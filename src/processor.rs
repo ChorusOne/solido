@@ -1,12 +1,9 @@
 use solana_program::{
     account_info::{next_account_info, AccountInfo},
-    clock::Clock,
-    decode_error::DecodeError,
-    entrypoint,
     entrypoint::ProgramResult,
     msg,
     program::{invoke, invoke_signed},
-    program_error::{PrintProgramError, ProgramError},
+    program_error::{ProgramError},
     program_pack::Pack,
     pubkey::Pubkey,
     rent::Rent,
@@ -14,9 +11,6 @@ use solana_program::{
     system_program,
     sysvar::Sysvar,
 };
-
-use std::convert::TryFrom;
-use std::mem::size_of;
 
 use crate::{error::StakePoolError, state::StakePool};
 
