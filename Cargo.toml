@@ -13,15 +13,18 @@ program = ["spl-token/no-entrypoint"]
 
 [dependencies]
 solana-program = "^1.5.5"
-spl-token = {version = "^3.0.1"}
+spl-token = { version = "3.1.0", features = [ "no-entrypoint" ] }
 thiserror = "1.0"
 zerocopy = "0.3.0"
+num-traits = "0.2"
+num-derive = "0.3"
+num_enum = "0.5.1"
 
 [dev-dependencies]
 solana-program-test = "^1.6.1"
 solana-runtime = "^1.5.12"
 solana-sdk = "^1.5.11"
-solana-secp256k1-program = "^1.5.14"
+# tokio = { version = "0.3", features = ["macros"]}
 
 [lib]
 crate-type = ["cdylib", "lib"]

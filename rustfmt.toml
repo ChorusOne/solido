@@ -1,0 +1,13 @@
+blank_lines_lower_bound      = 0
+blank_lines_upper_bound      = 2
+empty_item_single_line       = false
+enum_discrim_align_threshold = 80
+imports_layout               = "HorizontalVertical"
+match_arm_leading_pipes      = "Preserve"
+match_block_trailing_comma   = true
+normalize_comments           = true
+overflow_delimited_expr      = true
+reorder_impl_items           = true
+reorder_imports              = true
+struct_field_align_threshold = 80
+struct_lit_single_line       = false
