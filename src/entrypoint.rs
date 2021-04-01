@@ -1,21 +1,23 @@
-use std::convert::TryInto;
+use solana_program::{account_info::AccountInfo, entrypoint, entrypoint::ProgramResult, msg, pubkey::Pubkey};
 
-use solana_program::{
-    account_info::AccountInfo,
-    entrypoint,
-    entrypoint::ProgramResult,
-    pubkey::Pubkey,
-};
-
-use crate::processor::Processor;
+use crate::{instructions::StakePoolInstruction, processor::Processor};
 
 entrypoint!(process_instruction);
 
 pub fn process_instruction(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
-    _data: &[u8],
+    input: &[u8],
 ) -> ProgramResult {
-    let amount = u64::from_be_bytes(_data.try_into().unwrap());
-    Processor::process_deposit(program_id, amount, accounts)
+    let instruction = StakePoolInstruction::deserialize(input)?;
+    match instruction {
+        StakePoolInstruction::Initialize(init) => {
+            msg!("Instruction: Init");
+            Processor::process_initialize(program_id, init, accounts)
+        }
+        StakePoolInstruction::Deposit(amount) => {
+            msg!("Instruction: Deposit {}", amount);
+            Processor::process_deposit(program_id, amount, accounts)
+        }
+    }
 }

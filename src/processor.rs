@@ -1,18 +1,7 @@
-use solana_program::{
-    account_info::{next_account_info, AccountInfo},
-    entrypoint::ProgramResult,
-    msg,
-    program::{invoke, invoke_signed},
-    program_error::{ProgramError},
-    program_pack::Pack,
-    pubkey::Pubkey,
-    rent::Rent,
-    system_instruction,
-    system_program,
-    sysvar::Sysvar,
-};
+use solana_program::{account_info::{next_account_info, AccountInfo}, clock::Clock, entrypoint::ProgramResult, msg, program::{invoke, invoke_signed}, program_error::{ProgramError}, program_pack::Pack, pubkey::Pubkey, rent::Rent, system_instruction, system_program, sysvar::Sysvar};
+use spl_token::state::Mint;
 
-use crate::{error::StakePoolError, state::StakePool};
+use crate::{PROGRAM_VERSION, error::StakePoolError, state::{InitArgs, StakePool, ValidatorStakeList}};
 
 const PROCESSOR_MIN_RESERVE_BALANCE: u64 = 1000000;
 pub struct Processor;
@@ -362,5 +351,142 @@ impl Processor {
     fn min_reserve_balance(rent: &Rent) -> u64 {
         PROCESSOR_MIN_RESERVE_BALANCE
             .max(rent.minimum_balance(0) + rent.minimum_balance(spl_token::state::Account::LEN))
+    }
+
+    pub fn process_initialize(
+        program_id: &Pubkey,
+        init: InitArgs,
+        accounts: &[AccountInfo],
+    ) -> ProgramResult {
+        let account_info_iter = &mut accounts.iter();
+        let stake_pool_info = next_account_info(account_info_iter)?;
+        let owner_info = next_account_info(account_info_iter)?;
+        let validator_stake_list_info = next_account_info(account_info_iter)?;
+        let pool_mint_info = next_account_info(account_info_iter)?;
+        let owner_fee_info = next_account_info(account_info_iter)?;
+        // Clock sysvar account
+        let clock_info = next_account_info(account_info_iter)?;
+        let clock = &Clock::from_account_info(clock_info)?;
+        // Rent sysvar account
+        let rent_info = next_account_info(account_info_iter)?;
+        let rent = &Rent::from_account_info(rent_info)?;
+        // Token program ID
+        let token_program_info = next_account_info(account_info_iter)?;
+
+        if stake_pool_info.owner != program_id {
+            msg!(
+                "Wrong owner {} for the stake pool {}. Expected {}",
+                stake_pool_info.owner,
+                stake_pool_info.key,
+                program_id
+            );
+            return Err(StakePoolError::WrongOwner.into());
+        }
+        let mut stake_pool = StakePool::deserialize(&stake_pool_info.data.borrow())?;
+        // Stake pool account should not be already initialized
+        if stake_pool.is_initialized() {
+            return Err(StakePoolError::AlreadyInUse.into());
+        }
+
+        // Check if transaction was signed by owner
+        if !owner_info.is_signer {
+            return Err(StakePoolError::SignatureMissing.into());
+        }
+
+
+        // Check if validator stake list storage is unitialized
+        let mut validator_stake_list =
+            ValidatorStakeList::deserialize(&validator_stake_list_info.data.borrow())?;
+        if validator_stake_list.is_initialized() {
+            return Err(StakePoolError::AlreadyInUse.into());
+        }
+        validator_stake_list.version = ValidatorStakeList::VALIDATOR_STAKE_LIST_VERSION;
+        validator_stake_list.validators.clear();
+
+
+        // Check if stake pool account is rent-exempt
+        if !rent.is_exempt(stake_pool_info.lamports(), stake_pool_info.data_len()) {
+            return Err(StakePoolError::AccountNotRentExempt.into());
+        }
+
+        // Check if validator stake list account is rent-exempt
+        if !rent.is_exempt(
+            validator_stake_list_info.lamports(),
+            validator_stake_list_info.data_len(),
+        ) {
+            return Err(StakePoolError::AccountNotRentExempt.into());
+        }
+
+        let (_, deposit_bump_seed) = Self::find_authority_bump_seed(
+            program_id,
+            stake_pool_info.key,
+            Self::AUTHORITY_DEPOSIT,
+        );
+        let (withdraw_authority_key, withdraw_bump_seed) = Self::find_authority_bump_seed(
+            program_id,
+            stake_pool_info.key,
+            Self::AUTHORITY_WITHDRAW,
+        );
+
+        // Numerator should be smaller than or equal to denominator (fee <= 1)
+        if init.fee.numerator > init.fee.denominator {
+            return Err(StakePoolError::FeeTooHigh.into());
+        }
+
+        // Check if fee account's owner the same as token program id
+        if owner_fee_info.owner != token_program_info.key {
+            msg!(
+                "Expexted owner fee's account {} to have {} owner but it has {}",
+                owner_fee_info.key,
+                token_program_info.key,
+                owner_fee_info.owner
+            );
+            return Err(StakePoolError::InvalidFeeAccount.into());
+        }
+
+        // Check pool mint program ID
+        if pool_mint_info.owner != token_program_info.key {
+            return Err(ProgramError::IncorrectProgramId);
+        }
+
+        // Check for owner fee account to have proper mint assigned
+        if *pool_mint_info.key
+            != spl_token::state::Account::unpack_from_slice(&owner_fee_info.data.borrow())?.mint
+        {
+            return Err(StakePoolError::WrongAccountMint.into());
+        }
+
+        let pool_mint = Mint::unpack_from_slice(&pool_mint_info.data.borrow())?;
+
+        if !pool_mint.mint_authority.contains(&withdraw_authority_key) {
+            msg!(
+                "Mint authority is {} but need to be {}",
+                pool_mint.mint_authority.unwrap_or(Pubkey::new(&[0; 32])),
+                withdraw_authority_key
+            );
+            return Err(StakePoolError::WrongMintingAuthority.into());
+        }
+
+        if pool_mint.supply > 0 {
+            return Err(StakePoolError::MintHasInitialSupply.into());
+        }
+
+        validator_stake_list.serialize(&mut validator_stake_list_info.data.borrow_mut())?;
+
+        msg!("Clock data: {:?}", clock_info.data.borrow());
+        msg!("Epoch: {}", clock.epoch);
+
+        stake_pool.version = PROGRAM_VERSION;
+        stake_pool.owner = *owner_info.key;
+        stake_pool.deposit_bump_seed = deposit_bump_seed;
+        stake_pool.withdraw_bump_seed = withdraw_bump_seed;
+        stake_pool.validator_stake_list = *validator_stake_list_info.key;
+        stake_pool.pool_mint = *pool_mint_info.key;
+        stake_pool.owner_fee_account = *owner_fee_info.key;
+        stake_pool.token_program_id = *token_program_info.key;
+        stake_pool.last_update_epoch = clock.epoch;
+        stake_pool.fee = init.fee;
+
+        stake_pool.serialize(&mut stake_pool_info.data.borrow_mut())
     }
 }
