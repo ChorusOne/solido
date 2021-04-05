@@ -17,4 +17,4 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: unit test
-      run: cargo test
+      run: cargo test --no-fail-fast --lib
