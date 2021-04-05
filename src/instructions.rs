@@ -2,7 +2,7 @@ use std::mem::size_of;
 
 use solana_program::program_error::ProgramError;
 
-use crate::state::InitArgs;
+use crate::model::InitArgs;
 
 #[repr(C)]
 #[derive(Clone, Debug, PartialEq)]
@@ -55,7 +55,8 @@ impl StakePoolInstruction {
             1 => {
                 let val: &u64 = unpack(input)?;
                 Self::Deposit(*val)
-            }       _ => return Err(ProgramError::InvalidAccountData),
+            }
+            _ => return Err(ProgramError::InvalidAccountData),
         })
     }
 }

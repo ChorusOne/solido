@@ -1,8 +1,12 @@
-use solana_program_test::*;
-use solana_program_test::processor;
 use solana_program::pubkey::Pubkey;
+use solana_program_test::processor;
+use solana_program_test::*;
 use solana_sdk::{signature::Signer, transaction::Transaction};
-use solido::{entrypoint::process_instruction, state::{Fee, StakePool, ValidatorStakeList}};
+use solido::{
+    entrypoint::process_instruction,
+    model::ValidatorStakeList,
+    state::{Fee, StakePool},
+};
 
 solana_program::declare_id!("5QuBzCtUC6pHgFEQJ5d2qX7ktyyHba9HVXLQVUEiAf7d");
 
@@ -10,15 +14,11 @@ solana_program::declare_id!("5QuBzCtUC6pHgFEQJ5d2qX7ktyyHba9HVXLQVUEiAf7d");
 async fn process_deposit_test() {
     let (mut banks_client, payer, recent_blockhash) = program_test().start().await;
     let data_amount = 500u64.to_be_bytes();
-    let stake_pool = stake_pool();
-    let validator_stake_list = validator_stake_list();
+    let _stake_pool = stake_pool();
+    let _validator_stake_list = validator_stake_list();
 
-
-    let kine_instruction = solana_program::instruction::Instruction::new_with_bytes(
-        id(),
-        &data_amount,
-        Vec::new(),
-    );
+    let kine_instruction =
+        solana_program::instruction::Instruction::new_with_bytes(id(), &data_amount, Vec::new());
     let tx = Transaction::new_signed_with_payer(
         &[kine_instruction],
         Some(&payer.pubkey()),
@@ -27,7 +27,6 @@ async fn process_deposit_test() {
     );
     assert!(banks_client.process_transaction(tx).await.is_ok());
 }
-
 
 pub fn program_test() -> ProgramTest {
     ProgramTest::new("solido", id(), processor!(process_instruction))
@@ -46,9 +45,9 @@ fn stake_pool() -> StakePool {
         stake_total: 0u64,
         pool_total: 0u64,
         last_update_epoch: 0u64,
-        fee: Fee{
+        fee: Fee {
             denominator: 0u64,
-            numerator:   0u64,
+            numerator: 0u64,
         },
     }
 }

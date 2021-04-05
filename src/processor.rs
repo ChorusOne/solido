@@ -1,7 +1,24 @@
-use solana_program::{account_info::{next_account_info, AccountInfo}, clock::Clock, entrypoint::ProgramResult, msg, program::{invoke, invoke_signed}, program_error::{ProgramError}, program_pack::Pack, pubkey::Pubkey, rent::Rent, system_instruction, system_program, sysvar::Sysvar};
+use solana_program::{
+    account_info::{next_account_info, AccountInfo},
+    clock::Clock,
+    entrypoint::ProgramResult,
+    msg,
+    program::{invoke, invoke_signed},
+    program_error::ProgramError,
+    program_pack::Pack,
+    pubkey::Pubkey,
+    rent::Rent,
+    system_instruction, system_program,
+    sysvar::Sysvar,
+};
 use spl_token::state::Mint;
 
-use crate::{PROGRAM_VERSION, error::StakePoolError, state::{InitArgs, StakePool, ValidatorStakeList}};
+use crate::{
+    error::StakePoolError,
+    model::{InitArgs, ValidatorStakeList},
+    state::StakePool,
+    PROGRAM_VERSION,
+};
 
 const PROCESSOR_MIN_RESERVE_BALANCE: u64 = 1000000;
 pub struct Processor;
@@ -393,7 +410,6 @@ impl Processor {
             return Err(StakePoolError::SignatureMissing.into());
         }
 
-
         // Check if validator stake list storage is unitialized
         let mut validator_stake_list =
             ValidatorStakeList::deserialize(&validator_stake_list_info.data.borrow())?;
@@ -402,7 +418,6 @@ impl Processor {
         }
         validator_stake_list.version = ValidatorStakeList::VALIDATOR_STAKE_LIST_VERSION;
         validator_stake_list.validators.clear();
-
 
         // Check if stake pool account is rent-exempt
         if !rent.is_exempt(stake_pool_info.lamports(), stake_pool_info.data_len()) {
