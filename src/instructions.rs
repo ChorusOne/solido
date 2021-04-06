@@ -1,6 +1,11 @@
 use std::mem::size_of;
 
-use solana_program::program_error::ProgramError;
+use solana_program::{
+    instruction::{AccountMeta, Instruction},
+    program_error::ProgramError,
+    pubkey::Pubkey,
+    sysvar,
+};
 
 use crate::model::InitArgs;
 
@@ -12,13 +17,11 @@ pub enum StakePoolInstruction {
     ///   0. `[w]` New StakePool to create.
     ///   1. `[s]` Owner
     ///   2. `[w]` Uninitialized validator stake list storage account
-    ///   3. `[w]` Uninitialized credit list storage account
-    ///   4. `[]` pool token Mint. Must be non zero, owned by withdraw authority.
-    ///   5. `[]` Pool Account to deposit the generated fee for owner.
-    ///   6. `[w]` Credit reserve token account
-    ///   7. `[]` Clock sysvar
-    ///   8. `[]` Rent sysvar
-    ///   9. `[]` Token program id
+    ///   3. `[]` pool token Mint. Must be non zero, owned by withdraw authority.
+    ///   4. `[]` Pool Account to deposit the generated fee for owner.
+    ///   5. `[]` Clock sysvar
+    ///   6. `[]` Rent sysvar
+    ///   7. `[]` Token program id
     Initialize(InitArgs),
 
     ///   6) Deposit some stake into the pool.  The output is a "pool" token representing ownership
@@ -57,6 +60,53 @@ impl StakePoolInstruction {
                 Self::Deposit(*val)
             }
             _ => return Err(ProgramError::InvalidAccountData),
+        })
+    }
+    pub fn serialize(&self) -> Result<Vec<u8>, ProgramError> {
+        let mut output = vec![0u8; size_of::<StakePoolInstruction>()];
+        match self {
+            Self::Initialize(init) => {
+                output[0] = 0;
+                #[allow(clippy::cast_ptr_alignment)]
+                let value = unsafe { &mut *(&mut output[1] as *mut u8 as *mut InitArgs) };
+                *value = *init;
+            }
+            Self::Deposit(val) => {
+                output[0] = 1;
+                #[allow(clippy::cast_ptr_alignment)]
+                let value = unsafe { &mut *(&mut output[1] as *mut u8 as *mut u64) };
+                *value = *val;
+            }
+        }
+        Ok(output)
+    }
+
+    pub fn initialize(
+        program_id: &Pubkey,
+        stake_pool: &Pubkey,
+        owner: &Pubkey,
+        validator_stake_list: &Pubkey,
+        pool_mint: &Pubkey,
+        owner_pool_account: &Pubkey,
+        token_program_id: &Pubkey,
+        init_args: InitArgs,
+    ) -> Result<Instruction, ProgramError> {
+        let init_data = StakePoolInstruction::Initialize(init_args);
+        let data = init_data.serialize()?;
+        let accounts = vec![
+            AccountMeta::new(*stake_pool, true),
+            AccountMeta::new_readonly(*owner, true),
+            AccountMeta::new(*validator_stake_list, false),
+            AccountMeta::new_readonly(*pool_mint, false),
+            AccountMeta::new_readonly(*owner_pool_account, false),
+            AccountMeta::new_readonly(sysvar::clock::id(), false),
+            AccountMeta::new_readonly(sysvar::rent::id(), false),
+            AccountMeta::new_readonly(*token_program_id, false),
+        ];
+        Ok(Instruction {
+            program_id: *program_id,
+            accounts,
+            data,
         })
     }
 }
