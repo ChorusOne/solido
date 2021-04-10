@@ -2,16 +2,14 @@
 
 // #![cfg(all(target_arch = "bpf", not(feature = "no-entrypoint")))]
 
-use crate::{
-    error::StakePoolError, lido::entrypoint_lido::process_lido_instruction, processor::Processor,
-};
+use crate::error::StakePoolError;
+use crate::lido::processor::Processor;
 use solana_program::{
     account_info::AccountInfo, entrypoint, entrypoint::ProgramResult,
     program_error::PrintProgramError, pubkey::Pubkey,
 };
 
-entrypoint!(process_lido_instruction);
-fn process_instruction(
+pub fn process_lido_instruction(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
     instruction_data: &[u8],

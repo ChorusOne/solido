@@ -1,10 +1,11 @@
-#![deny(missing_docs)]
+// #![deny(missing_docs)]
 
 //! A program for creating and managing pools of stake
 
 pub mod borsh;
 pub mod error;
 pub mod instruction;
+pub mod lido;
 pub mod processor;
 pub mod stake_program;
 pub mod state;
