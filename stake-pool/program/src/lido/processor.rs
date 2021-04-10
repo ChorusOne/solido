@@ -37,7 +37,7 @@ use {
 #[derive(Clone, Debug, Default, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema)]
 pub struct Lido {
     stakepool: Pubkey,
-    members: Pubkey,
+    members: Vec<Pubkey>,
 }
 
 #[repr(C)]
@@ -45,7 +45,7 @@ pub struct Lido {
 pub enum LidoInstruction {
     Initialize {
         stake_pool: Pubkey,
-        member_list: Pubkey,
+        member_list: Vec<Pubkey>,
     },
     Deposit,
     Withdraw(u64),
@@ -57,7 +57,7 @@ impl Processor {
         program_id: &Pubkey,
         accounts: &[AccountInfo],
         stake_pool: Pubkey,
-        member_list: Pubkey,
+        member_list: Vec<Pubkey>,
     ) -> ProgramResult {
         Ok(())
     }
