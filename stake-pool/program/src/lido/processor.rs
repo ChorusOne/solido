@@ -47,6 +47,8 @@ pub enum LidoInstruction {
         stake_pool: Pubkey,
         member_list: Pubkey,
     },
+    Deposit,
+    Withdraw(u64),
 }
 /// Program state handler.
 pub struct Processor {}
@@ -59,6 +61,16 @@ impl Processor {
     ) -> ProgramResult {
         Ok(())
     }
+    pub fn process_deposit(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
+        Ok(())
+    }
+    pub fn process_withdraw(
+        program_id: &Pubkey,
+        pool_tokens: u64,
+        accounts: &[AccountInfo],
+    ) -> ProgramResult {
+        Ok(())
+    }
 
     /// Processes [Instruction](enum.Instruction.html).
     pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> ProgramResult {
@@ -68,6 +80,10 @@ impl Processor {
                 stake_pool,
                 member_list,
             } => Self::process_initialize(program_id, accounts, stake_pool, member_list),
+            LidoInstruction::Deposit {} => Self::process_deposit(program_id, accounts),
+            LidoInstruction::Withdraw(amount) => {
+                Self::process_withdraw(program_id, amount, accounts)
+            }
         }
     }
 }
