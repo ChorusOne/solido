@@ -3,7 +3,6 @@
 // #![cfg(all(target_arch = "bpf", not(feature = "no-entrypoint")))]
 
 use crate::{
-    lido::processor::Processor as LidoProcessor,
     error::StakePoolError, processor::Processor,
 };
 use solana_program::{
@@ -18,14 +17,8 @@ fn process_instruction(
     instruction_data: &[u8],
 ) -> ProgramResult {
     if let Err(error) = Processor::process(program_id, accounts, instruction_data) {
-        if let Ok(lido) = LidoProcessor::process(program_id, accounts, instruction_data) {
-            // process lido somehow
-            Ok(lido)
-        } else {
-            error.print::<StakePoolError>();
-            Err(error)
-        }
-
+        error.print::<StakePoolError>();
+        Err(error)
     } else {
         Ok(())
     }

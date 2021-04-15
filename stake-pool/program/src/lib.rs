@@ -5,7 +5,6 @@
 pub mod borsh;
 pub mod error;
 pub mod instruction;
-pub mod lido;
 pub mod processor;
 pub mod stake_program;
 pub mod state;
