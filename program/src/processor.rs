@@ -3,7 +3,8 @@
 use std::collections::HashSet;
 
 use {
-    crate::{
+    crate::state::DepositPool,
+    stake_pool::{
         borsh::try_from_slice_unchecked,
         error::StakePoolError,
         instruction::{Fee, StakePoolInstruction},
@@ -85,9 +86,18 @@ pub enum Instruction {
         stake_pool_account: Pubkey,
         members_list_account: Vec<Pubkey>,
     },
-    Deposit,
-    DelegateDeposit(u64),
-    Withdraw(u64),
+    /// Deposit with amount
+    Deposit {
+        amount: u64
+    },
+    /// Deposit amount to member validator
+    DelegateDeposit {
+        amount: u64,
+        member: PubKey,
+    },
+    Withdraw{
+        amount: u64
+    },
 }
 
 /// Program state handler.
@@ -139,11 +149,23 @@ impl Processor {
         Ok(())
     }
 
-    pub fn process_deposit(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
+    pub fn process_deposit(program_id: &Pubkey, amount: u64, accounts: &[AccountInfo]) -> ProgramResult {
+        if amount >  0 {
+            msg!("Amount must be greater than zero");
+            return Err(ProgramError::InvalidArgument);
+        }
+
         let account_info_iter = &mut accounts.iter();
+        // Lido
+        let lido_info = next_account_info(account_info_iter)?;
         // Deposit pool
         let deposit_pool_info = next_account_info(account_info_iter)?;
 
+        let mut lido = Lido::deserialize(&lido_info.data.borrow())?;
+        let mut deposit_pool = DepositPool::deserialize(&deposit_pool_info.data.borrow())?;
+
+        // How to check if lido members is initialized?
+        
         /**  
         
         Step 1 : Load Relevant Accounts and Parse them into Rust Structures  
@@ -213,8 +235,12 @@ impl Processor {
                 stake_pool_account,
                 &members_list_account,
             ),
-            Instruction::Deposit {} => Self::process_deposit(program_id, accounts),
-            Instruction::Withdraw(amount) => {
+            Instruction::Deposit {amount} => Self::process_deposit(program_id, amount, accounts),
+            Instruction::DelegateDeposit {
+                amount,
+                member,
+            } => Self::process_delegate_deposit(program_id, member, amount, accounts),
+            Instruction::Withdraw {amount} => {
                 Self::process_withdraw(program_id, amount, accounts)
             }
         }
