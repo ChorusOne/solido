@@ -4,14 +4,6 @@ use std::collections::HashSet;
 
 use {
     crate::state::DepositPool,
-    stake_pool::{
-        borsh::try_from_slice_unchecked,
-        error::StakePoolError,
-        instruction::{Fee, StakePoolInstruction},
-        stake_program,
-        state::{AccountType, StakePool, ValidatorList, ValidatorStakeInfo},
-        AUTHORITY_DEPOSIT, AUTHORITY_WITHDRAW,
-    },
     bincode::deserialize,
     borsh::{BorshDeserialize, BorshSchema, BorshSerialize},
     num_traits::FromPrimitive,
@@ -32,6 +24,13 @@ use {
         stake_history::StakeHistory,
         system_instruction,
         sysvar::Sysvar,
+    },
+    spl_stake_pool::{
+        borsh::try_from_slice_unchecked,
+        error::StakePoolError,
+        instruction::{Fee, StakePoolInstruction},
+        stake_program,
+        state::{AccountType, StakePool, ValidatorList, ValidatorStakeInfo},
     },
     spl_token::state::Mint,
 };
@@ -88,15 +87,15 @@ pub enum Instruction {
     },
     /// Deposit with amount
     Deposit {
-        amount: u64
+        amount: u64,
     },
     /// Deposit amount to member validator
     DelegateDeposit {
         amount: u64,
-        member: PubKey,
+        member: Pubkey,
     },
-    Withdraw{
-        amount: u64
+    Withdraw {
+        amount: u64,
     },
 }
 
@@ -149,8 +148,12 @@ impl Processor {
         Ok(())
     }
 
-    pub fn process_deposit(program_id: &Pubkey, amount: u64, accounts: &[AccountInfo]) -> ProgramResult {
-        if amount >  0 {
+    pub fn process_deposit(
+        program_id: &Pubkey,
+        amount: u64,
+        accounts: &[AccountInfo],
+    ) -> ProgramResult {
+        if amount > 0 {
             msg!("Amount must be greater than zero");
             return Err(ProgramError::InvalidArgument);
         }
@@ -161,58 +164,58 @@ impl Processor {
         // Deposit pool
         let deposit_pool_info = next_account_info(account_info_iter)?;
 
-        let mut lido = Lido::deserialize(&lido_info.data.borrow())?;
-        let mut deposit_pool = DepositPool::deserialize(&deposit_pool_info.data.borrow())?;
+        let mut lido = Lido::try_from_slice(&lido_info.data.borrow())?;
+        let mut deposit_pool = DepositPool::try_from_slice(&deposit_pool_info.data.borrow())?;
 
         // How to check if lido members is initialized?
-        
-        /**  
-        
-        Step 1 : Load Relevant Accounts and Parse them into Rust Structures  
 
-        Step 2 : Make Checks 
+        /**
 
-        - Boilerplate Checks 
-        - Logic Specific Checks 
-            - a) Deposit Amount > 0 
-            - 
+        Step 1 : Load Relevant Accounts and Parse them into Rust Structures
 
-        Step 3 : Logic 
+        Step 2 : Make Checks
+
+        - Boilerplate Checks
+        - Logic Specific Checks
+            - a) Deposit Amount > 0
+            -
+
+        Step 3 : Logic
             a) Take User's SOL and put it in deposit pool
-            b) Calculate LSOL to mint : User's SOL = Total LSOL Minted Already / Total SOL in Pool 
-            c) Mint LSOL, Transfer to user 
-            d - maybe) Update Lido State Info : Total SOL in Pool = Total SOL + What's just deposited 
-            e) Update Lido State Info : Total LSOL = Total LSOL + what's just minted 
+            b) Calculate LSOL to mint : User's SOL = Total LSOL Minted Already / Total SOL in Pool
+            c) Mint LSOL, Transfer to user
+            d - maybe) Update Lido State Info : Total SOL in Pool = Total SOL + What's just deposited
+            e) Update Lido State Info : Total LSOL = Total LSOL + what's just minted
 
         */
-         
-
         Ok(())
     }
 
-    pub fn process_delegate_deposit(program_id: &Pubkey, member: &PubKey, delegate_amount: u64,accounts: &[AccountInfo]) -> ProgramResult {
+    pub fn process_delegate_deposit(
+        program_id: &Pubkey,
+        member: &Pubkey,
+        delegate_amount: u64,
+        accounts: &[AccountInfo],
+    ) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         // Deposit pool
         let deposit_pool_info = next_account_info(account_info_iter)?;
 
         Ok(())
 
+        /*
 
+        Step 1 : Load Relevant Accounts and Parse them into Rust Structures
 
-        /**  
-        
-        Step 1 : Load Relevant Accounts and Parse them into Rust Structures  
+        Step 2 : Make Checks
 
-        Step 2 : Make Checks 
-
-        - Boilerplate Checks 
-        - Logic Specific Checks 
+        - Boilerplate Checks
+        - Logic Specific Checks
 
         Step 3: Logic
 
         */
     }
-
 
     pub fn process_withdraw(
         program_id: &Pubkey,
@@ -235,12 +238,11 @@ impl Processor {
                 stake_pool_account,
                 &members_list_account,
             ),
-            Instruction::Deposit {amount} => Self::process_deposit(program_id, amount, accounts),
-            Instruction::DelegateDeposit {
-                amount,
-                member,
-            } => Self::process_delegate_deposit(program_id, member, amount, accounts),
-            Instruction::Withdraw {amount} => {
+            Instruction::Deposit { amount } => Self::process_deposit(program_id, amount, accounts),
+            Instruction::DelegateDeposit { amount, member } => {
+                Self::process_delegate_deposit(program_id, &member, amount, accounts)
+            }
+            Instruction::Withdraw { amount } => {
                 Self::process_withdraw(program_id, amount, accounts)
             }
         }
