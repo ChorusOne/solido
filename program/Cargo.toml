@@ -1,5 +1,5 @@
 [package]
-authors = ["Julia Naomi <jnboeira@outlook.com>"]
+authors = ["Chorus One <techops@chorus.one>"]
 edition = "2018"
 name = "lido"
 version = "0.1.0"
