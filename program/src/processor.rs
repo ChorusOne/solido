@@ -4,6 +4,7 @@ use std::collections::HashSet;
 
 use crate::{
     error::LidoError,
+    instruction::LidoInstruction,
     state::{Lido, LidoAccountType, LidoMembers},
     AUTHORITY_ID,
 };
@@ -34,36 +35,10 @@ use {
     spl_token::state::Mint,
 };
 
-#[repr(C)]
-#[derive(Clone, Debug, PartialEq, BorshSerialize, BorshDeserialize, BorshSchema)]
-pub enum Instruction {
-    Initialize {
-        stake_pool_account: Pubkey,
-        members_list_account: Vec<Pubkey>,
-    },
-    /// Deposit with amount
-    Deposit {
-        amount: u64,
-    },
-    /// Deposit amount to member validator
-    DelegateDeposit {
-        amount: u64,
-        member: Pubkey,
-    },
-    Withdraw {
-        amount: u64,
-    },
-}
-
 /// Program state handler.
 pub struct Processor;
 impl Processor {
-    pub fn process_initialize(
-        program_id: &Pubkey,
-        accounts: &[AccountInfo],
-        stake_pool_account: Pubkey,
-        new_members: &[Pubkey],
-    ) -> ProgramResult {
+    pub fn process_initialize(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let lido_info = next_account_info(account_info_iter)?;
         let stakepool_info = next_account_info(account_info_iter)?;
@@ -143,15 +118,15 @@ impl Processor {
         let owner_info = next_account_info(account_info_iter)?;
         // User account
         let user_info = next_account_info(account_info_iter)?;
-        // User account
+        // Recipient account
         let lsol_recipient_info = next_account_info(account_info_iter)?;
-        // User account
+        // Token minter
         let lsol_mint_info = next_account_info(account_info_iter)?;
-        // Token program account
+        // Token program account (SPL Token Program)
         let token_program_info = next_account_info(account_info_iter)?;
         // Lido authority account
         let authority_info = next_account_info(account_info_iter)?;
-        // Lido authority account
+        // Reserve account
         let reserve_account_info = next_account_info(account_info_iter)?;
         // System program
         let system_program_info = next_account_info(account_info_iter)?;
@@ -290,22 +265,16 @@ impl Processor {
 
     /// Processes [Instruction](enum.Instruction.html).
     pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> ProgramResult {
-        let instruction = Instruction::try_from_slice(input)?;
+        let instruction = LidoInstruction::try_from_slice(input)?;
         match instruction {
-            Instruction::Initialize {
-                stake_pool_account,
-                members_list_account,
-            } => Self::process_initialize(
-                program_id,
-                accounts,
-                stake_pool_account,
-                &members_list_account,
-            ),
-            Instruction::Deposit { amount } => Self::process_deposit(program_id, amount, accounts),
-            Instruction::DelegateDeposit { amount, member } => {
+            LidoInstruction::Initialize => Self::process_initialize(program_id, accounts),
+            LidoInstruction::Deposit { amount } => {
+                Self::process_deposit(program_id, amount, accounts)
+            }
+            LidoInstruction::DelegateDeposit { amount, member } => {
                 Self::process_delegate_deposit(program_id, &member, amount, accounts)
             }
-            Instruction::Withdraw { amount } => {
+            LidoInstruction::Withdraw { amount } => {
                 Self::process_withdraw(program_id, amount, accounts)
             }
         }
