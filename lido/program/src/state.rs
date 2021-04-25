@@ -2,6 +2,7 @@
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use solana_program::pubkey::Pubkey;
+use std::convert::TryFrom;
 
 #[repr(C)]
 #[derive(Clone, Debug, Default, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema)]
@@ -11,7 +12,24 @@ pub struct Lido {
     pub lsol_mint_program: Pubkey,
     pub total_sol: u64,
     pub lsol_total_shares: u64,
-    pub lido_authority_bump_seed: u8,
+
+    pub sol_reserve_authority_bump_seed: u8,
+    pub deposit_authority_bump_seed: u8,
+    pub token_reserve_authority_bump_seed: u8,
+}
+
+impl Lido {
+    pub fn calc_pool_tokens_for_deposit(&self, stake_lamports: u64) -> Option<u64> {
+        if self.total_sol == 0 {
+            return Some(stake_lamports);
+        }
+        u64::try_from(
+            (stake_lamports as u128)
+                .checked_mul(self.lsol_total_shares as u128)?
+                .checked_div(self.total_sol as u128)?,
+        )
+        .ok()
+    }
 }
 
 #[repr(C)]

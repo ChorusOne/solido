@@ -17,7 +17,6 @@ pub enum LidoInstruction {
     /// Deposit amount to member validator
     DelegateDeposit {
         amount: u64,
-        member: Pubkey,
     },
     Withdraw {
         amount: u64,

@@ -2,7 +2,10 @@ mod helpers;
 
 use helpers::{
     program_test,
-    stakepool_account::{create_token_account, get_account, get_token_balance, transfer},
+    stakepool_account::{
+        create_token_account, get_account, get_token_balance, simple_add_validator_to_pool,
+        transfer, ValidatorStakeAccount,
+    },
     LidoAccounts,
 };
 use lido::{id, instruction, state};
@@ -13,7 +16,13 @@ use solana_sdk::{
     transaction::Transaction,
 };
 
-async fn setup() -> (BanksClient, Keypair, Hash, LidoAccounts) {
+async fn setup() -> (
+    BanksClient,
+    Keypair,
+    Hash,
+    LidoAccounts,
+    Vec<ValidatorStakeAccount>,
+) {
     let (mut banks_client, payer, recent_blockhash) = program_test().start().await;
     let mut lido_accounts = LidoAccounts::new();
     lido_accounts
@@ -21,13 +30,26 @@ async fn setup() -> (BanksClient, Keypair, Hash, LidoAccounts) {
         .await
         .unwrap();
 
-    (banks_client, payer, recent_blockhash, lido_accounts)
+    let validator = simple_add_validator_to_pool(
+        &mut banks_client,
+        &payer,
+        &recent_blockhash,
+        &lido_accounts.stake_pool_accounts,
+    )
+    .await;
+    (
+        banks_client,
+        payer,
+        recent_blockhash,
+        lido_accounts,
+        vec![validator],
+    )
 }
-pub const TEST_DEPOSIT_AMOUNT: u64 = 1000;
+pub const TEST_DEPOSIT_AMOUNT: u64 = 100_000_000_000;
 
 #[tokio::test]
-async fn test_successful_deposit() {
-    let (mut banks_client, payer, recent_blockhash, lido_accounts) = setup().await;
+async fn test_successful_stake() {
+    let (mut banks_client, payer, recent_blockhash, lido_accounts, validators) = setup().await;
 
     let user = Keypair::new();
     let recipient = Keypair::new();
@@ -70,7 +92,4 @@ async fn test_successful_deposit() {
     );
     transaction.sign(&[&payer, &user], recent_blockhash);
     banks_client.process_transaction(transaction).await.unwrap();
-
-    let balance = get_token_balance(&mut banks_client, &recipient.pubkey()).await;
-    assert_eq!(balance, TEST_DEPOSIT_AMOUNT);
 }

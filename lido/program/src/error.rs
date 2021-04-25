@@ -23,9 +23,14 @@ pub enum LidoError {
     /// Invalid stake pool
     #[error("SignatureMissing")]
     SignatureMissing,
+    // 5.
     /// Invalid stake pool
     #[error("InvalidToken")]
     InvalidToken,
+    #[error("CalculationFailure")]
+    CalculationFailure,
+    #[error("InvalidStaker")]
+    InvalidStaker,
 }
 impl From<LidoError> for ProgramError {
     fn from(e: LidoError) -> Self {
