@@ -27,6 +27,8 @@ pub enum LidoError {
     /// Invalid stake pool
     #[error("InvalidToken")]
     InvalidToken,
+    #[error("InvalidReserveAuthority")]
+    InvalidReserveAuthority,
     #[error("CalculationFailure")]
     CalculationFailure,
     #[error("InvalidStaker")]
