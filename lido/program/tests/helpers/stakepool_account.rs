@@ -203,7 +203,7 @@ pub async fn create_stake_pool(
     pool_token_account: &Pubkey,
     manager: &Keypair,
     staker: &Pubkey,
-    fee: &instruction::Fee,
+    fee: &state::Fee,
     max_validators: u32,
 ) -> Result<(), TransportError> {
     let rent = banks_client.get_rent().await.unwrap();
@@ -234,9 +234,11 @@ pub async fn create_stake_pool(
                 &manager.pubkey(),
                 staker,
                 &validator_list.pubkey(),
+                &Pubkey::new_unique(), // reserve_stake
                 pool_mint,
                 pool_token_account,
                 &spl_token::id(),
+                None, // deposit_authority
                 fee.clone(),
                 max_validators,
             )
@@ -471,7 +473,7 @@ pub struct StakePoolAccounts {
     pub staker: Keypair,
     pub withdraw_authority: Pubkey,
     pub deposit_authority: Pubkey,
-    pub fee: instruction::Fee,
+    pub fee: state::Fee,
     pub max_validators: u32,
 }
 
@@ -502,7 +504,7 @@ impl StakePoolAccounts {
             staker,
             withdraw_authority,
             deposit_authority,
-            fee: instruction::Fee {
+            fee: state::Fee {
                 numerator: 1,
                 denominator: 100,
             },
@@ -564,7 +566,7 @@ impl StakePoolAccounts {
         validator_stake_account: &Pubkey,
     ) -> Result<(), TransportError> {
         let transaction = Transaction::new_signed_with_payer(
-            &[instruction::deposit(
+            &instruction::deposit(
                 &spl_stake_pool::id(),
                 &self.stake_pool.pubkey(),
                 &self.validator_list.pubkey(),
@@ -575,8 +577,7 @@ impl StakePoolAccounts {
                 pool_account,
                 &self.pool_mint.pubkey(),
                 &spl_token::id(),
-            )
-            .unwrap()],
+            ),
             Some(&payer.pubkey()),
             &[payer],
             *recent_blockhash,
@@ -628,10 +629,14 @@ impl StakePoolAccounts {
         let transaction = Transaction::new_signed_with_payer(
             &[instruction::update_validator_list_balance(
                 &spl_stake_pool::id(),
+                &self.stake_pool.pubkey(),
+                &self.withdraw_authority,
                 &self.validator_list.pubkey(),
+                &Pubkey::new_unique(),
                 validator_list,
-            )
-            .unwrap()],
+                0,
+                true,
+            )],
             Some(&payer.pubkey()),
             &[payer],
             *recent_blockhash,
@@ -649,12 +654,12 @@ impl StakePoolAccounts {
             &[instruction::update_stake_pool_balance(
                 &spl_stake_pool::id(),
                 &self.stake_pool.pubkey(),
+                &self.withdraw_authority,
                 &self.validator_list.pubkey(),
                 &self.withdraw_authority,
                 &self.pool_fee_account.pubkey(),
                 &self.pool_mint.pubkey(),
-            )
-            .unwrap()],
+            )],
             Some(&payer.pubkey()),
             &[payer],
             *recent_blockhash,
@@ -668,20 +673,16 @@ impl StakePoolAccounts {
         payer: &Keypair,
         recent_blockhash: &Hash,
         stake: &Pubkey,
-        pool_account: &Pubkey,
+        _pool_account: &Pubkey,//???
     ) -> Option<TransportError> {
         let mut transaction = Transaction::new_with_payer(
             &[instruction::add_validator_to_pool(
                 &spl_stake_pool::id(),
                 &self.stake_pool.pubkey(),
                 &self.staker.pubkey(),
-                &self.deposit_authority,
                 &self.withdraw_authority,
                 &self.validator_list.pubkey(),
-                stake,
-                pool_account,
-                &self.pool_mint.pubkey(),
-                &spl_token::id(),
+                stake
             )
             .unwrap()],
             Some(&payer.pubkey()),
@@ -709,8 +710,6 @@ impl StakePoolAccounts {
                 &self.validator_list.pubkey(),
                 stake,
                 pool_account,
-                &self.pool_mint.pubkey(),
-                &spl_token::id(),
             )
             .unwrap()],
             Some(&payer.pubkey()),

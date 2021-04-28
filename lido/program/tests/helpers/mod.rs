@@ -1,6 +1,6 @@
 use lido::*;
 use solana_program::{
-    borsh::get_packed_len, hash::Hash, program_pack::Pack, pubkey::Pubkey, system_instruction,
+    borsh::get_packed_len, hash::Hash, pubkey::Pubkey, system_instruction,
 };
 use solana_program_test::*;
 use solana_sdk::{signature::Keypair, transport::TransportError};
