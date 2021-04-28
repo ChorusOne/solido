@@ -26,8 +26,7 @@ pub struct LidoAccounts {
     pub owner: Keypair,
     pub lido: Keypair,
     pub mint_program: Keypair,
-    pub authority: Pubkey,
-    pub reserve: Keypair,
+    pub reserve_authority: Pubkey,
 
     pub stake_pool_accounts: StakePoolAccounts,
 }
@@ -39,16 +38,17 @@ impl LidoAccounts {
         let mint_program = Keypair::new();
         let reserve = Keypair::new();
 
-        let (authority, _) =
-            Pubkey::find_program_address(&[&lido.pubkey().to_bytes()[..32], AUTHORITY_ID], &id());
+        let (reserve_authority, _) = Pubkey::find_program_address(
+            &[&lido.pubkey().to_bytes()[..32], RESERVE_AUTHORITY_ID],
+            &id(),
+        );
         let mut stake_pool = StakePoolAccounts::new();
-        stake_pool.deposit_authority = authority;
+        stake_pool.deposit_authority = reserve_authority;
         Self {
             owner,
             lido,
             mint_program,
-            authority,
-            reserve,
+            reserve_authority,
             stake_pool_accounts: stake_pool,
         }
     }
@@ -68,7 +68,7 @@ impl LidoAccounts {
             payer,
             recent_blockhash,
             &self.mint_program,
-            &self.authority,
+            &self.reserve_authority,
         )
         .await?;
 

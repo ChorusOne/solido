@@ -61,8 +61,7 @@ async fn test_successful_deposit() {
             &user.pubkey(),
             &recipient.pubkey(),
             &lido_accounts.mint_program.pubkey(),
-            &lido_accounts.authority,
-            &lido_accounts.reserve.pubkey(),
+            &lido_accounts.reserve_authority,
             TEST_DEPOSIT_AMOUNT,
         )
         .unwrap()],
@@ -72,5 +71,13 @@ async fn test_successful_deposit() {
     banks_client.process_transaction(transaction).await.unwrap();
 
     let balance = get_token_balance(&mut banks_client, &recipient.pubkey()).await;
+
+    let reserve_account = banks_client
+        .get_account(lido_accounts.reserve_authority)
+        .await
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(reserve_account.lamports, TEST_DEPOSIT_AMOUNT);
     assert_eq!(balance, TEST_DEPOSIT_AMOUNT);
 }
