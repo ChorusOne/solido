@@ -80,7 +80,7 @@ pub const TEST_DEPOSIT_AMOUNT: u64 = 100_000_000_000;
 pub const TEST_DELEGATE_DEPOSIT_AMOUNT: u64 = 10_000_000_000;
 
 #[tokio::test]
-async fn test_successful_delegate_deposit() {
+async fn test_successful_delegate_deposit_stake_pool_deposit() {
     let (mut banks_client, payer, recent_blockhash, lido_accounts, validators) = setup().await;
     let user = Keypair::new();
     let recipient = Keypair::new();
@@ -129,27 +129,6 @@ async fn test_successful_delegate_deposit() {
     let (stake_account, _) =
         Pubkey::find_program_address(&[&validator_account.vote.pubkey().to_bytes()[..32]], &id());
 
-    // program_id: &Pubkey,
-    // lido: &Pubkey,
-    // validator: &Pubkey,
-    // reserve: &Pubkey,
-    // stake: &Pubkey,
-    // deposit_authority: &Pubkey,
-    // withdraw_authority: &Pubkey,
-
-    // stake_pool_program: &Pubkey,
-    // stake_pool: &Pubkey,
-    // stake_pool_validator_list: &Pubkey,
-    // stake_pool_withdraw_authority: &Pubkey,
-    // stake_pool_validator_stake_account: &Pubkey,
-    // stake_pool_mint: &Pubkey,
-    // amount: u64,
-    println!(
-        "VALIDATOR VOTE: {}\nValidator: {}",
-        validator_account.vote.pubkey(),
-        validator_account.validator.pubkey()
-    );
-
     let mut transaction = Transaction::new_with_payer(
         &[instruction::delegate_deposit(
             &id(),
@@ -165,4 +144,43 @@ async fn test_successful_delegate_deposit() {
     );
     transaction.sign(&[&payer], recent_blockhash);
     banks_client.process_transaction(transaction).await.unwrap();
+
+    // TODO: test if variables are set right
+
+    let token_pool_account = Keypair::new();
+
+    create_token_account(
+        &mut banks_client,
+        &payer,
+        &recent_blockhash,
+        &token_pool_account,
+        &lido_accounts.stake_pool_accounts.pool_mint.pubkey(),
+        &lido_accounts.stake_pool_token_reserve_authority,
+    )
+    .await
+    .unwrap();
+
+    let mut transaction = Transaction::new_with_payer(
+        &[instruction::stake_pool_delegate(
+            &id(),
+            &lido_accounts.lido.pubkey(),
+            &validator_account.vote.pubkey(),
+            &stake_account,
+            &lido_accounts.deposit_authority,
+            &token_pool_account.pubkey(),
+            &spl_stake_pool::id(),
+            &lido_accounts.stake_pool_accounts.stake_pool.pubkey(),
+            &lido_accounts.stake_pool_accounts.validator_list.pubkey(),
+            &lido_accounts.stake_pool_accounts.withdraw_authority,
+            &validator_account.stake_account,
+            &lido_accounts.stake_pool_accounts.pool_mint.pubkey(),
+        )
+        .unwrap()],
+        Some(&payer.pubkey()),
+    );
+    transaction.sign(&[&payer], recent_blockhash);
+    banks_client.process_transaction(transaction).await.unwrap();
 }
+
+#[tokio::test]
+async fn test_stake_exists_delegate_deposit() {} // TODO
