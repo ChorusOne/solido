@@ -20,7 +20,7 @@ pub enum LidoInstruction {
     DelegateDeposit {
         amount: u64,
     },
-    StakePoolDeposit,
+    StakePoolDelegate,
     Withdraw {
         amount: u64,
     },
@@ -114,7 +114,54 @@ pub fn delegate_deposit(
     })
 }
 
-pub fn deposit_stake_pool(
+pub fn stake_pool_delegate(
+    program_id: &Pubkey,
+    lido: &Pubkey,
+    validator: &Pubkey,
+    stake: &Pubkey,
+    deposit_authority: &Pubkey,
+    pool_token: &Pubkey,
+    // Stake pool
+    stake_pool_program: &Pubkey,
+    stake_pool: &Pubkey,
+    stake_pool_validator_list: &Pubkey,
+    stake_pool_withdraw_authority: &Pubkey,
+    stake_pool_validator_stake_account: &Pubkey,
+    stake_pool_mint: &Pubkey,
+) -> Result<Instruction, ProgramError> {
+    let init_data = LidoInstruction::StakePoolDelegate;
+    let data = init_data.try_to_vec()?;
+    let accounts = vec![
+        AccountMeta::new(*lido, false),
+        AccountMeta::new(*validator, false),
+        AccountMeta::new(*stake, false),
+        AccountMeta::new(*deposit_authority, false),
+        AccountMeta::new(*pool_token, false),
+        // Stake Pool
+        AccountMeta::new_readonly(*stake_pool_program, false),
+        AccountMeta::new(*stake_pool, false),
+        AccountMeta::new(*stake_pool_validator_list, false),
+        AccountMeta::new_readonly(*stake_pool_withdraw_authority, false),
+        AccountMeta::new(*stake_pool_validator_stake_account, false),
+        AccountMeta::new(*stake_pool_mint, false),
+        // Sys
+        AccountMeta::new_readonly(sysvar::clock::id(), false),
+        AccountMeta::new_readonly(stake_history::id(), false),
+        AccountMeta::new_readonly(system_program::id(), false),
+        AccountMeta::new_readonly(sysvar::rent::id(), false),
+        AccountMeta::new_readonly(spl_token::id(), false),
+        AccountMeta::new_readonly(stake_program::id(), false),
+        // AccountMeta::new_readonly(stake_history::id(), false),
+        // AccountMeta::new_readonly(stake_program::config_id(), false),
+    ];
+    Ok(Instruction {
+        program_id: *program_id,
+        accounts,
+        data,
+    })
+}
+
+pub fn stake_pool_deposit(
     program_id: &Pubkey,
     stake_pool: &Pubkey,
     validator_list_storage: &Pubkey,
