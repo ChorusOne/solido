@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+use lido::instruction::initialize_stake_pool_with_authority;
 use {
     solana_program::{
         borsh::get_packed_len, hash::Hash, program_pack::Pack, pubkey::Pubkey, system_instruction,
@@ -18,8 +19,8 @@ use {
     },
     spl_stake_pool::{
         borsh::{get_instance_packed_len, try_from_slice_unchecked},
-        find_stake_program_address, find_transient_stake_program_address, id, instruction,
-        processor, stake_program, state,
+        find_stake_program_address, find_transient_stake_program_address, instruction,
+        stake_program, state,
     },
 };
 
@@ -202,7 +203,7 @@ pub async fn create_stake_pool(
     pool_token_account: &Pubkey,
     manager: &Keypair,
     staker: &Pubkey,
-    deposit_authority: &Option<Keypair>,
+    deposit_authority: &Pubkey,
     fee: &state::Fee,
     max_validators: u32,
 ) -> Result<(), TransportError> {
@@ -228,7 +229,7 @@ pub async fn create_stake_pool(
                 validator_list_size as u64,
                 &spl_stake_pool::id(),
             ),
-            instruction::initialize(
+            initialize_stake_pool_with_authority(
                 &spl_stake_pool::id(),
                 &stake_pool.pubkey(),
                 &manager.pubkey(),
@@ -238,7 +239,7 @@ pub async fn create_stake_pool(
                 pool_mint,
                 pool_token_account,
                 &spl_token::id(),
-                deposit_authority.as_ref().map(|k| k.pubkey()),
+                deposit_authority,
                 *fee,
                 max_validators,
             )
@@ -247,9 +248,6 @@ pub async fn create_stake_pool(
         Some(&payer.pubkey()),
     );
     let mut signers = vec![payer, stake_pool, validator_list, manager];
-    if let Some(deposit_authority) = deposit_authority.as_ref() {
-        signers.push(deposit_authority);
-    }
     transaction.sign(&signers, *recent_blockhash);
     banks_client.process_transaction(transaction).await?;
     Ok(())
@@ -582,7 +580,7 @@ impl StakePoolAccounts {
             &self.pool_fee_account.pubkey(),
             &self.manager,
             &self.staker.pubkey(),
-            &self.deposit_authority_keypair,
+            &self.deposit_authority,
             &self.fee,
             self.max_validators,
         )

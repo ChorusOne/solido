@@ -1,42 +1,30 @@
 //! Program state processor
 
-use std::collections::HashSet;
-
-use solana_program::instruction::Instruction;
-use spl_stake_pool::{instruction::StakePoolInstruction, stake_program};
+use solana_program::clock;
+use spl_stake_pool::stake_program;
 
 use crate::{
     error::LidoError,
     instruction::{deposit_stake_pool, LidoInstruction},
-    state::{Lido, LidoAccountType, LidoMembers},
-    DEPOSIT_AUTHORITY_ID, RESERVE_AUTHORITY_ID, TOKEN_RESERVE_AUTHORITY_ID,
+    state::Lido,
+    DEPOSIT_AUTHORITY_ID, RESERVE_AUTHORITY_ID, STAKE_POOL_TOKEN_RESERVE_AUTHORITY_ID,
 };
 
 use {
-    bincode::deserialize,
-    borsh::{BorshDeserialize, BorshSchema, BorshSerialize},
-    num_traits::FromPrimitive,
+    borsh::{BorshDeserialize, BorshSerialize},
     solana_program::{
         account_info::next_account_info,
         account_info::AccountInfo,
-        clock::Clock,
-        decode_error::DecodeError,
         entrypoint::ProgramResult,
         msg,
-        native_token::sol_to_lamports,
         program::{invoke, invoke_signed},
-        program_error::PrintProgramError,
         program_error::ProgramError,
-        program_pack::Pack,
         pubkey::Pubkey,
         rent::Rent,
-        stake_history::StakeHistory,
         system_instruction,
         sysvar::Sysvar,
     },
     spl_stake_pool::borsh::try_from_slice_unchecked,
-    spl_token::state::Mint,
-    std::convert::TryFrom,
 };
 
 /// Program state handler.
@@ -66,7 +54,10 @@ impl Processor {
         );
 
         let (_, token_reserve_bump_seed) = Pubkey::find_program_address(
-            &[&lido_info.key.to_bytes()[..32], TOKEN_RESERVE_AUTHORITY_ID],
+            &[
+                &lido_info.key.to_bytes()[..32],
+                STAKE_POOL_TOKEN_RESERVE_AUTHORITY_ID,
+            ],
             program_id,
         );
 
@@ -193,26 +184,13 @@ impl Processor {
         let stake_info = next_account_info(account_info_iter)?;
         let deposit_authority_info = next_account_info(account_info_iter)?;
 
-        // Stake pool
-        let stake_pool_program_info = next_account_info(account_info_iter)?;
-        let stake_pool_info = next_account_info(account_info_iter)?;
-        let stake_pool_validator_list_info = next_account_info(account_info_iter)?;
-        let stake_pool_deposit_authority = next_account_info(account_info_iter)?;
-        let stake_pool_withdraw_authority_info = next_account_info(account_info_iter)?;
-        let stake_pool_validator_stake_account_info = next_account_info(account_info_iter)?;
-        let stake_pool_tokens_authority = next_account_info(account_info_iter)?;
-        let stake_pool_mint_info = next_account_info(account_info_iter)?;
-
-        // let clock_info = next_account_info(account_info_iter)?;
-        // let clock = &Clock::from_account_info(clock_info)?;
-        // let stake_history_info = next_account_info(account_info_iter)?;
-
         // Sys
         let clock_info = next_account_info(account_info_iter)?;
-        let token_program_info = next_account_info(account_info_iter)?;
         let system_program_info = next_account_info(account_info_iter)?;
         let rent_info = next_account_info(account_info_iter)?;
         let stake_program_info = next_account_info(account_info_iter)?;
+        let stake_history_info = next_account_info(account_info_iter)?;
+        let stake_config_info = next_account_info(account_info_iter)?;
 
         let rent = &Rent::from_account_info(rent_info)?;
         let mut lido = Lido::try_from_slice(&lido_info.data.borrow())?;
@@ -265,13 +243,12 @@ impl Processor {
             &[&authority_signature_seeds[..], &validator_stake_seeds],
         )?;
 
-        // Make the staker/withdrawer the stake pool deposit authority
         invoke(
             &stake_program::initialize(
                 stake_info.key,
                 &stake_program::Authorized {
-                    staker: *stake_pool_deposit_authority.key,
-                    withdrawer: *stake_pool_deposit_authority.key,
+                    staker: *deposit_authority_info.key,
+                    withdrawer: *deposit_authority_info.key,
                 },
                 &stake_program::Lockup::default(),
             ),
@@ -282,53 +259,115 @@ impl Processor {
             ],
         )?;
 
-        let deposit_ix = deposit_stake_pool(
-            &stake_pool_program_info.key,
-            &stake_pool_info.key,
-            &stake_pool_validator_list_info.key,
-            &stake_pool_deposit_authority.key,
-            &stake_pool_withdraw_authority_info.key,
-            &stake_info.key,
-            &stake_pool_validator_stake_account_info.key,
-            &stake_pool_tokens_authority.key,
-            &stake_pool_mint_info.key,
-            &token_program_info.key,
-        );
-
         invoke_signed(
-            &deposit_ix,
+            &stake_program::delegate_stake(
+                stake_info.key,
+                deposit_authority_info.key,
+                validator_info.key,
+            ),
             &[
-                stake_pool_program_info.clone(),
-                stake_pool_info.clone(),
-                stake_pool_validator_list_info.clone(),
-                stake_pool_deposit_authority.clone(),
-                stake_pool_withdraw_authority_info.clone(),
                 stake_info.clone(),
-                stake_pool_validator_stake_account_info.clone(),
-                stake_pool_tokens_authority.clone(),
-                stake_pool_mint_info.clone(),
-                token_program_info.clone(),
+                validator_info.clone(),
+                clock_info.clone(),
+                stake_history_info.clone(),
+                stake_config_info.clone(),
+                deposit_authority_info.clone(),
             ],
-            &[],
-        )?;
+            &[&[
+                &lido_info.key.to_bytes()[..32],
+                DEPOSIT_AUTHORITY_ID,
+                &[lido.deposit_authority_bump_seed],
+            ]],
+        )
+    }
+
+    pub fn process_stake_pool_deposit(
+        program_id: &Pubkey,
+        accounts: &[AccountInfo],
+    ) -> ProgramResult {
+        let account_info_iter = &mut accounts.iter();
+
+        let lido_info = next_account_info(account_info_iter)?;
+        let validator_info = next_account_info(account_info_iter)?;
+        let reserve_info = next_account_info(account_info_iter)?;
+        let stake_info = next_account_info(account_info_iter)?;
+        let deposit_authority_info = next_account_info(account_info_iter)?;
+
+        // Sys
+        let clock_info = next_account_info(account_info_iter)?;
+        let system_program_info = next_account_info(account_info_iter)?;
+        let rent_info = next_account_info(account_info_iter)?;
+        let stake_program_info = next_account_info(account_info_iter)?;
+        let stake_history_info = next_account_info(account_info_iter)?;
+        let stake_config_info = next_account_info(account_info_iter)?;
+
+        let rent = &Rent::from_account_info(rent_info)?;
+        let mut lido = Lido::try_from_slice(&lido_info.data.borrow())?;
+
+        let (to_pubkey, stake_bump_seed) =
+            Pubkey::find_program_address(&[&validator_info.key.to_bytes()[..32]], program_id);
+        if &to_pubkey != stake_info.key {
+            return Err(LidoError::InvalidStaker.into());
+        }
+
+        let me_bytes = lido_info.key.to_bytes();
+        let reserve_authority_seed: &[&[_]] = &[&me_bytes, RESERVE_AUTHORITY_ID][..];
+        let (reserve_authority, _) =
+            Pubkey::find_program_address(reserve_authority_seed, program_id);
+
+        if reserve_info.key != &reserve_authority {
+            return Err(LidoError::InvalidReserveAuthority.into());
+        }
+
+        // TODO: Reference more validators
+
+        let authority_signature_seeds: &[&[_]] = &[
+            &me_bytes,
+            &RESERVE_AUTHORITY_ID[..],
+            &[lido.sol_reserve_authority_bump_seed],
+        ];
+
+        let validator_stake_seeds: &[&[_]] =
+            &[&validator_info.key.to_bytes()[..32], &[stake_bump_seed]];
+
+        // let deposit_ix = deposit_stake_pool(
+        //     &stake_pool_program_info.key,
+        //     &stake_pool_info.key,
+        //     &stake_pool_validator_list_info.key,
+        //     &deposit_authority_info.key,
+        //     &stake_pool_withdraw_authority_info.key,
+        //     &stake_info.key,
+        //     &stake_pool_validator_stake_account_info.key,
+        //     &withdraw_authority_info.key,
+        //     &stake_pool_mint_info.key,
+        //     &token_program_info.key,
+        // );
+
+        // invoke_signed(
+        //     &deposit_ix,
+        //     &[
+        //         stake_pool_program_info.clone(),
+        //         stake_pool_info.clone(),
+        //         stake_pool_validator_list_info.clone(),
+        //         deposit_authority_info.clone(),
+        //         stake_pool_withdraw_authority_info.clone(),
+        //         stake_info.clone(),
+        //         stake_pool_validator_stake_account_info.clone(),
+        //         withdraw_authority_info.clone(),
+        //         stake_pool_mint_info.clone(),
+        //         token_program_info.clone(),
+        //     ],
+        //     &[&[
+        //         &lido_info.key.to_bytes()[..32],
+        //         DEPOSIT_AUTHORITY_ID,
+        //         &[lido.deposit_authority_bump_seed],
+        //     ]],
+        // )?;
 
         // let auth_ix = deposit_ixs.get(0).unwrap();
         // invoke_signed(auth_ix, &[], signers)?;
 
         Ok(())
-
-        /*
-
-        Step 1 : Load Relevant Accounts and Parse them into Rust Structures
-
-        Step 2 : Make Checks
-
-        - Boilerplate Checks
-        - Logic Specific Checks
-
-        Step 3: Logic
-
-        */
     }
 
     pub fn process_withdraw(
@@ -349,6 +388,9 @@ impl Processor {
             }
             LidoInstruction::DelegateDeposit { amount } => {
                 Self::process_delegate_deposit(program_id, amount, accounts)
+            }
+            LidoInstruction::StakePoolDeposit => {
+                Self::process_stake_pool_deposit(program_id, accounts)
             }
             LidoInstruction::Withdraw { amount } => {
                 Self::process_withdraw(program_id, amount, accounts)

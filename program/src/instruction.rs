@@ -3,9 +3,10 @@ use solana_program::{
     instruction::{AccountMeta, Instruction},
     program_error::ProgramError,
     pubkey::Pubkey,
-    system_program, sysvar,
+    system_program,
+    sysvar::{self, stake_history},
 };
-use spl_stake_pool::{instruction::StakePoolInstruction, stake_program};
+use spl_stake_pool::{instruction::StakePoolInstruction, stake_program, state::Fee};
 
 #[repr(C)]
 #[derive(Clone, Debug, PartialEq, BorshSerialize, BorshDeserialize, BorshSchema)]
@@ -19,6 +20,7 @@ pub enum LidoInstruction {
     DelegateDeposit {
         amount: u64,
     },
+    StakePoolDeposit,
     Withdraw {
         amount: u64,
     },
@@ -87,14 +89,6 @@ pub fn delegate_deposit(
     stake: &Pubkey,
     deposit_authority: &Pubkey,
 
-    stake_pool_program: &Pubkey,
-    stake_pool: &Pubkey,
-    stake_pool_validator_list: &Pubkey,
-    stake_pool_deposit_authority: &Pubkey,
-    stake_pool_withdraw_authority: &Pubkey,
-    stake_pool_validator_stake_account: &Pubkey,
-    stake_pool_tokens_authority: &Pubkey,
-    stake_pool_mint: &Pubkey,
     amount: u64,
 ) -> Result<Instruction, ProgramError> {
     let init_data = LidoInstruction::DelegateDeposit { amount: amount };
@@ -105,21 +99,13 @@ pub fn delegate_deposit(
         AccountMeta::new(*reserve, false),
         AccountMeta::new(*stake, false),
         AccountMeta::new(*deposit_authority, false),
-        // Stake pool
-        AccountMeta::new_readonly(*stake_pool_program, false),
-        AccountMeta::new(*stake_pool, false),
-        AccountMeta::new(*stake_pool_validator_list, false),
-        AccountMeta::new_readonly(*stake_pool_deposit_authority, false),
-        AccountMeta::new_readonly(*stake_pool_withdraw_authority, false),
-        AccountMeta::new(*stake_pool_validator_stake_account, false),
-        AccountMeta::new(*stake_pool_tokens_authority, false),
-        AccountMeta::new(*stake_pool_mint, false),
         // Sys
         AccountMeta::new_readonly(sysvar::clock::id(), false),
-        AccountMeta::new_readonly(spl_token::id(), false),
         AccountMeta::new_readonly(system_program::id(), false),
         AccountMeta::new_readonly(sysvar::rent::id(), false),
         AccountMeta::new_readonly(stake_program::id(), false),
+        AccountMeta::new_readonly(stake_history::id(), false),
+        AccountMeta::new_readonly(stake_program::config_id(), false),
     ];
     Ok(Instruction {
         program_id: *program_id,
@@ -132,7 +118,7 @@ pub fn deposit_stake_pool(
     program_id: &Pubkey,
     stake_pool: &Pubkey,
     validator_list_storage: &Pubkey,
-    stake_pool_deposit_authority: &Pubkey,
+    deposit_authority: &Pubkey,
     stake_pool_withdraw_authority: &Pubkey,
     deposit_stake_address: &Pubkey,
     validator_stake_accont: &Pubkey,
@@ -143,7 +129,7 @@ pub fn deposit_stake_pool(
     let accounts = vec![
         AccountMeta::new(*stake_pool, false),
         AccountMeta::new(*validator_list_storage, false),
-        AccountMeta::new_readonly(*stake_pool_deposit_authority, true),
+        AccountMeta::new_readonly(*deposit_authority, true),
         AccountMeta::new_readonly(*stake_pool_withdraw_authority, false),
         AccountMeta::new(*deposit_stake_address, false),
         AccountMeta::new(*validator_stake_accont, false),
@@ -159,4 +145,43 @@ pub fn deposit_stake_pool(
         accounts,
         data: StakePoolInstruction::Deposit.try_to_vec().unwrap(),
     }
+}
+
+pub fn initialize_stake_pool_with_authority(
+    program_id: &Pubkey,
+    stake_pool: &Pubkey,
+    manager: &Pubkey,
+    staker: &Pubkey,
+    validator_list: &Pubkey,
+    reserve_stake: &Pubkey,
+    pool_mint: &Pubkey,
+    manager_pool_account: &Pubkey,
+    token_program_id: &Pubkey,
+    deposit_authority: &Pubkey,
+    fee: Fee,
+    max_validators: u32,
+) -> Result<Instruction, ProgramError> {
+    let init_data = StakePoolInstruction::Initialize {
+        fee,
+        max_validators,
+    };
+    let data = init_data.try_to_vec()?;
+    let accounts = vec![
+        AccountMeta::new(*stake_pool, true),
+        AccountMeta::new_readonly(*manager, true),
+        AccountMeta::new_readonly(*staker, false),
+        AccountMeta::new(*validator_list, false),
+        AccountMeta::new_readonly(*reserve_stake, false),
+        AccountMeta::new_readonly(*pool_mint, false),
+        AccountMeta::new_readonly(*manager_pool_account, false),
+        AccountMeta::new_readonly(sysvar::clock::id(), false),
+        AccountMeta::new_readonly(sysvar::rent::id(), false),
+        AccountMeta::new_readonly(*token_program_id, false),
+        AccountMeta::new_readonly(*deposit_authority, false),
+    ];
+    Ok(Instruction {
+        program_id: *program_id,
+        accounts,
+        data,
+    })
 }

@@ -17,6 +17,8 @@ use solana_sdk::{
     transport::TransportError,
 };
 
+use lido::DEPOSIT_AUTHORITY_ID;
+
 async fn create_account(
     banks_client: &mut BanksClient,
     payer: &Keypair,
@@ -124,19 +126,38 @@ async fn test_successful_delegate_deposit() {
     // Delegate the deposit
     let validator_account = validators.get(0).unwrap();
 
-    let (stake_account, _) = Pubkey::find_program_address(
-        &[&validator_account.validator.pubkey().to_bytes()[..32]],
-        &id(),
+    let (stake_account, _) =
+        Pubkey::find_program_address(&[&validator_account.vote.pubkey().to_bytes()[..32]], &id());
+
+    // program_id: &Pubkey,
+    // lido: &Pubkey,
+    // validator: &Pubkey,
+    // reserve: &Pubkey,
+    // stake: &Pubkey,
+    // deposit_authority: &Pubkey,
+    // withdraw_authority: &Pubkey,
+
+    // stake_pool_program: &Pubkey,
+    // stake_pool: &Pubkey,
+    // stake_pool_validator_list: &Pubkey,
+    // stake_pool_withdraw_authority: &Pubkey,
+    // stake_pool_validator_stake_account: &Pubkey,
+    // stake_pool_mint: &Pubkey,
+    // amount: u64,
+    println!(
+        "VALIDATOR VOTE: {}\nValidator: {}",
+        validator_account.vote.pubkey(),
+        validator_account.validator.pubkey()
     );
 
     let mut transaction = Transaction::new_with_payer(
         &[instruction::delegate_deposit(
             &id(),
             &lido_accounts.lido.pubkey(),
-            &lido_accounts.stake_pool_accounts.deposit_authority,
-            &stake_account,
+            &validator_account.vote.pubkey(),
             &lido_accounts.reserve_authority,
-            &validator_account.validator.pubkey(),
+            &stake_account,
+            &lido_accounts.deposit_authority,
             TEST_DELEGATE_DEPOSIT_AMOUNT,
         )
         .unwrap()],

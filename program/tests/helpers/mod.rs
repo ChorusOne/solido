@@ -27,6 +27,8 @@ pub struct LidoAccounts {
     pub lido: Keypair,
     pub mint_program: Keypair,
     pub reserve_authority: Pubkey,
+    pub deposit_authority: Pubkey,
+    pub stake_pool_token_reserve_authority: Pubkey,
 
     pub stake_pool_accounts: StakePoolAccounts,
 }
@@ -36,20 +38,34 @@ impl LidoAccounts {
         let owner = Keypair::new();
         let lido = Keypair::new();
         let mint_program = Keypair::new();
-        let reserve = Keypair::new();
 
         let (reserve_authority, _) = Pubkey::find_program_address(
             &[&lido.pubkey().to_bytes()[..32], RESERVE_AUTHORITY_ID],
             &id(),
         );
-        let mut stake_pool = StakePoolAccounts::new();
-        stake_pool.deposit_authority = reserve_authority;
+
+        let (deposit_authority, _) = Pubkey::find_program_address(
+            &[&lido.pubkey().to_bytes()[..32], DEPOSIT_AUTHORITY_ID],
+            &id(),
+        );
+        let (stake_pool_token_reserve_authority, _) = Pubkey::find_program_address(
+            &[
+                &lido.pubkey().to_bytes()[..32],
+                STAKE_POOL_TOKEN_RESERVE_AUTHORITY_ID,
+            ],
+            &id(),
+        );
+
+        let mut stake_pool_accounts = StakePoolAccounts::new();
+        stake_pool_accounts.deposit_authority = reserve_authority;
         Self {
             owner,
             lido,
             mint_program,
             reserve_authority,
-            stake_pool_accounts: stake_pool,
+            deposit_authority,
+            stake_pool_accounts,
+            stake_pool_token_reserve_authority,
         }
     }
 
@@ -59,6 +75,8 @@ impl LidoAccounts {
         payer: &Keypair,
         recent_blockhash: &Hash,
     ) -> Result<(), TransportError> {
+        self.stake_pool_accounts = StakePoolAccounts::new();
+        self.stake_pool_accounts.deposit_authority = self.deposit_authority;
         self.stake_pool_accounts
             .initialize_stake_pool(banks_client, payer, recent_blockhash, 1)
             .await?;
