@@ -43,7 +43,12 @@ impl Lido {
         }
     }
 
-    pub fn check_lido_for_deposit(&self, owner_key: &Pubkey, stakepool_key: &Pubkey, lsol_mint_key: &Pubkey) -> ProgramResult {
+    pub fn check_lido_for_deposit(
+        &self,
+        owner_key: &Pubkey,
+        stakepool_key: &Pubkey,
+        lsol_mint_key: &Pubkey,
+    ) -> ProgramResult {
         if &self.owner != owner_key {
             return Err(LidoError::InvalidOwner.into());
         }

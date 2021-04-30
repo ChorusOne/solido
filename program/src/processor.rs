@@ -3,7 +3,13 @@
 use solana_program::program_pack::Pack;
 use spl_stake_pool::{stake_program, state::StakePool};
 
-use crate::{DEPOSIT_AUTHORITY_ID, RESERVE_AUTHORITY_ID, STAKE_POOL_TOKEN_RESERVE_AUTHORITY_ID, error::LidoError, instruction::{stake_pool_deposit, LidoInstruction}, logic::{AccountType, check_reserve_authority, check_token_program_id, rent_exemption}, state::Lido};
+use crate::{
+    error::LidoError,
+    instruction::{stake_pool_deposit, LidoInstruction},
+    logic::{check_reserve_authority, check_token_program_id, rent_exemption, AccountType},
+    state::Lido,
+    DEPOSIT_AUTHORITY_ID, RESERVE_AUTHORITY_ID, STAKE_POOL_TOKEN_RESERVE_AUTHORITY_ID,
+};
 
 use {
     borsh::{BorshDeserialize, BorshSerialize},
@@ -48,7 +54,7 @@ impl Processor {
         let rent = &Rent::from_account_info(rent_info)?;
         rent_exemption(rent, stakepool_info, AccountType::StakePool)?;
         rent_exemption(rent, lido_info, AccountType::Lido)?;
-        
+
         let mut lido = try_from_slice_unchecked::<Lido>(&lido_info.data.borrow())?;
         lido.is_initialized()?;
 
@@ -123,11 +129,11 @@ impl Processor {
         }
 
         let mut lido = Lido::try_from_slice(&lido_info.data.borrow())?;
-        
+
         lido.check_lido_for_deposit(owner_info.key, stake_pool.key, lsol_mint_info.key)?;
         check_token_program_id(token_program_info)?;
         check_reserve_authority(lido_info, program_id, reserve_authority_info)?;
-        
+
         // Overflow will never happen because we check that user has `amount` in its account
         // user_info.lamports.borrow_mut().checked_sub(amount);
 
