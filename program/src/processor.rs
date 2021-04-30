@@ -53,6 +53,7 @@ impl Processor {
         let _rent = &Rent::from_account_info(rent_info)?;
 
         let mut lido = try_from_slice_unchecked::<Lido>(&lido_info.data.borrow())?;
+        lido.is_initialized()?;
 
         let (_, reserve_bump_seed) = Pubkey::find_program_address(
             &[&lido_info.key.to_bytes()[..32], RESERVE_AUTHORITY_ID],
@@ -78,6 +79,7 @@ impl Processor {
         lido.sol_reserve_authority_bump_seed = reserve_bump_seed;
         lido.deposit_authority_bump_seed = deposit_bump_seed;
         lido.toke_reserve_authority_bump_seed = token_reserve_bump_seed;
+        lido.is_initialized = true;
 
         lido.serialize(&mut *lido_info.data.borrow_mut())
             .map_err(|e| e.into())
