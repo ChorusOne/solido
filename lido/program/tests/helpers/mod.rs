@@ -1,11 +1,8 @@
 use lido::*;
-use solana_program::{
-    borsh::get_packed_len, hash::Hash, program_pack::Pack, pubkey::Pubkey, system_instruction,
-};
+use solana_program::{borsh::get_packed_len, hash::Hash, pubkey::Pubkey, system_instruction};
 use solana_program_test::*;
 use solana_sdk::{signature::Keypair, transport::TransportError};
 use solana_sdk::{signature::Signer, transaction::Transaction};
-use spl_stake_pool::stake_program::Stake;
 use stakepool_account::StakePoolAccounts;
 
 use self::stakepool_account::create_mint;

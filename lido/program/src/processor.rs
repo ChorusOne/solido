@@ -1,6 +1,6 @@
 //! Program state processor
 
-use solana_program::{clock, program_pack::Pack};
+use solana_program::program_pack::Pack;
 use spl_stake_pool::stake_program;
 
 use crate::{
@@ -50,7 +50,7 @@ impl Processor {
         // let members_list_info = next_account_info(account_info_iter)?;
         let rent_info = next_account_info(account_info_iter)?;
 
-        let rent = &Rent::from_account_info(rent_info)?;
+        let _rent = &Rent::from_account_info(rent_info)?;
 
         let mut lido = try_from_slice_unchecked::<Lido>(&lido_info.data.borrow())?;
 
@@ -77,14 +77,14 @@ impl Processor {
         lido.lsol_mint_program = *mint_program_info.key;
         lido.sol_reserve_authority_bump_seed = reserve_bump_seed;
         lido.deposit_authority_bump_seed = deposit_bump_seed;
-        lido.token_reserve_authority_bump_seed = token_reserve_bump_seed;
+        lido.toke_reserve_authority_bump_seed = token_reserve_bump_seed;
 
         lido.serialize(&mut *lido_info.data.borrow_mut())
             .map_err(|e| e.into())
     }
 
     pub fn process_deposit(
-        program_id: &Pubkey,
+        _program_id: &Pubkey,
         amount: u64,
         accounts: &[AccountInfo],
     ) -> ProgramResult {
@@ -204,7 +204,7 @@ impl Processor {
         let stake_config_info = next_account_info(account_info_iter)?;
 
         let rent = &Rent::from_account_info(rent_info)?;
-        let mut lido = Lido::try_from_slice(&lido_info.data.borrow())?;
+        let lido = Lido::try_from_slice(&lido_info.data.borrow())?;
 
         let (to_pubkey, stake_bump_seed) =
             Pubkey::find_program_address(&[&validator_info.key.to_bytes()[..32]], program_id);
@@ -229,7 +229,7 @@ impl Processor {
 
         let authority_signature_seeds: &[&[_]] = &[
             &me_bytes,
-            &RESERVE_AUTHORITY_ID[..],
+            &RESERVE_AUTHORITY_ID,
             &[lido.sol_reserve_authority_bump_seed],
         ];
 
@@ -255,7 +255,7 @@ impl Processor {
                 stake_info.clone(),
                 system_program_info.clone(),
             ],
-            &[&authority_signature_seeds[..], &validator_stake_seeds],
+            &[&authority_signature_seeds, &validator_stake_seeds],
         )?;
 
         invoke(
@@ -317,15 +317,15 @@ impl Processor {
         let stake_pool_mint_info = next_account_info(account_info_iter)?;
 
         // Sys
-        let clock_info = next_account_info(account_info_iter)?;
-        let stake_history_info = next_account_info(account_info_iter)?;
-        let system_program_info = next_account_info(account_info_iter)?;
+        let _clock_info = next_account_info(account_info_iter)?;
+        let _stake_history_info = next_account_info(account_info_iter)?;
+        let _system_program_info = next_account_info(account_info_iter)?;
         let rent_info = next_account_info(account_info_iter)?;
         let token_program_info = next_account_info(account_info_iter)?;
-        let stake_program_info = next_account_info(account_info_iter)?;
+        let _stake_program_info = next_account_info(account_info_iter)?;
 
-        let rent = &Rent::from_account_info(rent_info)?;
-        let mut lido = Lido::try_from_slice(&lido_info.data.borrow())?;
+        let _rent = &Rent::from_account_info(rent_info)?;
+        let lido = Lido::try_from_slice(&lido_info.data.borrow())?;
 
         let (to_pubkey, _) =
             Pubkey::find_program_address(&[&validator_info.key.to_bytes()[..32]], program_id);
@@ -383,9 +383,9 @@ impl Processor {
     }
 
     pub fn process_withdraw(
-        program_id: &Pubkey,
-        pool_tokens: u64,
-        accounts: &[AccountInfo],
+        _program_id: &Pubkey,
+        _pool_tokens: u64,
+        _accounts: &[AccountInfo],
     ) -> ProgramResult {
         Ok(())
     }

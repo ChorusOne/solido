@@ -1,3 +1,5 @@
+#![allow(clippy::too_many_arguments)]
+
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use solana_program::{
     instruction::{AccountMeta, Instruction},
@@ -14,14 +16,17 @@ pub enum LidoInstruction {
     Initialize,
     /// Deposit with amount
     Deposit {
+        #[allow(dead_code)] // but it's not
         amount: u64,
     },
     /// Deposit amount to member validator
     DelegateDeposit {
+        #[allow(dead_code)] // but it's not
         amount: u64,
     },
     StakePoolDelegate,
     Withdraw {
+        #[allow(dead_code)] // but it's not
         amount: u64,
     },
 }
@@ -60,7 +65,7 @@ pub fn deposit(
     reserve_authority: &Pubkey,
     amount: u64,
 ) -> Result<Instruction, ProgramError> {
-    let init_data = LidoInstruction::Deposit { amount: amount };
+    let init_data = LidoInstruction::Deposit { amount };
     let data = init_data.try_to_vec()?;
     let accounts = vec![
         AccountMeta::new(*lido, false),
@@ -91,7 +96,7 @@ pub fn delegate_deposit(
 
     amount: u64,
 ) -> Result<Instruction, ProgramError> {
-    let init_data = LidoInstruction::DelegateDeposit { amount: amount };
+    let init_data = LidoInstruction::DelegateDeposit { amount };
     let data = init_data.try_to_vec()?;
     let accounts = vec![
         AccountMeta::new(*lido, false),

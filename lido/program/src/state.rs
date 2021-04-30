@@ -15,7 +15,7 @@ pub struct Lido {
 
     pub sol_reserve_authority_bump_seed: u8,
     pub deposit_authority_bump_seed: u8,
-    pub token_reserve_authority_bump_seed: u8,
+    pub toke_reserve_authority_bump_seed: u8,
 }
 
 impl Lido {
@@ -64,7 +64,7 @@ impl LidoMembers {
     pub fn new(maximum_members: u32) -> Self {
         Self {
             account_type: LidoAccountType::Uninitialized,
-            maximum_members: maximum_members,
+            maximum_members,
             list: vec![Pubkey::default(); maximum_members as usize],
         }
     }

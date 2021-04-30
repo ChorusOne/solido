@@ -10,52 +10,18 @@ use helpers::{
     },
     LidoAccounts,
 };
-use lido::{id, instruction, state};
-use solana_program::{
-    borsh::{get_packed_len, try_from_slice_unchecked},
-    hash::Hash,
-    pubkey::Pubkey,
-    system_instruction,
-};
+use lido::{id, instruction};
+use solana_program::{borsh::try_from_slice_unchecked, hash::Hash, pubkey::Pubkey};
 use solana_program_test::{tokio, BanksClient};
 use solana_sdk::{
     signature::{Keypair, Signer},
     transaction::Transaction,
-    transport::TransportError,
 };
 
-use lido::DEPOSIT_AUTHORITY_ID;
 use spl_stake_pool::{
     minimum_stake_lamports, stake_program,
     state::{StakePool, ValidatorList},
 };
-
-async fn create_account(
-    banks_client: &mut BanksClient,
-    payer: &Keypair,
-    recent_blockhash: Hash,
-    to: &Keypair,
-    owner: &Pubkey,
-) -> Result<(), TransportError> {
-    let rent = banks_client.get_rent().await.unwrap();
-    let mint_rent = rent.minimum_balance(0);
-
-    banks_client
-        .process_transaction(Transaction::new_signed_with_payer(
-            &[system_instruction::create_account(
-                &payer.pubkey(),
-                &to.pubkey(),
-                mint_rent,
-                0,
-                owner,
-            )],
-            Some(&payer.pubkey()),
-            &[payer, to],
-            recent_blockhash,
-        ))
-        .await?;
-    Ok(())
-}
 
 async fn setup() -> (
     BanksClient,
