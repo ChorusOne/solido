@@ -3,13 +3,7 @@
 use solana_program::program_pack::Pack;
 use spl_stake_pool::{stake_program, state::StakePool};
 
-use crate::{
-    error::LidoError,
-    instruction::{stake_pool_deposit, LidoInstruction},
-    logic::{rent_exemption, AccountType},
-    state::Lido,
-    DEPOSIT_AUTHORITY_ID, RESERVE_AUTHORITY_ID, STAKE_POOL_TOKEN_RESERVE_AUTHORITY_ID,
-};
+use crate::{DEPOSIT_AUTHORITY_ID, RESERVE_AUTHORITY_ID, STAKE_POOL_TOKEN_RESERVE_AUTHORITY_ID, error::LidoError, instruction::{stake_pool_deposit, LidoInstruction}, logic::{AccountType, check_reserve_authority, rent_exemption}, state::Lido};
 
 use {
     borsh::{BorshDeserialize, BorshSerialize},
@@ -52,15 +46,12 @@ impl Processor {
         let rent_info = next_account_info(account_info_iter)?;
 
         let rent = &Rent::from_account_info(rent_info)?;
-        if let Some(value) = rent_exemption(rent, stakepool_info, AccountType::StakePool) {
-            value?;
-        }
-        if let Some(value) = rent_exemption(rent, lido_info, AccountType::Lido) {
-            value?;
-        }
-
+        rent_exemption(rent, stakepool_info, AccountType::StakePool)?;
+        rent_exemption(rent, lido_info, AccountType::Lido)?;
+        
         let mut lido = try_from_slice_unchecked::<Lido>(&lido_info.data.borrow())?;
         lido.is_initialized()?;
+        
         let stake_pool = StakePool::try_from_slice(&stakepool_info.data.borrow())?;
         if stake_pool.is_uninitialized() {
             msg!("Provided stake pool not initialized");
@@ -98,7 +89,7 @@ impl Processor {
     }
 
     pub fn process_deposit(
-        _program_id: &Pubkey,
+        program_id: &Pubkey,
         amount: u64,
         accounts: &[AccountInfo],
     ) -> ProgramResult {
@@ -143,6 +134,12 @@ impl Processor {
             return Err(LidoError::InvalidToken.into());
         }
 
+        if &token_program_info.key != &&spl_token::id() {
+            return Err(LidoError::InvalidToken.into());
+        }
+
+        check_reserve_authority(lido_info, program_id, reserve_authority_info)?;
+        
         // Overflow will never happen because we check that user has `amount` in its account
         // user_info.lamports.borrow_mut().checked_sub(amount);
 
