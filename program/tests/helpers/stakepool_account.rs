@@ -247,8 +247,10 @@ pub async fn create_stake_pool(
         ],
         Some(&payer.pubkey()),
     );
-    let mut signers = vec![payer, stake_pool, validator_list, manager];
-    transaction.sign(&signers, *recent_blockhash);
+    transaction.sign(
+        &vec![payer, stake_pool, validator_list, manager],
+        *recent_blockhash,
+    );
     banks_client.process_transaction(transaction).await?;
     Ok(())
 }

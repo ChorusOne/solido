@@ -4,7 +4,7 @@ use helpers::{program_test, stakepool_account::get_account, LidoAccounts};
 use lido::{id, state};
 use solana_program::borsh::get_packed_len;
 use solana_program_test::tokio;
-use solana_sdk::signature::{Keypair, Signer};
+use solana_sdk::signature::Signer;
 
 #[tokio::test]
 async fn test_success_initialize() {

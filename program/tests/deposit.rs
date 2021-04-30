@@ -2,11 +2,11 @@ mod helpers;
 
 use helpers::{
     program_test,
-    stakepool_account::{create_token_account, get_account, get_token_balance, transfer},
+    stakepool_account::{create_token_account, get_token_balance, transfer},
     LidoAccounts,
 };
-use lido::{id, instruction, state};
-use solana_program::{borsh::get_packed_len, hash::Hash};
+use lido::{id, instruction};
+use solana_program::hash::Hash;
 use solana_program_test::{tokio, BanksClient};
 use solana_sdk::{
     signature::{Keypair, Signer},
