@@ -1,5 +1,7 @@
 mod helpers;
 
+use bincode::deserialize;
+use borsh::BorshDeserialize;
 use helpers::{
     program_test,
     stakepool_account::{
@@ -9,7 +11,12 @@ use helpers::{
     LidoAccounts,
 };
 use lido::{id, instruction, state};
-use solana_program::{borsh::get_packed_len, hash::Hash, pubkey::Pubkey, system_instruction};
+use solana_program::{
+    borsh::{get_packed_len, try_from_slice_unchecked},
+    hash::Hash,
+    pubkey::Pubkey,
+    system_instruction,
+};
 use solana_program_test::{tokio, BanksClient};
 use solana_sdk::{
     signature::{Keypair, Signer},
@@ -18,6 +25,10 @@ use solana_sdk::{
 };
 
 use lido::DEPOSIT_AUTHORITY_ID;
+use spl_stake_pool::{
+    minimum_stake_lamports, stake_program,
+    state::{StakePool, ValidatorList},
+};
 
 async fn create_account(
     banks_client: &mut BanksClient,
@@ -145,10 +156,26 @@ async fn test_successful_delegate_deposit_stake_pool_deposit() {
     transaction.sign(&[&payer], recent_blockhash);
     banks_client.process_transaction(transaction).await.unwrap();
 
-    // TODO: test if variables are set right
+    let stake_pool_before = get_account(
+        &mut banks_client,
+        &lido_accounts.stake_pool_accounts.stake_pool.pubkey(),
+    )
+    .await;
+    let stake_pool_before = StakePool::try_from_slice(&stake_pool_before.data.as_slice()).unwrap();
+
+    let validator_list = get_account(
+        &mut banks_client,
+        &lido_accounts.stake_pool_accounts.validator_list.pubkey(),
+    )
+    .await;
+
+    let validator_list =
+        try_from_slice_unchecked::<ValidatorList>(validator_list.data.as_slice()).unwrap();
+    let validator_stake_item_before = validator_list
+        .find(&validator_account.vote.pubkey())
+        .unwrap();
 
     let token_pool_account = Keypair::new();
-
     create_token_account(
         &mut banks_client,
         &payer,
@@ -180,6 +207,54 @@ async fn test_successful_delegate_deposit_stake_pool_deposit() {
     );
     transaction.sign(&[&payer], recent_blockhash);
     banks_client.process_transaction(transaction).await.unwrap();
+
+    // Stake pool should add its balance to the pool balance
+    let stake_pool = get_account(
+        &mut banks_client,
+        &lido_accounts.stake_pool_accounts.stake_pool.pubkey(),
+    )
+    .await;
+    let stake_pool = StakePool::try_from_slice(&stake_pool.data.as_slice()).unwrap();
+    assert_eq!(
+        stake_pool.total_stake_lamports,
+        stake_pool_before.total_stake_lamports + TEST_DELEGATE_DEPOSIT_AMOUNT
+    );
+    assert_eq!(
+        stake_pool.pool_token_supply,
+        stake_pool_before.pool_token_supply + TEST_DELEGATE_DEPOSIT_AMOUNT
+    );
+
+    // Check minted tokens
+    let lido_token_balance =
+        get_token_balance(&mut banks_client, &token_pool_account.pubkey()).await;
+    assert_eq!(lido_token_balance, TEST_DELEGATE_DEPOSIT_AMOUNT);
+
+    // Check balances in validator stake account list storage
+    let validator_list = get_account(
+        &mut banks_client,
+        &lido_accounts.stake_pool_accounts.validator_list.pubkey(),
+    )
+    .await;
+    let validator_list =
+        try_from_slice_unchecked::<ValidatorList>(validator_list.data.as_slice()).unwrap();
+    let validator_stake_item = validator_list
+        .find(&validator_account.vote.pubkey())
+        .unwrap();
+    assert_eq!(
+        validator_stake_item.stake_lamports,
+        validator_stake_item_before.stake_lamports + TEST_DELEGATE_DEPOSIT_AMOUNT
+    );
+
+    // Check validator stake account actual SOL balance
+    let validator_stake_account =
+        get_account(&mut banks_client, &validator_account.stake_account).await;
+    let stake_state =
+        deserialize::<stake_program::StakeState>(&validator_stake_account.data).unwrap();
+    let meta = stake_state.meta().unwrap();
+    assert_eq!(
+        validator_stake_account.lamports - minimum_stake_lamports(&meta),
+        validator_stake_item.stake_lamports
+    );
 }
 
 #[tokio::test]
