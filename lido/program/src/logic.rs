@@ -28,6 +28,12 @@ pub fn check_reserve_authority(lido_info: &AccountInfo, program_id: &Pubkey, res
     Ok(())
 }
 
+pub fn check_token_program_id(token_program_info: &AccountInfo) -> Result<(), ProgramError> {
+    if &token_program_info.key != &&spl_token::id() {
+        return Err(LidoError::InvalidToken.into());
+    }
+    Ok(())
+}
 
 pub(crate) enum AccountType {
     StakePool,
