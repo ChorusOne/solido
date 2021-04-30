@@ -1,9 +1,15 @@
 //! Program state processor
 
 use solana_program::program_pack::Pack;
-use spl_stake_pool::stake_program;
+use spl_stake_pool::{stake_program, state::StakePool};
 
-use crate::{DEPOSIT_AUTHORITY_ID, RESERVE_AUTHORITY_ID, STAKE_POOL_TOKEN_RESERVE_AUTHORITY_ID, error::LidoError, instruction::{stake_pool_deposit, LidoInstruction}, logic::{AccountType, rent_exemption}, state::Lido};
+use crate::{
+    error::LidoError,
+    instruction::{stake_pool_deposit, LidoInstruction},
+    logic::{rent_exemption, AccountType},
+    state::Lido,
+    DEPOSIT_AUTHORITY_ID, RESERVE_AUTHORITY_ID, STAKE_POOL_TOKEN_RESERVE_AUTHORITY_ID,
+};
 
 use {
     borsh::{BorshDeserialize, BorshSerialize},
@@ -55,6 +61,11 @@ impl Processor {
 
         let mut lido = try_from_slice_unchecked::<Lido>(&lido_info.data.borrow())?;
         lido.is_initialized()?;
+        let stake_pool = StakePool::try_from_slice(&stakepool_info.data.borrow())?;
+        if stake_pool.is_uninitialized() {
+            msg!("Provided stake pool not initialized");
+            return Err(LidoError::InvalidStakePool.into());
+        }
 
         let (_, reserve_bump_seed) = Pubkey::find_program_address(
             &[&lido_info.key.to_bytes()[..32], RESERVE_AUTHORITY_ID],

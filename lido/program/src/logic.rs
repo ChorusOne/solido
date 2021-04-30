@@ -2,7 +2,11 @@ use std::fmt::Display;
 
 use solana_program::{account_info::AccountInfo, msg, program_error::ProgramError, rent::Rent};
 
-pub (crate) fn rent_exemption(rent: &Rent, account_info: &AccountInfo, account_type: AccountType) -> Option<Result<(), ProgramError>> {
+pub(crate) fn rent_exemption(
+    rent: &Rent,
+    account_info: &AccountInfo,
+    account_type: AccountType,
+) -> Option<Result<(), ProgramError>> {
     if !rent.is_exempt(account_info.lamports(), account_info.data_len()) {
         msg!("{} not rent-exempt", account_type);
         return Some(Err(ProgramError::AccountNotRentExempt));
@@ -10,9 +14,9 @@ pub (crate) fn rent_exemption(rent: &Rent, account_info: &AccountInfo, account_t
     None
 }
 
-pub (crate) enum AccountType {
+pub(crate) enum AccountType {
     StakePool,
-    Lido
+    Lido,
 }
 
 impl Display for AccountType {
