@@ -35,7 +35,7 @@ pub fn check_reserve_authority(
 }
 
 pub fn check_token_program_id(token_program_info: &AccountInfo) -> Result<(), ProgramError> {
-    if &token_program_info.key != &&spl_token::id() {
+    if token_program_info.key != &spl_token::id() {
         return Err(LidoError::InvalidToken.into());
     }
     Ok(())
