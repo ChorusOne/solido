@@ -1,4 +1,6 @@
-// #![cfg(all(target_arch = "bpf", not(feature = "no-entrypoint")))]
+//! Program entrypoint
+
+#![cfg(all(target_arch = "bpf", not(feature = "no-entrypoint")))]
 
 use crate::processor::Processor;
 use solana_program::{
