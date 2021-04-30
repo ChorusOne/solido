@@ -42,6 +42,20 @@ impl Lido {
             Ok(())
         }
     }
+
+    pub fn check_lido_for_deposit(&self, owner_key: &Pubkey, stakepool_key: &Pubkey, lsol_mint_key: &Pubkey) -> ProgramResult {
+        if &self.owner != owner_key {
+            return Err(LidoError::InvalidOwner.into());
+        }
+        if &self.stake_pool_account != stakepool_key {
+            return Err(LidoError::InvalidStakePool.into());
+        }
+
+        if &self.lsol_mint_program != lsol_mint_key {
+            return Err(LidoError::InvalidToken.into());
+        }
+        Ok(())
+    }
 }
 
 #[repr(C)]
