@@ -17,7 +17,7 @@ pub struct Lido {
 
     pub sol_reserve_authority_bump_seed: u8,
     pub deposit_authority_bump_seed: u8,
-    pub toke_reserve_authority_bump_seed: u8,
+    pub token_reserve_authority_bump_seed: u8,
     pub is_initialized: bool,
 }
 
