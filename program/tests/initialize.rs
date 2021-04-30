@@ -1,3 +1,5 @@
+#![cfg(feature = "test-bpf")]
+
 mod helpers;
 
 use helpers::{program_test, stakepool_account::get_account, LidoAccounts};
