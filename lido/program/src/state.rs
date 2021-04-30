@@ -1,8 +1,10 @@
 //! State transition types
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use solana_program::pubkey::Pubkey;
+use solana_program::{entrypoint::ProgramResult, msg, pubkey::Pubkey};
 use std::convert::TryFrom;
+
+use crate::error::LidoError;
 
 #[repr(C)]
 #[derive(Clone, Debug, Default, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema)]
@@ -16,6 +18,7 @@ pub struct Lido {
     pub sol_reserve_authority_bump_seed: u8,
     pub deposit_authority_bump_seed: u8,
     pub toke_reserve_authority_bump_seed: u8,
+    pub is_initialized: bool,
 }
 
 impl Lido {
@@ -29,6 +32,15 @@ impl Lido {
                 .checked_div(self.total_sol as u128)?,
         )
         .ok()
+    }
+
+    pub fn is_initialized(&self) -> ProgramResult {
+        if self.is_initialized {
+            msg!("Provided lido already in use");
+            Err(LidoError::AlreadyInUse.into())
+        } else {
+            Ok(())
+        }
     }
 }
 
