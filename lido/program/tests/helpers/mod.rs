@@ -61,8 +61,8 @@ impl LidoAccounts {
             mint_program,
             reserve_authority,
             deposit_authority,
-            stake_pool_accounts,
             stake_pool_token_reserve_authority,
+            stake_pool_accounts,
         }
     }
 
