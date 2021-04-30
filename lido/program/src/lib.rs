@@ -4,6 +4,7 @@ pub mod error;
 pub mod instruction;
 pub mod processor;
 pub mod state;
+pub (crate) mod logic;
 
 /// Seed for reserve authority in SOL
 pub const RESERVE_AUTHORITY_ID: &[u8] = b"reserve_authority";

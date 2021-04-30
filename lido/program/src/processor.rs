@@ -3,12 +3,7 @@
 use solana_program::program_pack::Pack;
 use spl_stake_pool::stake_program;
 
-use crate::{
-    error::LidoError,
-    instruction::{stake_pool_deposit, LidoInstruction},
-    state::Lido,
-    DEPOSIT_AUTHORITY_ID, RESERVE_AUTHORITY_ID, STAKE_POOL_TOKEN_RESERVE_AUTHORITY_ID,
-};
+use crate::{DEPOSIT_AUTHORITY_ID, RESERVE_AUTHORITY_ID, STAKE_POOL_TOKEN_RESERVE_AUTHORITY_ID, error::LidoError, instruction::{stake_pool_deposit, LidoInstruction}, logic::{AccountType, rent_exemption}, state::Lido};
 
 use {
     borsh::{BorshDeserialize, BorshSerialize},
@@ -50,7 +45,13 @@ impl Processor {
         // let members_list_info = next_account_info(account_info_iter)?;
         let rent_info = next_account_info(account_info_iter)?;
 
-        let _rent = &Rent::from_account_info(rent_info)?;
+        let rent = &Rent::from_account_info(rent_info)?;
+        if let Some(value) = rent_exemption(rent, stakepool_info, AccountType::StakePool) {
+            value?;
+        }
+        if let Some(value) = rent_exemption(rent, lido_info, AccountType::Lido) {
+            value?;
+        }
 
         let mut lido = try_from_slice_unchecked::<Lido>(&lido_info.data.borrow())?;
         lido.is_initialized()?;
@@ -78,7 +79,7 @@ impl Processor {
         lido.lsol_mint_program = *mint_program_info.key;
         lido.sol_reserve_authority_bump_seed = reserve_bump_seed;
         lido.deposit_authority_bump_seed = deposit_bump_seed;
-        lido.toke_reserve_authority_bump_seed = token_reserve_bump_seed;
+        lido.token_reserve_authority_bump_seed = token_reserve_bump_seed;
         lido.is_initialized = true;
 
         lido.serialize(&mut *lido_info.data.borrow_mut())
