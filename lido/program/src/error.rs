@@ -35,6 +35,9 @@ pub enum LidoError {
     InvalidStaker,
     #[error("WrongStakeState")]
     WrongStakeState,
+    // 10.
+    #[error("InvalidTokenProgram")]
+    InvalidTokenProgram,
 }
 impl From<LidoError> for ProgramError {
     fn from(e: LidoError) -> Self {

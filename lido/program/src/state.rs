@@ -61,6 +61,13 @@ impl Lido {
         }
         Ok(())
     }
+
+    pub fn check_token_program_id(&self, token_program_id: &Pubkey) -> ProgramResult {
+        if token_program_id != &self.token_program_id {
+            return Err(LidoError::InvalidTokenProgram.into());
+        }
+        Ok(())
+    }
 }
 
 #[repr(C)]
