@@ -32,6 +32,7 @@ async fn setup() -> (
     StakePoolAccounts,
     ValidatorStakeAccount,
     DepositStakeAccount,
+    Keypair,
     u64,
 ) {
     let (mut banks_client, payer, recent_blockhash) = program_test().start().await;
@@ -57,18 +58,20 @@ async fn setup() -> (
         &validator_stake_account,
         TEST_STAKE_AMOUNT,
     )
-    .await;
+    .await
+    .unwrap();
 
     let tokens_to_burn = deposit_info.pool_tokens / 4;
 
     // Delegate tokens for burning
+    let user_transfer_authority = Keypair::new();
     delegate_tokens(
         &mut banks_client,
         &payer,
         &recent_blockhash,
         &deposit_info.pool_account.pubkey(),
         &deposit_info.authority,
-        &stake_pool_accounts.withdraw_authority,
+        &user_transfer_authority.pubkey(),
         tokens_to_burn,
     )
     .await;
@@ -80,6 +83,7 @@ async fn setup() -> (
         stake_pool_accounts,
         validator_stake_account,
         deposit_info,
+        user_transfer_authority,
         tokens_to_burn,
     )
 }
@@ -93,6 +97,7 @@ async fn success() {
         stake_pool_accounts,
         validator_stake_account,
         deposit_info,
+        user_transfer_authority,
         tokens_to_burn,
     ) = setup().await;
 
@@ -135,6 +140,7 @@ async fn success() {
             &payer,
             &recent_blockhash,
             &user_stake_recipient.pubkey(),
+            &user_transfer_authority,
             &deposit_info.pool_account.pubkey(),
             &validator_stake_account.stake_account,
             &new_authority,
@@ -208,6 +214,7 @@ async fn fail_with_wrong_stake_program() {
         stake_pool_accounts,
         validator_stake_account,
         deposit_info,
+        user_transfer_authority,
         tokens_to_burn,
     ) = setup().await;
 
@@ -224,6 +231,7 @@ async fn fail_with_wrong_stake_program() {
         AccountMeta::new(validator_stake_account.stake_account, false),
         AccountMeta::new(user_stake_recipient.pubkey(), false),
         AccountMeta::new_readonly(new_authority, false),
+        AccountMeta::new_readonly(user_transfer_authority.pubkey(), true),
         AccountMeta::new(deposit_info.pool_account.pubkey(), false),
         AccountMeta::new(stake_pool_accounts.pool_mint.pubkey(), false),
         AccountMeta::new_readonly(sysvar::clock::id(), false),
@@ -238,8 +246,12 @@ async fn fail_with_wrong_stake_program() {
             .unwrap(),
     };
 
-    let mut transaction = Transaction::new_with_payer(&[instruction], Some(&payer.pubkey()));
-    transaction.sign(&[&payer], recent_blockhash);
+    let transaction = Transaction::new_signed_with_payer(
+        &[instruction],
+        Some(&payer.pubkey()),
+        &[&payer, &user_transfer_authority],
+        recent_blockhash,
+    );
     let transaction_error = banks_client
         .process_transaction(transaction)
         .await
@@ -263,6 +275,7 @@ async fn fail_with_wrong_withdraw_authority() {
         mut stake_pool_accounts,
         validator_stake_account,
         deposit_info,
+        user_transfer_authority,
         tokens_to_burn,
     ) = setup().await;
 
@@ -278,6 +291,7 @@ async fn fail_with_wrong_withdraw_authority() {
             &payer,
             &recent_blockhash,
             &user_stake_recipient.pubkey(),
+            &user_transfer_authority,
             &deposit_info.pool_account.pubkey(),
             &validator_stake_account.stake_account,
             &new_authority,
@@ -307,6 +321,7 @@ async fn fail_with_wrong_token_program_id() {
         stake_pool_accounts,
         validator_stake_account,
         deposit_info,
+        user_transfer_authority,
         tokens_to_burn,
     ) = setup().await;
 
@@ -316,7 +331,7 @@ async fn fail_with_wrong_token_program_id() {
     let new_authority = Pubkey::new_unique();
     let wrong_token_program = Keypair::new();
 
-    let mut transaction = Transaction::new_with_payer(
+    let transaction = Transaction::new_signed_with_payer(
         &[instruction::withdraw(
             &id(),
             &stake_pool_accounts.stake_pool.pubkey(),
@@ -325,6 +340,7 @@ async fn fail_with_wrong_token_program_id() {
             &validator_stake_account.stake_account,
             &user_stake_recipient.pubkey(),
             &new_authority,
+            &user_transfer_authority.pubkey(),
             &deposit_info.pool_account.pubkey(),
             &stake_pool_accounts.pool_mint.pubkey(),
             &wrong_token_program.pubkey(),
@@ -332,8 +348,9 @@ async fn fail_with_wrong_token_program_id() {
         )
         .unwrap()],
         Some(&payer.pubkey()),
+        &[&payer, &user_transfer_authority],
+        recent_blockhash,
     );
-    transaction.sign(&[&payer], recent_blockhash);
     let transaction_error = banks_client
         .process_transaction(transaction)
         .await
@@ -357,6 +374,7 @@ async fn fail_with_wrong_validator_list() {
         mut stake_pool_accounts,
         validator_stake_account,
         deposit_info,
+        user_transfer_authority,
         tokens_to_burn,
     ) = setup().await;
 
@@ -372,6 +390,7 @@ async fn fail_with_wrong_validator_list() {
             &payer,
             &recent_blockhash,
             &user_stake_recipient.pubkey(),
+            &user_transfer_authority,
             &deposit_info.pool_account.pubkey(),
             &validator_stake_account.stake_account,
             &new_authority,
@@ -396,7 +415,16 @@ async fn fail_with_wrong_validator_list() {
 
 #[tokio::test]
 async fn fail_with_unknown_validator() {
-    let (mut banks_client, payer, recent_blockhash, stake_pool_accounts, _, _, _) = setup().await;
+    let (
+        mut banks_client,
+        payer,
+        recent_blockhash,
+        stake_pool_accounts,
+        _,
+        _,
+        user_transfer_authority,
+        _,
+    ) = setup().await;
 
     let validator_stake_account =
         ValidatorStakeAccount::new(&stake_pool_accounts.stake_pool.pubkey());
@@ -475,7 +503,7 @@ async fn fail_with_unknown_validator() {
         &recent_blockhash,
         &user_pool_account,
         &user,
-        &stake_pool_accounts.withdraw_authority,
+        &user_transfer_authority.pubkey(),
         tokens_to_burn,
     )
     .await;
@@ -491,6 +519,7 @@ async fn fail_with_unknown_validator() {
             &payer,
             &recent_blockhash,
             &user_stake_recipient.pubkey(),
+            &user_transfer_authority,
             &user_pool_account,
             &validator_stake_account.stake_account,
             &new_authority,
@@ -518,6 +547,7 @@ async fn fail_double_withdraw_to_the_same_account() {
         stake_pool_accounts,
         validator_stake_account,
         deposit_info,
+        user_transfer_authority,
         tokens_to_burn,
     ) = setup().await;
 
@@ -538,6 +568,7 @@ async fn fail_double_withdraw_to_the_same_account() {
             &payer,
             &recent_blockhash,
             &user_stake_recipient.pubkey(),
+            &user_transfer_authority,
             &deposit_info.pool_account.pubkey(),
             &validator_stake_account.stake_account,
             &new_authority,
@@ -555,7 +586,7 @@ async fn fail_double_withdraw_to_the_same_account() {
         &latest_blockhash,
         &deposit_info.pool_account.pubkey(),
         &deposit_info.authority,
-        &stake_pool_accounts.withdraw_authority,
+        &user_transfer_authority.pubkey(),
         tokens_to_burn,
     )
     .await;
@@ -566,6 +597,7 @@ async fn fail_double_withdraw_to_the_same_account() {
             &payer,
             &latest_blockhash,
             &user_stake_recipient.pubkey(),
+            &user_transfer_authority,
             &deposit_info.pool_account.pubkey(),
             &validator_stake_account.stake_account,
             &new_authority,
@@ -607,7 +639,8 @@ async fn fail_without_token_approval() {
         &validator_stake_account,
         TEST_STAKE_AMOUNT,
     )
-    .await;
+    .await
+    .unwrap();
 
     let tokens_to_burn = deposit_info.pool_tokens / 4;
 
@@ -622,12 +655,14 @@ async fn fail_without_token_approval() {
     .await;
 
     let new_authority = Pubkey::new_unique();
+    let user_transfer_authority = Keypair::new();
     let transaction_error = stake_pool_accounts
         .withdraw_stake(
             &mut banks_client,
             &payer,
             &recent_blockhash,
             &user_stake_recipient.pubkey(),
+            &user_transfer_authority,
             &deposit_info.pool_account.pubkey(),
             &validator_stake_account.stake_account,
             &new_authority,
@@ -675,10 +710,12 @@ async fn fail_with_low_delegation() {
         &validator_stake_account,
         TEST_STAKE_AMOUNT,
     )
-    .await;
+    .await
+    .unwrap();
 
     let tokens_to_burn = deposit_info.pool_tokens / 4;
 
+    let user_transfer_authority = Keypair::new();
     // Delegate tokens for burning
     delegate_tokens(
         &mut banks_client,
@@ -686,7 +723,7 @@ async fn fail_with_low_delegation() {
         &recent_blockhash,
         &deposit_info.pool_account.pubkey(),
         &deposit_info.authority,
-        &stake_pool_accounts.withdraw_authority,
+        &user_transfer_authority.pubkey(),
         1,
     )
     .await;
@@ -708,6 +745,7 @@ async fn fail_with_low_delegation() {
             &payer,
             &recent_blockhash,
             &user_stake_recipient.pubkey(),
+            &user_transfer_authority,
             &deposit_info.pool_account.pubkey(),
             &validator_stake_account.stake_account,
             &new_authority,
@@ -739,6 +777,7 @@ async fn fail_overdraw_validator() {
         stake_pool_accounts,
         _validator_stake_account,
         deposit_info,
+        user_transfer_authority,
         tokens_to_burn,
     ) = setup().await;
 
@@ -767,6 +806,7 @@ async fn fail_overdraw_validator() {
             &payer,
             &recent_blockhash,
             &user_stake_recipient.pubkey(),
+            &user_transfer_authority,
             &deposit_info.pool_account.pubkey(),
             &validator_stake_account.stake_account,
             &new_authority,
@@ -819,7 +859,8 @@ async fn success_with_reserve() {
         &validator_stake,
         deposit_lamports,
     )
-    .await;
+    .await
+    .unwrap();
 
     // decrease some stake
     let error = stake_pool_accounts
@@ -853,13 +894,14 @@ async fn success_with_reserve() {
         .await;
 
     // Delegate tokens for burning during withdraw
+    let user_transfer_authority = Keypair::new();
     delegate_tokens(
         &mut context.banks_client,
         &context.payer,
         &context.last_blockhash,
         &deposit_info.pool_account.pubkey(),
         &deposit_info.authority,
-        &stake_pool_accounts.withdraw_authority,
+        &user_transfer_authority.pubkey(),
         deposit_info.pool_tokens,
     )
     .await;
@@ -880,6 +922,7 @@ async fn success_with_reserve() {
             &context.payer,
             &context.last_blockhash,
             &withdraw_destination.pubkey(),
+            &user_transfer_authority,
             &deposit_info.pool_account.pubkey(),
             &stake_pool_accounts.reserve_stake.pubkey(),
             &withdraw_destination_authority,
@@ -932,6 +975,7 @@ async fn success_with_reserve() {
             &context.payer,
             &context.last_blockhash,
             &withdraw_destination.pubkey(),
+            &user_transfer_authority,
             &deposit_info.pool_account.pubkey(),
             &stake_pool_accounts.reserve_stake.pubkey(),
             &withdraw_destination_authority,

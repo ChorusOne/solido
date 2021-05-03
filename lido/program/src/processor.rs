@@ -93,7 +93,6 @@ impl Processor {
         lido.deposit_authority_bump_seed = deposit_bump_seed;
         lido.token_reserve_authority_bump_seed = token_reserve_bump_seed;
         lido.token_program_id = *token_program_info.key;
-        lido.is_initialized = true;
 
         lido.serialize(&mut *lido_info.data.borrow_mut())
             .map_err(|e| e.into())
