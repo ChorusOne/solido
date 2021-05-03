@@ -23,6 +23,7 @@ members = [
   "utils/cgen",
   "utils/test-client",
   "lido/program",
+  "lido/cli",
 ]
 exclude = [
   "themis/client_ristretto",
