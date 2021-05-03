@@ -1712,7 +1712,7 @@ version = "0.1.0"
 dependencies = [
  "arrayref",
  "bincode",
- "borsh",
+ "borsh 0.8.2",
  "num-derive",
  "num-traits",
  "num_enum",
