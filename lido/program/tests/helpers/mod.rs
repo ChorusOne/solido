@@ -1,7 +1,5 @@
 use lido::*;
-use solana_program::{
-    borsh::get_packed_len, hash::Hash, program_pack::Pack, pubkey::Pubkey, system_instruction,
-};
+use solana_program::{borsh::get_packed_len, hash::Hash, pubkey::Pubkey, system_instruction};
 use solana_program_test::*;
 use solana_sdk::{signature::Keypair, transport::TransportError};
 use solana_sdk::{signature::Signer, transaction::Transaction};
@@ -24,29 +22,47 @@ pub fn program_test() -> ProgramTest {
 pub struct LidoAccounts {
     pub owner: Keypair,
     pub lido: Keypair,
-    pub stake_pool: Keypair,
     pub mint_program: Keypair,
-    pub authority: Pubkey,
-    pub reserve: Keypair,
+    pub reserve_authority: Pubkey,
+    pub deposit_authority: Pubkey,
+    pub stake_pool_token_reserve_authority: Pubkey,
+
+    pub stake_pool_accounts: StakePoolAccounts,
 }
 
 impl LidoAccounts {
     pub fn new() -> Self {
-        let stake_pool = Keypair::new();
         let owner = Keypair::new();
         let lido = Keypair::new();
         let mint_program = Keypair::new();
-        let reserve = Keypair::new();
 
-        let (authority, _) =
-            Pubkey::find_program_address(&[&lido.pubkey().to_bytes()[..32], AUTHORITY_ID], &id());
+        let (reserve_authority, _) = Pubkey::find_program_address(
+            &[&lido.pubkey().to_bytes()[..32], RESERVE_AUTHORITY_ID],
+            &id(),
+        );
+
+        let (deposit_authority, _) = Pubkey::find_program_address(
+            &[&lido.pubkey().to_bytes()[..32], DEPOSIT_AUTHORITY_ID],
+            &id(),
+        );
+        let (stake_pool_token_reserve_authority, _) = Pubkey::find_program_address(
+            &[
+                &lido.pubkey().to_bytes()[..32],
+                STAKE_POOL_TOKEN_RESERVE_AUTHORITY_ID,
+            ],
+            &id(),
+        );
+
+        let mut stake_pool_accounts = StakePoolAccounts::new();
+        stake_pool_accounts.deposit_authority = reserve_authority;
         Self {
-            stake_pool,
             owner,
             lido,
             mint_program,
-            authority,
-            reserve,
+            reserve_authority,
+            deposit_authority,
+            stake_pool_token_reserve_authority,
+            stake_pool_accounts,
         }
     }
 
@@ -56,18 +72,18 @@ impl LidoAccounts {
         payer: &Keypair,
         recent_blockhash: &Hash,
     ) -> Result<(), TransportError> {
-        let stake_pool = StakePoolAccounts::new();
-        stake_pool
-            .initialize_stake_pool(banks_client, payer, recent_blockhash)
+        self.stake_pool_accounts = StakePoolAccounts::new();
+        self.stake_pool_accounts.deposit_authority = self.deposit_authority;
+        self.stake_pool_accounts
+            .initialize_stake_pool(banks_client, payer, recent_blockhash, 1)
             .await?;
-        self.stake_pool = stake_pool.stake_pool;
 
         create_mint(
             banks_client,
             payer,
             recent_blockhash,
             &self.mint_program,
-            &self.authority,
+            &self.reserve_authority,
         )
         .await?;
 
@@ -85,7 +101,7 @@ impl LidoAccounts {
                 instruction::initialize(
                     &id(),
                     &self.lido.pubkey(),
-                    &self.stake_pool.pubkey(),
+                    &self.stake_pool_accounts.stake_pool.pubkey(),
                     &self.owner.pubkey(),
                     &self.mint_program.pubkey(),
                 )
@@ -93,7 +109,10 @@ impl LidoAccounts {
             ],
             Some(&payer.pubkey()),
         );
-        transaction.sign(&[payer, &self.lido, &self.stake_pool], *recent_blockhash);
+        transaction.sign(
+            &[payer, &self.lido, &self.stake_pool_accounts.stake_pool],
+            *recent_blockhash,
+        );
         banks_client.process_transaction(transaction).await?;
 
         Ok(())

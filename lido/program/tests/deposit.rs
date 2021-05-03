@@ -1,12 +1,14 @@
+#![cfg(feature = "test-bpf")]
+
 mod helpers;
 
 use helpers::{
     program_test,
-    stakepool_account::{create_token_account, get_account, get_token_balance, transfer},
+    stakepool_account::{create_token_account, get_token_balance, transfer},
     LidoAccounts,
 };
-use lido::{id, instruction, state};
-use solana_program::{borsh::get_packed_len, hash::Hash};
+use lido::{id, instruction};
+use solana_program::hash::Hash;
 use solana_program_test::{tokio, BanksClient};
 use solana_sdk::{
     signature::{Keypair, Signer},
@@ -26,7 +28,7 @@ async fn setup() -> (BanksClient, Keypair, Hash, LidoAccounts) {
 pub const TEST_DEPOSIT_AMOUNT: u64 = 1000;
 
 #[tokio::test]
-async fn test_deposit() {
+async fn test_successful_deposit() {
     let (mut banks_client, payer, recent_blockhash, lido_accounts) = setup().await;
 
     let user = Keypair::new();
@@ -56,13 +58,12 @@ async fn test_deposit() {
         &[instruction::deposit(
             &id(),
             &lido_accounts.lido.pubkey(),
-            &lido_accounts.stake_pool.pubkey(),
+            &lido_accounts.stake_pool_accounts.stake_pool.pubkey(),
             &lido_accounts.owner.pubkey(),
             &user.pubkey(),
             &recipient.pubkey(),
             &lido_accounts.mint_program.pubkey(),
-            &lido_accounts.authority,
-            &lido_accounts.reserve.pubkey(),
+            &lido_accounts.reserve_authority,
             TEST_DEPOSIT_AMOUNT,
         )
         .unwrap()],
@@ -72,5 +73,13 @@ async fn test_deposit() {
     banks_client.process_transaction(transaction).await.unwrap();
 
     let balance = get_token_balance(&mut banks_client, &recipient.pubkey()).await;
+
+    let reserve_account = banks_client
+        .get_account(lido_accounts.reserve_authority)
+        .await
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(reserve_account.lamports, TEST_DEPOSIT_AMOUNT);
     assert_eq!(balance, TEST_DEPOSIT_AMOUNT);
 }

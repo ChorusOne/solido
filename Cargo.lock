@@ -1695,7 +1695,7 @@ version = "0.1.0"
 dependencies = [
  "arrayref",
  "bincode",
- "borsh 0.8.2",
+ "borsh",
  "num-derive",
  "num-traits",
  "num_enum",
