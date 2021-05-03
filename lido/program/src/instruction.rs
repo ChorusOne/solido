@@ -46,6 +46,7 @@ pub fn initialize(
         AccountMeta::new_readonly(*owner, false),
         AccountMeta::new(*mint_program, false),
         AccountMeta::new_readonly(sysvar::rent::id(), false),
+        AccountMeta::new_readonly(spl_token::id(), false),
     ];
     Ok(Instruction {
         program_id: *program_id,

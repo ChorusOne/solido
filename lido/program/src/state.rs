@@ -19,7 +19,6 @@ pub struct Lido {
     pub deposit_authority_bump_seed: u8,
     pub token_reserve_authority_bump_seed: u8,
     pub token_program_id: Pubkey,
-    pub is_initialized: bool,
 }
 
 impl Lido {
@@ -36,7 +35,7 @@ impl Lido {
     }
 
     pub fn is_initialized(&self) -> ProgramResult {
-        if self.is_initialized {
+        if self.stake_pool_account != Pubkey::default() {
             msg!("Provided lido already in use");
             Err(LidoError::AlreadyInUse.into())
         } else {
