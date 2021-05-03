@@ -152,8 +152,8 @@ impl Processor {
             .calc_pool_tokens_for_deposit(amount)
             .ok_or(LidoError::CalculationFailure)?;
 
-        let total_lsol = lido.total_sol + lsol_amount;
-        let total_sol = lido.lsol_total_shares + amount;
+        let total_lsol = lido.lsol_total_shares + lsol_amount;
+        let total_sol = lido.total_sol + amount;
 
         let ix = spl_token::instruction::mint_to(
             token_program_info.key,
