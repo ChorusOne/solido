@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
-use lido::instruction::initialize_stake_pool_with_authority;
 use {
+    lido::instruction::initialize_stake_pool_with_authority,
     solana_program::{
         borsh::get_packed_len, hash::Hash, program_pack::Pack, pubkey::Pubkey, system_instruction,
         system_program,
@@ -175,7 +175,7 @@ pub async fn delegate_tokens(
     delegate: &Pubkey,
     amount: u64,
 ) {
-    let mut transaction = Transaction::new_with_payer(
+    let transaction = Transaction::new_signed_with_payer(
         &[spl_token::instruction::approve(
             &spl_token::id(),
             &account,
@@ -186,8 +186,9 @@ pub async fn delegate_tokens(
         )
         .unwrap()],
         Some(&payer.pubkey()),
+        &[payer, manager],
+        *recent_blockhash,
     );
-    transaction.sign(&[payer, manager], *recent_blockhash);
     banks_client.process_transaction(transaction).await.unwrap();
 }
 
@@ -649,6 +650,7 @@ impl StakePoolAccounts {
         payer: &Keypair,
         recent_blockhash: &Hash,
         stake_recipient: &Pubkey,
+        user_transfer_authority: &Keypair,
         pool_account: &Pubkey,
         validator_stake_account: &Pubkey,
         recipient_new_authority: &Pubkey,
@@ -663,6 +665,7 @@ impl StakePoolAccounts {
                 validator_stake_account,
                 stake_recipient,
                 recipient_new_authority,
+                &user_transfer_authority.pubkey(),
                 pool_account,
                 &self.pool_mint.pubkey(),
                 &spl_token::id(),
@@ -670,7 +673,7 @@ impl StakePoolAccounts {
             )
             .unwrap()],
             Some(&payer.pubkey()),
-            &[payer],
+            &[payer, user_transfer_authority],
             *recent_blockhash,
         );
         banks_client.process_transaction(transaction).await.err()
@@ -1003,7 +1006,7 @@ pub async fn simple_deposit(
     stake_pool_accounts: &StakePoolAccounts,
     validator_stake_account: &ValidatorStakeAccount,
     stake_lamports: u64,
-) -> DepositStakeAccount {
+) -> Option<DepositStakeAccount> {
     let authority = Keypair::new();
     // make stake account
     let stake = Keypair::new();
@@ -1057,11 +1060,11 @@ pub async fn simple_deposit(
             &authority,
         )
         .await
-        .unwrap();
+        .ok()?;
 
     let pool_tokens = get_token_balance(banks_client, &pool_account.pubkey()).await;
 
-    DepositStakeAccount {
+    Some(DepositStakeAccount {
         authority,
         stake,
         pool_account,
@@ -1069,7 +1072,7 @@ pub async fn simple_deposit(
         pool_tokens,
         vote_account,
         validator_stake_account,
-    }
+    })
 }
 
 pub async fn get_validator_list_sum(
