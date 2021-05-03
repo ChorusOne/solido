@@ -1,11 +1,12 @@
 //! Program state processor
 
 use solana_program::program_pack::Pack;
-use spl_stake_pool::stake_program;
+use spl_stake_pool::{stake_program, state::StakePool};
 
 use crate::{
     error::LidoError,
     instruction::{stake_pool_deposit, LidoInstruction},
+    logic::{check_reserve_authority, check_token_program_id, rent_exemption, AccountType},
     state::Lido,
     DEPOSIT_AUTHORITY_ID, RESERVE_AUTHORITY_ID, STAKE_POOL_TOKEN_RESERVE_AUTHORITY_ID,
 };
@@ -49,10 +50,23 @@ impl Processor {
         let mint_program_info = next_account_info(account_info_iter)?;
         // let members_list_info = next_account_info(account_info_iter)?;
         let rent_info = next_account_info(account_info_iter)?;
+        // Token program account (SPL Token Program)
+        let token_program_info = next_account_info(account_info_iter)?;
 
-        let _rent = &Rent::from_account_info(rent_info)?;
+        check_token_program_id(token_program_info.key)?;
+
+        let rent = &Rent::from_account_info(rent_info)?;
+        rent_exemption(rent, stakepool_info, AccountType::StakePool)?;
+        rent_exemption(rent, lido_info, AccountType::Lido)?;
 
         let mut lido = try_from_slice_unchecked::<Lido>(&lido_info.data.borrow())?;
+        lido.is_initialized()?;
+
+        let stake_pool = StakePool::try_from_slice(&stakepool_info.data.borrow())?;
+        if stake_pool.is_uninitialized() {
+            msg!("Provided stake pool not initialized");
+            return Err(LidoError::InvalidStakePool.into());
+        }
 
         let (_, reserve_bump_seed) = Pubkey::find_program_address(
             &[&lido_info.key.to_bytes()[..32], RESERVE_AUTHORITY_ID],
@@ -77,14 +91,16 @@ impl Processor {
         lido.lsol_mint_program = *mint_program_info.key;
         lido.sol_reserve_authority_bump_seed = reserve_bump_seed;
         lido.deposit_authority_bump_seed = deposit_bump_seed;
-        lido.toke_reserve_authority_bump_seed = token_reserve_bump_seed;
+        lido.token_reserve_authority_bump_seed = token_reserve_bump_seed;
+        lido.token_program_id = *token_program_info.key;
+        lido.is_initialized = true;
 
         lido.serialize(&mut *lido_info.data.borrow_mut())
             .map_err(|e| e.into())
     }
 
     pub fn process_deposit(
-        _program_id: &Pubkey,
+        program_id: &Pubkey,
         amount: u64,
         accounts: &[AccountInfo],
     ) -> ProgramResult {
@@ -118,16 +134,10 @@ impl Processor {
         }
 
         let mut lido = Lido::try_from_slice(&lido_info.data.borrow())?;
-        if &lido.owner != owner_info.key {
-            return Err(LidoError::InvalidOwner.into());
-        }
-        if &lido.stake_pool_account != stake_pool.key {
-            return Err(LidoError::InvalidStakePool.into());
-        }
 
-        if &lido.lsol_mint_program != lsol_mint_info.key {
-            return Err(LidoError::InvalidToken.into());
-        }
+        lido.check_lido_for_deposit(owner_info.key, stake_pool.key, lsol_mint_info.key)?;
+        check_token_program_id(&lido.token_program_id)?;
+        check_reserve_authority(lido_info, program_id, reserve_authority_info)?;
 
         // Overflow will never happen because we check that user has `amount` in its account
         // user_info.lamports.borrow_mut().checked_sub(amount);
