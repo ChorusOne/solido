@@ -21,7 +21,7 @@ cargo +"$rust_stable" test-bpf --manifest-path=lido/program/Cargo.toml -- --noca
 rm -rf target/debug # Prevents running out of space on github action runners
 
 # # Build/test all host crates
-# cargo +"$rust_stable" build
+cargo +"$rust_stable" build
 # cargo +"$rust_stable" test -- --nocapture
 
 # Run test-client sanity check
