@@ -13,6 +13,8 @@ set -x
 
 # Build all C examples
 make -C examples/c
+cargo +"$rust_stable" build-bpf \
+    --manifest-path=stake-pool/program/Cargo.tom
 
 # Build/test all BPF programs
 cargo +"$rust_stable" test-bpf -- --nocapture
