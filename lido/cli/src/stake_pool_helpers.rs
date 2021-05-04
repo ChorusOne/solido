@@ -1,5 +1,4 @@
 use {
-    crate::client::*,
     clap::{
         crate_description, crate_name, crate_version, value_t, value_t_or_exit, App, AppSettings,
         Arg, ArgGroup, SubCommand,
