@@ -4,13 +4,16 @@ use clap::{
     crate_description, crate_name, crate_version, value_t, value_t_or_exit, App, AppSettings, Arg,
     SubCommand,
 };
+use lido::{DEPOSIT_AUTHORITY_ID, RESERVE_AUTHORITY_ID};
 use solana_clap_utils::{
     input_parsers::pubkey_of,
     input_validators::{is_keypair, is_parsable, is_pubkey, is_url},
     keypair::signer_from_path,
 };
 use solana_client::rpc_client::RpcClient;
-use solana_program::{program_pack::Pack, pubkey::Pubkey, system_instruction};
+use solana_program::{
+    borsh::get_packed_len, program_pack::Pack, pubkey::Pubkey, system_instruction,
+};
 use solana_sdk::{
     commitment_config::CommitmentConfig,
     signature::{Keypair, Signer},
@@ -265,16 +268,12 @@ fn main() {
 
     let _ = match matches.subcommand() {
         ("create", Some(arg_matches)) => {
-            let lido_keypair = Keypair::new();
-
-            let (deposit_authority, _) =
-                lido::find_deposit_authority_program_address(&lido::id(), &lido_keypair.pubkey());
             let stake_pool = pubkey_of(arg_matches, "stake-pool");
-            let mut stake_pool_keypair = None;
+            let mut stake_pool_key;
             if stake_pool.is_none() {
                 let new_key = Keypair::new();
                 println!("Creating stake pool {}", &new_key.pubkey());
-                stake_pool_keypair = Some(new_key);
+                stake_pool_key = StakePoolKey::KeyPair(new_key);
             }
             let numerator = value_t_or_exit!(arg_matches, "fee-numerator", u64);
             let denominator = value_t_or_exit!(arg_matches, "fee-denominator", u64);
@@ -282,13 +281,12 @@ fn main() {
 
             command_create_solido(
                 &config,
-                &deposit_authority,
                 Fee {
                     denominator,
                     numerator,
                 },
                 max_validators,
-                stake_pool_keypair,
+                stake_pool_key,
             )
         }
 
@@ -300,30 +298,55 @@ fn main() {
     });
 }
 
+enum StakePoolKey {
+    KeyPair(Keypair),
+    Pubkey(Pubkey),
+}
+
 fn command_create_solido(
     config: &Config,
-    deposit_authority: &Pubkey,
     fee: Fee,
     max_validators: u32,
-    stake_pool_keypair: Option<Keypair>,
+    stake_pool_keypair: StakePoolKey,
 ) -> CommandResult {
-    stake_pool_helpers::command_create_pool(
-        &config,
-        &deposit_authority,
-        fee,
-        max_validators,
-        stake_pool_keypair,
-        None,
-    )?;
+    let lido_keypair = Keypair::new();
+
+    let (reserve_authority, _) = lido::find_authority_program_address(
+        &lido::id(),
+        &lido_keypair.pubkey(),
+        RESERVE_AUTHORITY_ID,
+    );
+    let stake_pool_pubkey = match stake_pool_keypair {
+        StakePoolKey::KeyPair(keypair) => {
+            let (deposit_authority, _) = lido::find_authority_program_address(
+                &lido::id(),
+                &lido_keypair.pubkey(),
+                DEPOSIT_AUTHORITY_ID,
+            );
+            let stake_pool_public_key = keypair.pubkey();
+            stake_pool_helpers::command_create_pool(
+                &config,
+                &deposit_authority,
+                fee,
+                max_validators,
+                Some(keypair),
+                None,
+            )?;
+            stake_pool_public_key
+        }
+        StakePoolKey::Pubkey(stake_pool_pubkey) => stake_pool_pubkey,
+    };
 
     let mint_keypair = Keypair::new();
     println!("Creating mint {}", mint_keypair.pubkey());
 
-    let owner = Keypair::new();
-
     let mint_account_balance = config
         .rpc_client
         .get_minimum_balance_for_rent_exemption(spl_token::state::Mint::LEN)?;
+    let lido_length = get_packed_len::<lido::state::Lido>();
+    let lido_account_balance = config
+        .rpc_client
+        .get_minimum_balance_for_rent_exemption(lido_length)?;
 
     let default_decimals = spl_token::native_mint::DECIMALS;
     let mut setup_transaction = Transaction::new_with_payer(
@@ -339,9 +362,16 @@ fn command_create_solido(
             spl_token::instruction::initialize_mint(
                 &spl_token::id(),
                 &mint_keypair.pubkey(),
-                &withdraw_authority,
+                &reserve_authority,
                 None,
                 default_decimals,
+            )?,
+            lido::instruction::initialize(
+                &lido::id(),
+                &lido_keypair.pubkey(),
+                &stake_pool_pubkey,
+                &config.fee_payer.pubkey(),
+                &mint_keypair.pubkey(),
             )?,
         ],
         Some(&config.fee_payer.pubkey()),

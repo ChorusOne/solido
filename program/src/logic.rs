@@ -4,7 +4,7 @@ use solana_program::{
     account_info::AccountInfo, msg, program_error::ProgramError, pubkey::Pubkey, rent::Rent,
 };
 
-use crate::{error::LidoError, DEPOSIT_AUTHORITY_ID, RESERVE_AUTHORITY_ID};
+use crate::{error::LidoError, RESERVE_AUTHORITY_ID};
 
 pub(crate) fn rent_exemption(
     rent: &Rent,
