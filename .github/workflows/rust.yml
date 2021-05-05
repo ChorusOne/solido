@@ -11,12 +11,12 @@ env:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
-
     steps:
     - uses: actions/checkout@v2
-    - name: Build
-      run: cargo build --verbose
-    - name: Run tests
-      run: cargo test --verbose
+    - name: Solana contract test
+      run: |
+        cd program
+        sh -c "$(curl -sSfL https://release.solana.com/v1.6.7/install)"
+        export PATH="/home/runner/.local/share/solana/install/active_release/bin:$PATH"
+        cargo test-bpf
