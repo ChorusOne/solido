@@ -42,7 +42,7 @@ pub fn initialize(
     let data = init_data.try_to_vec()?;
     let accounts = vec![
         AccountMeta::new(*lido, true),
-        AccountMeta::new_readonly(*stake_pool, true),
+        AccountMeta::new_readonly(*stake_pool, false),
         AccountMeta::new_readonly(*owner, false),
         AccountMeta::new(*mint_program, false),
         AccountMeta::new_readonly(sysvar::rent::id(), false),

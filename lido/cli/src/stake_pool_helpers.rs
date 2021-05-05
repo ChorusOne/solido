@@ -1,20 +1,10 @@
+use crate::unique_signers;
+
 use {
-    clap::{
-        crate_description, crate_name, crate_version, value_t, value_t_or_exit, App, AppSettings,
-        Arg, ArgGroup, SubCommand,
-    },
-    solana_clap_utils::{
-        input_parsers::pubkey_of,
-        input_validators::{is_amount, is_keypair, is_parsable, is_pubkey, is_url},
-        keypair::signer_from_path,
-    },
-    solana_client::rpc_client::RpcClient,
-    solana_program::{
-        borsh::get_packed_len, instruction::Instruction, program_pack::Pack, pubkey::Pubkey,
-    },
+    crate::helpers::{check_fee_payer_balance, send_transaction},
+    crate::{CommandResult, Config},
+    solana_program::{borsh::get_packed_len, program_pack::Pack, pubkey::Pubkey},
     solana_sdk::{
-        commitment_config::CommitmentConfig,
-        native_token::{self, Sol},
         signature::{Keypair, Signer},
         system_instruction,
         transaction::Transaction,
@@ -25,50 +15,10 @@ use {
         find_withdraw_authority_program_address,
         stake_program::{self},
         state::{Fee, StakePool, ValidatorList},
-        MAX_VALIDATORS_TO_UPDATE,
     },
 };
 
-use crate::{CommandResult, Config, Error};
-
-macro_rules! unique_signers {
-    ($vec:ident) => {
-        $vec.sort_by_key(|l| l.pubkey());
-        $vec.dedup();
-    };
-}
 const STAKE_STATE_LEN: usize = 200;
-
-fn check_fee_payer_balance(config: &Config, required_balance: u64) -> Result<(), Error> {
-    let balance = config.rpc_client.get_balance(&config.fee_payer.pubkey())?;
-    if balance < required_balance {
-        Err(format!(
-            "Fee payer, {}, has insufficient balance: {} required, {} available",
-            config.fee_payer.pubkey(),
-            Sol(required_balance),
-            Sol(balance)
-        )
-        .into())
-    } else {
-        Ok(())
-    }
-}
-
-fn send_transaction(
-    config: &Config,
-    transaction: Transaction,
-) -> solana_client::client_error::Result<()> {
-    if config.dry_run {
-        let result = config.rpc_client.simulate_transaction(&transaction)?;
-        println!("Simulate result: {:?}", result);
-    } else {
-        let signature = config
-            .rpc_client
-            .send_and_confirm_transaction_with_spinner(&transaction)?;
-        println!("Signature: {}", signature);
-    }
-    Ok(())
-}
 
 pub(crate) fn command_create_pool(
     config: &Config,
