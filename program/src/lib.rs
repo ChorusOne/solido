@@ -1,3 +1,5 @@
+use solana_program::pubkey::Pubkey;
+
 #[cfg(not(feature = "no-entrypoint"))]
 pub mod entrypoint;
 pub mod error;
@@ -13,4 +15,12 @@ pub const DEPOSIT_AUTHORITY_ID: &[u8] = b"deposit_authority";
 /// Seed for token reserve authority
 pub const STAKE_POOL_TOKEN_RESERVE_AUTHORITY_ID: &[u8] = b"token_reserve_authority";
 
-solana_program::declare_id!("LidoB9L9nR3CrcaziKVYVpRX6A9Y1LAXYasjjfCbApj");
+solana_program::declare_id!("5QSRmnNdU7BAwZgx8YV2YrHYyzRF7okMfNYjPJeZK1eE");
+
+pub fn find_authority_program_address(
+    program_id: &Pubkey,
+    lido_address: &Pubkey,
+    authority: &[u8],
+) -> (Pubkey, u8) {
+    Pubkey::find_program_address(&[&lido_address.to_bytes()[..32], authority], program_id)
+}

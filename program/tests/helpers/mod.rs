@@ -109,10 +109,7 @@ impl LidoAccounts {
             ],
             Some(&payer.pubkey()),
         );
-        transaction.sign(
-            &[payer, &self.lido, &self.stake_pool_accounts.stake_pool],
-            *recent_blockhash,
-        );
+        transaction.sign(&[payer, &self.lido], *recent_blockhash);
         banks_client.process_transaction(transaction).await?;
 
         Ok(())
