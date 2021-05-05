@@ -1,0 +1,6 @@
+target
+.env
+.vscode
+bin
+**/lido.so
+**/.DS_Store
