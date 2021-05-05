@@ -4,27 +4,24 @@ use clap::{
     crate_description, crate_name, crate_version, value_t, value_t_or_exit, App, AppSettings, Arg,
     SubCommand,
 };
-use lido::{DEPOSIT_AUTHORITY_ID, RESERVE_AUTHORITY_ID};
+
 use solana_clap_utils::{
     input_parsers::pubkey_of,
     input_validators::{is_keypair, is_parsable, is_pubkey, is_url},
     keypair::signer_from_path,
 };
 use solana_client::rpc_client::RpcClient;
-use solana_program::{
-    borsh::get_packed_len, program_pack::Pack, pubkey::Pubkey, system_instruction,
-};
 use solana_sdk::{
     commitment_config::CommitmentConfig,
     signature::{Keypair, Signer},
-    transaction::Transaction,
 };
-use spl_stake_pool::state::Fee;
 
-#[macro_use]
+use crate::helpers::{command_create_solido, NewStakePoolArgs, StakePoolArgs};
+
 extern crate lazy_static;
 extern crate spl_stake_pool;
 
+mod helpers;
 mod stake_pool_helpers;
 type Error = Box<dyn std::error::Error>;
 type CommandResult = Result<(), Error>;
@@ -34,11 +31,8 @@ struct Config {
     verbose: bool,
     manager: Box<dyn Signer>,
     staker: Box<dyn Signer>,
-    depositor: Option<Box<dyn Signer>>,
-    token_owner: Box<dyn Signer>,
     fee_payer: Box<dyn Signer>,
     dry_run: bool,
-    no_update: bool,
 }
 
 fn main() {
@@ -110,29 +104,6 @@ fn main() {
                 ),
         )
         .arg(
-            Arg::with_name("depositor")
-                .long("depositor")
-                .value_name("KEYPAIR")
-                .validator(is_keypair)
-                .takes_value(true)
-                .help(
-                    "Specify the stake pool depositor. \
-                     This may be a keypair file, the ASK keyword.",
-                ),
-        )
-        .arg(
-            Arg::with_name("token_owner")
-                .long("token-owner")
-                .value_name("KEYPAIR")
-                .validator(is_keypair)
-                .takes_value(true)
-                .help(
-                    "Specify the owner of the pool token account. \
-                     This may be a keypair file, the ASK keyword. \
-                     Defaults to the client keypair.",
-                ),
-        )
-        .arg(
             Arg::with_name("fee_payer")
                 .long("fee-payer")
                 .value_name("KEYPAIR")
@@ -146,7 +117,7 @@ fn main() {
         )
         .subcommand(
             SubCommand::with_name("create")
-                .about("Create a new lido stake pool")
+                .about("Create a new lido")
                 .arg(
                     Arg::with_name("stake-pool")
                         .long("stake-pool")
@@ -181,6 +152,7 @@ fn main() {
                         .help("Max number of validators included in the stake pool"),
                 ),
         )
+        .subcommand(SubCommand::with_name("deposit").about("Deposits to lido"))
         .get_matches();
 
     let mut wallet_manager = None;
@@ -203,36 +175,10 @@ fn main() {
             eprintln!("error: {}", e);
             exit(1);
         });
-        let depositor = if matches.is_present("depositor") {
-            Some(
-                signer_from_path(
-                    &matches,
-                    &cli_config.keypair_path,
-                    "depositor",
-                    &mut wallet_manager,
-                )
-                .unwrap_or_else(|e| {
-                    eprintln!("error: {}", e);
-                    exit(1);
-                }),
-            )
-        } else {
-            None
-        };
         let manager = signer_from_path(
             &matches,
             &cli_config.keypair_path,
             "manager",
-            &mut wallet_manager,
-        )
-        .unwrap_or_else(|e| {
-            eprintln!("error: {}", e);
-            exit(1);
-        });
-        let token_owner = signer_from_path(
-            &matches,
-            &cli_config.keypair_path,
-            "token_owner",
             &mut wallet_manager,
         )
         .unwrap_or_else(|e| {
@@ -251,43 +197,37 @@ fn main() {
         });
         let verbose = matches.is_present("verbose");
         let dry_run = matches.is_present("dry_run");
-        let no_update = matches.is_present("no_update");
 
         Config {
             rpc_client: RpcClient::new_with_commitment(json_rpc_url, CommitmentConfig::confirmed()),
             verbose,
             manager,
             staker,
-            depositor,
-            token_owner,
             fee_payer,
             dry_run,
-            no_update,
         }
     };
 
     let _ = match matches.subcommand() {
         ("create", Some(arg_matches)) => {
             let stake_pool = pubkey_of(arg_matches, "stake-pool");
-            let mut stake_pool_key;
-            if stake_pool.is_none() {
-                let new_key = Keypair::new();
-                println!("Creating stake pool {}", &new_key.pubkey());
-                stake_pool_key = StakePoolKey::KeyPair(new_key);
-            }
-            let numerator = value_t_or_exit!(arg_matches, "fee-numerator", u64);
-            let denominator = value_t_or_exit!(arg_matches, "fee-denominator", u64);
-            let max_validators = value_t_or_exit!(arg_matches, "max-validators", u32);
-
-            command_create_solido(
-                &config,
-                Fee {
-                    denominator,
-                    numerator,
-                },
-                max_validators,
-                stake_pool_key,
-            )
+            let stake_pool_args = match stake_pool {
+                Some(pubkey) => StakePoolArgs::Existing(pubkey),
+                None => {
+                    let keypair = Keypair::new();
+                    println!("Creating stake pool {}", &keypair.pubkey());
+                    let numerator = value_t_or_exit!(arg_matches, "fee-numerator", u64);
+                    let denominator = value_t_or_exit!(arg_matches, "fee-denominator", u64);
+                    let max_validators = value_t_or_exit!(arg_matches, "max-validators", u32);
+                    StakePoolArgs::New(NewStakePoolArgs {
+                        keypair,
+                        numerator,
+                        denominator,
+                        max_validators,
+                    })
+                }
+            };
+            command_create_solido(&config, stake_pool_args)
         }
 
         _ => unreachable!(),
@@ -296,86 +236,4 @@ fn main() {
         eprintln!("{}", err);
         exit(1);
     });
-}
-
-enum StakePoolKey {
-    KeyPair(Keypair),
-    Pubkey(Pubkey),
-}
-
-fn command_create_solido(
-    config: &Config,
-    fee: Fee,
-    max_validators: u32,
-    stake_pool_keypair: StakePoolKey,
-) -> CommandResult {
-    let lido_keypair = Keypair::new();
-
-    let (reserve_authority, _) = lido::find_authority_program_address(
-        &lido::id(),
-        &lido_keypair.pubkey(),
-        RESERVE_AUTHORITY_ID,
-    );
-    let stake_pool_pubkey = match stake_pool_keypair {
-        StakePoolKey::KeyPair(keypair) => {
-            let (deposit_authority, _) = lido::find_authority_program_address(
-                &lido::id(),
-                &lido_keypair.pubkey(),
-                DEPOSIT_AUTHORITY_ID,
-            );
-            let stake_pool_public_key = keypair.pubkey();
-            stake_pool_helpers::command_create_pool(
-                &config,
-                &deposit_authority,
-                fee,
-                max_validators,
-                Some(keypair),
-                None,
-            )?;
-            stake_pool_public_key
-        }
-        StakePoolKey::Pubkey(stake_pool_pubkey) => stake_pool_pubkey,
-    };
-
-    let mint_keypair = Keypair::new();
-    println!("Creating mint {}", mint_keypair.pubkey());
-
-    let mint_account_balance = config
-        .rpc_client
-        .get_minimum_balance_for_rent_exemption(spl_token::state::Mint::LEN)?;
-    let lido_length = get_packed_len::<lido::state::Lido>();
-    let lido_account_balance = config
-        .rpc_client
-        .get_minimum_balance_for_rent_exemption(lido_length)?;
-
-    let default_decimals = spl_token::native_mint::DECIMALS;
-    let mut setup_transaction = Transaction::new_with_payer(
-        &[
-            // Account for lido lsol mint
-            system_instruction::create_account(
-                &config.fee_payer.pubkey(),
-                &mint_keypair.pubkey(),
-                mint_account_balance,
-                spl_token::state::Mint::LEN as u64,
-                &spl_token::id(),
-            ),
-            spl_token::instruction::initialize_mint(
-                &spl_token::id(),
-                &mint_keypair.pubkey(),
-                &reserve_authority,
-                None,
-                default_decimals,
-            )?,
-            lido::instruction::initialize(
-                &lido::id(),
-                &lido_keypair.pubkey(),
-                &stake_pool_pubkey,
-                &config.fee_payer.pubkey(),
-                &mint_keypair.pubkey(),
-            )?,
-        ],
-        Some(&config.fee_payer.pubkey()),
-    );
-
-    Ok(())
 }
