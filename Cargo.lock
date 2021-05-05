@@ -1712,7 +1712,7 @@ version = "0.1.0"
 dependencies = [
  "arrayref",
  "bincode",
- "borsh",
+ "borsh 0.8.2",
  "num-derive",
  "num-traits",
  "num_enum",
@@ -3649,6 +3649,28 @@ dependencies = [
  "scroll",
  "thiserror",
  "time",
+]
+
+[[package]]
+name = "solido-cli"
+version = "0.1.0"
+dependencies = [
+ "bincode",
+ "borsh 0.8.2",
+ "bs58 0.4.0",
+ "clap",
+ "lazy_static",
+ "lido",
+ "serde_json",
+ "solana-account-decoder",
+ "solana-clap-utils",
+ "solana-cli-config",
+ "solana-client",
+ "solana-logger",
+ "solana-program",
+ "solana-sdk",
+ "spl-stake-pool",
+ "spl-token 3.1.0",
 ]
 
 [[package]]
