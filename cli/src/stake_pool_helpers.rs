@@ -1,5 +1,3 @@
-use crate::unique_signers;
-
 use {
     crate::helpers::{check_fee_payer_balance, send_transaction},
     crate::{CommandResult, Config},
@@ -180,23 +178,21 @@ pub(crate) fn command_create_pool(
             + fee_calculator.calculate_fee(&setup_transaction.message())
             + fee_calculator.calculate_fee(&initialize_transaction.message()),
     )?;
-    let mut setup_signers = vec![
+    let setup_signers = vec![
         config.fee_payer.as_ref(),
         &mint_keypair,
         &pool_fee_account,
         &reserve_stake,
     ];
-    unique_signers!(setup_signers);
     setup_transaction.sign(&setup_signers, recent_blockhash);
     send_transaction(&config, setup_transaction)?;
 
-    let mut initialize_signers = vec![
+    let initialize_signers = vec![
         config.fee_payer.as_ref(),
         &stake_pool_keypair,
         &validator_list,
         config.manager.as_ref(),
     ];
-    unique_signers!(initialize_signers);
     initialize_transaction.sign(&initialize_signers, recent_blockhash);
     send_transaction(&config, initialize_transaction)?;
     Ok(())
