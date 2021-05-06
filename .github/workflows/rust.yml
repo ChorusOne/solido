@@ -40,4 +40,6 @@ jobs:
     - name: install-clippy
       run: rustup component add clippy
     - name: run-clippy
-      run: cargo clippy -- -W clippy::pedantic
+      run: |
+        sudo apt-get install -y libudev-dev
+        cargo clippy -- -W clippy::pedantic
