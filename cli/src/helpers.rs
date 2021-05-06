@@ -138,6 +138,7 @@ pub(crate) fn command_create_solido(
                 &stake_pool_pubkey,
                 &config.staker.pubkey(),
                 &mint_keypair.pubkey(),
+                pool_token_to.pubkey() // to define
             )?,
         ],
         Some(&config.fee_payer.pubkey()),

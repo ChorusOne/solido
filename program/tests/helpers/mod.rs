@@ -118,6 +118,7 @@ impl LidoAccounts {
                     &self.stake_pool_accounts.stake_pool.pubkey(),
                     &self.owner.pubkey(),
                     &self.mint_program.pubkey(),
+                    &self.pool_token_to.pubkey(),
                 )
                 .unwrap(),
             ],

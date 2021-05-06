@@ -53,6 +53,7 @@ impl Processor {
         let rent_info = next_account_info(account_info_iter)?;
         // Token program account (SPL Token Program)
         let token_program_info = next_account_info(account_info_iter)?;
+        let pool_token_to_info = next_account_info(account_info_iter)?;
 
         let rent = &Rent::from_account_info(rent_info)?;
         rent_exemption(rent, stakepool_info, AccountType::StakePool)?;
@@ -85,6 +86,11 @@ impl Processor {
             program_id,
         );
 
+        let (pool_token_to_pubkey, _) = Pubkey::find_program_address(
+            &[&pool_token_to_info.key.to_bytes()[..32], RESERVE_AUTHORITY_ID],
+            program_id,
+        );
+
         lido.stake_pool_account = *stakepool_info.key;
         lido.owner = *owner_info.key;
         lido.lsol_mint_program = *mint_program_info.key;
@@ -92,6 +98,7 @@ impl Processor {
         lido.deposit_authority_bump_seed = deposit_bump_seed;
         lido.token_reserve_authority_bump_seed = token_reserve_bump_seed;
         lido.token_program_id = *token_program_info.key;
+        lido.pool_token_to = pool_token_to_pubkey;
 
         lido.serialize(&mut *lido_info.data.borrow_mut())
             .map_err(|e| e.into())
