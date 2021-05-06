@@ -5,7 +5,7 @@ use solana_sdk::{signature::Keypair, transport::TransportError};
 use solana_sdk::{signature::Signer, transaction::Transaction};
 use stakepool_account::StakePoolAccounts;
 
-use self::stakepool_account::create_mint;
+use self::stakepool_account::{create_mint, create_token_account};
 
 pub mod stakepool_account;
 
@@ -26,6 +26,7 @@ pub struct LidoAccounts {
     pub reserve_authority: Pubkey,
     pub deposit_authority: Pubkey,
     pub stake_pool_token_reserve_authority: Pubkey,
+    pub pool_token_to: Keypair,
 
     pub stake_pool_accounts: StakePoolAccounts,
 }
@@ -35,6 +36,7 @@ impl LidoAccounts {
         let owner = Keypair::new();
         let lido = Keypair::new();
         let mint_program = Keypair::new();
+        let pool_token_to = Keypair::new();
 
         let (reserve_authority, _) = Pubkey::find_program_address(
             &[&lido.pubkey().to_bytes()[..32], RESERVE_AUTHORITY_ID],
@@ -62,6 +64,7 @@ impl LidoAccounts {
             reserve_authority,
             deposit_authority,
             stake_pool_token_reserve_authority,
+            pool_token_to,
             stake_pool_accounts,
         }
     }
@@ -86,6 +89,17 @@ impl LidoAccounts {
             &self.reserve_authority,
         )
         .await?;
+
+        create_token_account(
+            banks_client,
+            &payer,
+            &recent_blockhash,
+            &self.pool_token_to,
+            &self.stake_pool_accounts.pool_mint.pubkey(),
+            &self.stake_pool_token_reserve_authority,
+        )
+        .await
+        .unwrap();
 
         let rent = banks_client.get_rent().await.unwrap();
         let rent_lido = rent.minimum_balance(get_packed_len::<state::Lido>());

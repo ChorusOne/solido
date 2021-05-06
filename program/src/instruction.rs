@@ -59,6 +59,7 @@ pub fn deposit(
     program_id: &Pubkey,
     lido: &Pubkey,
     stake_pool: &Pubkey,
+    pool_token_to: &Pubkey,
     owner: &Pubkey,
     user: &Pubkey,
     recipient: &Pubkey,
@@ -71,6 +72,7 @@ pub fn deposit(
     let accounts = vec![
         AccountMeta::new(*lido, false),
         AccountMeta::new_readonly(*stake_pool, false),
+        AccountMeta::new_readonly(*pool_token_to, false),
         AccountMeta::new_readonly(*owner, false),
         AccountMeta::new(*user, true),
         AccountMeta::new(*recipient, false),
@@ -78,7 +80,7 @@ pub fn deposit(
         AccountMeta::new_readonly(spl_token::id(), false),
         AccountMeta::new(*reserve_authority, false),
         AccountMeta::new_readonly(system_program::id(), false),
-        AccountMeta::new_readonly(sysvar::rent::id(), false),
+        // AccountMeta::new_readonly(sysvar::rent::id(), false),
     ];
     Ok(Instruction {
         program_id: *program_id,

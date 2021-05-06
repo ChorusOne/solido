@@ -89,6 +89,7 @@ async fn test_successful_delegate_deposit_stake_pool_deposit() {
             &id(),
             &lido_accounts.lido.pubkey(),
             &lido_accounts.stake_pool_accounts.stake_pool.pubkey(),
+            &lido_accounts.pool_token_to.pubkey(),
             &lido_accounts.owner.pubkey(),
             &user.pubkey(),
             &recipient.pubkey(),
@@ -143,18 +144,6 @@ async fn test_successful_delegate_deposit_stake_pool_deposit() {
         .find(&validator_account.vote.pubkey())
         .unwrap();
 
-    let token_pool_account = Keypair::new();
-    create_token_account(
-        &mut banks_client,
-        &payer,
-        &recent_blockhash,
-        &token_pool_account,
-        &lido_accounts.stake_pool_accounts.pool_mint.pubkey(),
-        &lido_accounts.stake_pool_token_reserve_authority,
-    )
-    .await
-    .unwrap();
-
     let mut transaction = Transaction::new_with_payer(
         &[instruction::stake_pool_delegate(
             &id(),
@@ -162,7 +151,7 @@ async fn test_successful_delegate_deposit_stake_pool_deposit() {
             &validator_account.vote.pubkey(),
             &stake_account,
             &lido_accounts.deposit_authority,
-            &token_pool_account.pubkey(),
+            &lido_accounts.pool_token_to.pubkey(),
             &spl_stake_pool::id(),
             &lido_accounts.stake_pool_accounts.stake_pool.pubkey(),
             &lido_accounts.stake_pool_accounts.validator_list.pubkey(),
@@ -194,7 +183,7 @@ async fn test_successful_delegate_deposit_stake_pool_deposit() {
 
     // Check minted tokens
     let lido_token_balance =
-        get_token_balance(&mut banks_client, &token_pool_account.pubkey()).await;
+        get_token_balance(&mut banks_client, &lido_accounts.pool_token_to.pubkey()).await;
     assert_eq!(lido_token_balance, TEST_DELEGATE_DEPOSIT_AMOUNT);
 
     // Check balances in validator stake account list storage

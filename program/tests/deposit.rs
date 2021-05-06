@@ -59,6 +59,7 @@ async fn test_successful_deposit() {
             &id(),
             &lido_accounts.lido.pubkey(),
             &lido_accounts.stake_pool_accounts.stake_pool.pubkey(),
+            &lido_accounts.pool_token_to.pubkey(),
             &lido_accounts.owner.pubkey(),
             &user.pubkey(),
             &recipient.pubkey(),
