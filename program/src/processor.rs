@@ -3,13 +3,7 @@
 use solana_program::program_pack::Pack;
 use spl_stake_pool::{stake_program, state::StakePool};
 
-use crate::{
-    error::LidoError,
-    instruction::{stake_pool_deposit, LidoInstruction},
-    logic::{check_reserve_authority, rent_exemption, AccountType},
-    state::Lido,
-    DEPOSIT_AUTHORITY_ID, RESERVE_AUTHORITY_ID, STAKE_POOL_TOKEN_RESERVE_AUTHORITY_ID,
-};
+use crate::{DEPOSIT_AUTHORITY_ID, RESERVE_AUTHORITY_ID, STAKE_POOL_TOKEN_RESERVE_AUTHORITY_ID, error::LidoError, instruction::{stake_pool_deposit, LidoInstruction}, logic::{AccountType, calc_stakepool_lamports, calc_total_lamports, check_reserve_authority, rent_exemption}, state::Lido};
 
 use {
     borsh::{BorshDeserialize, BorshSerialize},
@@ -26,7 +20,6 @@ use {
         sysvar::Sysvar,
     },
     spl_stake_pool::borsh::try_from_slice_unchecked,
-    std::convert::TryFrom,
 };
 
 fn get_stake_state(
@@ -168,20 +161,9 @@ impl Processor {
             spl_token::state::Account::unpack_from_slice(&pool_token_to_info.data.borrow())?;
 
         // stake_pool_total_sol * stake_pool_token(pool_token_to_info)/stake_pool_total_tokens
-        let stake_pool_lamports = if stake_pool.pool_token_supply != 0 {
-            u64::try_from(
-                (stake_pool.total_stake_lamports as u128)
-                    .checked_mul(pool_to_token_account.amount as u128)
-                    .ok_or(LidoError::CalculationFailure)?
-                    .checked_div(stake_pool.pool_token_supply as u128)
-                    .ok_or(LidoError::CalculationFailure)?,
-            )
-            .or_else(|_| Err::<u64, ProgramError>(LidoError::CalculationFailure.into()))?
-        } else {
-            0
-        };
+        let stake_pool_lamports = calc_stakepool_lamports(stake_pool, pool_to_token_account)?;
 
-        let total_lamports = reserve_lamports + stake_pool_lamports;
+        let total_lamports = calc_total_lamports(reserve_lamports, stake_pool_lamports);
         invoke(
             &system_instruction::transfer(user_info.key, reserve_authority_info.key, amount),
             &[
