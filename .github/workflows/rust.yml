@@ -10,6 +10,17 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Run fmt
+        uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: --all -- --check
+
   build:
     runs-on: ubuntu-latest
     steps:
@@ -20,3 +31,15 @@ jobs:
         sh -c "$(curl -sSfL https://release.solana.com/v1.6.7/install)"
         export PATH="/home/runner/.local/share/solana/install/active_release/bin:$PATH"
         cargo test-bpf
+
+  clippy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: install-clippy
+      run: rustup component add clippy
+    - name: run-clippy
+      run: |
+        sudo apt-get install -y libudev-dev
+        cargo clippy -- -W clippy::pedantic
