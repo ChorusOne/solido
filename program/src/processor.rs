@@ -156,6 +156,8 @@ impl Processor {
         if &stake_pool.token_program_id != token_program_info.key {
             return Err(LidoError::InvalidTokenProgram.into());
         }
+
+        // This check is failing
         // if &lido.pool_token_to != pool_token_to_info.key {
         //     return Err(LidoError::InvalidToken.into());
         // }
