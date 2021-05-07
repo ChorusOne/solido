@@ -2,7 +2,7 @@ name: Rust
 
 on:
   push:
-    branches: [ main ]
+    branches: '*'
   pull_request:
     branches: [ main ]
 
@@ -25,6 +25,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
+
+    - name: cache-build-artifacts
+      uses: actions/cache@v2
+      with:
+        path: target
+        key: cargo-bpf-${{ hashFiles('Cargo.lock') }}
+        restore-keys: |
+          cargo-bpf-${{ hashFiles('Cargo.lock') }}
+          cargo-bpf
+
     - name: Solana contract test
       run: |
         cd program
@@ -37,8 +47,19 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
+
+    - name: cache-build-artifacts
+      uses: actions/cache@v2
+      with:
+        path: target
+        key: cargo-clippy-${{ hashFiles('Cargo.lock') }}
+        restore-keys: |
+          cargo-clippy-${{ hashFiles('Cargo.lock') }}
+          cargo-clippy
+
     - name: install-clippy
       run: rustup component add clippy
+
     - name: run-clippy
       run: |
         sudo apt-get install -y libudev-dev
