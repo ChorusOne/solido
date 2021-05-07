@@ -51,7 +51,10 @@ impl Display for AccountType {
     }
 }
 
-pub fn calc_stakepool_lamports(stake_pool: StakePool, pool_to_token_account: spl_token::state::Account) -> Result<u64, ProgramError> {
+pub fn calc_stakepool_lamports(
+    stake_pool: StakePool,
+    pool_to_token_account: spl_token::state::Account,
+) -> Result<u64, ProgramError> {
     let stake_pool_lamports = if stake_pool.pool_token_supply != 0 {
         u64::try_from(
             (stake_pool.total_stake_lamports as u128)

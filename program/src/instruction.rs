@@ -46,9 +46,9 @@ pub fn initialize(
         AccountMeta::new_readonly(*stake_pool, false),
         AccountMeta::new_readonly(*owner, false),
         AccountMeta::new(*mint_program, false),
+        AccountMeta::new_readonly(*pool_token_to, false),
         AccountMeta::new_readonly(sysvar::rent::id(), false),
         AccountMeta::new_readonly(spl_token::id(), false),
-        AccountMeta::new_readonly(*pool_token_to, false),
     ];
     Ok(Instruction {
         program_id: *program_id,
