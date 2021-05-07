@@ -45,8 +45,8 @@ fn get_stake_state(
 
 /// Program state handler.
 pub struct Processor;
-impl Processor {
-    pub fn process_initialize(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> ProgramResult {
+impl<'b> Processor {
+    pub fn process_initialize(program_id: &Pubkey, accounts_raw: &'b [AccountInfo<'b>]) -> ProgramResult {
         let accounts = InitializeAccountsInfo::try_from_slice(accounts_raw)?;
 
         let rent = &Rent::from_account_info(accounts.sysvar_rent)?;
@@ -458,7 +458,7 @@ impl Processor {
     }
 
     /// Processes [Instruction](enum.Instruction.html).
-    pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> ProgramResult {
+    pub fn process(program_id: &Pubkey, accounts: &'b [AccountInfo<'b>], input: &[u8]) -> ProgramResult {
         let instruction = LidoInstruction::try_from_slice(input)?;
         match instruction {
             LidoInstruction::Initialize => Self::process_initialize(program_id, accounts),
