@@ -7,8 +7,11 @@ use solana_program::{
     pubkey::Pubkey,
     system_program,
     sysvar::{self, stake_history},
+    account_info::{AccountInfo, next_account_info},
 };
 use spl_stake_pool::{instruction::StakePoolInstruction, stake_program, state::Fee};
+
+use crate::error::LidoError;
 
 #[repr(C)]
 #[derive(Clone, Debug, PartialEq, BorshSerialize, BorshDeserialize, BorshSchema)]
@@ -31,30 +34,103 @@ pub enum LidoInstruction {
     },
 }
 
+macro_rules! accounts_struct_meta {
+    ($pubkey:expr, is_signer: $is_signer:expr, is_writable: true, ) => {
+        AccountMeta::new($pubkey, $is_signer)
+    };
+    ($pubkey:expr, is_signer: $is_signer:expr, is_writable: false, ) => {
+        AccountMeta::new_readonly($pubkey, $is_signer)
+    };
+}
+
+macro_rules! accounts_struct {
+    {
+        $NameAccountMeta:ident, $NameAccountInfo:ident {
+            $(
+                $account:ident {
+                    is_signer: $is_signer:expr,
+                    is_writable: $is_writable:tt
+                }
+            ),*
+        }
+    } => {
+        pub struct $NameAccountMeta {
+            $(
+                pub $account: Pubkey
+            ),*
+        }
+
+        pub struct $NameAccountInfo<'a> {
+            $(
+                pub $account: &'a AccountInfo<'a>
+            ),*
+        }
+
+        impl $NameAccountMeta {
+            pub fn to_vec(&self) -> Vec<AccountMeta> {
+                vec![ $(
+                    accounts_struct_meta!(
+                        self.$account,
+                        is_signer: $is_signer,
+                        is_writable: $is_writable,
+                    )
+                ),* ]
+            }
+        }
+
+        impl $NameAccountInfo<'_> {
+            pub fn try_from_slice<'a>(accounts: &'a [AccountInfo<'a>]) -> Result<$NameAccountInfo<'a>, ProgramError> {
+                let accounts_iter = &mut accounts.iter();
+
+                // Unpack the accounts from the iterator in the same order that
+                // they were provided to the macro. Also verify that is_signer
+                // and is_writable match their definitions, and return an error
+                // if not.
+                $(
+                    let $account = next_account_info(accounts_iter)?;
+                    if $account.is_signer != $is_signer
+                        || $account.is_writable != $is_writable {
+                        return Err(LidoError::InvalidAccountInfo.into());
+                    }
+                )*
+
+                // Check that there are no excess accounts provided.
+                if accounts_iter.next().is_some() {
+                    return Err(LidoError::TooManyAccountKeys.into());
+                }
+
+                let result = $NameAccountInfo {
+                    $( $account ),*
+                };
+
+                Ok(result)
+            }
+        }
+    }
+}
+
+accounts_struct! {
+    InitializeAccountsMeta, InitializeAccountsInfo {
+        lido { is_signer: true, is_writable: true },
+        stake_pool { is_signer: true, is_writable: false },
+        owner { is_signer: true, is_writable: false },
+        mint_program { is_signer: true, is_writable: false },
+        pool_token_to { is_signer: false, is_writable: false },
+        fee_token { is_signer: false, is_writable: false },
+        sysvar_rent { is_signer: false, is_writable: false },
+        spl_token { is_signer: false, is_writable: false }
+    }
+}
+
 pub fn initialize(
     program_id: &Pubkey,
-    lido: &Pubkey,
-    stake_pool: &Pubkey,
-    owner: &Pubkey,
-    mint_program: &Pubkey,
-    pool_token_to: &Pubkey,
-    fee_token: &Pubkey,
+    accounts: &InitializeAccountsMeta,
 ) -> Result<Instruction, ProgramError> {
     let init_data = LidoInstruction::Initialize;
     let data = init_data.try_to_vec()?;
-    let accounts = vec![
-        AccountMeta::new(*lido, true),
-        AccountMeta::new_readonly(*stake_pool, false),
-        AccountMeta::new_readonly(*owner, false),
-        AccountMeta::new(*mint_program, false),
-        AccountMeta::new_readonly(*pool_token_to, false),
-        AccountMeta::new_readonly(*fee_token, false),
-        AccountMeta::new_readonly(sysvar::rent::id(), false),
-        AccountMeta::new_readonly(spl_token::id(), false),
-    ];
     Ok(Instruction {
         program_id: *program_id,
-        accounts,
+        accounts: accounts.to_vec(),
         data,
     })
 }

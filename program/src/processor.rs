@@ -5,7 +5,7 @@ use spl_stake_pool::{stake_program, state::StakePool};
 
 use crate::{
     error::LidoError,
-    instruction::{stake_pool_deposit, LidoInstruction},
+    instruction::{stake_pool_deposit, LidoInstruction, InitializeAccountsInfo},
     logic::{
         calc_stakepool_lamports, calc_total_lamports, check_reserve_authority, rent_exemption,
         AccountType,
@@ -46,33 +46,23 @@ fn get_stake_state(
 /// Program state handler.
 pub struct Processor;
 impl Processor {
-    pub fn process_initialize(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
-        let account_info_iter = &mut accounts.iter();
-        let lido_info = next_account_info(account_info_iter)?;
-        let stakepool_info = next_account_info(account_info_iter)?;
-        let owner_info = next_account_info(account_info_iter)?;
-        let mint_program_info = next_account_info(account_info_iter)?;
-        let pool_token_to_info = next_account_info(account_info_iter)?;
-        let fee_token_info = next_account_info(account_info_iter)?;
-        // let members_list_info = next_account_info(account_info_iter)?;
-        let rent_info = next_account_info(account_info_iter)?;
-        // Token program account (SPL Token Program)
-        let token_program_info = next_account_info(account_info_iter)?;
+    pub fn process_initialize(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> ProgramResult {
+        let accounts = InitializeAccountsInfo::try_from_slice(accounts_raw)?;
 
-        let rent = &Rent::from_account_info(rent_info)?;
-        rent_exemption(rent, stakepool_info, AccountType::StakePool)?;
-        rent_exemption(rent, lido_info, AccountType::Lido)?;
+        let rent = &Rent::from_account_info(accounts.sysvar_rent)?;
+        rent_exemption(rent, accounts.stake_pool, AccountType::StakePool)?;
+        rent_exemption(rent, accounts.lido, AccountType::Lido)?;
 
-        let mut lido = try_from_slice_unchecked::<Lido>(&lido_info.data.borrow())?;
+        let mut lido = try_from_slice_unchecked::<Lido>(&accounts.lido.data.borrow())?;
         lido.is_initialized()?;
 
-        let stake_pool = StakePool::try_from_slice(&stakepool_info.data.borrow())?;
+        let stake_pool = StakePool::try_from_slice(&accounts.stake_pool.data.borrow())?;
         if stake_pool.is_uninitialized() {
             msg!("Provided stake pool not initialized");
             return Err(LidoError::InvalidStakePool.into());
         }
         let pool_to_token_account =
-            spl_token::state::Account::unpack_from_slice(&pool_token_to_info.data.borrow())?;
+            spl_token::state::Account::unpack_from_slice(&accounts.pool_token_to.data.borrow())?;
 
         if stake_pool.pool_mint != pool_to_token_account.mint {
             msg!(
@@ -83,45 +73,45 @@ impl Processor {
         }
 
         let (_, reserve_bump_seed) = Pubkey::find_program_address(
-            &[&lido_info.key.to_bytes()[..32], RESERVE_AUTHORITY_ID],
+            &[&accounts.lido.key.to_bytes()[..32], RESERVE_AUTHORITY_ID],
             program_id,
         );
 
         let (_, deposit_bump_seed) = Pubkey::find_program_address(
-            &[&lido_info.key.to_bytes()[..32], DEPOSIT_AUTHORITY_ID],
+            &[&accounts.lido.key.to_bytes()[..32], DEPOSIT_AUTHORITY_ID],
             program_id,
         );
 
         let (_, token_reserve_bump_seed) = Pubkey::find_program_address(
             &[
-                &lido_info.key.to_bytes()[..32],
+                &accounts.lido.key.to_bytes()[..32],
                 STAKE_POOL_TOKEN_RESERVE_AUTHORITY_ID,
             ],
             program_id,
         );
 
         let (fee_manager_account, _fee_manager_bump_seed) = Pubkey::find_program_address(
-            &[&lido_info.key.to_bytes()[..32], FEE_MANAGER_AUTHORITY],
+            &[&accounts.lido.key.to_bytes()[..32], FEE_MANAGER_AUTHORITY],
             program_id,
         );
 
         let fee_account =
-            spl_token::state::Account::unpack_from_slice(&fee_token_info.data.borrow())?;
+            spl_token::state::Account::unpack_from_slice(&accounts.fee_token.data.borrow())?;
         if fee_account.owner != fee_manager_account {
             msg!("Fee account has an invalid owner, it should owned by the fee manager authority");
             return Err(LidoError::InvalidOwner.into());
         }
 
-        lido.stake_pool_account = *stakepool_info.key;
-        lido.owner = *owner_info.key;
-        lido.lsol_mint_program = *mint_program_info.key;
+        lido.stake_pool_account = *accounts.stake_pool.key;
+        lido.owner = *accounts.owner.key;
+        lido.lsol_mint_program = *accounts.mint_program.key;
         lido.sol_reserve_authority_bump_seed = reserve_bump_seed;
         lido.deposit_authority_bump_seed = deposit_bump_seed;
         lido.token_reserve_authority_bump_seed = token_reserve_bump_seed;
-        lido.token_program_id = *token_program_info.key;
-        lido.pool_token_to = *pool_token_to_info.key;
+        lido.token_program_id = *accounts.spl_token.key;
+        lido.pool_token_to = *accounts.pool_token_to.key;
 
-        lido.serialize(&mut *lido_info.data.borrow_mut())
+        lido.serialize(&mut *accounts.lido.data.borrow_mut())
             .map_err(|e| e.into())
     }
 

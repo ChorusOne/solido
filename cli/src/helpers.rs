@@ -2,6 +2,7 @@ use lido::{DEPOSIT_AUTHORITY_ID, FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY_ID};
 use solana_program::{
     borsh::get_packed_len, native_token::Sol, program_pack::Pack, pubkey::Pubkey,
     system_instruction,
+    sysvar,
 };
 use solana_sdk::{
     signature::{Keypair, Signer},
@@ -172,12 +173,16 @@ pub(crate) fn command_create_solido(
             )?,
             lido::instruction::initialize(
                 &lido::id(),
-                &lido_keypair.pubkey(),
-                &stake_pool_pubkey,
-                &config.staker.pubkey(),
-                &mint_keypair.pubkey(),
-                &pool_token_to.pubkey(), // to define
-                &fee_keypair.pubkey(),
+                &lido::instruction::InitializeAccountsMeta {
+                    lido: lido_keypair.pubkey(),
+                    stake_pool: stake_pool_pubkey,
+                    owner: config.staker.pubkey(),
+                    mint_program: mint_keypair.pubkey(),
+                    pool_token_to: pool_token_to.pubkey(), // to define
+                    fee_token: fee_keypair.pubkey(),
+                    sysvar_rent: sysvar::rent::id(),
+                    spl_token: spl_token::id(),
+                },
             )?,
         ],
         Some(&config.fee_payer.pubkey()),

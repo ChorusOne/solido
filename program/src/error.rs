@@ -40,6 +40,12 @@ pub enum LidoError {
     InvalidTokenProgram,
     #[error("InvalidPoolToken")]
     InvalidPoolToken,
+    /// One of the provided accounts had a mismatch in is_writable or is_signer.
+    #[error("IncorrectAccountInto")]
+    InvalidAccountInfo,
+    /// More accounts were provided than the program expects.
+    #[error("TooManyAccountKeys")]
+    TooManyAccountKeys,
 }
 impl From<LidoError> for ProgramError {
     fn from(e: LidoError) -> Self {
