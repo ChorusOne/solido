@@ -84,7 +84,6 @@ pub fn deposit(
         AccountMeta::new_readonly(spl_token::id(), false),
         AccountMeta::new(*reserve_authority, false),
         AccountMeta::new_readonly(system_program::id(), false),
-        // AccountMeta::new_readonly(sysvar::rent::id(), false),
     ];
     Ok(Instruction {
         program_id: *program_id,
