@@ -60,70 +60,27 @@ pub const TEST_DELEGATE_DEPOSIT_AMOUNT: u64 = 10_000_000_000;
 
 #[tokio::test]
 async fn test_successful_delegate_deposit_stake_pool_deposit() {
-    let (mut banks_client, payer, recent_blockhash, lido_accounts, validators) = setup().await;
-    let user = Keypair::new();
-    let recipient = Keypair::new();
-
-    create_token_account(
-        &mut banks_client,
-        &payer,
-        &recent_blockhash,
-        &recipient,
-        &lido_accounts.mint_program.pubkey(),
-        &user.pubkey(),
-    )
-    .await
-    .unwrap();
-
-    transfer(
-        &mut banks_client,
-        &payer,
-        &recent_blockhash,
-        &user.pubkey(),
-        TEST_DEPOSIT_AMOUNT,
-    )
-    .await;
-
-    let mut transaction = Transaction::new_with_payer(
-        &[instruction::deposit(
-            &id(),
-            &lido_accounts.lido.pubkey(),
-            &lido_accounts.stake_pool_accounts.stake_pool.pubkey(),
-            &lido_accounts.pool_token_to.pubkey(),
-            &lido_accounts.owner.pubkey(),
-            &user.pubkey(),
-            &recipient.pubkey(),
-            &lido_accounts.mint_program.pubkey(),
-            &lido_accounts.reserve_authority,
+    let (mut banks_client, payer, recent_blockhash, lido_accounts, stake_accounts) = setup().await;
+    lido_accounts
+        .deposit(
+            &mut banks_client,
+            &payer,
+            &recent_blockhash,
             TEST_DEPOSIT_AMOUNT,
         )
-        .unwrap()],
-        Some(&payer.pubkey()),
-    );
-    transaction.sign(&[&payer, &user], recent_blockhash);
-    banks_client.process_transaction(transaction).await.unwrap();
+        .await;
 
     // Delegate the deposit
-    let validator_account = validators.get(0).unwrap();
-
-    let (stake_account, _) =
-        Pubkey::find_program_address(&[&validator_account.vote.pubkey().to_bytes()[..32]], &id());
-
-    let mut transaction = Transaction::new_with_payer(
-        &[instruction::delegate_deposit(
-            &id(),
-            &lido_accounts.lido.pubkey(),
-            &validator_account.vote.pubkey(),
-            &lido_accounts.reserve_authority,
-            &stake_account,
-            &lido_accounts.deposit_authority,
+    let validator_account = stake_accounts.get(0).unwrap();
+    let stake_account = lido_accounts
+        .delegate_deposit(
+            &mut banks_client,
+            &payer,
+            &recent_blockhash,
+            validator_account,
             TEST_DELEGATE_DEPOSIT_AMOUNT,
         )
-        .unwrap()],
-        Some(&payer.pubkey()),
-    );
-    transaction.sign(&[&payer], recent_blockhash);
-    banks_client.process_transaction(transaction).await.unwrap();
+        .await;
 
     let stake_pool_before = get_account(
         &mut banks_client,
@@ -144,26 +101,15 @@ async fn test_successful_delegate_deposit_stake_pool_deposit() {
         .find(&validator_account.vote.pubkey())
         .unwrap();
 
-    let mut transaction = Transaction::new_with_payer(
-        &[instruction::stake_pool_delegate(
-            &id(),
-            &lido_accounts.lido.pubkey(),
-            &validator_account.vote.pubkey(),
+    lido_accounts
+        .delegate_stakepool_deposit(
+            &mut banks_client,
+            &payer,
+            &recent_blockhash,
+            validator_account,
             &stake_account,
-            &lido_accounts.deposit_authority,
-            &lido_accounts.pool_token_to.pubkey(),
-            &spl_stake_pool::id(),
-            &lido_accounts.stake_pool_accounts.stake_pool.pubkey(),
-            &lido_accounts.stake_pool_accounts.validator_list.pubkey(),
-            &lido_accounts.stake_pool_accounts.withdraw_authority,
-            &validator_account.stake_account,
-            &lido_accounts.stake_pool_accounts.pool_mint.pubkey(),
         )
-        .unwrap()],
-        Some(&payer.pubkey()),
-    );
-    transaction.sign(&[&payer], recent_blockhash);
-    banks_client.process_transaction(transaction).await.unwrap();
+        .await;
 
     // Stake pool should add its balance to the pool balance
     let stake_pool = get_account(

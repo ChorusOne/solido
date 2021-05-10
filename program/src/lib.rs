@@ -14,6 +14,8 @@ pub const RESERVE_AUTHORITY_ID: &[u8] = b"reserve_authority";
 pub const DEPOSIT_AUTHORITY_ID: &[u8] = b"deposit_authority";
 /// Seed for token reserve authority
 pub const STAKE_POOL_TOKEN_RESERVE_AUTHORITY_ID: &[u8] = b"token_reserve_authority";
+/// Seed for fee manafer authority
+pub const FEE_MANAGER_AUTHORITY: &[u8] = b"fee_authority";
 
 solana_program::declare_id!("5QSRmnNdU7BAwZgx8YV2YrHYyzRF7okMfNYjPJeZK1eE");
 
