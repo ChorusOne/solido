@@ -26,7 +26,14 @@ def run(*args: str) -> str:
     """
     Run a program, ensure it exits with code 0, return its stdout.
     """
-    result = subprocess.run(args, check=True, capture_output=True, encoding='utf-8')
+    try:
+        result = subprocess.run(args, check=True, capture_output=True, encoding='utf-8')
+
+    except subprocess.CalledProcessError as err:
+        print('Stdout:', err.stdout)
+        print('Stderr:', err.stderr)
+        raise
+
     return result.stdout
 
 
