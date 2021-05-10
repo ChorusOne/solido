@@ -375,7 +375,7 @@ impl Processor {
         let _rent = &Rent::from_account_info(rent_info)?;
         let lido = Lido::try_from_slice(&lido_info.data.borrow())?;
 
-        if &lido.stake_pool_account != stake_pool_program_info.key {
+        if &lido.stake_pool_account != stake_pool_info.key {
             msg!("Invalid stake pool");
             return Err(LidoError::InvalidStakePool.into());
         }
