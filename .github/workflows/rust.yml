@@ -34,7 +34,9 @@ jobs:
     - name: cache-build-artifacts
       uses: actions/cache@v2
       with:
-        path: target
+        path: |
+          target
+          multisig/target
         key: cargo-bpf-${{ hashFiles('Cargo.lock') }}
         restore-keys: |
           cargo-bpf-${{ hashFiles('Cargo.lock') }}
@@ -43,6 +45,7 @@ jobs:
     - name: Solana contract test
       run: |
         cd program
+        sudo apt-get install -y libudev-dev
         sh -c "$(curl -sSfL https://release.solana.com/v1.6.7/install)"
         export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
         cargo test-bpf
@@ -50,9 +53,24 @@ jobs:
     - name: Build and test Multisig
       run: |
         export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
-        cargo build --package multisig
         solana-test-validator > /dev/null &
         validator="$!"
+
+        # Build the CLI while the validator is starting.
+        cargo build --package multisig
+
+        # Build the on-chain multisig program.
+        cd multisig
+        cargo install --git https://github.com/project-serum/anchor --tag v0.4.4 anchor-cli --locked
+        export PATH="$HOME/.cargo/bin:$PATH"
+        anchor build
+        cd ..
+
+        # Perform initial Solana setup.
+        solana-keygen new --no-bip39-passphrase --silent
+        solana config set --url http://127.0.0.1:8899
+        solana airdrop 500.0
+
         multisig-cli/tests/test_cli.py
         kill $validator
 
