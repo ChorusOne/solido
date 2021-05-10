@@ -11,7 +11,8 @@ use crate::{
         AccountType,
     },
     state::Lido,
-    DEPOSIT_AUTHORITY_ID, RESERVE_AUTHORITY_ID, STAKE_POOL_TOKEN_RESERVE_AUTHORITY_ID,
+    DEPOSIT_AUTHORITY_ID, FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY_ID,
+    STAKE_POOL_TOKEN_RESERVE_AUTHORITY_ID,
 };
 
 use {
@@ -52,6 +53,7 @@ impl Processor {
         let owner_info = next_account_info(account_info_iter)?;
         let mint_program_info = next_account_info(account_info_iter)?;
         let pool_token_to_info = next_account_info(account_info_iter)?;
+        let fee_token_info = next_account_info(account_info_iter)?;
         // let members_list_info = next_account_info(account_info_iter)?;
         let rent_info = next_account_info(account_info_iter)?;
         // Token program account (SPL Token Program)
@@ -97,6 +99,18 @@ impl Processor {
             ],
             program_id,
         );
+
+        let (fee_manager_account, _fee_manager_bump_seed) = Pubkey::find_program_address(
+            &[&lido_info.key.to_bytes()[..32], FEE_MANAGER_AUTHORITY],
+            program_id,
+        );
+
+        let fee_account =
+            spl_token::state::Account::unpack_from_slice(&fee_token_info.data.borrow())?;
+        if fee_account.owner != fee_manager_account {
+            msg!("Fee account has an invalid owner, it should owned by the fee manager authority");
+            return Err(LidoError::InvalidOwner.into());
+        }
 
         lido.stake_pool_account = *stakepool_info.key;
         lido.owner = *owner_info.key;

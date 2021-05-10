@@ -38,6 +38,7 @@ pub fn initialize(
     owner: &Pubkey,
     mint_program: &Pubkey,
     pool_token_to: &Pubkey,
+    fee_token: &Pubkey,
 ) -> Result<Instruction, ProgramError> {
     let init_data = LidoInstruction::Initialize;
     let data = init_data.try_to_vec()?;
@@ -47,6 +48,7 @@ pub fn initialize(
         AccountMeta::new_readonly(*owner, false),
         AccountMeta::new(*mint_program, false),
         AccountMeta::new_readonly(*pool_token_to, false),
+        AccountMeta::new_readonly(*fee_token, false),
         AccountMeta::new_readonly(sysvar::rent::id(), false),
         AccountMeta::new_readonly(spl_token::id(), false),
     ];
