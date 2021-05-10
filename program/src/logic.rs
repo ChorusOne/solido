@@ -63,7 +63,7 @@ pub fn calc_stakepool_lamports(
                 .checked_div(stake_pool.pool_token_supply as u128)
                 .ok_or(LidoError::CalculationFailure)?,
         )
-        .or_else(|_| Err::<u64, ProgramError>(LidoError::CalculationFailure.into()))?
+        .map_err(|_| LidoError::CalculationFailure)?
     } else {
         0
     };
