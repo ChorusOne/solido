@@ -1,4 +1,4 @@
-use lido::{DEPOSIT_AUTHORITY_ID, RESERVE_AUTHORITY_ID};
+use lido::{DEPOSIT_AUTHORITY_ID, FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY_ID};
 use solana_program::{
     borsh::get_packed_len, native_token::Sol, program_pack::Pack, pubkey::Pubkey,
     system_instruction,
@@ -65,6 +65,13 @@ pub(crate) fn command_create_solido(
         &lido_keypair.pubkey(),
         RESERVE_AUTHORITY_ID,
     );
+
+    let (fee_authority, _) = lido::find_authority_program_address(
+        &lido::id(),
+        &lido_keypair.pubkey(),
+        FEE_MANAGER_AUTHORITY,
+    );
+
     let stake_pool_pubkey = match stake_pool_args {
         StakePoolArgs::New(NewStakePoolArgs {
             keypair,
@@ -96,6 +103,14 @@ pub(crate) fn command_create_solido(
 
     let mint_keypair = Keypair::new();
     println!("Creating mint {}", mint_keypair.pubkey());
+    let fee_keypair = Keypair::new();
+    println!("Creating fee account {}", fee_keypair.pubkey());
+
+    let pool_token_to = Keypair::new();
+    println!(
+        "Creating lido's account in stake pool: {}",
+        pool_token_to.pubkey()
+    );
 
     let mint_account_balance = config
         .rpc_client
@@ -105,7 +120,15 @@ pub(crate) fn command_create_solido(
         .rpc_client
         .get_minimum_balance_for_rent_exemption(lido_size)?;
 
-    let total_rent_free_balances = mint_account_balance + lido_account_balance;
+    let fee_token_balance = config
+        .rpc_client
+        .get_minimum_balance_for_rent_exemption(spl_token::state::Account::LEN)?;
+    let pool_token_balance = config
+        .rpc_client
+        .get_minimum_balance_for_rent_exemption(spl_token::state::Account::LEN)?;
+
+    let total_rent_free_balances =
+        mint_account_balance + lido_account_balance + fee_token_balance + pool_token_balance;
 
     let default_decimals = spl_token::native_mint::DECIMALS;
     let mut lido_transaction = Transaction::new_with_payer(
@@ -132,13 +155,29 @@ pub(crate) fn command_create_solido(
                 lido_size as u64,
                 &lido::id(),
             ),
+            // Account for the pool fee accumulation
+            system_instruction::create_account(
+                &config.fee_payer.pubkey(),
+                &fee_keypair.pubkey(),
+                fee_token_balance,
+                spl_token::state::Account::LEN as u64,
+                &spl_token::id(),
+            ),
+            // Initialize fee receiver account
+            spl_token::instruction::initialize_account(
+                &spl_token::id(),
+                &fee_keypair.pubkey(),
+                &mint_keypair.pubkey(),
+                &fee_authority,
+            )?,
             lido::instruction::initialize(
                 &lido::id(),
                 &lido_keypair.pubkey(),
                 &stake_pool_pubkey,
                 &config.staker.pubkey(),
                 &mint_keypair.pubkey(),
-                pool_token_to.pubkey() // to define
+                &pool_token_to.pubkey(), // to define
+                &fee_keypair.pubkey(),
             )?,
         ],
         Some(&config.fee_payer.pubkey()),
