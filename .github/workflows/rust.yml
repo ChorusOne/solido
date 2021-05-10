@@ -44,8 +44,17 @@ jobs:
       run: |
         cd program
         sh -c "$(curl -sSfL https://release.solana.com/v1.6.7/install)"
-        export PATH="/home/runner/.local/share/solana/install/active_release/bin:$PATH"
+        export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
         cargo test-bpf
+
+    - name: Build and test Multisig
+      run: |
+        export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
+        cargo build --package multisig
+        solana-test-validator > /dev/null &
+        validator="$!"
+        multisig-cli/tests/test_cli.py
+        kill $validator
 
   clippy:
     runs-on: ubuntu-latest
