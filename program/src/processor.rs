@@ -5,7 +5,9 @@ use spl_stake_pool::{stake_program, state::StakePool};
 
 use crate::{
     error::LidoError,
-    instruction::{stake_pool_deposit, LidoInstruction, InitializeAccountsInfo},
+    instruction::{
+        stake_pool_deposit, DepositAccountsInfo, InitializeAccountsInfo, LidoInstruction,
+    },
     logic::{
         calc_stakepool_lamports, calc_total_lamports, check_reserve_authority, rent_exemption,
         AccountType,
@@ -46,7 +48,10 @@ fn get_stake_state(
 /// Program state handler.
 pub struct Processor;
 impl<'b> Processor {
-    pub fn process_initialize(program_id: &Pubkey, accounts_raw: &'b [AccountInfo<'b>]) -> ProgramResult {
+    pub fn process_initialize(
+        program_id: &Pubkey,
+        accounts_raw: &'b [AccountInfo<'b>],
+    ) -> ProgramResult {
         let accounts = InitializeAccountsInfo::try_from_slice(accounts_raw)?;
 
         let rent = &Rent::from_account_info(accounts.sysvar_rent)?;
@@ -118,80 +123,67 @@ impl<'b> Processor {
     pub fn process_deposit(
         program_id: &Pubkey,
         amount: u64,
-        accounts: &[AccountInfo],
+        accounts_raw: &'b [AccountInfo<'b>],
     ) -> ProgramResult {
+        let accounts = DepositAccountsInfo::try_from_slice(accounts_raw)?;
+
         if amount == 0 {
             msg!("Amount must be greater than zero");
             return Err(ProgramError::InvalidArgument);
         }
 
-        let account_info_iter = &mut accounts.iter();
-        // Lido
-        let lido_info = next_account_info(account_info_iter)?;
-        // Stake pool
-        let stake_pool_info = next_account_info(account_info_iter)?;
-        // Recipient of tokens from the stake pool
-        let pool_token_to_info = next_account_info(account_info_iter)?;
-        // Owner program
-        let owner_info = next_account_info(account_info_iter)?;
-        // User account
-        let user_info = next_account_info(account_info_iter)?;
-        // Recipient account
-        let lsol_recipient_info = next_account_info(account_info_iter)?;
-        // Token minter
-        let lsol_mint_info = next_account_info(account_info_iter)?;
-        // Token program account (SPL Token Program)
-        let token_program_info = next_account_info(account_info_iter)?;
-        // Lido authority account
-        let reserve_authority_info = next_account_info(account_info_iter)?;
-        // System program
-        let system_program_info = next_account_info(account_info_iter)?;
-
-        if user_info.lamports() < amount {
-            msg!("Not enough balance for the given amount");
+        if accounts.user.lamports() < amount {
             return Err(LidoError::InvalidAmount.into());
         }
 
-        let mut lido = Lido::try_from_slice(&lido_info.data.borrow())?;
+        let mut lido = Lido::try_from_slice(&accounts.lido.data.borrow())?;
 
-        lido.check_lido_for_deposit(owner_info.key, stake_pool_info.key, lsol_mint_info.key)?;
-        lido.check_token_program_id(token_program_info.key)?;
-        check_reserve_authority(lido_info, program_id, reserve_authority_info)?;
+        lido.check_lido_for_deposit(
+            accounts.owner.key,
+            accounts.stake_pool.key,
+            accounts.mint_program.key,
+        )?;
+        lido.check_token_program_id(accounts.spl_token.key)?;
+        check_reserve_authority(accounts.lido, program_id, accounts.reserve_authority)?;
 
-        if &lido.stake_pool_account != stake_pool_info.key {
+        if &lido.stake_pool_account != accounts.stake_pool.key {
             msg!("Invalid stake pool");
             return Err(LidoError::InvalidStakePool.into());
         }
-        let stake_pool = StakePool::try_from_slice(&stake_pool_info.data.borrow())?;
+        let stake_pool = StakePool::try_from_slice(&accounts.stake_pool.data.borrow())?;
         if !stake_pool.is_valid() {
             msg!("Invalid stake pool");
             return Err(LidoError::InvalidStakePool.into());
         }
-        if &stake_pool.token_program_id != token_program_info.key {
+        if &stake_pool.token_program_id != accounts.spl_token.key {
             msg!("Invalid token program");
             return Err(LidoError::InvalidTokenProgram.into());
         }
 
-        if &lido.pool_token_to != pool_token_to_info.key {
+        if &lido.pool_token_to != accounts.pool_token_to.key {
             msg!("Invalid stake pool token");
             return Err(LidoError::InvalidPoolToken.into());
         }
 
-        let reserve_lamports = reserve_authority_info.lamports();
+        let reserve_lamports = accounts.reserve_authority.lamports();
 
         let pool_to_token_account =
-            spl_token::state::Account::unpack_from_slice(&pool_token_to_info.data.borrow())?;
+            spl_token::state::Account::unpack_from_slice(&accounts.pool_token_to.data.borrow())?;
 
         // stake_pool_total_sol * stake_pool_token(pool_token_to_info)/stake_pool_total_tokens
         let stake_pool_lamports = calc_stakepool_lamports(stake_pool, pool_to_token_account)?;
 
         let total_lamports = calc_total_lamports(reserve_lamports, stake_pool_lamports);
         invoke(
-            &system_instruction::transfer(user_info.key, reserve_authority_info.key, amount),
+            &system_instruction::transfer(
+                accounts.user.key,
+                accounts.reserve_authority.key,
+                amount,
+            ),
             &[
-                user_info.clone(),
-                reserve_authority_info.clone(),
-                system_program_info.clone(),
+                accounts.user.clone(),
+                accounts.reserve_authority.clone(),
+                accounts.system_program.clone(),
             ],
         )?;
 
@@ -202,15 +194,15 @@ impl<'b> Processor {
         let total_lsol = lido.lsol_total_shares + lsol_amount;
 
         let ix = spl_token::instruction::mint_to(
-            token_program_info.key,
-            lsol_mint_info.key,
-            lsol_recipient_info.key,
-            reserve_authority_info.key,
+            accounts.spl_token.key,
+            accounts.mint_program.key,
+            accounts.recipient.key,
+            accounts.reserve_authority.key,
             &[],
             lsol_amount,
         )?;
 
-        let me_bytes = lido_info.key.to_bytes();
+        let me_bytes = accounts.lido.key.to_bytes();
         let authority_signature_seeds = [
             &me_bytes[..32],
             RESERVE_AUTHORITY_ID,
@@ -220,17 +212,17 @@ impl<'b> Processor {
         invoke_signed(
             &ix,
             &[
-                lsol_mint_info.clone(),
-                lsol_recipient_info.clone(),
-                reserve_authority_info.clone(),
-                token_program_info.clone(),
+                accounts.mint_program.clone(),
+                accounts.recipient.clone(),
+                accounts.reserve_authority.clone(),
+                accounts.spl_token.clone(),
             ],
             signers,
         )?;
 
         lido.lsol_total_shares = total_lsol;
 
-        lido.serialize(&mut *lido_info.data.borrow_mut())
+        lido.serialize(&mut *accounts.lido.data.borrow_mut())
             .map_err(|e| e.into())
     }
 
@@ -458,7 +450,11 @@ impl<'b> Processor {
     }
 
     /// Processes [Instruction](enum.Instruction.html).
-    pub fn process(program_id: &Pubkey, accounts: &'b [AccountInfo<'b>], input: &[u8]) -> ProgramResult {
+    pub fn process(
+        program_id: &Pubkey,
+        accounts: &'b [AccountInfo<'b>],
+        input: &[u8],
+    ) -> ProgramResult {
         let instruction = LidoInstruction::try_from_slice(input)?;
         match instruction {
             LidoInstruction::Initialize => Self::process_initialize(program_id, accounts),

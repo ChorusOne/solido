@@ -1,8 +1,7 @@
 use lido::{DEPOSIT_AUTHORITY_ID, FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY_ID};
 use solana_program::{
     borsh::get_packed_len, native_token::Sol, program_pack::Pack, pubkey::Pubkey,
-    system_instruction,
-    sysvar,
+    system_instruction, sysvar,
 };
 use solana_sdk::{
     signature::{Keypair, Signer},

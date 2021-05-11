@@ -2,12 +2,12 @@
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use solana_program::{
+    account_info::{next_account_info, AccountInfo},
     instruction::{AccountMeta, Instruction},
     program_error::ProgramError,
     pubkey::Pubkey,
     system_program,
     sysvar::{self, stake_history},
-    account_info::{AccountInfo, next_account_info},
 };
 use spl_stake_pool::{instruction::StakePoolInstruction, stake_program, state::Fee};
 
@@ -49,7 +49,7 @@ macro_rules! accounts_struct {
             $(
                 $account:ident {
                     is_signer: $is_signer:expr,
-                    is_writable: $is_writable:tt
+                    is_writable: $is_writable:tt,
                 }
             ),*
         }
@@ -111,14 +111,38 @@ macro_rules! accounts_struct {
 
 accounts_struct! {
     InitializeAccountsMeta, InitializeAccountsInfo {
-        lido { is_signer: true, is_writable: true },
-        stake_pool { is_signer: true, is_writable: false },
-        owner { is_signer: true, is_writable: false },
-        mint_program { is_signer: true, is_writable: false },
-        pool_token_to { is_signer: false, is_writable: false },
-        fee_token { is_signer: false, is_writable: false },
-        sysvar_rent { is_signer: false, is_writable: false },
-        spl_token { is_signer: false, is_writable: false }
+        lido {
+            is_signer: true,
+            is_writable: true,
+        },
+        stake_pool {
+            is_signer: true,
+            is_writable: false,
+        },
+        owner {
+            is_signer: true,
+            is_writable: false,
+        },
+        mint_program {
+            is_signer: true,
+            is_writable: false,
+        },
+        pool_token_to {
+            is_signer: false,
+            is_writable: false,
+        },
+        fee_token {
+            is_signer: false,
+            is_writable: false,
+        },
+        sysvar_rent {
+            is_signer: false,
+            is_writable: false,
+        },
+        spl_token {
+            is_signer: false,
+            is_writable: false,
+        }
     }
 }
 
@@ -135,35 +159,65 @@ pub fn initialize(
     })
 }
 
+accounts_struct! {
+    DepositAccountsMeta, DepositAccountsInfo {
+        lido {
+            is_signer: false,
+            is_writable: true,
+        },
+        stake_pool {
+            is_signer: false,
+            is_writable: false,
+        },
+        pool_token_to {
+            is_signer: false,
+            is_writable: false,
+        },
+        owner {
+            is_signer: false,
+            is_writable: false,
+        },
+        user {
+            is_signer: true,
+            is_writable: true,
+        },
+        recipient {
+            is_signer: false,
+            is_writable: true,
+        },
+        mint_program {
+            is_signer: false,
+            is_writable: true,
+        },
+        spl_token {
+            is_signer: false,
+            is_writable: false,
+        },
+        reserve_authority {
+            is_signer: false,
+            is_writable: true,
+        },
+        system_program {
+            is_signer: false,
+            is_writable: false,
+        },
+        sysvar_rent {
+            is_signer: false,
+            is_writable: false,
+        }
+    }
+}
+
 pub fn deposit(
     program_id: &Pubkey,
-    lido: &Pubkey,
-    stake_pool: &Pubkey,
-    pool_token_to: &Pubkey,
-    owner: &Pubkey,
-    user: &Pubkey,
-    recipient: &Pubkey,
-    mint_program: &Pubkey,
-    reserve_authority: &Pubkey,
+    accounts: &DepositAccountsMeta,
     amount: u64,
 ) -> Result<Instruction, ProgramError> {
     let init_data = LidoInstruction::Deposit { amount };
     let data = init_data.try_to_vec()?;
-    let accounts = vec![
-        AccountMeta::new(*lido, false),
-        AccountMeta::new_readonly(*stake_pool, false),
-        AccountMeta::new_readonly(*pool_token_to, false),
-        AccountMeta::new_readonly(*owner, false),
-        AccountMeta::new(*user, true),
-        AccountMeta::new(*recipient, false),
-        AccountMeta::new(*mint_program, false),
-        AccountMeta::new_readonly(spl_token::id(), false),
-        AccountMeta::new(*reserve_authority, false),
-        AccountMeta::new_readonly(system_program::id(), false),
-    ];
     Ok(Instruction {
         program_id: *program_id,
-        accounts,
+        accounts: accounts.to_vec(),
         data,
     })
 }
