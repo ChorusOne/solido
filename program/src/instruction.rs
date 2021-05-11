@@ -16,7 +16,9 @@ use crate::error::LidoError;
 #[repr(C)]
 #[derive(Clone, Debug, PartialEq, BorshSerialize, BorshDeserialize, BorshSchema)]
 pub enum LidoInstruction {
-    Initialize,
+    Initialize {
+        max_validators: u32,
+    },
     /// Deposit with amount
     Deposit {
         #[allow(dead_code)] // but it's not
@@ -32,6 +34,7 @@ pub enum LidoInstruction {
         #[allow(dead_code)] // but it's not
         amount: u64,
     },
+    ChangeFeeDistribution,
 }
 
 macro_rules! accounts_struct_meta {
@@ -236,7 +239,7 @@ pub fn initialize(
     program_id: &Pubkey,
     accounts: &InitializeAccountsMeta,
 ) -> Result<Instruction, ProgramError> {
-    let init_data = LidoInstruction::Initialize;
+    let init_data = LidoInstruction::Initialize { max_validators };
     let data = init_data.try_to_vec()?;
     Ok(Instruction {
         program_id: *program_id,
