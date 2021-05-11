@@ -57,7 +57,7 @@ jobs:
         validator="$!"
 
         # Build the CLI while the validator is starting.
-        cargo build --package multisig
+        cargo build --bin multisig
 
         # Build the on-chain multisig program.
         cd multisig
