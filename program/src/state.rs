@@ -2,6 +2,7 @@
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use solana_program::{entrypoint::ProgramResult, msg, pubkey::Pubkey};
+use spl_stake_pool::borsh::get_instance_packed_len;
 use std::convert::TryFrom;
 
 use crate::error::LidoError;
@@ -9,16 +10,25 @@ use crate::error::LidoError;
 #[repr(C)]
 #[derive(Clone, Debug, Default, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema)]
 pub struct Lido {
+    /// Stake pool account associated with Lido
     pub stake_pool_account: Pubkey,
-    pub owner: Pubkey,
+    /// Manager of the Lido program, able to execute administrative functions
+    pub manager: Pubkey,
+    /// Program in charge of minting Lido tokens
     pub st_sol_mint_program: Pubkey,
+    /// Total Lido tokens in circulation
     pub st_sol_total_shares: u64,
-    pub pool_token_to: Pubkey, // Used as recipient of the stake pool
+    /// Holder of tokens in Lido's underlying stake pool
+    pub pool_token_to: Pubkey,
+    /// Fee distribution state, set and modified by the manager
+    pub fee_distribution: Pubkey,
+    /// Token program id associated with Lido's token
+    pub token_program_id: Pubkey,
 
+    /// Bumb seeds for signing messages on behalf of the authority
     pub sol_reserve_authority_bump_seed: u8,
     pub deposit_authority_bump_seed: u8,
     pub token_reserve_authority_bump_seed: u8,
-    pub token_program_id: Pubkey,
 }
 
 impl Lido {
@@ -49,19 +59,19 @@ impl Lido {
 
     pub fn check_lido_for_deposit(
         &self,
-        owner_key: &Pubkey,
+        manager_key: &Pubkey,
         stakepool_key: &Pubkey,
         st_sol_mint_key: &Pubkey,
     ) -> ProgramResult {
-        if &self.owner != owner_key {
+        if &self.manager != manager_key {
             return Err(LidoError::InvalidOwner.into());
         }
         if &self.stake_pool_account != stakepool_key {
             return Err(LidoError::InvalidStakePool.into());
         }
 
-        if &self.st_sol_mint_program != st_sol_mint_key {
-            return Err(LidoError::InvalidToken.into());
+        if &self.st_sol_mint_program != lsol_mint_key {
+            return Err(LidoError::InvalidTokenMinter.into());
         }
         Ok(())
     }
@@ -76,44 +86,81 @@ impl Lido {
 
 #[repr(C)]
 #[derive(Clone, Debug, Default, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema)]
-pub struct Owner {
-    members: Pubkey,
+pub struct ValidatorCreditAccounts {
+    pub validator_accounts: Vec<ValidatorCredit>,
+    pub max_validators: u32,
 }
 
-#[derive(Clone, Debug, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema)]
-pub enum LidoAccountType {
-    Uninitialized,
-    Initialized,
+#[repr(C)]
+#[derive(Clone, Debug, Default, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema)]
+pub struct ValidatorCredit {
+    address: Pubkey,
+    amount: u64,
 }
 
-impl Default for LidoAccountType {
-    fn default() -> Self {
-        LidoAccountType::Uninitialized
+impl ValidatorCreditAccounts {
+    fn new(max_validators: u32) -> Self {
+        Self {
+            max_validators,
+            validator_accounts: vec![ValidatorCredit::default(); max_validators as usize],
+        }
+    }
+    pub fn maximum_byte_capacity(buffer_size: usize) -> usize {
+        return buffer_size.saturating_sub(8) / 40;
+    }
+    fn add(&mut self, address: Pubkey) -> Result<(), LidoError> {
+        if self.validator_accounts.len() == self.max_validators as usize {
+            return Err(LidoError::MaximumValidatorsExceeded);
+        }
+        self.validator_accounts.push(ValidatorCredit {
+            address: address,
+            amount: 0,
+        });
+        Ok(())
     }
 }
 
 #[repr(C)]
 #[derive(Clone, Debug, Default, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema)]
-pub struct LidoMembers {
-    /// Account type, must be LidoMembers currently
-    pub account_type: LidoAccountType,
+pub struct FeeDistribution {
+    pub insurance_fee_numerator: u64,
+    pub treasure_fee_numerator: u64,
+    pub validator_fee_numerator: u64,
+    pub manager_fee_numerator: u64,
+    pub denominator: u64,
 
-    maximum_members: u32,
-    list: Vec<Pubkey>,
+    pub insurance_account: Pubkey,
+    pub treasure_account: Pubkey,
+    pub manager_account: Pubkey,
+    pub validator_list_account: Pubkey,
 }
 
-impl LidoMembers {
-    pub fn new(maximum_members: u32) -> Self {
-        Self {
-            account_type: LidoAccountType::default(),
-            maximum_members,
-            list: vec![Pubkey::default(); maximum_members as usize],
+impl FeeDistribution {
+    /// Checks
+    pub fn check_sum(&self) -> Result<(), LidoError> {
+        if self.insurance_fee_numerator
+            + self.treasure_fee_numerator
+            + self.validator_fee_numerator
+            + self.manager_fee_numerator
+            != self.denominator
+            || self.denominator == 0
+        {
+            msg!("Fee numerators do not add up to denominator or denominator is 0");
+            return Err(LidoError::InvalidFeeAmount);
         }
+        Ok(())
     }
+}
 
-    pub fn is_initialized(&self) -> bool {
-        self.account_type != LidoAccountType::Uninitialized
-    }
+#[test]
+fn test_n_val() {
+    let n_validators: u64 = 10000;
+    let size = get_instance_packed_len(&ValidatorCreditAccounts::new(n_validators as u32)).unwrap();
+
+    assert_eq!(
+        ValidatorCreditAccounts::maximum_byte_capacity(size) as u64,
+        n_validators
+    );
 }
 
 #[cfg(test)]
