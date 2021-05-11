@@ -8,6 +8,7 @@ use crate::{
     instruction::{
         stake_pool_deposit, DelegateDepositAccountsInfo, DepositAccountsInfo,
         InitializeAccountsInfo, LidoInstruction, StakePoolDelegateAccountsInfo,
+        StakePoolDepositAccountsMeta,
     },
     logic::{
         calc_stakepool_lamports, calc_total_lamports, check_reserve_authority, rent_exemption,
@@ -374,15 +375,16 @@ impl<'b> Processor {
         invoke_signed(
             &stake_pool_deposit(
                 &accounts.stake_pool_program.key,
-                &accounts.stake_pool.key,
-                &accounts.stake_pool_validator_list.key,
-                &accounts.deposit_authority.key,
-                &accounts.stake_pool_withdraw_authority.key,
-                &accounts.stake.key,
-                &accounts.stake_pool_validator_stake_account.key,
-                &accounts.pool_token_to.key,
-                &accounts.stake_pool_mint.key,
-                &accounts.spl_token.key,
+                &StakePoolDepositAccountsMeta {
+                    stake_pool: *accounts.stake_pool.key,
+                    validator_list_storage: *accounts.stake_pool_validator_list.key,
+                    deposit_authority: *accounts.deposit_authority.key,
+                    stake_pool_withdraw_authority: *accounts.stake_pool_withdraw_authority.key,
+                    deposit_stake_address: *accounts.stake.key,
+                    validator_stake_account: *accounts.stake_pool_validator_stake_account.key,
+                    pool_tokens_to: *accounts.pool_token_to.key,
+                    pool_mint: *accounts.stake_pool_mint.key,
+                },
             ),
             &[
                 accounts.stake_pool_program.clone(),

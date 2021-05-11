@@ -412,35 +412,54 @@ pub fn stake_pool_delegate(
     })
 }
 
+accounts_struct! {
+    StakePoolDepositAccountsMeta, StakePoolDepositAccountsInfo {
+        pub stake_pool {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub validator_list_storage {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub deposit_authority {
+            is_signer: true,
+            is_writable: false,
+        },
+        pub stake_pool_withdraw_authority {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub deposit_stake_address {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub validator_stake_account {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub pool_tokens_to {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub pool_mint {
+            is_signer: false,
+            is_writable: true,
+        },
+        const spl_token = spl_token::id(),
+        const sysvar_clock = sysvar::clock::id(),
+        const sysvar_stake_history = sysvar::stake_history::id(),
+        const stake_program = stake_program::id(),
+    }
+}
+
 pub fn stake_pool_deposit(
     program_id: &Pubkey,
-    stake_pool: &Pubkey,
-    validator_list_storage: &Pubkey,
-    deposit_authority: &Pubkey,
-    stake_pool_withdraw_authority: &Pubkey,
-    deposit_stake_address: &Pubkey,
-    validator_stake_accont: &Pubkey,
-    pool_tokens_to: &Pubkey,
-    pool_mint: &Pubkey,
-    token_program_id: &Pubkey,
+    accounts: &StakePoolDepositAccountsMeta,
 ) -> Instruction {
-    let accounts = vec![
-        AccountMeta::new(*stake_pool, false),
-        AccountMeta::new(*validator_list_storage, false),
-        AccountMeta::new_readonly(*deposit_authority, true),
-        AccountMeta::new_readonly(*stake_pool_withdraw_authority, false),
-        AccountMeta::new(*deposit_stake_address, false),
-        AccountMeta::new(*validator_stake_accont, false),
-        AccountMeta::new(*pool_tokens_to, false),
-        AccountMeta::new(*pool_mint, false),
-        AccountMeta::new_readonly(sysvar::clock::id(), false),
-        AccountMeta::new_readonly(sysvar::stake_history::id(), false),
-        AccountMeta::new_readonly(*token_program_id, false),
-        AccountMeta::new_readonly(stake_program::id(), false),
-    ];
     Instruction {
         program_id: *program_id,
-        accounts,
+        accounts: accounts.to_vec(),
         data: StakePoolInstruction::Deposit.try_to_vec().unwrap(),
     }
 }
