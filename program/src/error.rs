@@ -38,6 +38,8 @@ pub enum LidoError {
     // 10.
     #[error("InvalidTokenProgram")]
     InvalidTokenProgram,
+    #[error("InvalidPoolToken")]
+    InvalidPoolToken,
 }
 impl From<LidoError> for ProgramError {
     fn from(e: LidoError) -> Self {

@@ -6,9 +6,13 @@ use spl_stake_pool::{stake_program, state::StakePool};
 use crate::{
     error::LidoError,
     instruction::{stake_pool_deposit, LidoInstruction},
-    logic::{check_reserve_authority, rent_exemption, AccountType},
+    logic::{
+        calc_stakepool_lamports, calc_total_lamports, check_reserve_authority, rent_exemption,
+        AccountType,
+    },
     state::Lido,
-    DEPOSIT_AUTHORITY_ID, RESERVE_AUTHORITY_ID, STAKE_POOL_TOKEN_RESERVE_AUTHORITY_ID,
+    DEPOSIT_AUTHORITY_ID, FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY_ID,
+    STAKE_POOL_TOKEN_RESERVE_AUTHORITY_ID,
 };
 
 use {
@@ -48,6 +52,8 @@ impl Processor {
         let stakepool_info = next_account_info(account_info_iter)?;
         let owner_info = next_account_info(account_info_iter)?;
         let mint_program_info = next_account_info(account_info_iter)?;
+        let pool_token_to_info = next_account_info(account_info_iter)?;
+        let fee_token_info = next_account_info(account_info_iter)?;
         // let members_list_info = next_account_info(account_info_iter)?;
         let rent_info = next_account_info(account_info_iter)?;
         // Token program account (SPL Token Program)
@@ -64,6 +70,16 @@ impl Processor {
         if stake_pool.is_uninitialized() {
             msg!("Provided stake pool not initialized");
             return Err(LidoError::InvalidStakePool.into());
+        }
+        let pool_to_token_account =
+            spl_token::state::Account::unpack_from_slice(&pool_token_to_info.data.borrow())?;
+
+        if stake_pool.pool_mint != pool_to_token_account.mint {
+            msg!(
+                "Pool token to has wrong minter, should be the same as stake pool minter {}",
+                stake_pool.pool_mint
+            );
+            return Err(LidoError::InvalidPoolToken.into());
         }
 
         let (_, reserve_bump_seed) = Pubkey::find_program_address(
@@ -84,6 +100,18 @@ impl Processor {
             program_id,
         );
 
+        let (fee_manager_account, _fee_manager_bump_seed) = Pubkey::find_program_address(
+            &[&lido_info.key.to_bytes()[..32], FEE_MANAGER_AUTHORITY],
+            program_id,
+        );
+
+        let fee_account =
+            spl_token::state::Account::unpack_from_slice(&fee_token_info.data.borrow())?;
+        if fee_account.owner != fee_manager_account {
+            msg!("Fee account has an invalid owner, it should owned by the fee manager authority");
+            return Err(LidoError::InvalidOwner.into());
+        }
+
         lido.stake_pool_account = *stakepool_info.key;
         lido.owner = *owner_info.key;
         lido.lsol_mint_program = *mint_program_info.key;
@@ -91,6 +119,7 @@ impl Processor {
         lido.deposit_authority_bump_seed = deposit_bump_seed;
         lido.token_reserve_authority_bump_seed = token_reserve_bump_seed;
         lido.token_program_id = *token_program_info.key;
+        lido.pool_token_to = *pool_token_to_info.key;
 
         lido.serialize(&mut *lido_info.data.borrow_mut())
             .map_err(|e| e.into())
@@ -110,7 +139,9 @@ impl Processor {
         // Lido
         let lido_info = next_account_info(account_info_iter)?;
         // Stake pool
-        let stake_pool = next_account_info(account_info_iter)?;
+        let stake_pool_info = next_account_info(account_info_iter)?;
+        // Recipient of tokens from the stake pool
+        let pool_token_to_info = next_account_info(account_info_iter)?;
         // Owner program
         let owner_info = next_account_info(account_info_iter)?;
         // User account
@@ -127,18 +158,44 @@ impl Processor {
         let system_program_info = next_account_info(account_info_iter)?;
 
         if user_info.lamports() < amount {
+            msg!("Not enough balance for the given amount");
             return Err(LidoError::InvalidAmount.into());
         }
 
         let mut lido = Lido::try_from_slice(&lido_info.data.borrow())?;
 
-        lido.check_lido_for_deposit(owner_info.key, stake_pool.key, lsol_mint_info.key)?;
+        lido.check_lido_for_deposit(owner_info.key, stake_pool_info.key, lsol_mint_info.key)?;
         lido.check_token_program_id(token_program_info.key)?;
         check_reserve_authority(lido_info, program_id, reserve_authority_info)?;
 
-        // Overflow will never happen because we check that user has `amount` in its account
-        // user_info.lamports.borrow_mut().checked_sub(amount);
+        if &lido.stake_pool_account != stake_pool_info.key {
+            msg!("Invalid stake pool");
+            return Err(LidoError::InvalidStakePool.into());
+        }
+        let stake_pool = StakePool::try_from_slice(&stake_pool_info.data.borrow())?;
+        if !stake_pool.is_valid() {
+            msg!("Invalid stake pool");
+            return Err(LidoError::InvalidStakePool.into());
+        }
+        if &stake_pool.token_program_id != token_program_info.key {
+            msg!("Invalid token program");
+            return Err(LidoError::InvalidTokenProgram.into());
+        }
 
+        if &lido.pool_token_to != pool_token_to_info.key {
+            msg!("Invalid stake pool token");
+            return Err(LidoError::InvalidPoolToken.into());
+        }
+
+        let reserve_lamports = reserve_authority_info.lamports();
+
+        let pool_to_token_account =
+            spl_token::state::Account::unpack_from_slice(&pool_token_to_info.data.borrow())?;
+
+        // stake_pool_total_sol * stake_pool_token(pool_token_to_info)/stake_pool_total_tokens
+        let stake_pool_lamports = calc_stakepool_lamports(stake_pool, pool_to_token_account)?;
+
+        let total_lamports = calc_total_lamports(reserve_lamports, stake_pool_lamports);
         invoke(
             &system_instruction::transfer(user_info.key, reserve_authority_info.key, amount),
             &[
@@ -149,11 +206,10 @@ impl Processor {
         )?;
 
         let lsol_amount = lido
-            .calc_pool_tokens_for_deposit(amount)
+            .calc_pool_tokens_for_deposit(amount, total_lamports)
             .ok_or(LidoError::CalculationFailure)?;
 
         let total_lsol = lido.lsol_total_shares + lsol_amount;
-        let total_sol = lido.total_sol + amount;
 
         let ix = spl_token::instruction::mint_to(
             token_program_info.key,
@@ -183,7 +239,6 @@ impl Processor {
         )?;
 
         lido.lsol_total_shares = total_lsol;
-        lido.total_sol = total_sol;
 
         lido.serialize(&mut *lido_info.data.borrow_mut())
             .map_err(|e| e.into())
@@ -313,7 +368,7 @@ impl Processor {
         let validator_info = next_account_info(account_info_iter)?;
         let stake_info = next_account_info(account_info_iter)?;
         let deposit_authority_info = next_account_info(account_info_iter)?;
-        let pool_token_info = next_account_info(account_info_iter)?;
+        let pool_token_to_info = next_account_info(account_info_iter)?;
 
         // Stake pool
         let stake_pool_program_info = next_account_info(account_info_iter)?;
@@ -334,6 +389,11 @@ impl Processor {
         let _rent = &Rent::from_account_info(rent_info)?;
         let lido = Lido::try_from_slice(&lido_info.data.borrow())?;
 
+        if &lido.stake_pool_account != stake_pool_info.key {
+            msg!("Invalid stake pool");
+            return Err(LidoError::InvalidStakePool.into());
+        }
+
         let (to_pubkey, _) =
             Pubkey::find_program_address(&[&validator_info.key.to_bytes()[..32]], program_id);
 
@@ -350,8 +410,18 @@ impl Processor {
         }
 
         let pool_token_account =
-            spl_token::state::Account::unpack_from_slice(&pool_token_info.data.borrow())?;
+            spl_token::state::Account::unpack_from_slice(&pool_token_to_info.data.borrow())?;
+
+        if &lido.pool_token_to != pool_token_to_info.key {
+            msg!("Invalid stake pool token");
+            return Err(LidoError::InvalidPoolToken.into());
+        }
+
         if stake_pool_token_reserve_authority != pool_token_account.owner {
+            msg!(
+                "Wrong stake pool reserve authority: {}",
+                pool_token_account.owner
+            );
             return Err(LidoError::InvalidOwner.into());
         }
 
@@ -364,7 +434,7 @@ impl Processor {
                 &stake_pool_withdraw_authority_info.key,
                 &stake_info.key,
                 &stake_pool_validator_stake_account_info.key,
-                &pool_token_info.key,
+                &pool_token_to_info.key,
                 &stake_pool_mint_info.key,
                 &token_program_info.key,
             ),
@@ -376,7 +446,7 @@ impl Processor {
                 stake_pool_withdraw_authority_info.clone(),
                 stake_info.clone(),
                 stake_pool_validator_stake_account_info.clone(),
-                pool_token_info.clone(),
+                pool_token_to_info.clone(),
                 stake_pool_mint_info.clone(),
                 token_program_info.clone(),
             ],

@@ -517,7 +517,7 @@ impl StakePoolAccounts {
             deposit_authority,
             deposit_authority_keypair: None,
             fee: state::Fee {
-                numerator: 1,
+                numerator: 10,
                 denominator: 100,
             },
             max_validators: MAX_TEST_VALIDATORS,
@@ -541,6 +541,7 @@ impl StakePoolAccounts {
         payer: &Keypair,
         recent_blockhash: &Hash,
         reserve_lamports: u64,
+        fee_manager: &Pubkey,
     ) -> Result<(), TransportError> {
         create_mint(
             &mut banks_client,
@@ -556,7 +557,7 @@ impl StakePoolAccounts {
             &recent_blockhash,
             &self.pool_fee_account,
             &self.pool_mint.pubkey(),
-            &self.manager.pubkey(),
+            &fee_manager,
         )
         .await?;
         create_independent_stake_account(
