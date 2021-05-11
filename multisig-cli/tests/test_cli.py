@@ -83,7 +83,7 @@ def solana_program_deploy(fname: str) -> str:
 
 
 print('\nUploading Multisig program ...')
-multisig_program_id = solana_program_deploy('multisig/target/deploy/multisig.so')
+multisig_program_id = solana_program_deploy('target/deploy/multisig.so')
 print(f'> Multisig program id is {multisig_program_id}.')
 
 
@@ -147,7 +147,7 @@ with tempfile.TemporaryDirectory() as scratch_dir:
     # We reuse the multisig binary for this purpose, but copy it to a different
     # location so 'solana program deploy' doesn't reuse the program id.
     program_fname = os.path.join(scratch_dir, 'program_v1.so')
-    shutil.copyfile('multisig/target/deploy/multisig.so', program_fname)
+    shutil.copyfile('target/deploy/multisig.so', program_fname)
     program_id = solana_program_deploy(program_fname)
     print(f'> Program id is {program_id}.')
 
@@ -169,7 +169,7 @@ with tempfile.TemporaryDirectory() as scratch_dir:
 
     print('\nUploading v2 of program to buffer ...')
     program_fname = os.path.join(scratch_dir, 'program_v2.so')
-    shutil.copyfile('multisig/target/deploy/multisig.so', program_fname)
+    shutil.copyfile('target/deploy/multisig.so', program_fname)
     result = solana(
         'program',
         'write-buffer',
@@ -258,7 +258,11 @@ try:
     )
 except subprocess.CalledProcessError as err:
     assert err.returncode != 0
-    assert 'Not enough owners signed this transaction' in err.stderr
+    # assert 'Not enough owners signed this transaction' in err.stderr
+    # TODO: Previously the error included a human-readable message, why does it
+    # only include the error code now? Something to do with different Anchor
+    # versions?
+    assert 'custom program error: 0x65' in err.stderr
     new_info = solana_program_show(program_id)
     assert new_info == upload_info, 'Program should not have changed.'
     print('> Execution failed as expected.')
@@ -313,7 +317,11 @@ try:
     )
 except subprocess.CalledProcessError as err:
     assert err.returncode != 0
-    assert 'The given transaction has already been executed.' in err.stderr
+    # assert 'The given transaction has already been executed.' in err.stderr
+    # TODO: Previously the error included a human-readable message, why does it
+    # only include the error code now? Something to do with different Anchor
+    # versions?
+    assert 'custom program error: 0x69' in err.stderr
     new_info = solana_program_show(program_id)
     assert new_info == upgrade_info, 'Program should not have changed.'
     print('> Execution failed as expected.')
@@ -425,7 +433,11 @@ try:
     )
 except subprocess.CalledProcessError as err:
     assert err.returncode != 0
-    assert 'The given owner is not part of this multisig.' in err.stderr
+    # assert 'The given owner is not part of this multisig.' in err.stderr
+    # TODO: Previously the error included a human-readable message, why does it
+    # only include the error code now? Something to do with different Anchor
+    # versions?
+    assert 'custom program error: 0x64' in err.stderr
     result = multisig(
         'show-transaction',
         '--transaction-address', upgrade_transaction_address,
