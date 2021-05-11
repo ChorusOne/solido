@@ -314,7 +314,7 @@ accounts_struct! {
         const sysvar_rent = sysvar::rent::id(),
         const stake_program = stake_program::id(),
         const stake_history = stake_history::id(),
-        const stake_program_config = stake_program::config_id()
+        const stake_program_config = stake_program::config_id(),
     }
 }
 

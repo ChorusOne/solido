@@ -6,7 +6,8 @@ use spl_stake_pool::{stake_program, state::StakePool};
 use crate::{
     error::LidoError,
     instruction::{
-        stake_pool_deposit, DepositAccountsInfo, InitializeAccountsInfo, LidoInstruction,
+        stake_pool_deposit, DelegateDepositAccountsInfo, DepositAccountsInfo,
+        InitializeAccountsInfo, LidoInstruction,
     },
     logic::{
         calc_stakepool_lamports, calc_total_lamports, check_reserve_authority, rent_exemption,
@@ -229,39 +230,25 @@ impl<'b> Processor {
     pub fn process_delegate_deposit(
         program_id: &Pubkey,
         amount: u64,
-        accounts: &[AccountInfo],
+        raw_accounts: &'b [AccountInfo<'b>],
     ) -> ProgramResult {
-        let account_info_iter = &mut accounts.iter();
+        let accounts = DelegateDepositAccountsInfo::try_from_slice(raw_accounts)?;
 
-        let lido_info = next_account_info(account_info_iter)?;
-        let validator_info = next_account_info(account_info_iter)?;
-        let reserve_info = next_account_info(account_info_iter)?;
-        let stake_info = next_account_info(account_info_iter)?;
-        let deposit_authority_info = next_account_info(account_info_iter)?;
-
-        // Sys
-        let clock_info = next_account_info(account_info_iter)?;
-        let system_program_info = next_account_info(account_info_iter)?;
-        let rent_info = next_account_info(account_info_iter)?;
-        let stake_program_info = next_account_info(account_info_iter)?;
-        let stake_history_info = next_account_info(account_info_iter)?;
-        let stake_config_info = next_account_info(account_info_iter)?;
-
-        let rent = &Rent::from_account_info(rent_info)?;
-        let lido = Lido::try_from_slice(&lido_info.data.borrow())?;
+        let rent = &Rent::from_account_info(accounts.sysvar_rent)?;
+        let lido = Lido::try_from_slice(&accounts.lido.data.borrow())?;
 
         let (to_pubkey, stake_bump_seed) =
-            Pubkey::find_program_address(&[&validator_info.key.to_bytes()[..32]], program_id);
-        if &to_pubkey != stake_info.key {
+            Pubkey::find_program_address(&[&accounts.validator.key.to_bytes()[..32]], program_id);
+        if &to_pubkey != accounts.stake.key {
             return Err(LidoError::InvalidStaker.into());
         }
 
-        let me_bytes = lido_info.key.to_bytes();
+        let me_bytes = accounts.lido.key.to_bytes();
         let reserve_authority_seed: &[&[_]] = &[&me_bytes, RESERVE_AUTHORITY_ID][..];
         let (reserve_authority, _) =
             Pubkey::find_program_address(reserve_authority_seed, program_id);
 
-        if reserve_info.key != &reserve_authority {
+        if accounts.reserve.key != &reserve_authority {
             return Err(LidoError::InvalidReserveAuthority.into());
         }
 
@@ -278,62 +265,62 @@ impl<'b> Processor {
         ];
 
         let validator_stake_seeds: &[&[_]] =
-            &[&validator_info.key.to_bytes()[..32], &[stake_bump_seed]];
+            &[&accounts.validator.key.to_bytes()[..32], &[stake_bump_seed]];
 
         // Check if the stake_info exists
-        if get_stake_state(stake_info).is_ok() {
+        if get_stake_state(accounts.stake).is_ok() {
             return Err(LidoError::WrongStakeState.into());
         }
 
         invoke_signed(
             &system_instruction::create_account(
-                reserve_info.key,
-                stake_info.key,
+                accounts.reserve.key,
+                accounts.stake.key,
                 amount,
                 std::mem::size_of::<stake_program::StakeState>() as u64,
                 &stake_program::id(),
             ),
             // &[reserve_info.clone(), stake_info.clone()],
             &[
-                reserve_info.clone(),
-                stake_info.clone(),
-                system_program_info.clone(),
+                accounts.reserve.clone(),
+                accounts.stake.clone(),
+                accounts.system_program.clone(),
             ],
             &[&authority_signature_seeds, &validator_stake_seeds],
         )?;
 
         invoke(
             &stake_program::initialize(
-                stake_info.key,
+                accounts.stake.key,
                 &stake_program::Authorized {
-                    staker: *deposit_authority_info.key,
-                    withdrawer: *deposit_authority_info.key,
+                    staker: *accounts.deposit_authority.key,
+                    withdrawer: *accounts.deposit_authority.key,
                 },
                 &stake_program::Lockup::default(),
             ),
             &[
-                stake_info.clone(),
-                rent_info.clone(),
-                stake_program_info.clone(),
+                accounts.stake.clone(),
+                accounts.sysvar_rent.clone(),
+                accounts.stake_program.clone(),
             ],
         )?;
 
         invoke_signed(
             &stake_program::delegate_stake(
-                stake_info.key,
-                deposit_authority_info.key,
-                validator_info.key,
+                accounts.stake.key,
+                accounts.deposit_authority.key,
+                accounts.validator.key,
             ),
             &[
-                stake_info.clone(),
-                validator_info.clone(),
-                clock_info.clone(),
-                stake_history_info.clone(),
-                stake_config_info.clone(),
-                deposit_authority_info.clone(),
+                accounts.stake.clone(),
+                accounts.validator.clone(),
+                accounts.sysvar_clock.clone(),
+                accounts.stake_history.clone(),
+                accounts.stake_program_config.clone(),
+                accounts.deposit_authority.clone(),
             ],
             &[&[
-                &lido_info.key.to_bytes()[..32],
+                &accounts.lido.key.to_bytes()[..32],
                 DEPOSIT_AUTHORITY_ID,
                 &[lido.deposit_authority_bump_seed],
             ]],
