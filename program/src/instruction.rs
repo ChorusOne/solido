@@ -464,17 +464,50 @@ pub fn stake_pool_deposit(
     }
 }
 
+accounts_struct! {
+    InitializeStakePoolWithAuthorityAccountsMeta,
+    InitializeStakePoolWithAuthorityAccountsInfo {
+        pub stake_pool {
+            is_signer: true,
+            is_writable: true,
+        },
+        pub manager {
+            is_signer: true,
+            is_writable: false,
+        },
+        pub staker {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub validator_list {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub reserve_stake {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub pool_mint {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub manager_pool_account {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub deposit_authority {
+            is_signer: false,
+            is_writable: false,
+        },
+        const spl_token = spl_token::id(),
+        const sysvar_clock = sysvar::clock::id(),
+        const sysvar_rent = sysvar::rent::id(),
+    }
+}
+
 pub fn initialize_stake_pool_with_authority(
     program_id: &Pubkey,
-    stake_pool: &Pubkey,
-    manager: &Pubkey,
-    staker: &Pubkey,
-    validator_list: &Pubkey,
-    reserve_stake: &Pubkey,
-    pool_mint: &Pubkey,
-    manager_pool_account: &Pubkey,
-    token_program_id: &Pubkey,
-    deposit_authority: &Pubkey,
+    accounts: &InitializeStakePoolWithAuthorityAccountsMeta,
     fee: Fee,
     max_validators: u32,
 ) -> Result<Instruction, ProgramError> {
@@ -483,22 +516,9 @@ pub fn initialize_stake_pool_with_authority(
         max_validators,
     };
     let data = init_data.try_to_vec()?;
-    let accounts = vec![
-        AccountMeta::new(*stake_pool, true),
-        AccountMeta::new_readonly(*manager, true),
-        AccountMeta::new_readonly(*staker, false),
-        AccountMeta::new(*validator_list, false),
-        AccountMeta::new_readonly(*reserve_stake, false),
-        AccountMeta::new_readonly(*pool_mint, false),
-        AccountMeta::new_readonly(*manager_pool_account, false),
-        AccountMeta::new_readonly(sysvar::clock::id(), false),
-        AccountMeta::new_readonly(sysvar::rent::id(), false),
-        AccountMeta::new_readonly(*token_program_id, false),
-        AccountMeta::new_readonly(*deposit_authority, false),
-    ];
     Ok(Instruction {
         program_id: *program_id,
-        accounts,
+        accounts: accounts.to_vec(),
         data,
     })
 }
