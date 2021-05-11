@@ -1,7 +1,7 @@
 use lido::{DEPOSIT_AUTHORITY_ID, FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY_ID};
 use solana_program::{
     borsh::get_packed_len, native_token::Sol, program_pack::Pack, pubkey::Pubkey,
-    system_instruction, sysvar,
+    system_instruction,
 };
 use solana_sdk::{
     signature::{Keypair, Signer},
@@ -179,8 +179,6 @@ pub(crate) fn command_create_solido(
                     mint_program: mint_keypair.pubkey(),
                     pool_token_to: pool_token_to.pubkey(), // to define
                     fee_token: fee_keypair.pubkey(),
-                    sysvar_rent: sysvar::rent::id(),
-                    spl_token: spl_token::id(),
                 },
             )?,
         ],

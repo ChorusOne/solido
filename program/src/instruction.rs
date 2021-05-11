@@ -43,38 +43,103 @@ macro_rules! accounts_struct_meta {
     };
 }
 
+/// Generates two structs for passing accounts by name.
+///
+/// Example:
+/// ```
+/// accounts_struct! {
+///     ExampleAccountsMeta, ExampleAccountsInfo {
+///         frobnicator: { is_signer: true, is_writable: false },
+///         sysvar_rent = sysvar::rent::id(),
+///     }
+/// ```
+/// This generates two structs:
+/// ```
+/// struct ExampleAccountsMeta {
+///     frobnicator: Pubkey,
+/// }
+///
+/// impl ExampleAccountsMeta {
+///     pub fn to_vec(&self) -> Vec<AccountMeta>;
+/// }
+///
+/// struct ExampleAccountsInfo<'a> {
+///     frobnicator: &'a AccountInfo<'a>,
+///     sysvar_rent: &'a AccountInfo<'a>,
+/// }
+///
+/// impl ExampleAccountsInfo {
+///     pub fn try_from_slice(raw: &'a [AccountInfo<'a>]) -> Result<ExampleAccountsInfo, ProgramError>;
+/// }
+/// ```
+/// Such that the accounts returned by `to_vec` are in the same order that
+/// `try_from_slice` expects them. `try_from_slice` furthermore validates that
+/// `is_signer` and is_writable` match the definition.
 macro_rules! accounts_struct {
     {
         $NameAccountMeta:ident, $NameAccountInfo:ident {
+            // We prefix the two cases with "pub" and "const", because otherwise
+            // the grammar would be locally ambiguous, and Rust doesn't know
+            // which of the two cases it is parsing after seeing only the
+            // identifier.
             $(
-                $account:ident {
+                pub $var_account:ident {
                     is_signer: $is_signer:expr,
                     is_writable: $is_writable:tt,
                 }
             ),*
+            // This second part with const accounts is optional, so wrap it in
+            // a $(...)? block.
+            $(
+                ,
+                $(
+                    const $const_account:ident = $const_value:expr
+                ),*
+                // Allow an optional trailing comma.
+                $(,)?
+            )?
         }
     } => {
         pub struct $NameAccountMeta {
             $(
-                pub $account: Pubkey
+                pub $var_account: Pubkey
             ),*
+            // Const accounts are not included here, they are not a variable
+            // input, they only show up in program, not in the call.
         }
 
         pub struct $NameAccountInfo<'a> {
             $(
-                pub $account: &'a AccountInfo<'a>
+                pub $var_account: &'a AccountInfo<'a>
             ),*
+            $(
+                ,
+                $(
+                    pub $const_account: &'a AccountInfo<'a>
+                ),*
+            )?
         }
 
         impl $NameAccountMeta {
             pub fn to_vec(&self) -> Vec<AccountMeta> {
-                vec![ $(
-                    accounts_struct_meta!(
-                        self.$account,
-                        is_signer: $is_signer,
-                        is_writable: $is_writable,
-                    )
-                ),* ]
+                vec![
+                    $(
+                        accounts_struct_meta!(
+                            self.$var_account,
+                            is_signer: $is_signer,
+                            is_writable: $is_writable,
+                        )
+                    ),*
+                    $(
+                        ,
+                        $(
+                            AccountMeta::new_readonly(
+                                $const_value,
+                                false /* is_signer */
+                            )
+                        ),*
+                    )?
+                ]
             }
         }
 
@@ -87,12 +152,23 @@ macro_rules! accounts_struct {
                 // and is_writable match their definitions, and return an error
                 // if not.
                 $(
-                    let $account = next_account_info(accounts_iter)?;
-                    if $account.is_signer != $is_signer
-                        || $account.is_writable != $is_writable {
+                    let $var_account = next_account_info(accounts_iter)?;
+                    if $var_account.is_signer != $is_signer
+                        || $var_account.is_writable != $is_writable {
                         return Err(LidoError::InvalidAccountInfo.into());
                     }
                 )*
+
+                $(
+                    $(
+                        let $const_account = next_account_info(accounts_iter)?;
+                        // Constant accounts (like the system program or rent
+                        // sysvar) are never signers or writable.
+                        if $const_account.is_signer || $const_account.is_writable {
+                            return Err(LidoError::InvalidAccountInfo.into());
+                        }
+                    )*
+                )?
 
                 // Check that there are no excess accounts provided.
                 if accounts_iter.next().is_some() {
@@ -100,7 +176,11 @@ macro_rules! accounts_struct {
                 }
 
                 let result = $NameAccountInfo {
-                    $( $account ),*
+                    $( $var_account ),*
+                    $(
+                        ,
+                        $( $const_account ),*
+                    )?
                 };
 
                 Ok(result)
@@ -111,38 +191,32 @@ macro_rules! accounts_struct {
 
 accounts_struct! {
     InitializeAccountsMeta, InitializeAccountsInfo {
-        lido {
+        pub lido {
             is_signer: true,
             is_writable: true,
         },
-        stake_pool {
+        pub stake_pool {
             is_signer: true,
             is_writable: false,
         },
-        owner {
+        pub owner {
             is_signer: true,
             is_writable: false,
         },
-        mint_program {
+        pub mint_program {
             is_signer: true,
             is_writable: false,
         },
-        pool_token_to {
+        pub pool_token_to {
             is_signer: false,
             is_writable: false,
         },
-        fee_token {
+        pub fee_token {
             is_signer: false,
             is_writable: false,
         },
-        sysvar_rent {
-            is_signer: false,
-            is_writable: false,
-        },
-        spl_token {
-            is_signer: false,
-            is_writable: false,
-        }
+        const sysvar_rent = sysvar::rent::id(),
+        const spl_token = spl_token::id(),
     }
 }
 
@@ -161,50 +235,41 @@ pub fn initialize(
 
 accounts_struct! {
     DepositAccountsMeta, DepositAccountsInfo {
-        lido {
+        pub lido {
             is_signer: false,
             is_writable: true,
         },
-        stake_pool {
+        pub stake_pool {
             is_signer: false,
             is_writable: false,
         },
-        pool_token_to {
+        pub pool_token_to {
             is_signer: false,
             is_writable: false,
         },
-        owner {
+        pub owner {
             is_signer: false,
             is_writable: false,
         },
-        user {
+        pub user {
             is_signer: true,
             is_writable: true,
         },
-        recipient {
+        pub recipient {
             is_signer: false,
             is_writable: true,
         },
-        mint_program {
+        pub mint_program {
             is_signer: false,
             is_writable: true,
         },
-        spl_token {
-            is_signer: false,
-            is_writable: false,
-        },
-        reserve_authority {
+        pub reserve_authority {
             is_signer: false,
             is_writable: true,
         },
-        system_program {
-            is_signer: false,
-            is_writable: false,
-        },
-        sysvar_rent {
-            is_signer: false,
-            is_writable: false,
-        }
+        const spl_token = spl_token::id(),
+        const system_program = system_program::id(),
+        const sysvar_rent = sysvar::rent::id(),
     }
 }
 
@@ -222,35 +287,47 @@ pub fn deposit(
     })
 }
 
+accounts_struct! {
+    DelegateDepositAccountsMeta, DelegateDepositAccountsInfo {
+        pub lido {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub validator {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub reserve {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub stake {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub deposit_authority {
+            is_signer: false,
+            is_writable: true,
+        },
+        const sysvar_clock = sysvar::clock::id(),
+        const system_program = system_program::id(),
+        const sysvar_rent = sysvar::rent::id(),
+        const stake_program = stake_program::id(),
+        const stake_history = stake_history::id(),
+        const stake_program_config = stake_program::config_id()
+    }
+}
+
 pub fn delegate_deposit(
     program_id: &Pubkey,
-    lido: &Pubkey,
-    validator: &Pubkey,
-    reserve: &Pubkey,
-    stake: &Pubkey,
-    deposit_authority: &Pubkey,
-
+    accounts: &DelegateDepositAccountsMeta,
     amount: u64,
 ) -> Result<Instruction, ProgramError> {
     let init_data = LidoInstruction::DelegateDeposit { amount };
     let data = init_data.try_to_vec()?;
-    let accounts = vec![
-        AccountMeta::new(*lido, false),
-        AccountMeta::new(*validator, false),
-        AccountMeta::new(*reserve, false),
-        AccountMeta::new(*stake, false),
-        AccountMeta::new(*deposit_authority, false),
-        // Sys
-        AccountMeta::new_readonly(sysvar::clock::id(), false),
-        AccountMeta::new_readonly(system_program::id(), false),
-        AccountMeta::new_readonly(sysvar::rent::id(), false),
-        AccountMeta::new_readonly(stake_program::id(), false),
-        AccountMeta::new_readonly(stake_history::id(), false),
-        AccountMeta::new_readonly(stake_program::config_id(), false),
-    ];
     Ok(Instruction {
         program_id: *program_id,
-        accounts,
+        accounts: accounts.to_vec(),
         data,
     })
 }
