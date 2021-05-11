@@ -7,7 +7,7 @@ use crate::{
     error::LidoError,
     instruction::{
         stake_pool_deposit, DelegateDepositAccountsInfo, DepositAccountsInfo,
-        InitializeAccountsInfo, LidoInstruction,
+        InitializeAccountsInfo, LidoInstruction, StakePoolDelegateAccountsInfo,
     },
     logic::{
         calc_stakepool_lamports, calc_total_lamports, check_reserve_authority, rent_exemption,
@@ -21,7 +21,6 @@ use crate::{
 use {
     borsh::{BorshDeserialize, BorshSerialize},
     solana_program::{
-        account_info::next_account_info,
         account_info::AccountInfo,
         entrypoint::ProgramResult,
         msg,
@@ -329,59 +328,37 @@ impl<'b> Processor {
 
     pub fn process_stake_pool_delegate(
         program_id: &Pubkey,
-        accounts: &[AccountInfo],
+        raw_accounts: &'b [AccountInfo<'b>],
     ) -> ProgramResult {
-        let account_info_iter = &mut accounts.iter();
+        let accounts = StakePoolDelegateAccountsInfo::try_from_slice(raw_accounts)?;
 
-        let lido_info = next_account_info(account_info_iter)?;
-        let validator_info = next_account_info(account_info_iter)?;
-        let stake_info = next_account_info(account_info_iter)?;
-        let deposit_authority_info = next_account_info(account_info_iter)?;
-        let pool_token_to_info = next_account_info(account_info_iter)?;
+        let _rent = &Rent::from_account_info(accounts.sysvar_rent)?;
+        let lido = Lido::try_from_slice(&accounts.lido.data.borrow())?;
 
-        // Stake pool
-        let stake_pool_program_info = next_account_info(account_info_iter)?;
-        let stake_pool_info = next_account_info(account_info_iter)?;
-        let stake_pool_validator_list_info = next_account_info(account_info_iter)?;
-        let stake_pool_withdraw_authority_info = next_account_info(account_info_iter)?;
-        let stake_pool_validator_stake_account_info = next_account_info(account_info_iter)?;
-        let stake_pool_mint_info = next_account_info(account_info_iter)?;
-
-        // Sys
-        let _clock_info = next_account_info(account_info_iter)?;
-        let _stake_history_info = next_account_info(account_info_iter)?;
-        let _system_program_info = next_account_info(account_info_iter)?;
-        let rent_info = next_account_info(account_info_iter)?;
-        let token_program_info = next_account_info(account_info_iter)?;
-        let _stake_program_info = next_account_info(account_info_iter)?;
-
-        let _rent = &Rent::from_account_info(rent_info)?;
-        let lido = Lido::try_from_slice(&lido_info.data.borrow())?;
-
-        if &lido.stake_pool_account != stake_pool_info.key {
+        if &lido.stake_pool_account != accounts.stake_pool.key {
             msg!("Invalid stake pool");
             return Err(LidoError::InvalidStakePool.into());
         }
 
         let (to_pubkey, _) =
-            Pubkey::find_program_address(&[&validator_info.key.to_bytes()[..32]], program_id);
+            Pubkey::find_program_address(&[&accounts.validator.key.to_bytes()[..32]], program_id);
 
         let (stake_pool_token_reserve_authority, _) = Pubkey::find_program_address(
             &[
-                &lido_info.key.to_bytes()[..32],
+                &accounts.lido.key.to_bytes()[..32],
                 STAKE_POOL_TOKEN_RESERVE_AUTHORITY_ID,
             ],
             program_id,
         );
 
-        if &to_pubkey != stake_info.key {
+        if &to_pubkey != accounts.stake.key {
             return Err(LidoError::InvalidStaker.into());
         }
 
         let pool_token_account =
-            spl_token::state::Account::unpack_from_slice(&pool_token_to_info.data.borrow())?;
+            spl_token::state::Account::unpack_from_slice(&accounts.pool_token_to.data.borrow())?;
 
-        if &lido.pool_token_to != pool_token_to_info.key {
+        if &lido.pool_token_to != accounts.pool_token_to.key {
             msg!("Invalid stake pool token");
             return Err(LidoError::InvalidPoolToken.into());
         }
@@ -396,31 +373,31 @@ impl<'b> Processor {
 
         invoke_signed(
             &stake_pool_deposit(
-                &stake_pool_program_info.key,
-                &stake_pool_info.key,
-                &stake_pool_validator_list_info.key,
-                &deposit_authority_info.key,
-                &stake_pool_withdraw_authority_info.key,
-                &stake_info.key,
-                &stake_pool_validator_stake_account_info.key,
-                &pool_token_to_info.key,
-                &stake_pool_mint_info.key,
-                &token_program_info.key,
+                &accounts.stake_pool_program.key,
+                &accounts.stake_pool.key,
+                &accounts.stake_pool_validator_list.key,
+                &accounts.deposit_authority.key,
+                &accounts.stake_pool_withdraw_authority.key,
+                &accounts.stake.key,
+                &accounts.stake_pool_validator_stake_account.key,
+                &accounts.pool_token_to.key,
+                &accounts.stake_pool_mint.key,
+                &accounts.spl_token.key,
             ),
             &[
-                stake_pool_program_info.clone(),
-                stake_pool_info.clone(),
-                stake_pool_validator_list_info.clone(),
-                deposit_authority_info.clone(),
-                stake_pool_withdraw_authority_info.clone(),
-                stake_info.clone(),
-                stake_pool_validator_stake_account_info.clone(),
-                pool_token_to_info.clone(),
-                stake_pool_mint_info.clone(),
-                token_program_info.clone(),
+                accounts.stake_pool_program.clone(),
+                accounts.stake_pool.clone(),
+                accounts.stake_pool_validator_list.clone(),
+                accounts.deposit_authority.clone(),
+                accounts.stake_pool_withdraw_authority.clone(),
+                accounts.stake.clone(),
+                accounts.stake_pool_validator_stake_account.clone(),
+                accounts.pool_token_to.clone(),
+                accounts.stake_pool_mint.clone(),
+                accounts.spl_token.clone(),
             ],
             &[&[
-                &lido_info.key.to_bytes()[..32],
+                &accounts.lido.key.to_bytes()[..32],
                 DEPOSIT_AUTHORITY_ID,
                 &[lido.deposit_authority_bump_seed],
             ]],
