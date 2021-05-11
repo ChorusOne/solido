@@ -39,6 +39,8 @@ pub fn check_reserve_authority(
 pub(crate) enum AccountType {
     StakePool,
     Lido,
+    FeeDistribution,
+    ValidatorCreditAccounts,
 }
 
 impl Display for AccountType {
@@ -46,6 +48,8 @@ impl Display for AccountType {
         let printable = match *self {
             Self::StakePool => "Stake pool",
             Self::Lido => "Lido",
+            Self::FeeDistribution => "FeeDistribution",
+            Self::ValidatorCreditAccounts => "ValidatorCreditAccounts",
         };
         write!(f, "{}", printable)
     }
