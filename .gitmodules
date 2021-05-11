@@ -1,0 +1,3 @@
+[submodule "multisig"]
+	path = multisig
+	url = https://github.com/chorusone/multisig
