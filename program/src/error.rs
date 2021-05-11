@@ -41,7 +41,7 @@ pub enum LidoError {
     #[error("InvalidPoolToken")]
     InvalidPoolToken,
     /// One of the provided accounts had a mismatch in is_writable or is_signer.
-    #[error("IncorrectAccountInto")]
+    #[error("InvalidAccountInto")]
     InvalidAccountInfo,
     /// More accounts were provided than the program expects.
     #[error("TooManyAccountKeys")]
