@@ -631,6 +631,10 @@ fn propose_instruction(
         .expect("Failed to serialize dummy transaction.");
     account_bytes.extend(&multisig::Transaction::discriminator()[..]);
 
+    // Taking the just the length of the account is insufficient, apparently
+    // there is more going on than just this. Add a margin of 10 bytes.
+    let tx_account_size = account_bytes.len() + 10;
+
     program
         .request()
         // Create the program-owned account that will hold the transaction data,
@@ -642,9 +646,9 @@ fn propose_instruction(
             // account.
             program
                 .rpc()
-                .get_minimum_balance_for_rent_exemption(account_bytes.len())
+                .get_minimum_balance_for_rent_exemption(tx_account_size)
                 .expect("Failed to obtain minimum rent-exempt balance."),
-            account_bytes.len() as u64,
+            tx_account_size as u64,
             &program.id(),
         ))
         // Creating the account must be signed by the account itself.
