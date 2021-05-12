@@ -19,8 +19,7 @@ use {
     spl_stake_pool::{
         self,
         borsh::{get_instance_packed_len, try_from_slice_unchecked},
-        find_stake_program_address, find_transient_stake_program_address,
-        stake_program, state,
+        find_stake_program_address, find_transient_stake_program_address, stake_program, state,
     },
 };
 

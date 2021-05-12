@@ -250,7 +250,7 @@ impl LidoAccounts {
                     stake_pool_withdraw_authority: self.stake_pool_accounts.withdraw_authority,
                     stake_pool_validator_stake_account: validator.stake_account,
                     stake_pool_mint: self.stake_pool_accounts.pool_mint.pubkey(),
-                }
+                },
             )
             .unwrap()],
             Some(&payer.pubkey()),

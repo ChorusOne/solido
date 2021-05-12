@@ -6,16 +6,13 @@ use borsh::BorshDeserialize;
 use helpers::{
     program_test,
     stakepool_account::{
-        get_account, get_token_balance, simple_add_validator_to_pool,
-        ValidatorStakeAccount,
+        get_account, get_token_balance, simple_add_validator_to_pool, ValidatorStakeAccount,
     },
     LidoAccounts,
 };
 use solana_program::{borsh::try_from_slice_unchecked, hash::Hash};
 use solana_program_test::{tokio, BanksClient};
-use solana_sdk::{
-    signature::{Keypair, Signer},
-};
+use solana_sdk::signature::{Keypair, Signer};
 
 use spl_stake_pool::{
     minimum_stake_lamports, stake_program,
