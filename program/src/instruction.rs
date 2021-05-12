@@ -81,7 +81,7 @@ macro_rules! accounts_struct_meta {
 /// }
 ///
 /// impl ExampleAccountsInfo {
-///     pub fn try_from_slice(raw: &'a [AccountInfo<'a>]) -> Result<ExampleAccountsInfo, ProgramError>;
+///     pub fn try_from_slice<'a, 'b: 'a>(raw: &'b [AccountInfo<'a>]) -> Result<ExampleAccountsInfo, ProgramError>;
 /// }
 /// ```
 /// Such that the accounts returned by `to_vec` are in the same order that
@@ -155,16 +155,16 @@ macro_rules! accounts_struct {
             }
         }
 
-        impl $NameAccountInfo<'_> {
-            pub fn try_from_slice<'a>(accounts: &'a [AccountInfo<'a>]) -> Result<$NameAccountInfo<'a>, ProgramError> {
-                let accounts_iter = &mut accounts.iter();
+        impl<'a> $NameAccountInfo<'a> {
+            pub fn try_from_slice<'b: 'a>(accounts: &'b [AccountInfo<'a>]) -> Result<$NameAccountInfo<'a>, ProgramError> {
+                let mut accounts_iter: std::slice::Iter<'b, AccountInfo<'a>> = accounts.iter();
 
                 // Unpack the accounts from the iterator in the same order that
                 // they were provided to the macro. Also verify that is_signer
                 // and is_writable match their definitions, and return an error
                 // if not.
                 $(
-                    let $var_account = next_account_info(accounts_iter)?;
+                    let $var_account = next_account_info(&mut accounts_iter)?;
                     if $var_account.is_signer != $is_signer
                         || $var_account.is_writable != $is_writable {
                         return Err(LidoError::InvalidAccountInfo.into());
@@ -173,7 +173,7 @@ macro_rules! accounts_struct {
 
                 $(
                     $(
-                        let $const_account = next_account_info(accounts_iter)?;
+                        let $const_account = next_account_info(&mut accounts_iter)?;
                         // Constant accounts (like the system program or rent
                         // sysvar) are never signers or writable.
                         if $const_account.is_signer || $const_account.is_writable {

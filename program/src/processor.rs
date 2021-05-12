@@ -48,10 +48,10 @@ fn get_stake_state(
 
 /// Program state handler.
 pub struct Processor;
-impl<'b> Processor {
-    pub fn process_initialize(
-        program_id: &Pubkey,
-        accounts_raw: &'b [AccountInfo<'b>],
+impl Processor {
+    pub fn process_initialize<'a>(
+        program_id: &'a Pubkey,
+        accounts_raw: &'a [AccountInfo<'a>],
     ) -> ProgramResult {
         let accounts = InitializeAccountsInfo::try_from_slice(accounts_raw)?;
 
@@ -121,10 +121,10 @@ impl<'b> Processor {
             .map_err(|e| e.into())
     }
 
-    pub fn process_deposit(
-        program_id: &Pubkey,
+    pub fn process_deposit<'a>(
+        program_id: &'a Pubkey,
         amount: u64,
-        accounts_raw: &'b [AccountInfo<'b>],
+        accounts_raw: &'a [AccountInfo<'a>],
     ) -> ProgramResult {
         let accounts = DepositAccountsInfo::try_from_slice(accounts_raw)?;
 
@@ -227,10 +227,10 @@ impl<'b> Processor {
             .map_err(|e| e.into())
     }
 
-    pub fn process_delegate_deposit(
-        program_id: &Pubkey,
+    pub fn process_delegate_deposit<'a>(
+        program_id: &'a Pubkey,
         amount: u64,
-        raw_accounts: &'b [AccountInfo<'b>],
+        raw_accounts: &'a [AccountInfo<'a>],
     ) -> ProgramResult {
         let accounts = DelegateDepositAccountsInfo::try_from_slice(raw_accounts)?;
 
@@ -327,9 +327,9 @@ impl<'b> Processor {
         )
     }
 
-    pub fn process_stake_pool_delegate(
-        program_id: &Pubkey,
-        raw_accounts: &'b [AccountInfo<'b>],
+    pub fn process_stake_pool_delegate<'a>(
+        program_id: &'a Pubkey,
+        raw_accounts: &'a [AccountInfo<'a>],
     ) -> ProgramResult {
         let accounts = StakePoolDelegateAccountsInfo::try_from_slice(raw_accounts)?;
 
@@ -416,10 +416,10 @@ impl<'b> Processor {
     }
 
     /// Processes [Instruction](enum.Instruction.html).
-    pub fn process(
-        program_id: &Pubkey,
-        accounts: &'b [AccountInfo<'b>],
-        input: &[u8],
+    pub fn process<'a>(
+        program_id: &'a Pubkey,
+        accounts: &'a [AccountInfo<'a>],
+        input: &'a [u8],
     ) -> ProgramResult {
         let instruction = LidoInstruction::try_from_slice(input)?;
         match instruction {

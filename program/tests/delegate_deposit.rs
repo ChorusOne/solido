@@ -2,22 +2,19 @@
 
 mod helpers;
 
-use bincode::deserialize;
 use borsh::BorshDeserialize;
 use helpers::{
     program_test,
     stakepool_account::{
-        create_token_account, get_account, get_token_balance, simple_add_validator_to_pool,
-        transfer, ValidatorStakeAccount,
+        get_account, get_token_balance, simple_add_validator_to_pool,
+        ValidatorStakeAccount,
     },
     LidoAccounts,
 };
-use lido::{id, instruction};
-use solana_program::{borsh::try_from_slice_unchecked, hash::Hash, pubkey::Pubkey};
+use solana_program::{borsh::try_from_slice_unchecked, hash::Hash};
 use solana_program_test::{tokio, BanksClient};
 use solana_sdk::{
     signature::{Keypair, Signer},
-    transaction::Transaction,
 };
 
 use spl_stake_pool::{
@@ -152,7 +149,7 @@ async fn test_successful_delegate_deposit_stake_pool_deposit() {
     let validator_stake_account =
         get_account(&mut banks_client, &validator_account.stake_account).await;
     let stake_state =
-        deserialize::<stake_program::StakeState>(&validator_stake_account.data).unwrap();
+        bincode::deserialize::<stake_program::StakeState>(&validator_stake_account.data).unwrap();
     let meta = stake_state.meta().unwrap();
     assert_eq!(
         validator_stake_account.lamports - minimum_stake_lamports(&meta),
