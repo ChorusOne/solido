@@ -6,17 +6,13 @@ use clap::{
 };
 
 use solana_clap_utils::{
-    input_parsers::pubkey_of,
     input_validators::{is_keypair, is_parsable, is_pubkey, is_url},
     keypair::signer_from_path,
 };
 use solana_client::rpc_client::RpcClient;
-use solana_sdk::{
-    commitment_config::CommitmentConfig,
-    signature::{Keypair, Signer},
-};
+use solana_sdk::{commitment_config::CommitmentConfig, signature::Signer};
 
-use crate::helpers::{command_create_solido, NewStakePoolArgs, StakePoolArgs};
+use crate::helpers::{command_create_solido, CreateSolidoOpts};
 
 extern crate lazy_static;
 extern crate spl_stake_pool;
@@ -24,11 +20,10 @@ extern crate spl_stake_pool;
 mod helpers;
 mod stake_pool_helpers;
 type Error = Box<dyn std::error::Error>;
-type CommandResult = Result<(), Error>;
 
-struct Config {
+/// Determines which network to connect to, and who pays the fees.
+pub struct Config {
     rpc_client: RpcClient,
-    verbose: bool,
     manager: Box<dyn Signer>,
     staker: Box<dyn Signer>,
     fee_payer: Box<dyn Signer>,
@@ -56,14 +51,6 @@ fn main() {
                 arg
             }
         })
-        .arg(
-            Arg::with_name("verbose")
-                .long("verbose")
-                .short("v")
-                .takes_value(false)
-                .global(true)
-                .help("Show additional information"),
-        )
         .arg(
             Arg::with_name("dry_run")
                 .long("dry-run")
@@ -156,7 +143,7 @@ fn main() {
         .get_matches();
 
     let mut wallet_manager = None;
-    let config = {
+    let mut config = {
         let cli_config = if let Some(config_file) = matches.value_of("config_file") {
             solana_cli_config::Config::load(config_file).unwrap_or_default()
         } else {
@@ -195,12 +182,10 @@ fn main() {
             eprintln!("error: {}", e);
             exit(1);
         });
-        let verbose = matches.is_present("verbose");
         let dry_run = matches.is_present("dry_run");
 
         Config {
             rpc_client: RpcClient::new_with_commitment(json_rpc_url, CommitmentConfig::confirmed()),
-            verbose,
             manager,
             staker,
             fee_payer,
@@ -210,24 +195,15 @@ fn main() {
 
     let _ = match matches.subcommand() {
         ("create", Some(arg_matches)) => {
-            let stake_pool = pubkey_of(arg_matches, "stake-pool");
-            let stake_pool_args = match stake_pool {
-                Some(pubkey) => StakePoolArgs::Existing(pubkey),
-                None => {
-                    let keypair = Keypair::new();
-                    println!("Creating stake pool {}", &keypair.pubkey());
-                    let numerator = value_t_or_exit!(arg_matches, "fee-numerator", u64);
-                    let denominator = value_t_or_exit!(arg_matches, "fee-denominator", u64);
-                    let max_validators = value_t_or_exit!(arg_matches, "max-validators", u32);
-                    StakePoolArgs::New(NewStakePoolArgs {
-                        keypair,
-                        numerator,
-                        denominator,
-                        max_validators,
-                    })
-                }
+            let numerator = value_t_or_exit!(arg_matches, "fee-numerator", u64);
+            let denominator = value_t_or_exit!(arg_matches, "fee-denominator", u64);
+            let max_validators = value_t_or_exit!(arg_matches, "max-validators", u32);
+            let opts = CreateSolidoOpts {
+                fee_numerator: numerator,
+                fee_denominator: denominator,
+                max_validators: max_validators,
             };
-            command_create_solido(&config, stake_pool_args)
+            command_create_solido(&mut config, opts)
         }
 
         _ => unreachable!(),
