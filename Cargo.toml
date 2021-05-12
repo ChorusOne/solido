@@ -1,7 +1,7 @@
 [workspace]
 members = [
     "cli",
-    "multisig-cli",
+    # "multisig-cli",
     "program",
 ]
 
@@ -10,6 +10,6 @@ members = [
 # which interferes with this one, because there can only be one root. So
 # explicitly exclude it, we can still have a path dependency to the library in
 # there.
-exclude = [
-    "multisig"
-]
+# exclude = [
+#     "multisig"
+# ]
