@@ -75,6 +75,9 @@ pub enum LidoError {
     /// Validator credit account was changed
     #[error("ValidatorCreditChanged")]
     ValidatorCreditChanged,
+    /// Fee account should be the same as the Stake pool fee'
+    #[error("ValidatorCreditChanged")]
+    InvalidFeeAccount,
 }
 impl From<LidoError> for ProgramError {
     fn from(e: LidoError) -> Self {
