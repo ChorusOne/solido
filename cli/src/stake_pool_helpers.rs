@@ -1,3 +1,5 @@
+use solana_program::sysvar;
+
 use {
     crate::helpers::{check_fee_payer_balance, send_transaction},
     crate::{CommandResult, Config},
@@ -164,6 +166,9 @@ pub(crate) fn command_create_pool(
                     pool_mint: mint_keypair.pubkey(),
                     manager_pool_account: pool_fee_account.pubkey(),
                     deposit_authority: *deposit_authority,
+                    sysvar_clock: sysvar::clock::id(),
+                    sysvar_rent: sysvar::rent::id(),
+                    sysvar_token: spl_token::id(),
                 },
                 fee,
                 max_validators,
