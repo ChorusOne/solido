@@ -57,14 +57,16 @@ async fn test_successful_deposit() {
     let mut transaction = Transaction::new_with_payer(
         &[instruction::deposit(
             &id(),
-            &lido_accounts.lido.pubkey(),
-            &lido_accounts.stake_pool_accounts.stake_pool.pubkey(),
-            &lido_accounts.pool_token_to.pubkey(),
-            &lido_accounts.owner.pubkey(),
-            &user.pubkey(),
-            &recipient.pubkey(),
-            &lido_accounts.mint_program.pubkey(),
-            &lido_accounts.reserve_authority,
+            &instruction::DepositAccountsMeta {
+                lido: lido_accounts.lido.pubkey(),
+                stake_pool: lido_accounts.stake_pool_accounts.stake_pool.pubkey(),
+                pool_token_to: lido_accounts.pool_token_to.pubkey(),
+                owner: lido_accounts.owner.pubkey(),
+                user: user.pubkey(),
+                recipient: recipient.pubkey(),
+                mint_program: lido_accounts.mint_program.pubkey(),
+                reserve_authority: lido_accounts.reserve_authority,
+            },
             TEST_DEPOSIT_AMOUNT,
         )
         .unwrap()],

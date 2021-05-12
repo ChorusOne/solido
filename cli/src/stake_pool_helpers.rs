@@ -1,3 +1,5 @@
+use solana_program::sysvar;
+
 use {
     crate::helpers::{check_fee_payer_balance, send_transaction},
     crate::{CommandResult, Config},
@@ -155,15 +157,19 @@ pub(crate) fn command_create_pool(
             // Initialize stake pool
             lido::instruction::initialize_stake_pool_with_authority(
                 &spl_stake_pool::id(),
-                &stake_pool_keypair.pubkey(),
-                &config.manager.pubkey(),
-                &config.staker.pubkey(),
-                &validator_list.pubkey(),
-                &reserve_stake.pubkey(),
-                &mint_keypair.pubkey(),
-                &pool_fee_account.pubkey(),
-                &spl_token::id(),
-                deposit_authority,
+                &lido::instruction::InitializeStakePoolWithAuthorityAccountsMeta {
+                    stake_pool: stake_pool_keypair.pubkey(),
+                    manager: config.manager.pubkey(),
+                    staker: config.staker.pubkey(),
+                    validator_list: validator_list.pubkey(),
+                    reserve_stake: reserve_stake.pubkey(),
+                    pool_mint: mint_keypair.pubkey(),
+                    manager_pool_account: pool_fee_account.pubkey(),
+                    deposit_authority: *deposit_authority,
+                    sysvar_clock: sysvar::clock::id(),
+                    sysvar_rent: sysvar::rent::id(),
+                    sysvar_token: spl_token::id(),
+                },
                 fee,
                 max_validators,
             )?,

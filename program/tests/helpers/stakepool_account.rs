@@ -1,7 +1,8 @@
 #![allow(dead_code)]
 
+use solana_program::sysvar;
+
 use {
-    lido::instruction::initialize_stake_pool_with_authority,
     solana_program::{
         borsh::get_packed_len, hash::Hash, program_pack::Pack, pubkey::Pubkey, system_instruction,
         system_program,
@@ -18,9 +19,9 @@ use {
         vote_state::{VoteInit, VoteState},
     },
     spl_stake_pool::{
+        self,
         borsh::{get_instance_packed_len, try_from_slice_unchecked},
-        find_stake_program_address, find_transient_stake_program_address, instruction,
-        stake_program, state,
+        find_stake_program_address, find_transient_stake_program_address, stake_program, state,
     },
 };
 
@@ -230,17 +231,21 @@ pub async fn create_stake_pool(
                 validator_list_size as u64,
                 &spl_stake_pool::id(),
             ),
-            initialize_stake_pool_with_authority(
+            lido::instruction::initialize_stake_pool_with_authority(
                 &spl_stake_pool::id(),
-                &stake_pool.pubkey(),
-                &manager.pubkey(),
-                staker,
-                &validator_list.pubkey(),
-                reserve_stake,
-                pool_mint,
-                pool_token_account,
-                &spl_token::id(),
-                deposit_authority,
+                &lido::instruction::InitializeStakePoolWithAuthorityAccountsMeta {
+                    stake_pool: stake_pool.pubkey(),
+                    manager: manager.pubkey(),
+                    staker: *staker,
+                    validator_list: validator_list.pubkey(),
+                    reserve_stake: *reserve_stake,
+                    pool_mint: *pool_mint,
+                    manager_pool_account: *pool_token_account,
+                    deposit_authority: *deposit_authority,
+                    sysvar_clock: sysvar::clock::id(),
+                    sysvar_rent: sysvar::rent::id(),
+                    sysvar_token: spl_token::id(),
+                },
                 *fee,
                 max_validators,
             )
@@ -359,7 +364,7 @@ pub async fn create_validator_stake_account(
     validator: &Pubkey,
 ) {
     let transaction = Transaction::new_signed_with_payer(
-        &[instruction::create_validator_stake_account(
+        &[spl_stake_pool::instruction::create_validator_stake_account(
             &spl_stake_pool::id(),
             &stake_pool,
             &staker.pubkey(),
@@ -607,7 +612,7 @@ impl StakePoolAccounts {
         let instructions = if let Some(deposit_authority) = self.deposit_authority_keypair.as_ref()
         {
             signers.push(deposit_authority);
-            instruction::deposit_with_authority(
+            spl_stake_pool::instruction::deposit_with_authority(
                 &spl_stake_pool::id(),
                 &self.stake_pool.pubkey(),
                 &self.validator_list.pubkey(),
@@ -621,7 +626,7 @@ impl StakePoolAccounts {
                 &spl_token::id(),
             )
         } else {
-            instruction::deposit(
+            spl_stake_pool::instruction::deposit(
                 &spl_stake_pool::id(),
                 &self.stake_pool.pubkey(),
                 &self.validator_list.pubkey(),
@@ -658,7 +663,7 @@ impl StakePoolAccounts {
         amount: u64,
     ) -> Option<TransportError> {
         let transaction = Transaction::new_signed_with_payer(
-            &[instruction::withdraw(
+            &[spl_stake_pool::instruction::withdraw(
                 &spl_stake_pool::id(),
                 &self.stake_pool.pubkey(),
                 &self.validator_list.pubkey(),
@@ -689,7 +694,7 @@ impl StakePoolAccounts {
         no_merge: bool,
     ) -> Option<TransportError> {
         let transaction = Transaction::new_signed_with_payer(
-            &[instruction::update_validator_list_balance(
+            &[spl_stake_pool::instruction::update_validator_list_balance(
                 &spl_stake_pool::id(),
                 &self.stake_pool.pubkey(),
                 &self.withdraw_authority,
@@ -713,7 +718,7 @@ impl StakePoolAccounts {
         recent_blockhash: &Hash,
     ) -> Option<TransportError> {
         let transaction = Transaction::new_signed_with_payer(
-            &[instruction::update_stake_pool_balance(
+            &[spl_stake_pool::instruction::update_stake_pool_balance(
                 &spl_stake_pool::id(),
                 &self.stake_pool.pubkey(),
                 &self.withdraw_authority,
@@ -739,7 +744,7 @@ impl StakePoolAccounts {
     ) -> Option<TransportError> {
         let transaction = Transaction::new_signed_with_payer(
             &[
-                instruction::update_validator_list_balance(
+                spl_stake_pool::instruction::update_validator_list_balance(
                     &spl_stake_pool::id(),
                     &self.stake_pool.pubkey(),
                     &self.withdraw_authority,
@@ -749,7 +754,7 @@ impl StakePoolAccounts {
                     0,
                     no_merge,
                 ),
-                instruction::update_stake_pool_balance(
+                spl_stake_pool::instruction::update_stake_pool_balance(
                     &spl_stake_pool::id(),
                     &self.stake_pool.pubkey(),
                     &self.withdraw_authority,
@@ -774,7 +779,7 @@ impl StakePoolAccounts {
         stake: &Pubkey,
     ) -> Option<TransportError> {
         let transaction = Transaction::new_signed_with_payer(
-            &[instruction::add_validator_to_pool(
+            &[spl_stake_pool::instruction::add_validator_to_pool(
                 &spl_stake_pool::id(),
                 &self.stake_pool.pubkey(),
                 &self.staker.pubkey(),
@@ -800,7 +805,7 @@ impl StakePoolAccounts {
         transient_stake: &Pubkey,
     ) -> Option<TransportError> {
         let transaction = Transaction::new_signed_with_payer(
-            &[instruction::remove_validator_from_pool(
+            &[spl_stake_pool::instruction::remove_validator_from_pool(
                 &spl_stake_pool::id(),
                 &self.stake_pool.pubkey(),
                 &self.staker.pubkey(),
@@ -828,7 +833,7 @@ impl StakePoolAccounts {
         lamports: u64,
     ) -> Option<TransportError> {
         let transaction = Transaction::new_signed_with_payer(
-            &[instruction::decrease_validator_stake(
+            &[spl_stake_pool::instruction::decrease_validator_stake(
                 &spl_stake_pool::id(),
                 &self.stake_pool.pubkey(),
                 &self.staker.pubkey(),
@@ -855,7 +860,7 @@ impl StakePoolAccounts {
         lamports: u64,
     ) -> Option<TransportError> {
         let transaction = Transaction::new_signed_with_payer(
-            &[instruction::increase_validator_stake(
+            &[spl_stake_pool::instruction::increase_validator_stake(
                 &spl_stake_pool::id(),
                 &self.stake_pool.pubkey(),
                 &self.staker.pubkey(),

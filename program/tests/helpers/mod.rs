@@ -124,12 +124,14 @@ impl LidoAccounts {
                 ),
                 instruction::initialize(
                     &id(),
-                    &self.lido.pubkey(),
-                    &self.stake_pool_accounts.stake_pool.pubkey(),
-                    &self.owner.pubkey(),
-                    &self.mint_program.pubkey(),
-                    &self.pool_token_to.pubkey(),
-                    &self.stake_pool_accounts.pool_fee_account.pubkey(),
+                    &instruction::InitializeAccountsMeta {
+                        lido: self.lido.pubkey(),
+                        stake_pool: self.stake_pool_accounts.stake_pool.pubkey(),
+                        owner: self.owner.pubkey(),
+                        mint_program: self.mint_program.pubkey(),
+                        pool_token_to: self.pool_token_to.pubkey(),
+                        fee_token: self.stake_pool_accounts.pool_fee_account.pubkey(),
+                    },
                 )
                 .unwrap(),
             ],
@@ -174,14 +176,16 @@ impl LidoAccounts {
         let mut transaction = Transaction::new_with_payer(
             &[instruction::deposit(
                 &id(),
-                &self.lido.pubkey(),
-                &self.stake_pool_accounts.stake_pool.pubkey(),
-                &self.pool_token_to.pubkey(),
-                &self.owner.pubkey(),
-                &user.pubkey(),
-                &recipient.pubkey(),
-                &self.mint_program.pubkey(),
-                &self.reserve_authority,
+                &instruction::DepositAccountsMeta {
+                    lido: self.lido.pubkey(),
+                    stake_pool: self.stake_pool_accounts.stake_pool.pubkey(),
+                    pool_token_to: self.pool_token_to.pubkey(),
+                    owner: self.owner.pubkey(),
+                    user: user.pubkey(),
+                    recipient: recipient.pubkey(),
+                    mint_program: self.mint_program.pubkey(),
+                    reserve_authority: self.reserve_authority,
+                },
                 deposit_amount,
             )
             .unwrap()],
@@ -206,11 +210,13 @@ impl LidoAccounts {
         let mut transaction = Transaction::new_with_payer(
             &[instruction::delegate_deposit(
                 &id(),
-                &self.lido.pubkey(),
-                &validator.vote.pubkey(),
-                &self.reserve_authority,
-                &stake_account,
-                &self.deposit_authority,
+                &instruction::DelegateDepositAccountsMeta {
+                    lido: self.lido.pubkey(),
+                    validator: validator.vote.pubkey(),
+                    reserve: self.reserve_authority,
+                    stake: stake_account,
+                    deposit_authority: self.deposit_authority,
+                },
                 delegate_amount,
             )
             .unwrap()],
@@ -232,17 +238,19 @@ impl LidoAccounts {
         let mut transaction = Transaction::new_with_payer(
             &[instruction::stake_pool_delegate(
                 &id(),
-                &self.lido.pubkey(),
-                &validator.vote.pubkey(),
-                &stake_account,
-                &self.deposit_authority,
-                &self.pool_token_to.pubkey(),
-                &spl_stake_pool::id(),
-                &self.stake_pool_accounts.stake_pool.pubkey(),
-                &self.stake_pool_accounts.validator_list.pubkey(),
-                &self.stake_pool_accounts.withdraw_authority,
-                &validator.stake_account,
-                &self.stake_pool_accounts.pool_mint.pubkey(),
+                &instruction::StakePoolDelegateAccountsMeta {
+                    lido: self.lido.pubkey(),
+                    validator: validator.vote.pubkey(),
+                    stake: *stake_account,
+                    deposit_authority: self.deposit_authority,
+                    pool_token_to: self.pool_token_to.pubkey(),
+                    stake_pool_program: spl_stake_pool::id(),
+                    stake_pool: self.stake_pool_accounts.stake_pool.pubkey(),
+                    stake_pool_validator_list: self.stake_pool_accounts.validator_list.pubkey(),
+                    stake_pool_withdraw_authority: self.stake_pool_accounts.withdraw_authority,
+                    stake_pool_validator_stake_account: validator.stake_account,
+                    stake_pool_mint: self.stake_pool_accounts.pool_mint.pubkey(),
+                },
             )
             .unwrap()],
             Some(&payer.pubkey()),

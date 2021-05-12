@@ -2,28 +2,20 @@
 
 mod helpers;
 
-use bincode::deserialize;
 use borsh::BorshDeserialize;
 use helpers::{
     program_test,
     stakepool_account::{
-        create_token_account, get_account, get_token_balance, simple_add_validator_to_pool,
-        transfer, ValidatorStakeAccount,
+        get_account, get_token_balance, simple_add_validator_to_pool, transfer,
+        ValidatorStakeAccount,
     },
     LidoAccounts,
 };
-use lido::{id, instruction, state::Lido};
-use solana_program::{borsh::try_from_slice_unchecked, hash::Hash, pubkey::Pubkey};
-use solana_program_test::{tokio, BanksClient, ProgramTestContext};
-use solana_sdk::{
-    signature::{Keypair, Signer},
-    transaction::Transaction,
-};
+use solana_program::pubkey::Pubkey;
+use solana_program_test::{tokio, ProgramTestContext};
+use solana_sdk::signature::Signer;
 
-use spl_stake_pool::{
-    minimum_stake_lamports, stake_program,
-    state::{StakePool, ValidatorList},
-};
+use spl_stake_pool::state::StakePool;
 
 async fn setup() -> (ProgramTestContext, LidoAccounts, Vec<ValidatorStakeAccount>) {
     let mut context = program_test().start_with_context().await;
