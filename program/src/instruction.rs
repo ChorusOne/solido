@@ -165,7 +165,7 @@ macro_rules! accounts_struct {
                 // if not.
                 $(
                     let $var_account = accounts_iter.next().ok_or(ProgramError::NotEnoughAccountKeys)?;
-                    if $var_account.is_signer != $is_signer
+                    if ($var_account.is_signer == true && $var_account.is_signer != $is_signer)
                         || $var_account.is_writable != $is_writable {
                         return Err(LidoError::InvalidAccountInfo.into());
                     }
@@ -208,15 +208,15 @@ accounts_struct! {
             is_writable: true,
         },
         pub stake_pool {
-            is_signer: true,
+            is_signer: false,
             is_writable: false,
         },
         pub owner {
-            is_signer: true,
+            is_signer: false,
             is_writable: false,
         },
         pub mint_program {
-            is_signer: true,
+            is_signer: false,
             is_writable: false,
         },
         pub pool_token_to {
@@ -446,9 +446,9 @@ accounts_struct! {
             is_signer: false,
             is_writable: true,
         },
-        const spl_token = spl_token::id(),
         const sysvar_clock = sysvar::clock::id(),
         const sysvar_stake_history = sysvar::stake_history::id(),
+        const spl_token = spl_token::id(),
         const stake_program = stake_program::id(),
     }
 }
@@ -468,7 +468,7 @@ accounts_struct! {
     InitializeStakePoolWithAuthorityAccountsMeta,
     InitializeStakePoolWithAuthorityAccountsInfo {
         pub stake_pool {
-            is_signer: true,
+            is_signer: false,
             is_writable: true,
         },
         pub manager {
@@ -495,13 +495,25 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
+        pub sysvar_clock {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub sysvar_rent {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub sysvar_token {
+            is_signer: false,
+            is_writable: false,
+        },
         pub deposit_authority {
             is_signer: false,
             is_writable: false,
         },
-        const spl_token = spl_token::id(),
-        const sysvar_clock = sysvar::clock::id(),
-        const sysvar_rent = sysvar::rent::id(),
+        // const sysvar_clock = sysvar::clock::id(),
+        // const sysvar_rent = sysvar::rent::id(),
+        // const spl_token = spl_token::id(),
     }
 }
 

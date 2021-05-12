@@ -1,5 +1,7 @@
 #![allow(dead_code)]
 
+use solana_program::sysvar;
+
 use {
     solana_program::{
         borsh::get_packed_len, hash::Hash, program_pack::Pack, pubkey::Pubkey, system_instruction,
@@ -240,6 +242,9 @@ pub async fn create_stake_pool(
                     pool_mint: *pool_mint,
                     manager_pool_account: *pool_token_account,
                     deposit_authority: *deposit_authority,
+                    sysvar_clock: sysvar::clock::id(),
+                    sysvar_rent: sysvar::rent::id(),
+                    sysvar_token: spl_token::id(),
                 },
                 *fee,
                 max_validators,
