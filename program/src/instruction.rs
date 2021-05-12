@@ -35,6 +35,8 @@ pub enum LidoInstruction {
         amount: u64,
     },
     ChangeFeeDistribution,
+    AddValidator,
+    RemoveValidator,
 }
 
 macro_rules! accounts_struct_meta {
@@ -214,7 +216,7 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
-        pub owner {
+        pub manager {
             is_signer: false,
             is_writable: false,
         },
@@ -230,6 +232,14 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
+        pub fee_distribution {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub validator_credit_accounts {
+            is_signer: false,
+            is_writable: false,
+        },
         const sysvar_rent = sysvar::rent::id(),
         const spl_token = spl_token::id(),
     }
@@ -237,6 +247,7 @@ accounts_struct! {
 
 pub fn initialize(
     program_id: &Pubkey,
+    max_validators: u32,
     accounts: &InitializeAccountsMeta,
 ) -> Result<Instruction, ProgramError> {
     let init_data = LidoInstruction::Initialize { max_validators };
@@ -262,7 +273,7 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
-        pub owner {
+        pub manager {
             is_signer: false,
             is_writable: false,
         },

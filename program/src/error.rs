@@ -61,11 +61,20 @@ pub enum LidoError {
     #[error("InvalidManager")]
     InvalidManager,
     /// One of the provided accounts had a mismatch in is_writable or is_signer.
-    #[error("InvalidAccountInto")]
+    #[error("InvalidAccountInfo")]
     InvalidAccountInfo,
     /// More accounts were provided than the program expects.
     #[error("TooManyAccountKeys")]
     TooManyAccountKeys,
+    /// Wrong fee distribution account
+    #[error("InvalidFeeDistributionAccount")]
+    InvalidFeeDistributionAccount,
+    /// Wrong validator credits account
+    #[error("InvalidValidatorCreditAccount")]
+    InvalidValidatorCreditAccount,
+    /// Validator credit account was changed
+    #[error("ValidatorCreditChanged")]
+    ValidatorCreditChanged,
 }
 impl From<LidoError> for ProgramError {
     fn from(e: LidoError) -> Self {

@@ -10,7 +10,7 @@ use self::stakepool_account::{create_mint, create_token_account, transfer, Valid
 pub mod stakepool_account;
 
 pub fn program_test() -> ProgramTest {
-    let mut program = ProgramTest::new("lido", id(), processor!(processor::Processor::process));
+    let mut program = ProgramTest::new("lido", id(), processor!(processor::process));
     program.add_program(
         "spl_stake_pool",
         spl_stake_pool::id(),
