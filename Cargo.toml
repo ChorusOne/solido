@@ -13,9 +13,3 @@ members = [
 exclude = [
     "multisig"
 ]
-
-# Fix needed for lifetimes in the entry point. The rev is a backport of
-# https://github.com/solana-labs/solana/pull/17185 onto 1.6.7.
-[patch.crates-io.solana-program]
-git = "https://github.com/chorusone/solana"
-rev = "9d9e2a023a220851c0a0fb8b1b1024da4e89289a"

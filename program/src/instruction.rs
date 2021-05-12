@@ -2,7 +2,7 @@
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use solana_program::{
-    account_info::{next_account_info, AccountInfo},
+    account_info::AccountInfo,
     instruction::{AccountMeta, Instruction},
     program_error::ProgramError,
     pubkey::Pubkey,
@@ -120,14 +120,14 @@ macro_rules! accounts_struct {
             // input, they only show up in program, not in the call.
         }
 
-        pub struct $NameAccountInfo<'a> {
+        pub struct $NameAccountInfo<'a, 'b> {
             $(
-                pub $var_account: &'a AccountInfo<'a>
+                pub $var_account: &'a AccountInfo<'b>
             ),*
             $(
                 ,
                 $(
-                    pub $const_account: &'a AccountInfo<'a>
+                    pub $const_account: &'a AccountInfo<'b>
                 ),*
             )?
         }
@@ -155,16 +155,16 @@ macro_rules! accounts_struct {
             }
         }
 
-        impl<'a> $NameAccountInfo<'a> {
-            pub fn try_from_slice<'b: 'a>(accounts: &'b [AccountInfo<'a>]) -> Result<$NameAccountInfo<'a>, ProgramError> {
-                let mut accounts_iter: std::slice::Iter<'b, AccountInfo<'a>> = accounts.iter();
+        impl<'a, 'b> $NameAccountInfo<'a, 'b> {
+            pub fn try_from_slice(accounts: &'a [AccountInfo<'b>]) -> Result<$NameAccountInfo<'a, 'b>, ProgramError> {
+                let mut accounts_iter = accounts.iter();
 
                 // Unpack the accounts from the iterator in the same order that
                 // they were provided to the macro. Also verify that is_signer
                 // and is_writable match their definitions, and return an error
                 // if not.
                 $(
-                    let $var_account = next_account_info(&mut accounts_iter)?;
+                    let $var_account = accounts_iter.next().ok_or(ProgramError::NotEnoughAccountKeys)?;
                     if $var_account.is_signer != $is_signer
                         || $var_account.is_writable != $is_writable {
                         return Err(LidoError::InvalidAccountInfo.into());
@@ -173,7 +173,7 @@ macro_rules! accounts_struct {
 
                 $(
                     $(
-                        let $const_account = next_account_info(&mut accounts_iter)?;
+                        let $const_account = accounts_iter.next().ok_or(ProgramError::NotEnoughAccountKeys)?;
                         // Constant accounts (like the system program or rent
                         // sysvar) are never signers or writable.
                         if $const_account.is_signer || $const_account.is_writable {

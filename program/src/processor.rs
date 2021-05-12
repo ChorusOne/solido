@@ -49,10 +49,7 @@ fn get_stake_state(
 /// Program state handler.
 pub struct Processor;
 impl Processor {
-    pub fn process_initialize<'a>(
-        program_id: &'a Pubkey,
-        accounts_raw: &'a [AccountInfo<'a>],
-    ) -> ProgramResult {
+    pub fn process_initialize(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> ProgramResult {
         let accounts = InitializeAccountsInfo::try_from_slice(accounts_raw)?;
 
         let rent = &Rent::from_account_info(accounts.sysvar_rent)?;
@@ -121,10 +118,10 @@ impl Processor {
             .map_err(|e| e.into())
     }
 
-    pub fn process_deposit<'a>(
-        program_id: &'a Pubkey,
+    pub fn process_deposit(
+        program_id: &Pubkey,
         amount: u64,
-        accounts_raw: &'a [AccountInfo<'a>],
+        accounts_raw: &[AccountInfo],
     ) -> ProgramResult {
         let accounts = DepositAccountsInfo::try_from_slice(accounts_raw)?;
 
@@ -227,10 +224,10 @@ impl Processor {
             .map_err(|e| e.into())
     }
 
-    pub fn process_delegate_deposit<'a>(
-        program_id: &'a Pubkey,
+    pub fn process_delegate_deposit(
+        program_id: &Pubkey,
         amount: u64,
-        raw_accounts: &'a [AccountInfo<'a>],
+        raw_accounts: &[AccountInfo],
     ) -> ProgramResult {
         let accounts = DelegateDepositAccountsInfo::try_from_slice(raw_accounts)?;
 
@@ -327,9 +324,9 @@ impl Processor {
         )
     }
 
-    pub fn process_stake_pool_delegate<'a>(
-        program_id: &'a Pubkey,
-        raw_accounts: &'a [AccountInfo<'a>],
+    pub fn process_stake_pool_delegate(
+        program_id: &Pubkey,
+        raw_accounts: &[AccountInfo],
     ) -> ProgramResult {
         let accounts = StakePoolDelegateAccountsInfo::try_from_slice(raw_accounts)?;
 
@@ -416,11 +413,7 @@ impl Processor {
     }
 
     /// Processes [Instruction](enum.Instruction.html).
-    pub fn process<'a>(
-        program_id: &'a Pubkey,
-        accounts: &'a [AccountInfo<'a>],
-        input: &'a [u8],
-    ) -> ProgramResult {
+    pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> ProgramResult {
         let instruction = LidoInstruction::try_from_slice(input)?;
         match instruction {
             LidoInstruction::Initialize => Self::process_initialize(program_id, accounts),
