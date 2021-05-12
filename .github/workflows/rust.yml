@@ -2,7 +2,7 @@ name: Rust
 
 on:
   push:
-    branches: '*'
+    branches: [ main ]
   pull_request:
     branches: [ main ]
 
@@ -71,3 +71,13 @@ jobs:
       run: |
         sudo apt-get install -y libudev-dev
         cargo clippy -- -W clippy::pedantic
+
+  coverage:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: coverage
+      uses: actions/checkout@v2
+      run: |
+        cargo install cargo-tarpaulin
+        cargo tarpaulin -v
