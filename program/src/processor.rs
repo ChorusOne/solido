@@ -18,8 +18,8 @@ use crate::{
         process_add_validator, process_change_fee_distribution, process_remove_validator,
     },
     state::{FeeDistribution, Lido, ValidatorCreditAccounts},
-    DEPOSIT_AUTHORITY_ID, FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY_ID,
-    STAKE_POOL_TOKEN_RESERVE_AUTHORITY_ID,
+    DEPOSIT_AUTHORITY, FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY, STAKE_POOL_MANAGER,
+    STAKE_POOL_TOKEN_RESERVE_AUTHORITY,
 };
 
 use {
@@ -117,19 +117,19 @@ pub fn process_initialize(
     fee_distribution.validator_list_account = *accounts.validator_credit_accounts.key;
 
     let (_, reserve_bump_seed) = Pubkey::find_program_address(
-        &[&accounts.lido.key.to_bytes()[..32], RESERVE_AUTHORITY_ID],
+        &[&accounts.lido.key.to_bytes()[..32], RESERVE_AUTHORITY],
         program_id,
     );
 
     let (_, deposit_bump_seed) = Pubkey::find_program_address(
-        &[&accounts.lido.key.to_bytes()[..32], DEPOSIT_AUTHORITY_ID],
+        &[&accounts.lido.key.to_bytes()[..32], DEPOSIT_AUTHORITY],
         program_id,
     );
 
     let (_, token_reserve_bump_seed) = Pubkey::find_program_address(
         &[
             &accounts.lido.key.to_bytes()[..32],
-            STAKE_POOL_TOKEN_RESERVE_AUTHORITY_ID,
+            STAKE_POOL_TOKEN_RESERVE_AUTHORITY,
         ],
         program_id,
     );
@@ -138,6 +138,18 @@ pub fn process_initialize(
         &[&accounts.lido.key.to_bytes()[..32], FEE_MANAGER_AUTHORITY],
         program_id,
     );
+
+    let (stake_pool_manager, stake_pool_authority_bump_seed) = Pubkey::find_program_address(
+        &[&accounts.lido.key.to_bytes()[..32], STAKE_POOL_MANAGER],
+        program_id,
+    );
+    if stake_pool.staker != stake_pool_manager {
+        msg!(
+            "Stake pool should be managed by the derived address {}",
+            &stake_pool_manager
+        );
+        return Err(LidoError::InvalidManager.into());
+    }
 
     let fee_account =
         spl_token::state::Account::unpack_from_slice(&accounts.fee_token.data.borrow())?;
@@ -155,6 +167,7 @@ pub fn process_initialize(
     lido.sol_reserve_authority_bump_seed = reserve_bump_seed;
     lido.deposit_authority_bump_seed = deposit_bump_seed;
     lido.token_reserve_authority_bump_seed = token_reserve_bump_seed;
+    lido.stake_pool_authority_bump_seed = stake_pool_authority_bump_seed;
     lido.token_program_id = *accounts.spl_token.key;
     lido.pool_token_to = *accounts.pool_token_to.key;
     lido.fee_distribution = *accounts.fee_distribution.key;
@@ -240,7 +253,7 @@ pub fn process_deposit(
     let me_bytes = accounts.lido.key.to_bytes();
     let authority_signature_seeds = [
         &me_bytes[..32],
-        RESERVE_AUTHORITY_ID,
+        RESERVE_AUTHORITY,
         &[lido.sol_reserve_authority_bump_seed],
     ];
     let signers = &[&authority_signature_seeds[..]];
@@ -278,7 +291,7 @@ pub fn process_delegate_deposit(
     }
 
     let me_bytes = accounts.lido.key.to_bytes();
-    let reserve_authority_seed: &[&[_]] = &[&me_bytes, RESERVE_AUTHORITY_ID][..];
+    let reserve_authority_seed: &[&[_]] = &[&me_bytes, RESERVE_AUTHORITY][..];
     let (reserve_authority, _) = Pubkey::find_program_address(reserve_authority_seed, program_id);
 
     if accounts.reserve.key != &reserve_authority {
@@ -293,7 +306,7 @@ pub fn process_delegate_deposit(
 
     let authority_signature_seeds: &[&[_]] = &[
         &me_bytes,
-        &RESERVE_AUTHORITY_ID,
+        &RESERVE_AUTHORITY,
         &[lido.sol_reserve_authority_bump_seed],
     ];
 
@@ -354,7 +367,7 @@ pub fn process_delegate_deposit(
         ],
         &[&[
             &accounts.lido.key.to_bytes()[..32],
-            DEPOSIT_AUTHORITY_ID,
+            DEPOSIT_AUTHORITY,
             &[lido.deposit_authority_bump_seed],
         ]],
     )
@@ -380,7 +393,7 @@ pub fn process_stake_pool_delegate(
     let (stake_pool_token_reserve_authority, _) = Pubkey::find_program_address(
         &[
             &accounts.lido.key.to_bytes()[..32],
-            STAKE_POOL_TOKEN_RESERVE_AUTHORITY_ID,
+            STAKE_POOL_TOKEN_RESERVE_AUTHORITY,
         ],
         program_id,
     );
@@ -433,7 +446,7 @@ pub fn process_stake_pool_delegate(
         ],
         &[&[
             &accounts.lido.key.to_bytes()[..32],
-            DEPOSIT_AUTHORITY_ID,
+            DEPOSIT_AUTHORITY,
             &[lido.deposit_authority_bump_seed],
         ]],
     )?;

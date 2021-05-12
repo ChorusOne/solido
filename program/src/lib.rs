@@ -10,13 +10,15 @@ pub mod processor;
 pub mod state;
 
 /// Seed for reserve authority in SOL
-pub const RESERVE_AUTHORITY_ID: &[u8] = b"reserve_authority";
+pub const RESERVE_AUTHORITY: &[u8] = b"reserve_authority";
 /// Seed for deposit authority
-pub const DEPOSIT_AUTHORITY_ID: &[u8] = b"deposit_authority";
+pub const DEPOSIT_AUTHORITY: &[u8] = b"deposit_authority";
 /// Seed for token reserve authority
-pub const STAKE_POOL_TOKEN_RESERVE_AUTHORITY_ID: &[u8] = b"token_reserve_authority";
-/// Seed for fee manafer authority
+pub const STAKE_POOL_TOKEN_RESERVE_AUTHORITY: &[u8] = b"token_reserve_authority";
+/// Seed for fee manager authority
 pub const FEE_MANAGER_AUTHORITY: &[u8] = b"fee_authority";
+/// Stake pool manager authority
+pub const STAKE_POOL_MANAGER: &[u8] = b"stake_pool_manager";
 
 solana_program::declare_id!("3kEkdGe68DuTKg6FhVrLPZ3Wm8EcUPCPjhCeu8WrGDoc");
 

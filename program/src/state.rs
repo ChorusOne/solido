@@ -25,10 +25,11 @@ pub struct Lido {
     /// Token program id associated with Lido's token
     pub token_program_id: Pubkey,
 
-    /// Bumb seeds for signing messages on behalf of the authority
+    /// Bump seeds for signing messages on behalf of the authority
     pub sol_reserve_authority_bump_seed: u8,
     pub deposit_authority_bump_seed: u8,
     pub token_reserve_authority_bump_seed: u8,
+    pub stake_pool_authority_bump_seed: u8,
 }
 
 impl Lido {
