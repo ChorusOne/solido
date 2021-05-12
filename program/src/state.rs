@@ -19,9 +19,11 @@ pub struct Lido {
     /// Total Lido tokens in circulation
     pub st_sol_total_shares: u64,
     /// Holder of tokens in Lido's underlying stake pool
-    pub pool_token_to: Pubkey,
+    pub stake_pool_token_holder: Pubkey,
     /// Fee distribution state, set and modified by the manager
     pub fee_distribution: Pubkey,
+    /// Validator credits to take from the fee
+    pub validator_credit_accounts: Pubkey,
     /// Token program id associated with Lido's token
     pub token_program_id: Pubkey,
 
@@ -30,6 +32,7 @@ pub struct Lido {
     pub deposit_authority_bump_seed: u8,
     pub token_reserve_authority_bump_seed: u8,
     pub stake_pool_authority_bump_seed: u8,
+    pub fee_manager_bump_seed: u8,
 }
 
 impl Lido {
@@ -95,8 +98,8 @@ pub struct ValidatorCreditAccounts {
 #[repr(C)]
 #[derive(Clone, Debug, Default, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema)]
 pub struct ValidatorCredit {
-    address: Pubkey,
-    st_sol_amount: u64,
+    pub address: Pubkey,
+    pub st_sol_amount: u64,
 }
 
 impl ValidatorCreditAccounts {
@@ -125,23 +128,29 @@ impl ValidatorCreditAccounts {
 #[derive(Clone, Debug, Default, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema)]
 pub struct FeeDistribution {
     pub insurance_fee_numerator: u64,
-    pub treasure_fee_numerator: u64,
-    pub validator_fee_numerator: u64,
+    pub treasury_fee_numerator: u64,
+    pub validators_fee_numerator: u64,
     pub manager_fee_numerator: u64,
     pub denominator: u64,
 
     pub insurance_account: Pubkey,
-    pub treasure_account: Pubkey,
+    pub treasury_account: Pubkey,
     pub manager_account: Pubkey,
-    pub validator_list_account: Pubkey,
+}
+
+pub struct CalculatedTokenFeeAmount {
+    pub insurance_amount: u64,
+    pub treasury_amount: u64,
+    pub each_validator_amount: u64,
+    pub manager_amount: u64,
 }
 
 impl FeeDistribution {
     /// Checks
     pub fn check_sum(&self) -> Result<(), LidoError> {
         if self.insurance_fee_numerator
-            + self.treasure_fee_numerator
-            + self.validator_fee_numerator
+            + self.treasury_fee_numerator
+            + self.validators_fee_numerator
             + self.manager_fee_numerator
             != self.denominator
             || self.denominator == 0
@@ -150,6 +159,60 @@ impl FeeDistribution {
             return Err(LidoError::InvalidFeeAmount);
         }
         Ok(())
+    }
+    /// Returns the amount of each
+    pub fn calculate_token_amounts(
+        &self,
+        total_token_amount: u64,
+        number_validators: u32,
+    ) -> Result<CalculatedTokenFeeAmount, LidoError> {
+        let insurance_amount = (total_token_amount as u128)
+            .checked_mul(self.insurance_fee_numerator as u128)
+            .ok_or(LidoError::CalculationFailure)?
+            .checked_div(self.denominator as u128)
+            .ok_or(LidoError::CalculationFailure)? as u64;
+        let treasury_amount = (total_token_amount as u128)
+            .checked_mul(self.treasury_fee_numerator as u128)
+            .ok_or(LidoError::CalculationFailure)?
+            .checked_div(self.denominator as u128)
+            .ok_or(LidoError::CalculationFailure)? as u64;
+
+        let validators_amount = (total_token_amount as u128)
+            .checked_mul(self.validators_fee_numerator as u128)
+            .ok_or(LidoError::CalculationFailure)?
+            .checked_div(self.denominator as u128)
+            .ok_or(LidoError::CalculationFailure)?;
+
+        let each_validator_amount = validators_amount
+            .checked_div(number_validators as u128)
+            .ok_or(LidoError::CalculationFailure)? as u64;
+
+        let manager_check = (total_token_amount as u128)
+            .checked_mul(self.manager_fee_numerator as u128)
+            .ok_or(LidoError::CalculationFailure)?
+            .checked_div(self.denominator as u128)
+            .ok_or(LidoError::CalculationFailure)? as u64;
+        let manager_amount = total_token_amount
+            - insurance_amount
+            - treasury_amount
+            - each_validator_amount
+                .checked_mul(number_validators as u64)
+                .ok_or(LidoError::CalculationFailure)?;
+        // This should never happen
+        if manager_amount < manager_check {
+            msg!(
+                "Manager is receiving an incorrect number of tokens {}, should get at least  {}",
+                manager_amount,
+                manager_check,
+            );
+            return Err(LidoError::CalculationFailure);
+        }
+        Ok(CalculatedTokenFeeAmount {
+            insurance_amount,
+            treasury_amount,
+            each_validator_amount,
+            manager_amount,
+        })
     }
 }
 
@@ -169,15 +232,6 @@ mod test_lido {
     use super::*;
     use solana_program::program_error::ProgramError;
     use solana_sdk::signature::{Keypair, Signer};
-
-    #[test]
-    fn test_lido_members_initialized() {
-        let mut members = LidoMembers::new(10);
-        assert!(!members.is_initialized());
-        members.account_type = LidoAccountType::Initialized;
-
-        assert!(members.is_initialized())
-    }
 
     #[test]
     fn lido_initialized() {
@@ -262,7 +316,7 @@ mod test_lido {
         let other_stakepool = Keypair::new();
 
         let err = lido.check_lido_for_deposit(
-            &lido.owner,
+            &lido.manager,
             &other_stakepool.pubkey(),
             &lido.st_sol_mint_program,
         );
@@ -277,12 +331,57 @@ mod test_lido {
         let other_mint = Keypair::new();
 
         let err = lido.check_lido_for_deposit(
-            &lido.owner,
+            &lido.manager,
             &lido.stake_pool_account,
             &other_mint.pubkey(),
         );
 
-        let expect: ProgramError = LidoError::InvalidToken.into();
+        let expect: ProgramError = LidoError::InvalidTokenMinter.into();
         assert_eq!(expect, err.err().unwrap());
+    }
+    #[test]
+    fn test_fee_distribution() {
+        let fee_distribution = FeeDistribution {
+            insurance_fee_numerator: 3,
+            treasury_fee_numerator: 3,
+            validators_fee_numerator: 2,
+            manager_fee_numerator: 1,
+            denominator: 9,
+
+            insurance_account: Pubkey::default(),
+            treasury_account: Pubkey::default(),
+            manager_account: Pubkey::default(),
+        };
+        assert!(fee_distribution.check_sum().is_ok());
+        let amount: u64 = 1000;
+        let number_validators: u32 = 10;
+
+        let insurance_amount =
+            (amount * fee_distribution.insurance_fee_numerator) / fee_distribution.denominator;
+        let treasury_amount =
+            (amount * fee_distribution.treasury_fee_numerator) / fee_distribution.denominator;
+        let validators_amount =
+            (amount * fee_distribution.validators_fee_numerator) / fee_distribution.denominator;
+
+        let each_validator_amount = validators_amount / number_validators as u64;
+        let manager_amount = amount
+            - insurance_amount
+            - treasury_amount
+            - each_validator_amount * number_validators as u64;
+
+        let distributions = fee_distribution
+            .calculate_token_amounts(amount, number_validators)
+            .unwrap();
+        assert_eq!(insurance_amount, distributions.insurance_amount);
+        assert_eq!(treasury_amount, distributions.treasury_amount);
+        assert_eq!(each_validator_amount, distributions.each_validator_amount);
+        assert_eq!(manager_amount, distributions.manager_amount);
+        assert_eq!(
+            manager_amount
+                + each_validator_amount * number_validators as u64
+                + treasury_amount
+                + insurance_amount,
+            amount,
+        );
     }
 }

@@ -114,7 +114,6 @@ pub fn process_initialize(
     )?;
     validator_credit_accounts.max_validators = max_validators;
     validator_credit_accounts.validator_accounts.clear();
-    fee_distribution.validator_list_account = *accounts.validator_credit_accounts.key;
 
     let (_, reserve_bump_seed) = Pubkey::find_program_address(
         &[&accounts.lido.key.to_bytes()[..32], RESERVE_AUTHORITY],
@@ -134,7 +133,7 @@ pub fn process_initialize(
         program_id,
     );
 
-    let (fee_manager_account, _fee_manager_bump_seed) = Pubkey::find_program_address(
+    let (fee_manager_account, fee_manager_bump_seed) = Pubkey::find_program_address(
         &[&accounts.lido.key.to_bytes()[..32], FEE_MANAGER_AUTHORITY],
         program_id,
     );
@@ -149,6 +148,10 @@ pub fn process_initialize(
             &stake_pool_manager
         );
         return Err(LidoError::InvalidManager.into());
+    }
+    if &stake_pool.manager_fee_account != accounts.fee_token.key {
+        msg!("Stake pool's manager_fee should be the same as the token fee account");
+        return Err(LidoError::InvalidFeeAccount.into());
     }
 
     let fee_account =
@@ -168,9 +171,11 @@ pub fn process_initialize(
     lido.deposit_authority_bump_seed = deposit_bump_seed;
     lido.token_reserve_authority_bump_seed = token_reserve_bump_seed;
     lido.stake_pool_authority_bump_seed = stake_pool_authority_bump_seed;
+    lido.fee_manager_bump_seed = fee_manager_bump_seed;
     lido.token_program_id = *accounts.spl_token.key;
-    lido.pool_token_to = *accounts.pool_token_to.key;
+    lido.stake_pool_token_holder = *accounts.pool_token_to.key;
     lido.fee_distribution = *accounts.fee_distribution.key;
+    lido.validator_credit_accounts = *accounts.validator_credit_accounts.key;
 
     lido.serialize(&mut *accounts.lido.data.borrow_mut())
         .map_err(|e| e.into())
@@ -212,7 +217,7 @@ pub fn process_deposit(
         return Err(LidoError::InvalidTokenProgram.into());
     }
 
-    if &lido.pool_token_to != accounts.pool_token_to.key {
+    if &lido.stake_pool_token_holder != accounts.pool_token_to.key {
         msg!("Invalid stake pool token");
         return Err(LidoError::InvalidPoolToken.into());
     }
@@ -405,7 +410,7 @@ pub fn process_stake_pool_delegate(
     let pool_token_account =
         spl_token::state::Account::unpack_from_slice(&accounts.pool_token_to.data.borrow())?;
 
-    if &lido.pool_token_to != accounts.pool_token_to.key {
+    if &lido.stake_pool_token_holder != accounts.pool_token_to.key {
         msg!("Invalid stake pool token");
         return Err(LidoError::InvalidPoolToken.into());
     }

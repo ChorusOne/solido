@@ -1,12 +1,13 @@
 use std::fmt::Display;
 
 use solana_program::{
-    account_info::AccountInfo, msg, program_error::ProgramError, pubkey::Pubkey, rent::Rent,
+    account_info::AccountInfo, msg, program::invoke_signed, program_error::ProgramError,
+    pubkey::Pubkey, rent::Rent,
 };
 use spl_stake_pool::state::StakePool;
 use std::convert::TryFrom;
 
-use crate::{error::LidoError, RESERVE_AUTHORITY_ID};
+use crate::{error::LidoError, RESERVE_AUTHORITY};
 
 pub(crate) fn rent_exemption(
     rent: &Rent,
@@ -26,7 +27,7 @@ pub fn check_reserve_authority(
     reserve_authority_info: &AccountInfo,
 ) -> Result<(), ProgramError> {
     let (reserve_id, _) = Pubkey::find_program_address(
-        &[&lido_info.key.to_bytes()[..32], RESERVE_AUTHORITY_ID],
+        &[&lido_info.key.to_bytes()[..32], RESERVE_AUTHORITY],
         program_id,
     );
     if reserve_id != *reserve_authority_info.key {
@@ -81,6 +82,65 @@ pub fn calc_total_lamports(
     reserve_lamports
         .checked_add(stake_pool_lamports)
         .ok_or(LidoError::CalculationFailure)
+}
+
+/// Issue a spl_token `MintTo` instruction.
+#[allow(clippy::too_many_arguments)]
+pub fn token_mint_to<'a>(
+    lido: &Pubkey,
+    token_program: AccountInfo<'a>,
+    mint: AccountInfo<'a>,
+    destination: AccountInfo<'a>,
+    authority: AccountInfo<'a>,
+    authority_type: &[u8],
+    bump_seed: u8,
+    amount: u64,
+) -> Result<(), ProgramError> {
+    let me_bytes = lido.to_bytes();
+    let authority_signature_seeds = [&me_bytes[..32], authority_type, &[bump_seed]];
+    let signers = &[&authority_signature_seeds[..]];
+
+    let ix = spl_token::instruction::mint_to(
+        token_program.key,
+        mint.key,
+        destination.key,
+        authority.key,
+        &[],
+        amount,
+    )?;
+
+    invoke_signed(&ix, &[mint, destination, authority, token_program], signers)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn transfer_to<'a>(
+    lido: &Pubkey,
+    token_program: AccountInfo<'a>,
+    source: AccountInfo<'a>,
+    destination: AccountInfo<'a>,
+    authority: AccountInfo<'a>,
+    authority_type: &[u8],
+    bump_seed: u8,
+    amount: u64,
+) -> Result<(), ProgramError> {
+    let me_bytes = lido.to_bytes();
+    let authority_signature_seeds = [&me_bytes[..32], authority_type, &[bump_seed]];
+    let signers = &[&authority_signature_seeds[..]];
+
+    let ix = spl_token::instruction::transfer(
+        token_program.key,
+        source.key,
+        destination.key,
+        authority.key,
+        &[],
+        amount,
+    )?;
+
+    invoke_signed(
+        &ix,
+        &[source, destination, authority, token_program],
+        signers,
+    )
 }
 
 #[cfg(test)]
