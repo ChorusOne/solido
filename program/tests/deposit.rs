@@ -8,7 +8,7 @@ use helpers::{
     LidoAccounts,
 };
 use lido::{id, instruction};
-use solana_program::{hash::Hash};
+use solana_program::hash::Hash;
 use solana_program_test::{tokio, BanksClient};
 use solana_sdk::{
     signature::{Keypair, Signer},

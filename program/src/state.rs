@@ -120,7 +120,7 @@ impl LidoMembers {
 mod test_lido {
     use super::*;
     use solana_program::program_error::ProgramError;
-    use solana_sdk::{signature::{Keypair, Signer}};
+    use solana_sdk::signature::{Keypair, Signer};
 
     #[test]
     fn test_lido_members_initialized() {
@@ -141,7 +141,6 @@ mod test_lido {
     #[test]
     fn test_pool_tokens_when_total_lamports_is_zero() {
         let lido = Lido::default();
-        
 
         let pool_tokens_for_deposit = lido.calc_pool_tokens_for_deposit(123, 0);
 
@@ -151,7 +150,6 @@ mod test_lido {
     #[test]
     fn test_pool_tokens_when_lsol_total_shares_is_default() {
         let lido = Lido::default();
-        
 
         let pool_tokens_for_deposit = lido.calc_pool_tokens_for_deposit(200, 100);
 
@@ -162,7 +160,6 @@ mod test_lido {
     fn test_pool_tokens_when_lsol_total_shares_is_increased() {
         let mut lido = Lido::default();
         lido.lsol_total_shares = 120;
-        
 
         let pool_tokens_for_deposit = lido.calc_pool_tokens_for_deposit(200, 40);
 
@@ -173,7 +170,6 @@ mod test_lido {
     fn test_pool_tokens_when_stake_lamports_is_zero() {
         let mut lido = Lido::default();
         lido.lsol_total_shares = 120;
-        
 
         let pool_tokens_for_deposit = lido.calc_pool_tokens_for_deposit(0, 40);
 
@@ -203,8 +199,8 @@ mod test_lido {
         let other_owner = Keypair::new();
 
         let err = lido.check_lido_for_deposit(
-            &other_owner.pubkey(), 
-            &lido.stake_pool_account, 
+            &other_owner.pubkey(),
+            &lido.stake_pool_account,
             &lido.lsol_mint_program,
         );
 
@@ -218,8 +214,8 @@ mod test_lido {
         let other_stakepool = Keypair::new();
 
         let err = lido.check_lido_for_deposit(
-            &lido.owner, 
-            &other_stakepool.pubkey(), 
+            &lido.owner,
+            &other_stakepool.pubkey(),
             &lido.lsol_mint_program,
         );
 
@@ -233,7 +229,7 @@ mod test_lido {
         let other_mint = Keypair::new();
 
         let err = lido.check_lido_for_deposit(
-            &lido.owner, 
+            &lido.owner,
             &lido.stake_pool_account,
             &other_mint.pubkey(),
         );

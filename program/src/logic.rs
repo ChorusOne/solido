@@ -73,3 +73,47 @@ pub fn calc_stakepool_lamports(
 pub fn calc_total_lamports(reserve_lamports: u64, stake_pool_lamports: u64) -> u64 {
     reserve_lamports + stake_pool_lamports
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_calc_total_lamports() {
+        assert_eq!(calc_total_lamports(0, 0), 0);
+        assert_eq!(calc_total_lamports(10, 10), 20);
+        assert_eq!(calc_total_lamports(45, 74), 119);
+        assert_eq!(calc_total_lamports(95, 37), 132);
+    }
+
+    #[test]
+    fn test_account_not_rent_exempt() {
+        let key = Pubkey::default();
+        let mut lamports = 3000;
+        let data = &mut [0; 8];
+        let mut rent = Rent::default();
+        rent.lamports_per_byte_year = 100;
+        rent.exemption_threshold = 1.0;
+        let account_type = AccountType::StakePool;
+        let account = AccountInfo::new(&key, false, false, &mut lamports, data, &key, false, 1);
+
+        let val = rent_exemption(&rent, &account, account_type);
+
+        assert_eq!(val.err().unwrap(), ProgramError::AccountNotRentExempt);
+    }
+
+    #[test]
+    fn test_account_is_rent_exempt() {
+        let key = Pubkey::default();
+        let mut lamports = 3000000;
+        let data = &mut [0; 8];
+        let mut rent = Rent::default();
+        rent.lamports_per_byte_year = 100;
+        rent.exemption_threshold = 1.0;
+        let account_type = AccountType::StakePool;
+        let account = AccountInfo::new(&key, false, false, &mut lamports, data, &key, false, 1);
+
+        let val = rent_exemption(&rent, &account, account_type);
+        assert!(val.is_ok());
+    }
+}
