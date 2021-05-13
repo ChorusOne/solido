@@ -116,4 +116,51 @@ mod test {
         let val = rent_exemption(&rent, &account, account_type);
         assert!(val.is_ok());
     }
+
+    #[test]
+    fn test_calc_stakepool_lamports_with_defaults() {
+        let stakepool = StakePool::default();
+        let pool = spl_token::state::Account::default();
+
+        let result = calc_stakepool_lamports(stakepool, pool);
+
+        assert_eq!(result.unwrap(), 0);
+    }
+
+    #[test]
+    fn test_calc_stakepool_lamports_with_token_supply_increase() {
+        let mut stakepool = StakePool::default();
+        stakepool.pool_token_supply = 100;
+        stakepool.total_stake_lamports = 50;
+        let pool = spl_token::state::Account::default();
+
+        let result = calc_stakepool_lamports(stakepool, pool);
+
+        assert_eq!(result.unwrap(), 0);
+    }
+
+    #[test]
+    fn test_calc_stakepool_lamports_with_token_supply_increase_and_pool_increase() {
+        let mut stakepool = StakePool::default();
+        stakepool.pool_token_supply = 100;
+        stakepool.total_stake_lamports = 50;
+        let mut pool = spl_token::state::Account::default();
+        pool.amount = 30;
+
+        let result = calc_stakepool_lamports(stakepool, pool);
+
+        assert_eq!(result.unwrap(), 15);
+    }
+
+    #[test]
+    fn test_calc_stakepool_lamports_with_pool_increase() {
+        let mut stakepool = StakePool::default();
+        stakepool.pool_token_supply = 100;
+        let mut pool = spl_token::state::Account::default();
+        pool.amount = 30;
+
+        let result = calc_stakepool_lamports(stakepool, pool);
+
+        assert_eq!(result.unwrap(), 0);
+    }
 }
