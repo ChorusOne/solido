@@ -21,3 +21,12 @@ async fn test_success_initialize() {
     assert_eq!(lido.data.len(), get_packed_len::<state::Lido>());
     assert_eq!(lido.owner, id());
 }
+
+#[tokio::test]
+#[should_panic]
+async fn test_uninitialize() {
+    let (mut banks_client, payer, recent_blockhash) = program_test().start().await;
+    let mut lido_accounts = LidoAccounts::new();
+
+    let lido = get_account(&mut banks_client, &lido_accounts.lido.pubkey()).await;
+}
