@@ -3734,12 +3734,14 @@ dependencies = [
 name = "solido-cli"
 version = "0.1.0"
 dependencies = [
+ "anchor-client",
  "bincode",
  "borsh 0.8.2",
  "bs58 0.4.0",
- "clap 2.33.3",
+ "clap 3.0.0-beta.2",
  "lazy_static",
  "lido",
+ "serde",
  "serde_json",
  "solana-account-decoder",
  "solana-clap-utils",

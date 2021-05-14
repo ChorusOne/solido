@@ -3,6 +3,7 @@ use std::fmt;
 use {
     crate::helpers::{check_fee_payer_balance, send_transaction},
     crate::Config,
+    serde::Serialize,
     solana_program::{borsh::get_packed_len, program_pack::Pack, pubkey::Pubkey},
     solana_sdk::{
         signature::{Keypair, Signer},
@@ -20,6 +21,7 @@ use {
 
 const STAKE_STATE_LEN: usize = 200;
 
+#[derive(Serialize)]
 pub struct CreatePoolOutput {
     /// Account that holds the stake pool data structure.
     pub stake_pool_address: Pubkey,
@@ -67,7 +69,7 @@ impl fmt::Display for CreatePoolOutput {
 }
 
 pub fn command_create_pool(
-    config: &mut Config,
+    config: &Config,
     deposit_authority: &Pubkey,
     fee: Fee,
     max_validators: u32,
@@ -212,7 +214,7 @@ pub fn command_create_pool(
             + fee_calculator.calculate_fee(&initialize_transaction.message()),
     )?;
     let setup_signers = vec![
-        config.fee_payer.as_ref(),
+        config.fee_payer,
         &mint_keypair,
         &pool_fee_account,
         &reserve_stake,
@@ -221,10 +223,10 @@ pub fn command_create_pool(
     send_transaction(&config, setup_transaction)?;
 
     let initialize_signers = vec![
-        config.fee_payer.as_ref(),
+        config.fee_payer,
         &stake_pool_keypair,
         &validator_list,
-        config.manager.as_ref(),
+        config.manager,
     ];
     initialize_transaction.sign(&initialize_signers, recent_blockhash);
     send_transaction(&config, initialize_transaction)?;

@@ -1,4 +1,8 @@
+use std::fmt;
+
+use clap::Clap;
 use lido::{DEPOSIT_AUTHORITY_ID, FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY_ID};
+use serde::Serialize;
 use solana_program::{
     borsh::get_packed_len, native_token::Sol, program_pack::Pack, pubkey::Pubkey,
     system_instruction,
@@ -8,7 +12,6 @@ use solana_sdk::{
     transaction::Transaction,
 };
 use spl_stake_pool::state::Fee;
-use std::fmt;
 
 use crate::{
     stake_pool_helpers::{command_create_pool, CreatePoolOutput},
@@ -44,7 +47,7 @@ pub fn send_transaction(
     Ok(())
 }
 
-#[derive(Debug)]
+#[derive(Clap, Debug)]
 pub struct CreateSolidoOpts {
     /// Numerator of the fee fraction.
     pub fee_numerator: u64,
@@ -56,6 +59,7 @@ pub struct CreateSolidoOpts {
     pub max_validators: u32,
 }
 
+#[derive(Serialize)]
 pub struct CreateSolidoOutput {
     /// Account that stores the data for this Solido instance.
     pub solido_address: Pubkey,
@@ -94,7 +98,7 @@ impl fmt::Display for CreateSolidoOutput {
 }
 
 pub fn command_create_solido(
-    config: &mut Config,
+    config: &Config,
     opts: CreateSolidoOpts,
 ) -> Result<CreateSolidoOutput, crate::Error> {
     let lido_keypair = Keypair::new();
@@ -209,7 +213,7 @@ pub fn command_create_solido(
         config,
         total_rent_free_balances + fee_calculator.calculate_fee(&lido_transaction.message()),
     )?;
-    let signers = vec![config.fee_payer.as_ref(), &mint_keypair, &lido_keypair];
+    let signers = vec![config.fee_payer, &mint_keypair, &lido_keypair];
     lido_transaction.sign(&signers, recent_blockhash);
     send_transaction(&config, lido_transaction)?;
 
