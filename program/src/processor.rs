@@ -171,7 +171,7 @@ impl Processor {
         // stake_pool_total_sol * stake_pool_token(pool_token_to_info)/stake_pool_total_tokens
         let stake_pool_lamports = calc_stakepool_lamports(stake_pool, pool_to_token_account)?;
 
-        let total_lamports = calc_total_lamports(reserve_lamports, stake_pool_lamports);
+        let total_lamports = calc_total_lamports(reserve_lamports, stake_pool_lamports)?;
         invoke(
             &system_instruction::transfer(
                 accounts.user.key,
