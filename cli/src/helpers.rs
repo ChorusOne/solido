@@ -15,7 +15,7 @@ use spl_stake_pool::state::Fee;
 
 use crate::{
     stake_pool_helpers::{command_create_pool, CreatePoolOutput},
-    Config, Error,
+    Config, Error, OutputMode
 };
 
 pub fn check_fee_payer_balance(config: &Config, required_balance: u64) -> Result<(), Error> {
@@ -40,9 +40,22 @@ pub fn send_transaction(
     if config.dry_run {
         config.rpc_client.simulate_transaction(&transaction)?;
     } else {
-        let _signature = config
-            .rpc_client
-            .send_and_confirm_transaction_with_spinner(&transaction)?;
+        let _signature = match config.output_mode {
+            OutputMode::Text => {
+                // In text mode, we can display a spinner.
+                config
+                    .rpc_client
+                    .send_and_confirm_transaction_with_spinner(&transaction)?
+            }
+            OutputMode::Json => {
+                // In json mode, printing a spinner to stdout would break the
+                // json that we also print to stdout, so opt for the silent
+                // version.
+                config
+                    .rpc_client
+                    .send_and_confirm_transaction(&transaction)?
+            }
+        };
     }
     Ok(())
 }
