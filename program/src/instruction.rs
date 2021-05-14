@@ -548,3 +548,171 @@ pub fn initialize_stake_pool_with_authority(
         data,
     })
 }
+
+accounts_struct! {
+    ChangeFeeDistributionMeta, ChangeFeeDistributionInfo {
+        pub lido {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub manager {
+            is_signer: true,
+            is_writable: false,
+        },
+        pub current_fee_distribution {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub new_fee_distribution {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub validator_credit_accounts {
+            is_signer: false,
+            is_writable: false,
+        },
+    }
+}
+
+pub fn change_fee_distribution(
+    program_id: &Pubkey,
+    accounts: &ChangeFeeDistributionMeta,
+) -> Instruction {
+    Instruction {
+        program_id: *program_id,
+        accounts: accounts.to_vec(),
+        data: LidoInstruction::ChangeFeeDistribution.try_to_vec().unwrap(),
+    }
+}
+
+accounts_struct! {
+    AddValidatorMeta, AddValidatorInfo {
+        pub lido {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub manager {
+            is_signer: true,
+            is_writable: false,
+        },
+        pub stake_pool_manager_authority {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub validator_credit_accounts {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub stake_pool_program_id {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub stake_pool {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub stake_pool_withdraw_authority {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub stake_pool_validator_list {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub stake_account {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub validator_token_account {
+            is_signer: false,
+            is_writable: false,
+        },
+        const sysvar_clock = sysvar::clock::id(),
+        const sysvar_stake_history = sysvar::stake_history::id(),
+    }
+}
+
+pub fn add_validator(program_id: &Pubkey, accounts: &AddValidatorMeta) -> Instruction {
+    Instruction {
+        program_id: *program_id,
+        accounts: accounts.to_vec(),
+        data: LidoInstruction::AddValidator.try_to_vec().unwrap(),
+    }
+}
+
+//     let stake_pool_info = next_account_info(account_info_iter)?;
+//     let stake_pool_token_program_info = next_account_info(account_info_iter)?;
+//     let stake_pool_validator_list_info = next_account_info(account_info_iter)?;
+//     let stake_pool_fee_account_info = next_account_info(account_info_iter)?;
+//     let stake_pool_manager_fee_account_info = next_account_info(account_info_iter)?;
+
+accounts_struct! {
+    DistributeFeesMeta, DistributeFeesInfo {
+        pub lido {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub manager {
+            is_signer: true,
+            is_writable: false,
+        },
+        pub validator_credit_accounts {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub fee_distribution {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub token_holder_stake_pool {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub mint_program {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub reserve_authority {
+             is_signer: false,
+            is_writable: false,
+        },
+        pub insurance_account {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub treasury_account {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub fee_manager_account {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub stake_pool {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub stake_pool_validator_list {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub stake_pool_fee_account {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub stake_pool_manager_fee_account {
+             is_signer: false,
+            is_writable: false,
+        },
+
+        const spl_token = spl_token::id(),
+    }
+}
+
+pub fn distribute_fees(program_id: &Pubkey, accounts: &DistributeFeesMeta) -> Instruction {
+    Instruction {
+        program_id: *program_id,
+        accounts: accounts.to_vec(),
+        data: LidoInstruction::AddValidator.try_to_vec().unwrap(),
+    }
+}
