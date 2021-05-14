@@ -11,8 +11,8 @@ use crate::error::LidoError;
 pub struct Lido {
     pub stake_pool_account: Pubkey,
     pub owner: Pubkey,
-    pub stsol_mint_program: Pubkey,
-    pub stsol_total_shares: u64,
+    pub st_sol_mint_program: Pubkey,
+    pub st_sol_total_shares: u64,
     pub pool_token_to: Pubkey, // Used as recipient of the stake pool
 
     pub sol_reserve_authority_bump_seed: u8,
@@ -32,7 +32,7 @@ impl Lido {
         }
         u64::try_from(
             (stake_lamports as u128)
-                .checked_mul(self.stsol_total_shares as u128)?
+                .checked_mul(self.st_sol_total_shares as u128)?
                 .checked_div(total_lamports as u128)?,
         )
         .ok()
@@ -51,7 +51,7 @@ impl Lido {
         &self,
         owner_key: &Pubkey,
         stakepool_key: &Pubkey,
-        stsol_mint_key: &Pubkey,
+        st_sol_mint_key: &Pubkey,
     ) -> ProgramResult {
         if &self.owner != owner_key {
             return Err(LidoError::InvalidOwner.into());
@@ -60,7 +60,7 @@ impl Lido {
             return Err(LidoError::InvalidStakePool.into());
         }
 
-        if &self.stsol_mint_program != stsol_mint_key {
+        if &self.st_sol_mint_program != st_sol_mint_key {
             return Err(LidoError::InvalidToken.into());
         }
         Ok(())
@@ -148,7 +148,7 @@ mod test_lido {
     }
 
     #[test]
-    fn test_pool_tokens_when_stsol_total_shares_is_default() {
+    fn test_pool_tokens_when_st_sol_total_shares_is_default() {
         let lido = Lido::default();
 
         let pool_tokens_for_deposit = lido.calc_pool_tokens_for_deposit(200, 100);
@@ -157,9 +157,9 @@ mod test_lido {
     }
 
     #[test]
-    fn test_pool_tokens_when_stsol_total_shares_is_increased() {
+    fn test_pool_tokens_when_st_sol_total_shares_is_increased() {
         let mut lido = Lido::default();
-        lido.stsol_total_shares = 120;
+        lido.st_sol_total_shares = 120;
 
         let pool_tokens_for_deposit = lido.calc_pool_tokens_for_deposit(200, 40);
 
@@ -169,7 +169,7 @@ mod test_lido {
     #[test]
     fn test_pool_tokens_when_stake_lamports_is_zero() {
         let mut lido = Lido::default();
-        lido.stsol_total_shares = 120;
+        lido.st_sol_total_shares = 120;
 
         let pool_tokens_for_deposit = lido.calc_pool_tokens_for_deposit(0, 40);
 
@@ -201,7 +201,7 @@ mod test_lido {
         let err = lido.check_lido_for_deposit(
             &other_owner.pubkey(),
             &lido.stake_pool_account,
-            &lido.stsol_mint_program,
+            &lido.st_sol_mint_program,
         );
 
         let expect: ProgramError = LidoError::InvalidOwner.into();
@@ -216,7 +216,7 @@ mod test_lido {
         let err = lido.check_lido_for_deposit(
             &lido.owner,
             &other_stakepool.pubkey(),
-            &lido.stsol_mint_program,
+            &lido.st_sol_mint_program,
         );
 
         let expect: ProgramError = LidoError::InvalidStakePool.into();
