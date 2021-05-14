@@ -20,7 +20,7 @@ mod multisig;
 mod stake_pool_helpers;
 type Error = Box<dyn std::error::Error>;
 
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug)]
 pub enum OutputMode {
     /// Output human-readable text to stdout.
     Text,
@@ -78,6 +78,7 @@ pub struct Config<'a> {
     staker: &'a Keypair,
     fee_payer: &'a Keypair,
     dry_run: bool,
+    output_mode: OutputMode,
 }
 
 /// Resolve ~/.config/solana/id.json.
@@ -124,6 +125,7 @@ fn main() {
         fee_payer: &keypair,
         // TODO: Do we want a dry-run option in the MVP at all?
         dry_run: false,
+        output_mode: opts.output_mode,
     };
 
     match opts.subcommand {
