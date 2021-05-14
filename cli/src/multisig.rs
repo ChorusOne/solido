@@ -1,11 +1,9 @@
 use std::fmt;
-use std::path::PathBuf;
 
 use anchor_client::solana_sdk::bpf_loader_upgradeable;
 use anchor_client::solana_sdk::commitment_config::CommitmentConfig;
 use anchor_client::solana_sdk::instruction::Instruction;
 use anchor_client::solana_sdk::pubkey::Pubkey;
-use anchor_client::solana_sdk::signature::read_keypair_file;
 use anchor_client::solana_sdk::signature::{Keypair, Signer};
 use anchor_client::solana_sdk::system_instruction;
 use anchor_client::solana_sdk::sysvar;
@@ -19,24 +17,13 @@ use multisig::accounts as multisig_accounts;
 use multisig::instruction as multisig_instruction;
 use serde::{Serialize, Serializer};
 
-/// Multisig -- interact with a deployed Multisig program.
+use crate::{print_output, OutputMode};
+
 #[derive(Clap, Debug)]
-struct Opts {
+pub struct MultisigOpts {
     /// Address of the Multisig program.
     #[clap(long)]
     multisig_program_id: Pubkey,
-
-    /// The keypair to sign and pay with. [default: ~/.config/solana/id.json]
-    #[clap(long)]
-    keypair_path: Option<PathBuf>,
-
-    /// Cluster to connect to (mainnet, testnet, devnet, localnet, or url).
-    #[clap(long, default_value = "localnet")]
-    cluster: Cluster,
-
-    /// Output json instead of text to stdout.
-    #[clap(long)]
-    output_json: bool,
 
     #[clap(subcommand)]
     subcommand: SubCommand,
@@ -176,59 +163,35 @@ struct ExecuteTransactionOpts {
     transaction_address: Pubkey,
 }
 
-/// Resolve ~/.config/solana/id.json.
-fn get_default_keypair_path() -> PathBuf {
-    let home = std::env::var("HOME").expect("Expected $HOME to be set.");
-    let mut path = PathBuf::from(home);
-    path.push(".config/solana/id.json");
-    path
-}
+pub fn main(
+    payer: Keypair,
+    cluster: Cluster,
+    output_mode: OutputMode,
+    multisig_opts: MultisigOpts,
+) {
+    let client = Client::new_with_options(cluster, payer, CommitmentConfig::confirmed());
+    let program = client.program(multisig_opts.multisig_program_id);
 
-fn print_output<Output: fmt::Display + Serialize>(as_json: bool, output: &Output) {
-    if as_json {
-        let json_string =
-            serde_json::to_string_pretty(output).expect("Failed to serialize output as json.");
-        println!("{}", json_string);
-    } else {
-        println!("{}", output);
-    }
-}
-
-fn main() {
-    let opts = Opts::parse();
-
-    let payer_keypair_path = match opts.keypair_path {
-        Some(path) => path,
-        None => get_default_keypair_path(),
-    };
-    let payer = read_keypair_file(&payer_keypair_path).expect(&format!(
-        "Failed to read key pair from {:?}.",
-        payer_keypair_path
-    ));
-
-    let client = Client::new_with_options(opts.cluster, payer, CommitmentConfig::confirmed());
-    let program = client.program(opts.multisig_program_id);
-
-    match opts.subcommand {
+    match multisig_opts.subcommand {
         SubCommand::CreateMultisig(cmd_opts) => {
             let output = create_multisig(program, cmd_opts);
-            print_output(opts.output_json, &output);
+            print_output(output_mode, &output);
         }
         SubCommand::ShowMultisig(cmd_opts) => {
             let output = show_multisig(program, cmd_opts);
-            print_output(opts.output_json, &output);
+            print_output(output_mode, &output);
         }
         SubCommand::ShowTransaction(cmd_opts) => {
             let output = show_transaction(program, cmd_opts);
-            print_output(opts.output_json, &output);
+            print_output(output_mode, &output);
         }
         SubCommand::ProposeUpgrade(cmd_opts) => {
             let output = propose_upgrade(program, cmd_opts);
-            print_output(opts.output_json, &output);
+            print_output(output_mode, &output);
         }
         SubCommand::ProposeChangeMultisig(cmd_opts) => {
             let output = propose_change_multisig(program, cmd_opts);
-            print_output(opts.output_json, &output);
+            print_output(output_mode, &output);
         }
         SubCommand::Approve(cmd_opts) => approve(program, cmd_opts),
         SubCommand::ExecuteTransaction(cmd_opts) => execute_transaction(program, cmd_opts),

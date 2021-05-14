@@ -1,5 +1,6 @@
 use std::fmt;
 use std::path::PathBuf;
+use std::str::FromStr;
 
 use anchor_client::Cluster;
 use clap::Clap;
@@ -9,13 +10,36 @@ use solana_sdk::commitment_config::CommitmentConfig;
 use solana_sdk::signature::{read_keypair_file, Keypair};
 
 use crate::helpers::{command_create_solido, CreateSolidoOpts};
+use crate::multisig::MultisigOpts;
 
 extern crate lazy_static;
 extern crate spl_stake_pool;
 
 mod helpers;
+mod multisig;
 mod stake_pool_helpers;
 type Error = Box<dyn std::error::Error>;
+
+#[derive(Debug)]
+pub enum OutputMode {
+    /// Output human-readable text to stdout.
+    Text,
+
+    /// Output machine-readable json to stdout.
+    Json,
+}
+
+impl FromStr for OutputMode {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<OutputMode, &'static str> {
+        match s {
+            "text" => Ok(OutputMode::Text),
+            "json" => Ok(OutputMode::Json),
+            _ => Err("Invalid output mode, expected 'text' or 'json'."),
+        }
+    }
+}
 
 /// Solido -- Interact with Lido for Solana.
 #[derive(Clap, Debug)]
@@ -30,9 +54,9 @@ struct Opts {
     // it has a convenient `FromStr` implementation.
     cluster: Cluster,
 
-    /// Output json instead of text to stdout.
-    #[clap(long)]
-    output_json: bool,
+    /// Whether to output text or json.
+    #[clap(long = "output", default_value = "text", possible_values = &["text", "json"])]
+    output_mode: OutputMode,
 
     #[clap(subcommand)]
     subcommand: SubCommand,
@@ -42,6 +66,9 @@ struct Opts {
 enum SubCommand {
     /// Create a new Lido for Solana instance.
     CreateSolido(CreateSolidoOpts),
+
+    /// Interact with a deployed Multisig program for governance tasks.
+    Multisig(MultisigOpts),
 }
 
 /// Determines which network to connect to, and who pays the fees.
@@ -61,13 +88,14 @@ fn get_default_keypair_path() -> PathBuf {
     path
 }
 
-fn print_output<Output: fmt::Display + Serialize>(as_json: bool, output: &Output) {
-    if as_json {
-        let json_string =
-            serde_json::to_string_pretty(output).expect("Failed to serialize output as json.");
-        println!("{}", json_string);
-    } else {
-        println!("{}", output);
+fn print_output<Output: fmt::Display + Serialize>(mode: OutputMode, output: &Output) {
+    match mode {
+        OutputMode::Text => println!("{}", output),
+        OutputMode::Json => {
+            let json_string =
+                serde_json::to_string_pretty(output).expect("Failed to serialize output as json.");
+            println!("{}", json_string);
+        }
     }
 }
 
@@ -102,7 +130,11 @@ fn main() {
         SubCommand::CreateSolido(cmd_opts) => {
             let output = command_create_solido(&config, cmd_opts)
                 .expect("Failed to create Solido instance.");
-            print_output(opts.output_json, &output);
+            print_output(opts.output_mode, &output);
+        }
+        SubCommand::Multisig(cmd_opts) => {
+            let payer = keypair;
+            multisig::main(payer, opts.cluster, opts.output_mode, cmd_opts);
         }
     }
 }
