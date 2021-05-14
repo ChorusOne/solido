@@ -1,7 +1,6 @@
 [workspace]
 members = [
     "cli",
-    "multisig-cli",
     "program",
 ]
 
