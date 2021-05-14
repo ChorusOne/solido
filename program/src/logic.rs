@@ -99,7 +99,7 @@ mod test {
 
         let val = rent_exemption(&rent, &account, account_type);
 
-        assert_eq!(val.err().unwrap(), ProgramError::AccountNotRentExempt);
+        assert_eq!(val.err(), Some(ProgramError::AccountNotRentExempt));
     }
 
     #[test]

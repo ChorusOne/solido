@@ -24,7 +24,7 @@ async fn test_success_initialize() {
 
 #[tokio::test]
 #[should_panic]
-async fn test_uninitialize() {
+async fn test_uninitialize_lido_throws_when_getting_account() {
     let (mut banks_client, payer, recent_blockhash) = program_test().start().await;
     let mut lido_accounts = LidoAccounts::new();
 

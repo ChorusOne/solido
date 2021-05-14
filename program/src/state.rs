@@ -205,7 +205,7 @@ mod test_lido {
         );
 
         let expect: ProgramError = LidoError::InvalidOwner.into();
-        assert_eq!(expect, err.err().unwrap());
+        assert_eq!(err.err(), Some(expect));
     }
 
     #[test]
