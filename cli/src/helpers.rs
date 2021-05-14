@@ -133,7 +133,7 @@ pub(crate) fn command_create_solido(
     let default_decimals = spl_token::native_mint::DECIMALS;
     let mut lido_transaction = Transaction::new_with_payer(
         &[
-            // Account for lido lsol mint
+            // Account for lido stsol mint
             system_instruction::create_account(
                 &config.fee_payer.pubkey(),
                 &mint_keypair.pubkey(),

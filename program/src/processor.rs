@@ -107,7 +107,7 @@ impl Processor {
 
         lido.stake_pool_account = *accounts.stake_pool.key;
         lido.owner = *accounts.owner.key;
-        lido.lsol_mint_program = *accounts.mint_program.key;
+        lido.stsol_mint_program = *accounts.mint_program.key;
         lido.sol_reserve_authority_bump_seed = reserve_bump_seed;
         lido.deposit_authority_bump_seed = deposit_bump_seed;
         lido.token_reserve_authority_bump_seed = token_reserve_bump_seed;
@@ -185,11 +185,11 @@ impl Processor {
             ],
         )?;
 
-        let lsol_amount = lido
+        let stsol_amount = lido
             .calc_pool_tokens_for_deposit(amount, total_lamports)
             .ok_or(LidoError::CalculationFailure)?;
 
-        let total_lsol = lido.lsol_total_shares + lsol_amount;
+        let total_stsol = lido.stsol_total_shares + stsol_amount;
 
         let ix = spl_token::instruction::mint_to(
             accounts.spl_token.key,
@@ -197,7 +197,7 @@ impl Processor {
             accounts.recipient.key,
             accounts.reserve_authority.key,
             &[],
-            lsol_amount,
+            stsol_amount,
         )?;
 
         let me_bytes = accounts.lido.key.to_bytes();
@@ -218,7 +218,7 @@ impl Processor {
             signers,
         )?;
 
-        lido.lsol_total_shares = total_lsol;
+        lido.stsol_total_shares = total_stsol;
 
         lido.serialize(&mut *accounts.lido.data.borrow_mut())
             .map_err(|e| e.into())
