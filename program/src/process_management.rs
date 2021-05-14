@@ -16,6 +16,7 @@ use spl_stake_pool::{
 
 use crate::{
     error::LidoError,
+    instruction::{AddValidatorInfo, ChangeFeeDistributionInfo, DistributeFeesInfo},
     logic::{token_mint_to, transfer_to},
     state::{FeeDistribution, Lido, ValidatorCredit, ValidatorCreditAccounts},
     FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY, STAKE_POOL_MANAGER,
@@ -23,124 +24,91 @@ use crate::{
 
 pub fn process_change_fee_distribution(
     program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    accounts_raw: &[AccountInfo],
 ) -> ProgramResult {
-    let account_info_iter = &mut accounts.iter();
-
-    let lido_info = next_account_info(account_info_iter)?;
-    let manager = next_account_info(account_info_iter)?;
-    let current_fee_distribution_info = next_account_info(account_info_iter)?;
-    let new_fee_distribution_info = next_account_info(account_info_iter)?;
-    let validator_credit_accounts_info = next_account_info(account_info_iter)?;
-
-    if !manager.is_signer {
-        msg!("Message needs to be signed by Lido's manager");
-        return Err(LidoError::InvalidOwner.into());
-    }
+    let accounts = ChangeFeeDistributionInfo::try_from_slice(accounts_raw)?;
     // TODO(fynn): Remove new_fee_distribution in favour of keeping the state in the Lido's account
-    if lido_info.owner != program_id || new_fee_distribution_info.owner != program_id {
+    if accounts.lido.owner != program_id || accounts.new_fee_distribution.owner != program_id {
         msg!("State has invalid owner");
         return Err(LidoError::InvalidOwner.into());
     }
 
-    let mut lido = try_from_slice_unchecked::<Lido>(&lido_info.data.borrow())?;
-    if &lido.fee_distribution != current_fee_distribution_info.key {
+    let mut lido = try_from_slice_unchecked::<Lido>(&accounts.lido.data.borrow())?;
+    if &lido.fee_distribution != accounts.current_fee_distribution.key {
         msg!("Invalid current fee distribution account");
         return Err(LidoError::InvalidFeeDistributionAccount.into());
     }
 
-    let current_fee_distribution =
-        try_from_slice_unchecked::<FeeDistribution>(&current_fee_distribution_info.data.borrow())?;
+    let current_fee_distribution = try_from_slice_unchecked::<FeeDistribution>(
+        &accounts.current_fee_distribution.data.borrow(),
+    )?;
 
-    if &lido.validator_credit_accounts != validator_credit_accounts_info.key {
+    if &lido.validator_credit_accounts != accounts.validator_credit_accounts.key {
         msg!("Invalid validators credit accounts");
         return Err(LidoError::InvalidValidatorCreditAccount.into());
     }
 
     let new_fee_distribution =
-        try_from_slice_unchecked::<FeeDistribution>(&new_fee_distribution_info.data.borrow())?;
+        try_from_slice_unchecked::<FeeDistribution>(&accounts.new_fee_distribution.data.borrow())?;
     new_fee_distribution.check_sum()?;
 
-    lido.fee_distribution = *new_fee_distribution_info.key;
+    lido.fee_distribution = *accounts.new_fee_distribution.key;
 
-    lido.serialize(&mut *lido_info.data.borrow_mut())
+    lido.serialize(&mut *accounts.lido.data.borrow_mut())
         .map_err(|e| e.into())
 }
 
-// TODO(fynn): Change in favour of integrating the state to Lido's
-pub fn process_add_validator(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
-    let account_info_iter = &mut accounts.iter();
+pub fn process_add_validator(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> ProgramResult {
+    // TODO(fynn): Change in favour of integrating the state to Lido's
+    let accounts = AddValidatorInfo::try_from_slice(accounts_raw)?;
 
-    // Stake pool info
-    let stake_pool_program_id_info = next_account_info(account_info_iter)?;
-    let stake_pool_info = next_account_info(account_info_iter)?;
-    let stake_pool_withdraw_authority_info = next_account_info(account_info_iter)?;
-    let stake_pool_validator_list_info = next_account_info(account_info_iter)?;
-
-    let stake_account_info = next_account_info(account_info_iter)?;
-    let validator_lsol_account_info = next_account_info(account_info_iter)?;
-
-    let lido_info = next_account_info(account_info_iter)?;
-    let manager_info = next_account_info(account_info_iter)?;
-    let fee_distribution_info = next_account_info(account_info_iter)?;
-    let validator_credit_accounts_info = next_account_info(account_info_iter)?;
-
-    // Sys
-    let clock_info = next_account_info(account_info_iter)?;
-    let stake_history = next_account_info(account_info_iter)?;
-
-    let mut lido = try_from_slice_unchecked::<Lido>(&lido_info.data.borrow())?;
-    if &lido.stake_pool_account != stake_pool_info.key {
+    let mut lido = try_from_slice_unchecked::<Lido>(&accounts.lido.data.borrow())?;
+    if &lido.stake_pool_account != accounts.stake_pool.key {
         msg!("Invalid stake pool");
         return Err(LidoError::InvalidStakePool.into());
     }
 
-    if !manager_info.is_signer {
-        msg!("Message needs to be signed by Lido's manager");
-        return Err(LidoError::InvalidOwner.into());
-    }
-    if &lido.fee_distribution != fee_distribution_info.key {
-        msg!("Invalid current fee distribution account");
-        return Err(LidoError::InvalidFeeDistributionAccount.into());
-    }
-    let validator_st_sol_account =
-        spl_token::state::Account::unpack_from_slice(&validator_lsol_account_info.data.borrow())?;
-    if lido.lsol_mint_program != validator_st_sol_account.mint {
+    let validator_token_account = spl_token::state::Account::unpack_from_slice(
+        &accounts.validator_token_account.data.borrow(),
+    )?;
+    if lido.st_sol_mint_program != validator_token_account.mint {
         msg!(
             "Validator account minter should be the same as Lido minter {}",
-            lido.lsol_mint_program
+            lido.st_sol_mint_program
         );
         return Err(LidoError::InvalidTokenMinter.into());
     }
 
+    // TODO: Check stake pool manager authority
+
     invoke_signed(
         &add_validator_to_pool(
-            stake_pool_program_id_info.key,
-            stake_pool_info.key,
-            manager_info.key,
-            stake_pool_withdraw_authority_info.key,
-            stake_pool_validator_list_info.key,
-            stake_account_info.key,
+            accounts.stake_pool_program_id.key,
+            accounts.stake_pool.key,
+            accounts.stake_pool_manager_authority.key,
+            accounts.stake_pool_withdraw_authority.key,
+            accounts.stake_pool_validator_list.key,
+            accounts.stake_account.key,
         )?,
         &[
-            stake_pool_info.clone(),
-            manager_info.clone(),
-            stake_pool_withdraw_authority_info.clone(),
-            stake_pool_validator_list_info.clone(),
-            stake_account_info.clone(),
-            clock_info.clone(),
-            stake_history.clone(),
-            stake_pool_program_id_info.clone(),
+            accounts.stake_pool_program_id.clone(),
+            accounts.stake_pool.clone(),
+            accounts.stake_pool_manager_authority.clone(),
+            accounts.stake_pool_withdraw_authority.clone(),
+            accounts.stake_pool_validator_list.clone(),
+            accounts.stake_account.clone(),
+            accounts.sysvar_clock.clone(),
+            accounts.sysvar_stake_history.clone(),
         ],
         &[&[
-            &lido_info.key.to_bytes()[..32],
+            &accounts.lido.key.to_bytes()[..32],
             STAKE_POOL_MANAGER,
             &[lido.sol_reserve_authority_bump_seed],
         ]],
     )?;
 
     let mut validator_credit_accounts = try_from_slice_unchecked::<ValidatorCreditAccounts>(
-        &validator_credit_accounts_info.data.borrow(),
+        &accounts.validator_credit_accounts.data.borrow(),
     )?;
     // If the condition below is false, the stake pool operation should have failed, but
     // we double check to be sure
@@ -154,12 +122,12 @@ pub fn process_add_validator(program_id: &Pubkey, accounts: &[AccountInfo]) -> P
     validator_credit_accounts
         .validator_accounts
         .push(ValidatorCredit {
-            address: *validator_lsol_account_info.key,
+            address: *accounts.validator_token_account.key,
             amount: 0,
         });
 
     validator_credit_accounts
-        .serialize(&mut *validator_credit_accounts_info.data.borrow_mut())
+        .serialize(&mut *accounts.validator_credit_accounts.data.borrow_mut())
         .map_err(|err| err.into())
 }
 
@@ -173,80 +141,46 @@ pub fn process_claim_validators_fee(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
 ) -> ProgramResult {
-    let account_info_iter = &mut accounts.iter();
-
-    // Stake pool info
-    let stake_pool_program_id_info = next_account_info(account_info_iter)?;
-    let stake_pool_info = next_account_info(account_info_iter)?;
-    let stake_pool_withdraw_authority_info = next_account_info(account_info_iter)?;
-    let stake_pool_validator_list_info = next_account_info(account_info_iter)?;
-
-    let stake_account_info = next_account_info(account_info_iter)?;
-    let validator_lsol_account_info = next_account_info(account_info_iter)?;
-
-    let lido_info = next_account_info(account_info_iter)?;
-    let stake_pool_token_holder_info = next_account_info(account_info_iter)?;
-
-    let fee_distribution_info = next_account_info(account_info_iter)?;
-    let validator_credit_accounts_info = next_account_info(account_info_iter)?;
     unimplemented!()
 }
 
-pub fn process_distribute_fees(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
-    let account_info_iter = &mut accounts.iter();
+pub fn process_distribute_fees(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> ProgramResult {
+    let accounts = DistributeFeesInfo::try_from_slice(accounts_raw)?;
 
-    let lido_info = next_account_info(account_info_iter)?;
-    let validator_credit_accounts_info = next_account_info(account_info_iter)?;
-    let fee_distribution_info = next_account_info(account_info_iter)?;
-    let token_holder_stake_pool_info = next_account_info(account_info_iter)?;
-    let fee_manager_info = next_account_info(account_info_iter)?;
-    let token_program_info = next_account_info(account_info_iter)?;
-    let mint_program = next_account_info(account_info_iter)?;
-    let reserve_authority_info = next_account_info(account_info_iter)?;
+    let lido = try_from_slice_unchecked::<Lido>(&accounts.lido.data.borrow())?;
 
-    // Recipients
-    let insurance_info = next_account_info(account_info_iter)?;
-    let treasury_info = next_account_info(account_info_iter)?;
-    let manager_info = next_account_info(account_info_iter)?;
-
-    let stake_pool_info = next_account_info(account_info_iter)?;
-    let stake_pool_token_program_info = next_account_info(account_info_iter)?;
-    let stake_pool_validator_list_info = next_account_info(account_info_iter)?;
-    let stake_pool_fee_account_info = next_account_info(account_info_iter)?;
-    let stake_pool_manager_fee_account_info = next_account_info(account_info_iter)?;
-
-    let lido = try_from_slice_unchecked::<Lido>(&lido_info.data.borrow())?;
-
-    if &lido.stake_pool_account != stake_pool_info.key {
+    if &lido.stake_pool_account != accounts.stake_pool.key {
         msg!("Invalid stake pool");
         return Err(LidoError::InvalidStakePool.into());
     }
-    if &lido.validator_credit_accounts != validator_credit_accounts_info.key {
+    if &lido.validator_credit_accounts != accounts.validator_credit_accounts.key {
         msg!("Wrong validator credit accounts");
         return Err(LidoError::InvalidValidatorCreditAccount.into());
     }
-    if &lido.fee_distribution != fee_distribution_info.key {
+    if &lido.fee_distribution != accounts.fee_distribution.key {
         msg!("Wrong fee distribution");
         return Err(LidoError::InvalidFeeDistributionAccount.into());
     }
 
-    let stake_pool = StakePool::try_from_slice(&stake_pool_info.data.borrow())?;
-    if &stake_pool.validator_list != stake_pool_validator_list_info.key {
+    let stake_pool = StakePool::try_from_slice(&accounts.stake_pool.data.borrow())?;
+    if &stake_pool.validator_list != accounts.stake_pool_validator_list.key {
         msg!("Invalid validators list from StakePool");
         return Err(StakePoolError::InvalidValidatorStakeList.into());
     }
-    if &stake_pool.manager_fee_account != stake_pool_fee_account_info.key {
+    if &stake_pool.manager_fee_account != accounts.stake_pool_fee_account.key {
         msg!("Invalid fee account from StakePool");
         return Err(StakePoolError::InvalidFeeAccount.into());
     }
-    let stake_pool_fee_account =
-        spl_token::state::Account::unpack_from_slice(&stake_pool_fee_account_info.data.borrow())?;
+    let stake_pool_fee_account = spl_token::state::Account::unpack_from_slice(
+        &accounts.stake_pool_fee_account.data.borrow(),
+    )?;
 
-    let validator_list =
-        try_from_slice_unchecked::<ValidatorList>(&stake_pool_validator_list_info.data.borrow())?;
+    let validator_list = try_from_slice_unchecked::<ValidatorList>(
+        &accounts.stake_pool_validator_list.data.borrow(),
+    )?;
 
     let fee_distribution =
-        try_from_slice_unchecked::<FeeDistribution>(&fee_distribution_info.data.borrow())?;
+        try_from_slice_unchecked::<FeeDistribution>(&accounts.fee_distribution.data.borrow())?;
 
     let token_shares = fee_distribution.calculate_token_amounts(
         stake_pool_fee_account.amount,
@@ -254,16 +188,16 @@ pub fn process_distribute_fees(program_id: &Pubkey, accounts: &[AccountInfo]) ->
     )?;
 
     let mut validator_credit_accounts = try_from_slice_unchecked::<ValidatorCreditAccounts>(
-        &validator_credit_accounts_info.data.borrow(),
+        &accounts.validator_credit_accounts.data.borrow(),
     )?;
 
     // Send all tokens to Lido token holder
     transfer_to(
-        lido_info.key,
-        stake_pool_token_program_info.clone(),
-        stake_pool_manager_fee_account_info.clone(),
-        token_holder_stake_pool_info.clone(),
-        fee_manager_info.clone(),
+        accounts.lido.key,
+        accounts.spl_token.clone(),
+        accounts.stake_pool_manager_fee_account.clone(),
+        accounts.token_holder_stake_pool.clone(),
+        accounts.fee_manager_account.clone(),
         FEE_MANAGER_AUTHORITY,
         lido.fee_manager_bump_seed,
         stake_pool_fee_account.amount,
@@ -271,33 +205,33 @@ pub fn process_distribute_fees(program_id: &Pubkey, accounts: &[AccountInfo]) ->
 
     // Mint tokens for insurance
     token_mint_to(
-        lido_info.key,
-        token_program_info.clone(),
-        mint_program.clone(),
-        insurance_info.clone(),
-        reserve_authority_info.clone(),
+        accounts.lido.key,
+        accounts.spl_token.clone(),
+        accounts.mint_program.clone(),
+        accounts.insurance_account.clone(),
+        accounts.reserve_authority.clone(),
         RESERVE_AUTHORITY,
         lido.sol_reserve_authority_bump_seed,
         token_shares.insurance_amount,
     )?;
     // Mint tokens for treasury
     token_mint_to(
-        lido_info.key,
-        token_program_info.clone(),
-        mint_program.clone(),
-        treasury_info.clone(),
-        reserve_authority_info.clone(),
+        accounts.lido.key,
+        accounts.spl_token.clone(),
+        accounts.mint_program.clone(),
+        accounts.treasury_account.clone(),
+        accounts.reserve_authority.clone(),
         RESERVE_AUTHORITY,
         lido.sol_reserve_authority_bump_seed,
         token_shares.treasury_amount,
     )?;
     // Mint tokens for manager
     token_mint_to(
-        lido_info.key,
-        token_program_info.clone(),
-        mint_program.clone(),
-        manager_info.clone(),
-        reserve_authority_info.clone(),
+        accounts.lido.key,
+        accounts.spl_token.clone(),
+        accounts.mint_program.clone(),
+        accounts.manager.clone(),
+        accounts.reserve_authority.clone(),
         RESERVE_AUTHORITY,
         lido.sol_reserve_authority_bump_seed,
         token_shares.manager_amount,
@@ -309,7 +243,7 @@ pub fn process_distribute_fees(program_id: &Pubkey, accounts: &[AccountInfo]) ->
             token_shares.each_validator_amount;
     }
     validator_credit_accounts
-        .serialize(&mut *validator_credit_accounts_info.data.borrow_mut())
+        .serialize(&mut *accounts.validator_credit_accounts.data.borrow_mut())
         .map_err(|err| err.into())
 }
 
