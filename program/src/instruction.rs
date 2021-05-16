@@ -11,12 +11,15 @@ use solana_program::{
 };
 use spl_stake_pool::{instruction::StakePoolInstruction, stake_program, state::Fee};
 
-use crate::error::LidoError;
+use crate::{error::LidoError, state::FeeDistribution};
 
 #[repr(C)]
 #[derive(Clone, Debug, PartialEq, BorshSerialize, BorshDeserialize, BorshSchema)]
 pub enum LidoInstruction {
     Initialize {
+        #[allow(dead_code)] // but it's not
+        fee_structure: FeeDistribution,
+        #[allow(dead_code)] // but it's not
         max_validators: u32,
     },
     /// Deposit with amount
@@ -170,8 +173,8 @@ macro_rules! accounts_struct {
                 // if not.
                 $(
                     let $var_account = accounts_iter.next().ok_or(ProgramError::NotEnoughAccountKeys)?;
-                    if ($var_account.is_signer == true && $var_account.is_signer != $is_signer)
-                        || $var_account.is_writable != $is_writable {
+                    if (($is_signer && !$var_account.is_signer)
+                        || ($is_writable && !$var_account.is_writable)) {
                         return Err(LidoError::InvalidAccountInfo.into());
                     }
                 )*
@@ -209,7 +212,7 @@ macro_rules! accounts_struct {
 accounts_struct! {
     InitializeAccountsMeta, InitializeAccountsInfo {
         pub lido {
-            is_signer: true,
+            is_signer: false,
             is_writable: true,
         },
         pub stake_pool {
@@ -234,7 +237,7 @@ accounts_struct! {
         },
         pub fee_distribution {
             is_signer: false,
-            is_writable: false,
+            is_writable: true,
         },
         pub validator_credit_accounts {
             is_signer: false,
@@ -247,10 +250,14 @@ accounts_struct! {
 
 pub fn initialize(
     program_id: &Pubkey,
+    fee_structure: FeeDistribution,
     max_validators: u32,
     accounts: &InitializeAccountsMeta,
 ) -> Result<Instruction, ProgramError> {
-    let init_data = LidoInstruction::Initialize { max_validators };
+    let init_data = LidoInstruction::Initialize {
+        fee_structure,
+        max_validators,
+    };
     let data = init_data.try_to_vec()?;
     Ok(Instruction {
         program_id: *program_id,
@@ -491,7 +498,7 @@ accounts_struct! {
         },
         pub staker {
             is_signer: false,
-            is_writable: true,
+            is_writable: false,
         },
         pub validator_list {
             is_signer: false,
