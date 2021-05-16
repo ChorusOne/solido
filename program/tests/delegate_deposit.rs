@@ -4,7 +4,7 @@ mod helpers;
 
 use borsh::BorshDeserialize;
 use helpers::{
-    program_test,
+    program_test, simple_add_validator_to_pool,
     stakepool_account::{get_account, get_token_balance, ValidatorStakeAccount},
     LidoAccounts,
 };
@@ -16,8 +16,6 @@ use spl_stake_pool::{
     minimum_stake_lamports, stake_program,
     state::{StakePool, ValidatorList},
 };
-
-use helpers::simple_add_validator_to_pool;
 
 async fn setup() -> (
     BanksClient,
