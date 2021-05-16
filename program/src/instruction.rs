@@ -38,6 +38,7 @@ pub enum LidoInstruction {
         amount: u64,
     },
     ChangeFeeDistribution,
+    CreateValidatorStakeAccount,
     AddValidator,
     RemoveValidator,
 }
@@ -596,7 +597,7 @@ accounts_struct! {
     AddValidatorMeta, AddValidatorInfo {
         pub lido {
             is_signer: false,
-            is_writable: true,
+            is_writable: false,
         },
         pub manager {
             is_signer: true,
@@ -616,7 +617,7 @@ accounts_struct! {
         },
         pub stake_pool {
             is_signer: false,
-            is_writable: false,
+            is_writable: true,
         },
         pub stake_pool_withdraw_authority {
             is_signer: false,
@@ -628,7 +629,7 @@ accounts_struct! {
         },
         pub stake_account {
             is_signer: false,
-            is_writable: false,
+            is_writable: true,
         },
         pub validator_token_account {
             is_signer: false,
@@ -636,6 +637,7 @@ accounts_struct! {
         },
         const sysvar_clock = sysvar::clock::id(),
         const sysvar_stake_history = sysvar::stake_history::id(),
+        const sysvar_stake_program = stake_program::id(),
     }
 }
 
@@ -646,12 +648,6 @@ pub fn add_validator(program_id: &Pubkey, accounts: &AddValidatorMeta) -> Instru
         data: LidoInstruction::AddValidator.try_to_vec().unwrap(),
     }
 }
-
-//     let stake_pool_info = next_account_info(account_info_iter)?;
-//     let stake_pool_token_program_info = next_account_info(account_info_iter)?;
-//     let stake_pool_validator_list_info = next_account_info(account_info_iter)?;
-//     let stake_pool_fee_account_info = next_account_info(account_info_iter)?;
-//     let stake_pool_manager_fee_account_info = next_account_info(account_info_iter)?;
 
 accounts_struct! {
     DistributeFeesMeta, DistributeFeesInfo {
@@ -721,5 +717,61 @@ pub fn distribute_fees(program_id: &Pubkey, accounts: &DistributeFeesMeta) -> In
         program_id: *program_id,
         accounts: accounts.to_vec(),
         data: LidoInstruction::AddValidator.try_to_vec().unwrap(),
+    }
+}
+
+accounts_struct! {
+    CreateValidatorStakeAccountMeta, CreateValidatorStakeAccountInfo {
+        pub lido {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub manager {
+            is_signer: true,
+            is_writable: false,
+        },
+        pub stake_pool_program {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub stake_pool {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub staker {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub funder {
+            is_signer: true,
+            is_writable: true,
+        },
+        pub stake_account {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub validator {
+            is_signer: false,
+            is_writable: false,
+        },
+        const sysvar_rent = sysvar::rent::id(),
+        const sysvar_clock = sysvar::clock::id(),
+        const sysvar_stake_history = stake_history::id(),
+        const stake_program_config = stake_program::config_id(),
+        const system_program = system_program::id(),
+        const stake_program = stake_program::id(),
+    }
+}
+
+pub fn create_validator_stake_account(
+    program_id: &Pubkey,
+    accounts: &CreateValidatorStakeAccountMeta,
+) -> Instruction {
+    Instruction {
+        program_id: *program_id,
+        accounts: accounts.to_vec(),
+        data: LidoInstruction::CreateValidatorStakeAccount
+            .try_to_vec()
+            .unwrap(),
     }
 }
