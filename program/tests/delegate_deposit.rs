@@ -17,6 +17,8 @@ use spl_stake_pool::{
     state::{StakePool, ValidatorList},
 };
 
+use helpers::simple_add_validator_to_pool;
+
 async fn setup() -> (
     BanksClient,
     Keypair,
@@ -31,15 +33,17 @@ async fn setup() -> (
         .await
         .unwrap();
 
-    // let validator = simple_add_validator_to_pool(
-    //     &mut banks_client,
-    //     &payer,
-    //     &recent_blockhash,
-    //     &lido_accounts.stake_pool_accounts,
-    // )
-    // .await;
+    let validator =
+        simple_add_validator_to_pool(&mut banks_client, &payer, &recent_blockhash, &lido_accounts)
+            .await;
 
-    (banks_client, payer, recent_blockhash, lido_accounts, vec![])
+    (
+        banks_client,
+        payer,
+        recent_blockhash,
+        lido_accounts,
+        vec![validator],
+    )
 }
 pub const TEST_DEPOSIT_AMOUNT: u64 = 100_000_000_000;
 pub const TEST_DELEGATE_DEPOSIT_AMOUNT: u64 = 10_000_000_000;

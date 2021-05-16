@@ -2,6 +2,8 @@
 
 use solana_program::sysvar;
 
+use super::{create_token_account, LidoAccounts};
+
 use {
     solana_program::{
         borsh::get_packed_len, hash::Hash, program_pack::Pack, pubkey::Pubkey, system_instruction,
@@ -89,41 +91,6 @@ pub async fn transfer(
         *recent_blockhash,
     );
     banks_client.process_transaction(transaction).await.unwrap();
-}
-
-pub async fn create_token_account(
-    banks_client: &mut BanksClient,
-    payer: &Keypair,
-    recent_blockhash: &Hash,
-    account: &Keypair,
-    pool_mint: &Pubkey,
-    manager: &Pubkey,
-) -> Result<(), TransportError> {
-    let rent = banks_client.get_rent().await.unwrap();
-    let account_rent = rent.minimum_balance(spl_token::state::Account::LEN);
-
-    let mut transaction = Transaction::new_with_payer(
-        &[
-            system_instruction::create_account(
-                &payer.pubkey(),
-                &account.pubkey(),
-                account_rent,
-                spl_token::state::Account::LEN as u64,
-                &spl_token::id(),
-            ),
-            spl_token::instruction::initialize_account(
-                &spl_token::id(),
-                &account.pubkey(),
-                pool_mint,
-                manager,
-            )
-            .unwrap(),
-        ],
-        Some(&payer.pubkey()),
-    );
-    transaction.sign(&[payer, account], *recent_blockhash);
-    banks_client.process_transaction(transaction).await?;
-    Ok(())
 }
 
 pub async fn mint_tokens(
@@ -354,32 +321,6 @@ pub async fn create_blank_stake_account(
     lamports
 }
 
-pub async fn create_validator_stake_account(
-    banks_client: &mut BanksClient,
-    payer: &Keypair,
-    recent_blockhash: &Hash,
-    stake_pool: &Pubkey,
-    staker: &Keypair,
-    stake_account: &Pubkey,
-    validator: &Pubkey,
-) {
-    let transaction = Transaction::new_signed_with_payer(
-        &[spl_stake_pool::instruction::create_validator_stake_account(
-            &spl_stake_pool::id(),
-            &stake_pool,
-            &staker.pubkey(),
-            &payer.pubkey(),
-            &stake_account,
-            &validator,
-        )
-        .unwrap()],
-        Some(&payer.pubkey()),
-        &[payer, staker],
-        *recent_blockhash,
-    );
-    banks_client.process_transaction(transaction).await.unwrap();
-}
-
 pub async fn delegate_stake_account(
     banks_client: &mut BanksClient,
     payer: &Keypair,
@@ -428,12 +369,14 @@ pub struct ValidatorStakeAccount {
     pub vote: Keypair,
     pub validator: Keypair,
     pub stake_pool: Pubkey,
+    pub validator_token_account: Keypair,
 }
 
 impl ValidatorStakeAccount {
     pub fn new(stake_pool: &Pubkey) -> Self {
         let validator = Keypair::new();
         let vote = Keypair::new();
+        let validator_token_account = Keypair::new();
         let (stake_account, _) =
             find_stake_program_address(&spl_stake_pool::id(), &vote.pubkey(), stake_pool);
         let (transient_stake_account, _) =
@@ -444,6 +387,7 @@ impl ValidatorStakeAccount {
             vote,
             validator,
             stake_pool: *stake_pool,
+            validator_token_account,
         }
     }
 
@@ -452,7 +396,8 @@ impl ValidatorStakeAccount {
         mut banks_client: &mut BanksClient,
         payer: &Keypair,
         recent_blockhash: &Hash,
-        staker: &Keypair,
+        lido_accounts: &LidoAccounts,
+        staker: &Pubkey,
     ) {
         create_vote(
             &mut banks_client,
@@ -463,16 +408,16 @@ impl ValidatorStakeAccount {
         )
         .await;
 
-        create_validator_stake_account(
-            &mut banks_client,
-            &payer,
-            &recent_blockhash,
-            &self.stake_pool,
-            staker,
-            &self.stake_account,
-            &self.vote.pubkey(),
-        )
-        .await;
+        lido_accounts
+            .create_validator_stake_account(
+                banks_client,
+                payer,
+                recent_blockhash,
+                staker,
+                &self.stake_account,
+                &self.vote.pubkey(),
+            )
+            .await;
     }
 }
 
@@ -768,30 +713,6 @@ impl StakePoolAccounts {
         banks_client.process_transaction(transaction).await.err()
     }
 
-    // pub async fn add_validator_to_pool(
-    //     &self,
-    //     banks_client: &mut BanksClient,
-    //     payer: &Keypair,
-    //     recent_blockhash: &Hash,
-    //     stake: &Pubkey,
-    // ) -> Option<TransportError> {
-    //     let transaction = Transaction::new_signed_with_payer(
-    //         &[spl_stake_pool::instruction::add_validator_to_pool(
-    //             &spl_stake_pool::id(),
-    //             &self.stake_pool.pubkey(),
-    //             &self.staker.pubkey(),
-    //             &self.withdraw_authority,
-    //             &self.validator_list.pubkey(),
-    //             stake,
-    //         )
-    //         .unwrap()],
-    //         Some(&payer.pubkey()),
-    //         &[payer, &self.staker],
-    //         *recent_blockhash,
-    //     );
-    //     banks_client.process_transaction(transaction).await.err()
-    // }
-
     // pub async fn remove_validator_from_pool(
     //     &self,
     //     banks_client: &mut BanksClient,
@@ -875,35 +796,6 @@ impl StakePoolAccounts {
     //         banks_client.process_transaction(transaction).await.err()
     //     }
 }
-
-// pub async fn simple_add_validator_to_pool(
-//     banks_client: &mut BanksClient,
-//     payer: &Keypair,
-//     recent_blockhash: &Hash,
-//     stake_pool_accounts: &StakePoolAccounts,
-// ) -> ValidatorStakeAccount {
-//     let validator_stake = ValidatorStakeAccount::new(&stake_pool_accounts.stake_pool.pubkey());
-//     validator_stake
-//         .create_and_delegate(
-//             banks_client,
-//             &payer,
-//             &recent_blockhash,
-//             &stake_pool_accounts.staker,
-//         )
-//         .await;
-
-//     let error = stake_pool_accounts
-//         .add_validator_to_pool(
-//             banks_client,
-//             &payer,
-//             &recent_blockhash,
-//             &validator_stake.stake_account,
-//         )
-//         .await;
-//     assert!(error.is_none());
-
-//     validator_stake
-// }
 
 #[derive(Debug)]
 pub struct DepositStakeAccount {
