@@ -5,9 +5,7 @@ mod helpers;
 use borsh::BorshDeserialize;
 use helpers::{
     program_test,
-    stakepool_account::{
-        get_account, get_token_balance, simple_add_validator_to_pool, ValidatorStakeAccount,
-    },
+    stakepool_account::{get_account, get_token_balance, ValidatorStakeAccount},
     LidoAccounts,
 };
 use solana_program::{borsh::try_from_slice_unchecked, hash::Hash};
@@ -33,21 +31,15 @@ async fn setup() -> (
         .await
         .unwrap();
 
-    let validator = simple_add_validator_to_pool(
-        &mut banks_client,
-        &payer,
-        &recent_blockhash,
-        &lido_accounts.stake_pool_accounts,
-    )
-    .await;
+    // let validator = simple_add_validator_to_pool(
+    //     &mut banks_client,
+    //     &payer,
+    //     &recent_blockhash,
+    //     &lido_accounts.stake_pool_accounts,
+    // )
+    // .await;
 
-    (
-        banks_client,
-        payer,
-        recent_blockhash,
-        lido_accounts,
-        vec![validator],
-    )
+    (banks_client, payer, recent_blockhash, lido_accounts, vec![])
 }
 pub const TEST_DEPOSIT_AMOUNT: u64 = 100_000_000_000;
 pub const TEST_DELEGATE_DEPOSIT_AMOUNT: u64 = 10_000_000_000;

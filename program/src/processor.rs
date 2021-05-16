@@ -18,8 +18,7 @@ use crate::{
         process_add_validator, process_change_fee_distribution, process_remove_validator,
     },
     state::{FeeDistribution, Lido, ValidatorCreditAccounts},
-    DEPOSIT_AUTHORITY, FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY, STAKE_POOL_MANAGER,
-    STAKE_POOL_TOKEN_RESERVE_AUTHORITY,
+    DEPOSIT_AUTHORITY, FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY, STAKE_POOL_AUTHORITY,
 };
 
 use {
@@ -52,11 +51,11 @@ fn get_stake_state(
 /// Program state handler.
 pub fn process_initialize(
     program_id: &Pubkey,
+    fee_structure: FeeDistribution,
     max_validators: u32,
     accounts_raw: &[AccountInfo],
 ) -> ProgramResult {
     let accounts = InitializeAccountsInfo::try_from_slice(accounts_raw)?;
-
     let rent = &Rent::from_account_info(accounts.sysvar_rent)?;
     rent_exemption(rent, accounts.stake_pool, AccountType::StakePool)?;
     rent_exemption(rent, accounts.lido, AccountType::Lido)?;
@@ -90,14 +89,8 @@ pub fn process_initialize(
         return Err(LidoError::InvalidTokenMinter.into());
     }
 
-    // Check fees structure
-    // if &stake_pool.staker != program_id {
-    //     msg!("Stake pool's staker should be the Lido program");
-    //     return Err(LidoError::InvalidOwner.into());
-    // }
-    let mut fee_distribution =
-        try_from_slice_unchecked::<FeeDistribution>(&accounts.fee_distribution.data.borrow())?;
-    fee_distribution.check_sum()?;
+    // Check if fee structure is valid
+    fee_structure.check_sum()?;
 
     let expected_max_validators =
         ValidatorCreditAccounts::maximum_accounts(accounts.validator_credit_accounts.data_len());
@@ -125,27 +118,19 @@ pub fn process_initialize(
         program_id,
     );
 
-    let (_, token_reserve_bump_seed) = Pubkey::find_program_address(
-        &[
-            &accounts.lido.key.to_bytes()[..32],
-            STAKE_POOL_TOKEN_RESERVE_AUTHORITY,
-        ],
-        program_id,
-    );
-
     let (fee_manager_account, fee_manager_bump_seed) = Pubkey::find_program_address(
         &[&accounts.lido.key.to_bytes()[..32], FEE_MANAGER_AUTHORITY],
         program_id,
     );
 
-    let (stake_pool_manager, stake_pool_authority_bump_seed) = Pubkey::find_program_address(
-        &[&accounts.lido.key.to_bytes()[..32], STAKE_POOL_MANAGER],
+    let (stake_pool_authority, stake_pool_authority_bump_seed) = Pubkey::find_program_address(
+        &[&accounts.lido.key.to_bytes()[..32], STAKE_POOL_AUTHORITY],
         program_id,
     );
-    if stake_pool.staker != stake_pool_manager {
+    if stake_pool.staker != stake_pool_authority {
         msg!(
             "Stake pool should be managed by the derived address {}",
-            &stake_pool_manager
+            &stake_pool_authority
         );
         return Err(LidoError::InvalidManager.into());
     }
@@ -163,13 +148,12 @@ pub fn process_initialize(
 
     validator_credit_accounts
         .serialize(&mut *accounts.validator_credit_accounts.data.borrow_mut())?;
-    fee_distribution.serialize(&mut *accounts.fee_distribution.data.borrow_mut())?;
+    fee_structure.serialize(&mut *accounts.fee_distribution.data.borrow_mut())?;
     lido.stake_pool_account = *accounts.stake_pool.key;
     lido.manager = *accounts.manager.key;
     lido.st_sol_mint_program = *accounts.mint_program.key;
     lido.sol_reserve_authority_bump_seed = reserve_bump_seed;
     lido.deposit_authority_bump_seed = deposit_bump_seed;
-    lido.token_reserve_authority_bump_seed = token_reserve_bump_seed;
     lido.stake_pool_authority_bump_seed = stake_pool_authority_bump_seed;
     lido.fee_manager_bump_seed = fee_manager_bump_seed;
     lido.token_program_id = *accounts.spl_token.key;
@@ -213,7 +197,7 @@ pub fn process_deposit(
         return Err(LidoError::InvalidStakePool.into());
     }
     if &stake_pool.token_program_id != accounts.spl_token.key {
-        msg!("Invalid token program");
+        msg!("Invalid stake pool token program");
         return Err(LidoError::InvalidTokenProgram.into());
     }
 
@@ -395,11 +379,8 @@ pub fn process_stake_pool_delegate(
     let (to_pubkey, _) =
         Pubkey::find_program_address(&[&accounts.validator.key.to_bytes()[..32]], program_id);
 
-    let (stake_pool_token_reserve_authority, _) = Pubkey::find_program_address(
-        &[
-            &accounts.lido.key.to_bytes()[..32],
-            STAKE_POOL_TOKEN_RESERVE_AUTHORITY,
-        ],
+    let (stake_pool_authority, _) = Pubkey::find_program_address(
+        &[&accounts.lido.key.to_bytes()[..32], STAKE_POOL_AUTHORITY],
         program_id,
     );
 
@@ -415,7 +396,7 @@ pub fn process_stake_pool_delegate(
         return Err(LidoError::InvalidPoolToken.into());
     }
 
-    if stake_pool_token_reserve_authority != pool_token_account.owner {
+    if stake_pool_authority != pool_token_account.owner {
         msg!(
             "Wrong stake pool reserve authority: {}",
             pool_token_account.owner
@@ -471,9 +452,10 @@ pub fn process_withdraw(
 pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> ProgramResult {
     let instruction = LidoInstruction::try_from_slice(input)?;
     match instruction {
-        LidoInstruction::Initialize { max_validators } => {
-            process_initialize(program_id, max_validators, accounts)
-        }
+        LidoInstruction::Initialize {
+            fee_structure,
+            max_validators,
+        } => process_initialize(program_id, fee_structure, max_validators, accounts),
         LidoInstruction::Deposit { amount } => process_deposit(program_id, amount, accounts),
         LidoInstruction::DelegateDeposit { amount } => {
             process_delegate_deposit(program_id, amount, accounts)

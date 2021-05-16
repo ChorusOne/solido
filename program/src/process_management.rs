@@ -19,7 +19,7 @@ use crate::{
     instruction::{AddValidatorInfo, ChangeFeeDistributionInfo, DistributeFeesInfo},
     logic::{token_mint_to, transfer_to},
     state::{FeeDistribution, Lido, ValidatorCredit, ValidatorCreditAccounts},
-    FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY, STAKE_POOL_MANAGER,
+    FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY, STAKE_POOL_AUTHORITY,
 };
 
 pub fn process_change_fee_distribution(
@@ -62,10 +62,15 @@ pub fn process_add_validator(program_id: &Pubkey, accounts_raw: &[AccountInfo]) 
     // TODO(fynn): Change in favour of integrating the state to Lido's
     let accounts = AddValidatorInfo::try_from_slice(accounts_raw)?;
 
-    let mut lido = try_from_slice_unchecked::<Lido>(&accounts.lido.data.borrow())?;
+    let lido = try_from_slice_unchecked::<Lido>(&accounts.lido.data.borrow())?;
     if &lido.stake_pool_account != accounts.stake_pool.key {
         msg!("Invalid stake pool");
         return Err(LidoError::InvalidStakePool.into());
+    }
+
+    if &lido.validator_credit_accounts != accounts.validator_credit_accounts.key {
+        msg!("Invalid validator credit accounts");
+        return Err(LidoError::InvalidValidatorCreditAccount.into());
     }
 
     let validator_token_account = spl_token::state::Account::unpack_from_slice(
@@ -102,7 +107,7 @@ pub fn process_add_validator(program_id: &Pubkey, accounts_raw: &[AccountInfo]) 
         ],
         &[&[
             &accounts.lido.key.to_bytes()[..32],
-            STAKE_POOL_MANAGER,
+            STAKE_POOL_AUTHORITY,
             &[lido.sol_reserve_authority_bump_seed],
         ]],
     )?;

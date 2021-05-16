@@ -30,7 +30,6 @@ pub struct Lido {
     /// Bump seeds for signing messages on behalf of the authority
     pub sol_reserve_authority_bump_seed: u8,
     pub deposit_authority_bump_seed: u8,
-    pub token_reserve_authority_bump_seed: u8,
     pub stake_pool_authority_bump_seed: u8,
     pub fee_manager_bump_seed: u8,
 }
@@ -103,7 +102,7 @@ pub struct ValidatorCredit {
 }
 
 impl ValidatorCreditAccounts {
-    fn new(max_validators: u32) -> Self {
+    pub fn new(max_validators: u32) -> Self {
         Self {
             max_validators,
             validator_accounts: vec![ValidatorCredit::default(); max_validators as usize],
