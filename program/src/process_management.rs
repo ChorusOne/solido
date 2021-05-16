@@ -10,17 +10,64 @@ use solana_program::{
 };
 use spl_stake_pool::{
     error::StakePoolError,
-    instruction::add_validator_to_pool,
+    instruction::{add_validator_to_pool, create_validator_stake_account},
     state::{StakePool, ValidatorList},
 };
 
 use crate::{
     error::LidoError,
-    instruction::{AddValidatorInfo, ChangeFeeDistributionInfo, DistributeFeesInfo},
+    instruction::{
+        AddValidatorInfo, ChangeFeeDistributionInfo, CreateValidatorStakeAccountInfo,
+        DistributeFeesInfo,
+    },
     logic::{token_mint_to, transfer_to},
     state::{FeeDistribution, Lido, ValidatorCredit, ValidatorCreditAccounts},
     FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY, STAKE_POOL_AUTHORITY,
 };
+
+pub fn process_create_validator_stake_account(
+    program_id: &Pubkey,
+    accounts_raw: &[AccountInfo],
+) -> ProgramResult {
+    let accounts = CreateValidatorStakeAccountInfo::try_from_slice(accounts_raw)?;
+    let (stake_pool_authority, stake_pool_authority_bump_seed) = Pubkey::find_program_address(
+        &[&accounts.lido.key.to_bytes()[..32], STAKE_POOL_AUTHORITY],
+        program_id,
+    );
+    if &stake_pool_authority != accounts.staker.key {
+        msg!("Wrong stake pool staker");
+        return Err(LidoError::InvalidStaker.into());
+    }
+
+    invoke_signed(
+        &create_validator_stake_account(
+            &spl_stake_pool::id(),
+            accounts.stake_pool.key,
+            accounts.staker.key,
+            accounts.funder.key,
+            accounts.stake_account.key,
+            accounts.validator.key,
+        )?,
+        &[
+            accounts.stake_pool_program.clone(),
+            accounts.staker.clone(),
+            accounts.funder.clone(),
+            accounts.stake_account.clone(),
+            accounts.validator.clone(),
+            accounts.sysvar_rent.clone(),
+            accounts.sysvar_clock.clone(),
+            accounts.sysvar_stake_history.clone(),
+            accounts.stake_program_config.clone(),
+            accounts.system_program.clone(),
+            accounts.stake_program.clone(),
+        ],
+        &[&[
+            &accounts.lido.key.to_bytes()[..32],
+            STAKE_POOL_AUTHORITY,
+            &[stake_pool_authority_bump_seed],
+        ]],
+    )
+}
 
 pub fn process_change_fee_distribution(
     program_id: &Pubkey,
@@ -104,11 +151,12 @@ pub fn process_add_validator(program_id: &Pubkey, accounts_raw: &[AccountInfo]) 
             accounts.stake_account.clone(),
             accounts.sysvar_clock.clone(),
             accounts.sysvar_stake_history.clone(),
+            accounts.sysvar_stake_program.clone(),
         ],
         &[&[
             &accounts.lido.key.to_bytes()[..32],
             STAKE_POOL_AUTHORITY,
-            &[lido.sol_reserve_authority_bump_seed],
+            &[lido.stake_pool_authority_bump_seed],
         ]],
     )?;
 

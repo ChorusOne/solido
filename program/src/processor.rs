@@ -15,7 +15,8 @@ use crate::{
         AccountType,
     },
     process_management::{
-        process_add_validator, process_change_fee_distribution, process_remove_validator,
+        process_add_validator, process_change_fee_distribution,
+        process_create_validator_stake_account, process_remove_validator,
     },
     state::{FeeDistribution, Lido, ValidatorCreditAccounts},
     DEPOSIT_AUTHORITY, FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY, STAKE_POOL_AUTHORITY,
@@ -464,6 +465,9 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
         LidoInstruction::Withdraw { amount } => process_withdraw(program_id, amount, accounts),
         LidoInstruction::ChangeFeeDistribution => {
             process_change_fee_distribution(program_id, accounts)
+        }
+        LidoInstruction::CreateValidatorStakeAccount => {
+            process_create_validator_stake_account(program_id, accounts)
         }
         LidoInstruction::AddValidator => process_add_validator(program_id, accounts),
         LidoInstruction::RemoveValidator => process_remove_validator(program_id, accounts),

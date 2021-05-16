@@ -659,6 +659,22 @@ dependencies = [
 ]
 
 [[package]]
+<<<<<<< HEAD
+=======
+name = "cli"
+version = "0.0.0"
+dependencies = [
+ "anchor-client",
+ "anchor-lang",
+ "borsh 0.8.2",
+ "clap 3.0.0-beta.2",
+ "multisig",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+>>>>>>> ca496a5 (Implement add validator and make delegate_deposits work)
 name = "cloudabi"
 version = "0.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3726,7 +3742,11 @@ dependencies = [
  "bincode",
  "borsh 0.8.2",
  "bs58 0.4.0",
+<<<<<<< HEAD
  "clap 3.0.0-beta.2",
+=======
+ "clap 2.33.3",
+>>>>>>> ca496a5 (Implement add validator and make delegate_deposits work)
  "lazy_static",
  "lido",
  "multisig",
