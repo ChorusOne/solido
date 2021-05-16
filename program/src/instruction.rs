@@ -38,6 +38,9 @@ pub enum LidoInstruction {
         amount: u64,
     },
     DistributeFees,
+    ClaimValidatorFees {
+        start_idx: u32,
+    },
     ChangeFeeDistribution,
     CreateValidatorStakeAccount,
     AddValidator,
@@ -784,6 +787,20 @@ pub fn create_validator_stake_account(
         program_id: *program_id,
         accounts: accounts.to_vec(),
         data: LidoInstruction::CreateValidatorStakeAccount
+            .try_to_vec()
+            .unwrap(),
+    }
+}
+
+pub fn claim_validator_fees(
+    program_id: &Pubkey,
+    start_idx: u32,
+    accounts: Vec<AccountMeta>,
+) -> Instruction {
+    Instruction {
+        program_id: *program_id,
+        accounts: accounts,
+        data: LidoInstruction::ClaimValidatorFees { start_idx }
             .try_to_vec()
             .unwrap(),
     }
