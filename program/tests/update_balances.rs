@@ -80,16 +80,6 @@ async fn test_successful_update_balance() {
         )
         .await;
 
-    let error = lido_accounts
-        .stake_pool_accounts
-        .update_stake_pool_balance(
-            &mut context.banks_client,
-            &context.payer,
-            &context.last_blockhash,
-        )
-        .await;
-    assert!(error.is_none());
-
     for stake_account in &stake_accounts {
         transfer(
             &mut context.banks_client,

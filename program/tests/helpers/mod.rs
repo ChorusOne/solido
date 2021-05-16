@@ -40,7 +40,7 @@ pub struct LidoAccounts {
     // Fees
     pub insurance_account: Keypair,
     pub treasury_account: Keypair,
-    pub manager_account: Keypair,
+    pub manager_fee_account: Keypair,
     pub fee_structure: FeeDistribution,
 
     pub reserve_authority: Pubkey,
@@ -62,7 +62,7 @@ impl LidoAccounts {
         // Fees
         let insurance_account = Keypair::new();
         let treasury_account = Keypair::new();
-        let manager_account = Keypair::new();
+        let manager_fee_account = Keypair::new();
 
         let fee_structure = FeeDistribution {
             insurance_fee_numerator: 2,
@@ -73,7 +73,7 @@ impl LidoAccounts {
 
             insurance_account: insurance_account.pubkey(),
             treasury_account: treasury_account.pubkey(),
-            manager_account: manager_account.pubkey(),
+            manager_account: manager_fee_account.pubkey(),
         };
 
         let (reserve_authority, _) = Pubkey::find_program_address(
@@ -106,7 +106,7 @@ impl LidoAccounts {
             pool_token_to,
             insurance_account,
             treasury_account,
-            manager_account,
+            manager_fee_account,
             fee_structure,
             reserve_authority,
             deposit_authority,
@@ -154,6 +154,37 @@ impl LidoAccounts {
         .await
         .unwrap();
 
+        create_token_account(
+            banks_client,
+            payer,
+            recent_blockhash,
+            &self.insurance_account,
+            &self.mint_program.pubkey(),
+            &self.insurance_account.pubkey(),
+        )
+        .await
+        .unwrap();
+        create_token_account(
+            banks_client,
+            payer,
+            recent_blockhash,
+            &self.treasury_account,
+            &self.mint_program.pubkey(),
+            &self.treasury_account.pubkey(),
+        )
+        .await
+        .unwrap();
+        create_token_account(
+            banks_client,
+            payer,
+            recent_blockhash,
+            &self.manager_fee_account,
+            &self.mint_program.pubkey(),
+            &self.manager_fee_account.pubkey(),
+        )
+        .await
+        .unwrap();
+
         let validator_accounts_len =
             get_instance_packed_len(&ValidatorCreditAccounts::new(MAX_VALIDATORS)).unwrap();
         let rent = banks_client.get_rent().await.unwrap();
@@ -196,6 +227,9 @@ impl LidoAccounts {
                         mint_program: self.mint_program.pubkey(),
                         pool_token_to: self.pool_token_to.pubkey(),
                         fee_token: self.stake_pool_accounts.pool_fee_account.pubkey(),
+                        insurance_account: self.insurance_account.pubkey(),
+                        treasury_account: self.treasury_account.pubkey(),
+                        manager_fee_account: self.manager_fee_account.pubkey(),
                     },
                 )
                 .unwrap(),
@@ -384,6 +418,39 @@ impl LidoAccounts {
                     stake_pool_validator_list: self.stake_pool_accounts.validator_list.pubkey(),
                     stake_account: *stake,
                     validator_token_account: *validator_token_account,
+                },
+            )],
+            Some(&payer.pubkey()),
+            &[payer, &self.manager],
+            *recent_blockhash,
+        );
+        banks_client.process_transaction(transaction).await.err()
+    }
+
+    pub async fn distribute_fees(
+        &self,
+        banks_client: &mut BanksClient,
+        payer: &Keypair,
+        recent_blockhash: &Hash,
+    ) -> Option<TransportError> {
+        let transaction = Transaction::new_signed_with_payer(
+            &[lido::instruction::distribute_fees(
+                &id(),
+                &lido::instruction::DistributeFeesMeta {
+                    lido: self.lido.pubkey(),
+                    manager: self.manager.pubkey(),
+                    validator_credit_accounts: self.validator_credit_accounts.pubkey(),
+                    fee_distribution: self.fee_distribution.pubkey(),
+                    token_holder_stake_pool: self.pool_token_to.pubkey(),
+                    mint_program: self.mint_program.pubkey(),
+                    reserve_authority: self.reserve_authority,
+                    insurance_account: self.insurance_account.pubkey(),
+                    treasury_account: self.treasury_account.pubkey(),
+                    manager_fee_account: self.manager_fee_account.pubkey(),
+                    stake_pool: self.stake_pool_accounts.stake_pool.pubkey(),
+                    stake_pool_validator_list: self.stake_pool_accounts.validator_list.pubkey(),
+                    stake_pool_fee_account: self.stake_pool_accounts.pool_fee_account.pubkey(),
+                    stake_pool_manager_fee_account: self.fee_manager_authority,
                 },
             )],
             Some(&payer.pubkey()),

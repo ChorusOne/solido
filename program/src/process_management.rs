@@ -199,7 +199,6 @@ pub fn process_distribute_fees(program_id: &Pubkey, accounts_raw: &[AccountInfo]
     let accounts = DistributeFeesInfo::try_from_slice(accounts_raw)?;
 
     let lido = try_from_slice_unchecked::<Lido>(&accounts.lido.data.borrow())?;
-
     if &lido.stake_pool_account != accounts.stake_pool.key {
         msg!("Invalid stake pool");
         return Err(LidoError::InvalidStakePool.into());
@@ -246,9 +245,9 @@ pub fn process_distribute_fees(program_id: &Pubkey, accounts_raw: &[AccountInfo]
     transfer_to(
         accounts.lido.key,
         accounts.spl_token.clone(),
-        accounts.stake_pool_manager_fee_account.clone(),
+        accounts.stake_pool_fee_account.clone(),
         accounts.token_holder_stake_pool.clone(),
-        accounts.fee_manager_account.clone(),
+        accounts.stake_pool_manager_fee_account.clone(),
         FEE_MANAGER_AUTHORITY,
         lido.fee_manager_bump_seed,
         stake_pool_fee_account.amount,
@@ -281,7 +280,7 @@ pub fn process_distribute_fees(program_id: &Pubkey, accounts_raw: &[AccountInfo]
         accounts.lido.key,
         accounts.spl_token.clone(),
         accounts.mint_program.clone(),
-        accounts.manager.clone(),
+        accounts.manager_fee_account.clone(),
         accounts.reserve_authority.clone(),
         RESERVE_AUTHORITY,
         lido.sol_reserve_authority_bump_seed,
