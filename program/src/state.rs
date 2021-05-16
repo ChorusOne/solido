@@ -4,7 +4,6 @@ use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use solana_program::{
     account_info::AccountInfo, entrypoint::ProgramResult, msg, program_pack::Pack, pubkey::Pubkey,
 };
-use spl_stake_pool::borsh::get_instance_packed_len;
 use std::convert::TryFrom;
 
 use crate::error::LidoError;
@@ -113,7 +112,7 @@ impl ValidatorCreditAccounts {
     pub fn maximum_accounts(buffer_size: usize) -> usize {
         return buffer_size.saturating_sub(8) / 40;
     }
-    fn add(&mut self, address: Pubkey) -> Result<(), LidoError> {
+    pub fn add(&mut self, address: Pubkey) -> Result<(), LidoError> {
         if self.validator_accounts.len() == self.max_validators as usize {
             return Err(LidoError::MaximumValidatorsExceeded);
         }
@@ -262,6 +261,7 @@ mod test_lido {
     use super::*;
     use solana_program::program_error::ProgramError;
     use solana_sdk::signature::{Keypair, Signer};
+    use spl_stake_pool::borsh::get_instance_packed_len;
 
     #[test]
     fn lido_initialized() {
@@ -412,6 +412,17 @@ mod test_lido {
                 + treasury_amount
                 + insurance_amount,
             amount,
+        );
+    }
+    #[test]
+    fn test_n_val() {
+        let n_validators: u64 = 10000;
+        let size =
+            get_instance_packed_len(&ValidatorCreditAccounts::new(n_validators as u32)).unwrap();
+
+        assert_eq!(
+            ValidatorCreditAccounts::maximum_byte_capacity(size) as u64,
+            n_validators
         );
     }
 }

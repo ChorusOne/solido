@@ -21,7 +21,7 @@ use crate::{
         DistributeFeesInfo,
     },
     logic::{token_mint_to, transfer_to},
-    state::{FeeDistribution, Lido, ValidatorCredit, ValidatorCreditAccounts},
+    state::{FeeDistribution, Lido, ValidatorCreditAccounts},
     FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY, STAKE_POOL_AUTHORITY,
 };
 
@@ -86,10 +86,6 @@ pub fn process_change_fee_distribution(
         return Err(LidoError::InvalidFeeDistributionAccount.into());
     }
 
-    let current_fee_distribution = try_from_slice_unchecked::<FeeDistribution>(
-        &accounts.current_fee_distribution.data.borrow(),
-    )?;
-
     if &lido.validator_credit_accounts != accounts.validator_credit_accounts.key {
         msg!("Invalid validators credit accounts");
         return Err(LidoError::InvalidValidatorCreditAccount.into());
@@ -110,6 +106,10 @@ pub fn process_add_validator(program_id: &Pubkey, accounts_raw: &[AccountInfo]) 
     let accounts = AddValidatorInfo::try_from_slice(accounts_raw)?;
 
     let lido = try_from_slice_unchecked::<Lido>(&accounts.lido.data.borrow())?;
+    if accounts.lido.owner != program_id {
+        msg!("Lido state has an invalid owner, should be the Lido program");
+        return Err(LidoError::InvalidOwner.into());
+    }
     if &lido.stake_pool_account != accounts.stake_pool.key {
         msg!("Invalid stake pool");
         return Err(LidoError::InvalidStakePool.into());
@@ -172,20 +172,14 @@ pub fn process_add_validator(program_id: &Pubkey, accounts_raw: &[AccountInfo]) 
         return Err(LidoError::UnexpectedValidatorCreditAccountSize.into());
     }
 
-    validator_credit_accounts
-        .validator_accounts
-        .push(ValidatorCredit {
-            address: *accounts.validator_token_account.key,
-            amount: 0,
-        });
-
+    validator_credit_accounts.add(*accounts.validator_token_account.key)?;
     validator_credit_accounts
         .serialize(&mut *accounts.validator_credit_accounts.data.borrow_mut())
         .map_err(|err| err.into())
 }
 
 /// TODO
-pub fn process_remove_validator(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
+pub fn process_remove_validator(_program_id: &Pubkey, _accounts: &[AccountInfo]) -> ProgramResult {
     unimplemented!()
 }
 
@@ -222,22 +216,32 @@ pub fn process_claim_validators_fee(
         .iter_mut()
         .skip(start_idx as usize)
         .zip(validator_token_accounts)
-        .map(|(validator_credit, validator_account)| {
-            token_mint_to(
-                lido_info.key,
-                spl_token.clone(),
-                mint_program_info.clone(),
-                validator_account.clone(),
-                reserve_authority_info.clone(),
-                RESERVE_AUTHORITY,
-                lido.sol_reserve_authority_bump_seed,
-                validator_credit.amount,
-            )?;
-            validator_credit.amount = 0;
-
+        .try_for_each::<_, ProgramResult>(|(validator_credit, validator_account)| {
+            if validator_credit.amount != 0 {
+                msg!(
+                    "Minting {} tokens to validator {}",
+                    validator_credit.amount,
+                    validator_account.key
+                );
+                token_mint_to(
+                    lido_info.key,
+                    spl_token.clone(),
+                    mint_program_info.clone(),
+                    validator_account.clone(),
+                    reserve_authority_info.clone(),
+                    RESERVE_AUTHORITY,
+                    lido.sol_reserve_authority_bump_seed,
+                    validator_credit.amount,
+                )?;
+                validator_credit.amount = 0;
+            } else {
+                msg!(
+                    "Attempting to mint 0 tokens to validator {}",
+                    validator_account.key
+                );
+            }
             Ok(())
-        })
-        .collect::<ProgramResult>()?;
+        })?;
     validator_credit_accounts
         .serialize(&mut *validator_credit_accounts_info.data.borrow_mut())
         .map_err(|err| err.into())
@@ -245,6 +249,10 @@ pub fn process_claim_validators_fee(
 
 pub fn process_distribute_fees(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> ProgramResult {
     let accounts = DistributeFeesInfo::try_from_slice(accounts_raw)?;
+    if accounts.lido.owner != program_id {
+        msg!("Lido state has an invalid owner, should be the Lido program");
+        return Err(LidoError::InvalidOwner.into());
+    }
 
     let lido = try_from_slice_unchecked::<Lido>(&accounts.lido.data.borrow())?;
     if &lido.stake_pool_account != accounts.stake_pool.key {
@@ -348,9 +356,9 @@ pub fn process_distribute_fees(program_id: &Pubkey, accounts_raw: &[AccountInfo]
 /// TODO
 /// Called by the validator, changes the fee account which the validator
 /// receives tokens
-pub fn process_change_validator_fee_account(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+pub fn _process_change_validator_fee_account(
+    _program_id: &Pubkey,
+    _accounts: &[AccountInfo],
 ) -> ProgramResult {
     unimplemented!()
 }
