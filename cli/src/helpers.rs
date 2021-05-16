@@ -1,4 +1,4 @@
-use lido::{DEPOSIT_AUTHORITY_ID, FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY_ID};
+use lido::{state::FeeDistribution, DEPOSIT_AUTHORITY, FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY};
 use solana_program::{
     borsh::get_packed_len, native_token::Sol, program_pack::Pack, pubkey::Pubkey,
     system_instruction,
@@ -58,12 +58,30 @@ pub(crate) fn command_create_solido(
     stake_pool_args: StakePoolArgs,
 ) -> CommandResult {
     let lido_keypair = Keypair::new();
+    let manager_keypair = Keypair::new();
+    let fee_distribution_keypair = Keypair::new();
+    let validator_credit_keypair = Keypair::new();
+    let insurance_keypair = Keypair::new();
+    let treasury_keypair = Keypair::new();
+    let manager_fee_keypair = Keypair::new();
+
+    let fee_structure = FeeDistribution {
+        insurance_fee_numerator: 2,
+        treasury_fee_numerator: 2,
+        validators_fee_numerator: 2,
+        manager_fee_numerator: 4,
+        denominator: 10,
+        insurance_account: insurance_keypair.pubkey(),
+        treasury_account: treasury_keypair.pubkey(),
+        manager_account: manager_fee_keypair.pubkey(),
+    };
+
     println!("Creating lido {}", lido_keypair.pubkey());
 
     let (reserve_authority, _) = lido::find_authority_program_address(
         &lido::id(),
         &lido_keypair.pubkey(),
-        RESERVE_AUTHORITY_ID,
+        RESERVE_AUTHORITY,
     );
 
     let (fee_authority, _) = lido::find_authority_program_address(
@@ -82,7 +100,7 @@ pub(crate) fn command_create_solido(
             let (deposit_authority, _) = lido::find_authority_program_address(
                 &lido::id(),
                 &lido_keypair.pubkey(),
-                DEPOSIT_AUTHORITY_ID,
+                DEPOSIT_AUTHORITY,
             );
             let stake_pool_public_key = keypair.pubkey();
             command_create_pool(
@@ -172,13 +190,20 @@ pub(crate) fn command_create_solido(
             )?,
             lido::instruction::initialize(
                 &lido::id(),
+                fee_structure,
+                10_000,
                 &lido::instruction::InitializeAccountsMeta {
                     lido: lido_keypair.pubkey(),
                     stake_pool: stake_pool_pubkey,
-                    owner: config.staker.pubkey(),
+                    manager: manager_keypair.pubkey(),
                     mint_program: mint_keypair.pubkey(),
                     pool_token_to: pool_token_to.pubkey(), // to define
                     fee_token: fee_keypair.pubkey(),
+                    fee_distribution: fee_distribution_keypair.pubkey(),
+                    validator_credit_accounts: validator_credit_keypair.pubkey(),
+                    insurance_account: insurance_keypair.pubkey(),
+                    treasury_account: treasury_keypair.pubkey(),
+                    manager_fee_account: manager_fee_keypair.pubkey(),
                 },
             )?,
         ],
