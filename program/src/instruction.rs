@@ -39,6 +39,7 @@ pub enum LidoInstruction {
     },
     DistributeFees,
     ClaimValidatorFees {
+        #[allow(dead_code)] // but it's not
         start_idx: u32,
     },
     ChangeFeeDistribution,
@@ -799,7 +800,7 @@ pub fn claim_validator_fees(
 ) -> Instruction {
     Instruction {
         program_id: *program_id,
-        accounts: accounts,
+        accounts,
         data: LidoInstruction::ClaimValidatorFees { start_idx }
             .try_to_vec()
             .unwrap(),
