@@ -468,7 +468,7 @@ impl LidoAccounts {
         recent_blockhash: &Hash,
         start_idx: u32,
         validator_token_accounts: &Vec<Pubkey>,
-    ) -> Option<TransportError> {
+    ) -> Result<(), TransportError> {
         let mut accounts = vec![
             AccountMeta::new_readonly(self.lido.pubkey(), false),
             AccountMeta::new(self.validator_credit_accounts.pubkey(), false),
@@ -492,7 +492,7 @@ impl LidoAccounts {
             &[payer],
             *recent_blockhash,
         );
-        banks_client.process_transaction(transaction).await.err()
+        banks_client.process_transaction(transaction).await
     }
 }
 
@@ -527,8 +527,7 @@ pub async fn create_token_account(
         Some(&payer.pubkey()),
     );
     transaction.sign(&[payer, account], *recent_blockhash);
-    banks_client.process_transaction(transaction).await?;
-    Ok(())
+    banks_client.process_transaction(transaction).await
 }
 
 pub async fn simple_add_validator_to_pool(
