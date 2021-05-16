@@ -4,7 +4,7 @@ mod helpers;
 
 use borsh::BorshDeserialize;
 use helpers::{
-    program_test,
+    program_test, simple_add_validator_to_pool,
     stakepool_account::{get_account, get_token_balance, transfer, ValidatorStakeAccount},
     LidoAccounts,
 };
@@ -27,17 +27,17 @@ async fn setup() -> (ProgramTestContext, LidoAccounts, Vec<ValidatorStakeAccount
         .unwrap();
 
     let mut stake_accounts = Vec::new();
-    // for _ in 0..STAKE_ACCOUNTS {
-    //     let validator_stake_account = simple_add_validator_to_pool(
-    //         &mut context.banks_client,
-    //         &context.payer,
-    //         &context.last_blockhash,
-    //         &lido_accounts.stake_pool_accounts,
-    //     )
-    //     .await;
+    for _ in 0..STAKE_ACCOUNTS {
+        let validator_stake_account = simple_add_validator_to_pool(
+            &mut context.banks_client,
+            &context.payer,
+            &context.last_blockhash,
+            &lido_accounts,
+        )
+        .await;
 
-    //     stake_accounts.push(validator_stake_account);
-    // }
+        stake_accounts.push(validator_stake_account);
+    }
     (context, lido_accounts, stake_accounts)
 }
 const STAKE_ACCOUNTS: u64 = 4;
