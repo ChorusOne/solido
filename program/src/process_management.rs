@@ -189,12 +189,58 @@ pub fn process_remove_validator(program_id: &Pubkey, accounts: &[AccountInfo]) -
     unimplemented!()
 }
 
-/// TODO
 pub fn process_claim_validators_fee(
     program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    start_idx: u32,
+    accounts_raw: &[AccountInfo],
 ) -> ProgramResult {
-    unimplemented!()
+    let account_info_iter = &mut accounts_raw.iter();
+    let lido_info = next_account_info(account_info_iter)?;
+    let validator_credit_accounts_info = next_account_info(account_info_iter)?;
+    let mint_program_info = next_account_info(account_info_iter)?;
+    let reserve_authority_info = next_account_info(account_info_iter)?;
+    let spl_token = next_account_info(account_info_iter)?;
+    let validator_token_accounts = account_info_iter.as_slice();
+
+    if lido_info.owner != program_id {
+        msg!("Lido has an invalid owner");
+        return Err(LidoError::InvalidOwner.into());
+    }
+
+    let lido = try_from_slice_unchecked::<Lido>(&lido_info.data.borrow())?;
+    if &lido.validator_credit_accounts != validator_credit_accounts_info.key {
+        msg!("Invalid validator credit accounts");
+        return Err(LidoError::InvalidValidatorCreditAccount.into());
+    }
+
+    let mut validator_credit_accounts = try_from_slice_unchecked::<ValidatorCreditAccounts>(
+        &validator_credit_accounts_info.data.borrow(),
+    )?;
+
+    validator_credit_accounts
+        .validator_accounts
+        .iter_mut()
+        .skip(start_idx as usize)
+        .zip(validator_token_accounts)
+        .map(|(validator_credit, validator_account)| {
+            token_mint_to(
+                lido_info.key,
+                spl_token.clone(),
+                mint_program_info.clone(),
+                validator_account.clone(),
+                reserve_authority_info.clone(),
+                RESERVE_AUTHORITY,
+                lido.sol_reserve_authority_bump_seed,
+                validator_credit.amount,
+            )?;
+            validator_credit.amount = 0;
+
+            Ok(())
+        })
+        .collect::<ProgramResult>()?;
+    validator_credit_accounts
+        .serialize(&mut *validator_credit_accounts_info.data.borrow_mut())
+        .map_err(|err| err.into())
 }
 
 pub fn process_distribute_fees(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> ProgramResult {

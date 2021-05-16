@@ -6,7 +6,8 @@ use lido::{
     DEPOSIT_AUTHORITY, FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY, STAKE_POOL_AUTHORITY,
 };
 use solana_program::{
-    borsh::get_packed_len, hash::Hash, program_pack::Pack, pubkey::Pubkey, system_instruction,
+    borsh::get_packed_len, hash::Hash, instruction::AccountMeta, program_pack::Pack,
+    pubkey::Pubkey, system_instruction,
 };
 use solana_program_test::*;
 use solana_sdk::{signature::Keypair, transport::TransportError};
@@ -455,6 +456,40 @@ impl LidoAccounts {
             )],
             Some(&payer.pubkey()),
             &[payer, &self.manager],
+            *recent_blockhash,
+        );
+        banks_client.process_transaction(transaction).await.err()
+    }
+
+    pub async fn claim_validator_fees(
+        &self,
+        banks_client: &mut BanksClient,
+        payer: &Keypair,
+        recent_blockhash: &Hash,
+        start_idx: u32,
+        validator_token_accounts: &Vec<Pubkey>,
+    ) -> Option<TransportError> {
+        let mut accounts = vec![
+            AccountMeta::new_readonly(self.lido.pubkey(), false),
+            AccountMeta::new(self.validator_credit_accounts.pubkey(), false),
+            AccountMeta::new(self.mint_program.pubkey(), false),
+            AccountMeta::new_readonly(self.reserve_authority, false),
+            AccountMeta::new_readonly(spl_token::id(), false),
+        ];
+        accounts.append(
+            &mut validator_token_accounts
+                .iter()
+                .map(|val| AccountMeta::new(*val, false))
+                .collect::<Vec<AccountMeta>>(),
+        );
+        let transaction = Transaction::new_signed_with_payer(
+            &[lido::instruction::claim_validator_fees(
+                &id(),
+                start_idx,
+                accounts,
+            )],
+            Some(&payer.pubkey()),
+            &[payer],
             *recent_blockhash,
         );
         banks_client.process_transaction(transaction).await.err()

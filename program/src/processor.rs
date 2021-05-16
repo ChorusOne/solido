@@ -15,7 +15,7 @@ use crate::{
         token_mint_to, AccountType,
     },
     process_management::{
-        process_add_validator, process_change_fee_distribution,
+        process_add_validator, process_change_fee_distribution, process_claim_validators_fee,
         process_create_validator_stake_account, process_distribute_fees, process_remove_validator,
     },
     state::{FeeDistribution, Lido, ValidatorCreditAccounts},
@@ -454,6 +454,9 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
         LidoInstruction::StakePoolDelegate => process_stake_pool_delegate(program_id, accounts),
         LidoInstruction::Withdraw { amount } => process_withdraw(program_id, amount, accounts),
         LidoInstruction::DistributeFees => process_distribute_fees(program_id, accounts),
+        LidoInstruction::ClaimValidatorFees { start_idx } => {
+            process_claim_validators_fee(program_id, start_idx, accounts)
+        }
         LidoInstruction::ChangeFeeDistribution => {
             process_change_fee_distribution(program_id, accounts)
         }
