@@ -1,7 +1,9 @@
 //! State transition types
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use solana_program::{entrypoint::ProgramResult, msg, pubkey::Pubkey};
+use solana_program::{
+    account_info::AccountInfo, entrypoint::ProgramResult, msg, program_pack::Pack, pubkey::Pubkey,
+};
 use spl_stake_pool::borsh::get_instance_packed_len;
 use std::convert::TryFrom;
 
@@ -156,6 +158,35 @@ impl FeeDistribution {
         {
             msg!("Fee numerators do not add up to denominator or denominator is 0");
             return Err(LidoError::InvalidFeeAmount);
+        }
+        Ok(())
+    }
+    pub fn check_recipient_accounts(
+        &self,
+        minter_program: &Pubkey,
+        insurance_account: &AccountInfo,
+        treasury_account: &AccountInfo,
+        manager_accounts: &AccountInfo,
+    ) -> Result<(), LidoError> {
+        let insurance =
+            spl_token::state::Account::unpack_from_slice(&insurance_account.data.borrow())
+                .map_err(|_| LidoError::InvalidFeeRecipient)?;
+        let treasury =
+            spl_token::state::Account::unpack_from_slice(&treasury_account.data.borrow())
+                .map_err(|_| LidoError::InvalidFeeRecipient)?;
+        let manager = spl_token::state::Account::unpack_from_slice(&manager_accounts.data.borrow())
+            .map_err(|_| LidoError::InvalidFeeRecipient)?;
+        if insurance_account.key != &self.insurance_account
+            || treasury_account.key != &self.treasury_account
+            || manager_accounts.key != &self.manager_account
+        {
+            return Err(LidoError::InvalidFeeRecipient);
+        }
+        if &insurance.mint != minter_program
+            || &treasury.mint != minter_program
+            || &manager.mint != minter_program
+        {
+            return Err(LidoError::InvalidTokenMinter);
         }
         Ok(())
     }

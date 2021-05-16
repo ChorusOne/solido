@@ -207,7 +207,7 @@ pub async fn create_stake_pool(
                     validator_list: validator_list.pubkey(),
                     reserve_stake: *reserve_stake,
                     pool_mint: *pool_mint,
-                    manager_pool_account: *pool_token_account,
+                    manager_fee_account: *pool_token_account,
                     deposit_authority: *deposit_authority,
                     sysvar_clock: sysvar::clock::id(),
                     sysvar_rent: sysvar::rent::id(),

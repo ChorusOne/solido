@@ -12,11 +12,11 @@ use crate::{
     },
     logic::{
         calc_stakepool_lamports, calc_total_lamports, check_reserve_authority, rent_exemption,
-        AccountType,
+        token_mint_to, AccountType,
     },
     process_management::{
         process_add_validator, process_change_fee_distribution,
-        process_create_validator_stake_account, process_remove_validator,
+        process_create_validator_stake_account, process_distribute_fees, process_remove_validator,
     },
     state::{FeeDistribution, Lido, ValidatorCreditAccounts},
     DEPOSIT_AUTHORITY, FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY, STAKE_POOL_AUTHORITY,
@@ -92,6 +92,12 @@ pub fn process_initialize(
 
     // Check if fee structure is valid
     fee_structure.check_sum()?;
+    fee_structure.check_recipient_accounts(
+        &accounts.mint_program.key,
+        accounts.insurance_account,
+        accounts.treasury_account,
+        accounts.manager_fee_account,
+    )?;
 
     let expected_max_validators =
         ValidatorCreditAccounts::maximum_accounts(accounts.validator_credit_accounts.data_len());
@@ -231,31 +237,15 @@ pub fn process_deposit(
 
     let total_st_sol = lido.st_sol_total_shares + st_sol_amount;
 
-    let ix = spl_token::instruction::mint_to(
-        accounts.spl_token.key,
-        accounts.mint_program.key,
-        accounts.recipient.key,
-        accounts.reserve_authority.key,
-        &[],
-        st_sol_amount,
-    )?;
-
-    let me_bytes = accounts.lido.key.to_bytes();
-    let authority_signature_seeds = [
-        &me_bytes[..32],
+    token_mint_to(
+        accounts.lido.key,
+        accounts.spl_token.clone(),
+        accounts.mint_program.clone(),
+        accounts.recipient.clone(),
+        accounts.reserve_authority.clone(),
         RESERVE_AUTHORITY,
-        &[lido.sol_reserve_authority_bump_seed],
-    ];
-    let signers = &[&authority_signature_seeds[..]];
-    invoke_signed(
-        &ix,
-        &[
-            accounts.mint_program.clone(),
-            accounts.recipient.clone(),
-            accounts.reserve_authority.clone(),
-            accounts.spl_token.clone(),
-        ],
-        signers,
+        lido.sol_reserve_authority_bump_seed,
+        lsol_amount,
     )?;
 
     lido.st_sol_total_shares = total_st_sol;
@@ -463,6 +453,7 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
         }
         LidoInstruction::StakePoolDelegate => process_stake_pool_delegate(program_id, accounts),
         LidoInstruction::Withdraw { amount } => process_withdraw(program_id, amount, accounts),
+        LidoInstruction::DistributeFees => process_distribute_fees(program_id, accounts),
         LidoInstruction::ChangeFeeDistribution => {
             process_change_fee_distribution(program_id, accounts)
         }

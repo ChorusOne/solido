@@ -37,6 +37,7 @@ pub enum LidoInstruction {
         #[allow(dead_code)] // but it's not
         amount: u64,
     },
+    DistributeFees,
     ChangeFeeDistribution,
     CreateValidatorStakeAccount,
     AddValidator,
@@ -241,6 +242,18 @@ accounts_struct! {
             is_writable: true,
         },
         pub validator_credit_accounts {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub insurance_account {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub treasury_account {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub manager_fee_account {
             is_signer: false,
             is_writable: false,
         },
@@ -513,7 +526,7 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
-        pub manager_pool_account {
+        pub manager_fee_account {
             is_signer: false,
             is_writable: false,
         },
@@ -669,27 +682,27 @@ accounts_struct! {
         },
         pub token_holder_stake_pool {
             is_signer: false,
-            is_writable: false,
+            is_writable: true,
         },
         pub mint_program {
             is_signer: false,
-            is_writable: false,
+            is_writable: true,
         },
         pub reserve_authority {
-             is_signer: false,
+            is_signer: false,
             is_writable: false,
         },
         pub insurance_account {
             is_signer: false,
-            is_writable: false,
+            is_writable: true,
         },
         pub treasury_account {
             is_signer: false,
-            is_writable: false,
+            is_writable: true,
         },
-        pub fee_manager_account {
+        pub manager_fee_account {
             is_signer: false,
-            is_writable: false,
+            is_writable: true,
         },
         pub stake_pool {
             is_signer: false,
@@ -701,10 +714,10 @@ accounts_struct! {
         },
         pub stake_pool_fee_account {
             is_signer: false,
-            is_writable: false,
+            is_writable: true,
         },
         pub stake_pool_manager_fee_account {
-             is_signer: false,
+            is_signer: false,
             is_writable: false,
         },
 
@@ -716,7 +729,7 @@ pub fn distribute_fees(program_id: &Pubkey, accounts: &DistributeFeesMeta) -> In
     Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
-        data: LidoInstruction::AddValidator.try_to_vec().unwrap(),
+        data: LidoInstruction::DistributeFees.try_to_vec().unwrap(),
     }
 }
 
