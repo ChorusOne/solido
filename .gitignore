@@ -5,3 +5,5 @@ bin
 **/lido.so
 **/.DS_Store
 result
+testnet/harness/images/solido/build
+

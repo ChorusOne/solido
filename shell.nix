@@ -10,11 +10,14 @@ in
     alias cbuild="cargo build"
      '';
 
-  buildInputs = [
+  buildInputs = with pkgs; [
     rust
-    pkgs.libudev
-    pkgs.hidapi
-    pkgs.pkg-config
-    pkgs.openssl
+    libudev
+    hidapi
+    pkg-config
+    openssl
+    minikube
+    k9s
+    tilt
   ];
 }
