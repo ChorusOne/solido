@@ -102,9 +102,9 @@ pub fn process_add_validator(program_id: &Pubkey, accounts: &[AccountInfo]) -> P
         msg!("Invalid current fee distribution account");
         return Err(LidoError::InvalidFeeDistributionAccount.into());
     }
-    let validator_lsol_account =
+    let validator_st_sol_account =
         spl_token::state::Account::unpack_from_slice(&validator_lsol_account_info.data.borrow())?;
-    if lido.lsol_mint_program != validator_lsol_account.mint {
+    if lido.lsol_mint_program != validator_st_sol_account.mint {
         msg!(
             "Validator account minter should be the same as Lido minter {}",
             lido.lsol_mint_program
