@@ -19,6 +19,7 @@ jobs:
         with:
           submodules: true
         run: |
+          git submodule update --init --recursive
           cargo install cargo-tarpaulin
           cargo tarpaulin --verbose --workspace --timeout 300 --out Xml
       - name:                   Upload to codecov.io
