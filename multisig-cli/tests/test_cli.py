@@ -19,7 +19,7 @@ import subprocess
 import sys
 import tempfile
 
-from typing import Any, Dict, NamedTuple
+from typing import Any, Dict, Optional, NamedTuple
 
 
 def run(*args: str) -> str:
@@ -87,15 +87,17 @@ multisig_program_id = solana_program_deploy('target/deploy/multisig.so')
 print(f'> Multisig program id is {multisig_program_id}.')
 
 
-def multisig(*args: str) -> Any:
+def multisig(*args: str, keypair_path: Optional[str] = None) -> Any:
     """
     Run 'multisig' against localhost, return its parsed json output.
     """
     output = run(
-        'target/debug/multisig',
+        'target/debug/solido',
         '--cluster', 'localnet',
+        '--output', 'json',
+        *([] if keypair_path is None else ['--keypair-path', keypair_path]),
+        'multisig',
         '--multisig-program-id', multisig_program_id,
-        '--output-json',
         *args,
     )
     if output == '':
@@ -216,12 +218,12 @@ else:
 
 print('\nProposing program upgrade ...')
 result = multisig(
-    '--keypair-path', 'test-key-1.json',
     'propose-upgrade',
     '--multisig-address', multisig_address,
     '--program-address', program_id,
     '--buffer-address', buffer_address,
     '--spill-address', addr1,
+    keypair_path='test-key-1.json',
 )
 upgrade_transaction_address = result['transaction_address']
 print(f'> Transaction address is {upgrade_transaction_address}.')
@@ -273,10 +275,10 @@ else:
 
 print('\nApproving transaction from a second account ...')
 multisig(
-    '--keypair-path', 'test-key-2.json',
     'approve',
     '--multisig-address', multisig_address,
     '--transaction-address', upgrade_transaction_address,
+    keypair_path='test-key-2.json',
 )
 result = multisig(
     'show-transaction',
@@ -343,12 +345,12 @@ assert multisig_before == {
 print('\nProposing to remove the third owner from the multisig ...')
 # This time we omit the third owner. The threshold remains 2.
 result = multisig(
-    '--keypair-path', 'test-key-1.json',
     'propose-change-multisig',
     '--multisig-address', multisig_address,
     '--threshold', '2',
     '--owner', addr1,
     '--owner', addr2,
+    keypair_path='test-key-1.json',
 )
 change_multisig_transaction_address = result['transaction_address']
 print(f'> Transaction address is {change_multisig_transaction_address}.')
@@ -356,10 +358,10 @@ print(f'> Transaction address is {change_multisig_transaction_address}.')
 
 print('\nApproving transaction from a second account ...')
 multisig(
-    '--keypair-path', 'test-key-3.json',
     'approve',
     '--multisig-address', multisig_address,
     '--transaction-address', change_multisig_transaction_address,
+    keypair_path='test-key-3.json',
 )
 result = multisig(
     'show-transaction',
@@ -412,12 +414,12 @@ print('> Owners ids are gone, but approval count is preserved as expected.')
 # is no longer allowed to approve.
 print('\nProposing new program upgrade ...')
 result = multisig(
-    '--keypair-path', 'test-key-1.json',
     'propose-upgrade',
     '--multisig-address', multisig_address,
     '--program-address', program_id,
     '--buffer-address', buffer_address,
     '--spill-address', addr1,
+    keypair_path='test-key-1.json',
 )
 upgrade_transaction_address = result['transaction_address']
 print(f'> Transaction address is {upgrade_transaction_address}.')
@@ -426,10 +428,10 @@ print(f'> Transaction address is {upgrade_transaction_address}.')
 print('\nApproving this transaction from owner 3, which should fail ...')
 try:
     multisig(
-        '--keypair-path', 'test-key-3.json',
         'approve',
         '--multisig-address', multisig_address,
         '--transaction-address', upgrade_transaction_address,
+        keypair_path='test-key-3.json',
     )
 except subprocess.CalledProcessError as err:
     assert err.returncode != 0
