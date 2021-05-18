@@ -176,10 +176,6 @@ pub fn process_deposit(
         return Err(ProgramError::InvalidArgument);
     }
 
-    if accounts.user.lamports() < amount {
-        return Err(LidoError::InvalidAmount.into());
-    }
-
     let mut lido = Lido::try_from_slice(&accounts.lido.data.borrow())?;
 
     lido.check_lido_for_deposit(
