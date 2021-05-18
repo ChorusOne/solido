@@ -9,7 +9,10 @@ use solana_sdk::{
 };
 use spl_stake_pool::state::Fee;
 
-use crate::{stake_pool_helpers::command_create_pool, CommandResult, Config, Error};
+use crate::{
+    stake_pool_helpers::{command_create_pool, CreatePoolOutput},
+    CommandResult, Config, Error,
+};
 
 pub(crate) fn check_fee_payer_balance(config: &Config, required_balance: u64) -> Result<(), Error> {
     let balance = config.rpc_client.get_balance(&config.fee_payer.pubkey())?;
