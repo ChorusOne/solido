@@ -67,6 +67,7 @@ pub fn process_change_fee_distribution(
         .map_err(|e| e.into())
 }
 
+// TODO(fynn): Change in favour of integrating the state to Lido's
 pub fn process_add_validator(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
     let account_info_iter = &mut accounts.iter();
 
