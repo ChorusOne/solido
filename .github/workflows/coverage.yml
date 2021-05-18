@@ -18,8 +18,10 @@ jobs:
       - name:                   Generate code coverage
         run: |
           git submodule update --init --recursive
+          sudo apt update
+          sudo apt install libudev-dev
           cargo install cargo-tarpaulin
-          cargo tarpaulin --verbose --out Xml
+          cargo tarpaulin --verbose --workspace --out Xml
       - name:                   Upload to codecov.io
         uses:                   codecov/codecov-action@v1
         with:
