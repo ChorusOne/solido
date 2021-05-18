@@ -95,7 +95,7 @@ pub struct ValidatorCreditAccounts {
 #[derive(Clone, Debug, Default, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema)]
 pub struct ValidatorCredit {
     address: Pubkey,
-    amount: u64,
+    st_sol_amount: u64,
 }
 
 impl ValidatorCreditAccounts {
