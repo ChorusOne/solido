@@ -32,6 +32,7 @@ pub fn process_change_fee_distribution(
         msg!("Message needs to be signed by Lido's manager");
         return Err(LidoError::InvalidOwner.into());
     }
+    // TODO(fynn): Remove new_fee_distribution in favour of keeping the state in the Lido's account
     if lido_info.owner != program_id || new_fee_distribution_info.owner != program_id {
         msg!("State has invalid owner");
         return Err(LidoError::InvalidOwner.into());
