@@ -17,7 +17,7 @@ pub const STAKE_POOL_TOKEN_RESERVE_AUTHORITY_ID: &[u8] = b"token_reserve_authori
 /// Seed for fee manafer authority
 pub const FEE_MANAGER_AUTHORITY: &[u8] = b"fee_authority";
 
-solana_program::declare_id!("5QSRmnNdU7BAwZgx8YV2YrHYyzRF7okMfNYjPJeZK1eE");
+solana_program::declare_id!("3kEkdGe68DuTKg6FhVrLPZ3Wm8EcUPCPjhCeu8WrGDoc");
 
 pub fn find_authority_program_address(
     program_id: &Pubkey,

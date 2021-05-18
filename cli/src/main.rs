@@ -1,239 +1,142 @@
-use std::process::exit;
+use std::fmt;
+use std::path::PathBuf;
+use std::str::FromStr;
 
-use clap::{
-    crate_description, crate_name, crate_version, value_t, value_t_or_exit, App, AppSettings, Arg,
-    SubCommand,
-};
-
-use solana_clap_utils::{
-    input_parsers::pubkey_of,
-    input_validators::{is_keypair, is_parsable, is_pubkey, is_url},
-    keypair::signer_from_path,
-};
+use anchor_client::Cluster;
+use clap::Clap;
+use serde::Serialize;
 use solana_client::rpc_client::RpcClient;
-use solana_sdk::{
-    commitment_config::CommitmentConfig,
-    signature::{Keypair, Signer},
-};
+use solana_sdk::commitment_config::CommitmentConfig;
+use solana_sdk::signature::{read_keypair_file, Keypair};
 
-use crate::helpers::{command_create_solido, NewStakePoolArgs, StakePoolArgs};
+use crate::helpers::{command_create_solido, CreateSolidoOpts};
+use crate::multisig::MultisigOpts;
 
 extern crate lazy_static;
 extern crate spl_stake_pool;
 
 mod helpers;
+mod multisig;
 mod stake_pool_helpers;
 type Error = Box<dyn std::error::Error>;
-type CommandResult = Result<(), Error>;
 
-struct Config {
+#[derive(Copy, Clone, Debug)]
+pub enum OutputMode {
+    /// Output human-readable text to stdout.
+    Text,
+
+    /// Output machine-readable json to stdout.
+    Json,
+}
+
+impl FromStr for OutputMode {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<OutputMode, &'static str> {
+        match s {
+            "text" => Ok(OutputMode::Text),
+            "json" => Ok(OutputMode::Json),
+            _ => Err("Invalid output mode, expected 'text' or 'json'."),
+        }
+    }
+}
+
+/// Solido -- Interact with Lido for Solana.
+#[derive(Clap, Debug)]
+struct Opts {
+    /// The keypair to sign and pay with. [default: ~/.config/solana/id.json]
+    #[clap(long)]
+    keypair_path: Option<PathBuf>,
+
+    /// Cluster to connect to (mainnet, testnet, devnet, localnet, or url).
+    #[clap(long, default_value = "localnet")]
+    // Although we don't use Anchor here, we use it’s `Cluster` type because
+    // it has a convenient `FromStr` implementation.
+    cluster: Cluster,
+
+    /// Whether to output text or json.
+    #[clap(long = "output", default_value = "text", possible_values = &["text", "json"])]
+    output_mode: OutputMode,
+
+    #[clap(subcommand)]
+    subcommand: SubCommand,
+}
+
+#[derive(Clap, Debug)]
+enum SubCommand {
+    /// Create a new Lido for Solana instance.
+    CreateSolido(CreateSolidoOpts),
+
+    /// Interact with a deployed Multisig program for governance tasks.
+    Multisig(MultisigOpts),
+}
+
+/// Determines which network to connect to, and who pays the fees.
+pub struct Config<'a> {
     rpc_client: RpcClient,
-    verbose: bool,
-    manager: Box<dyn Signer>,
-    staker: Box<dyn Signer>,
-    fee_payer: Box<dyn Signer>,
+    manager: &'a Keypair,
+    staker: &'a Keypair,
+    fee_payer: &'a Keypair,
     dry_run: bool,
+    output_mode: OutputMode,
+}
+
+/// Resolve ~/.config/solana/id.json.
+fn get_default_keypair_path() -> PathBuf {
+    let home = std::env::var("HOME").expect("Expected $HOME to be set.");
+    let mut path = PathBuf::from(home);
+    path.push(".config/solana/id.json");
+    path
+}
+
+fn print_output<Output: fmt::Display + Serialize>(mode: OutputMode, output: &Output) {
+    match mode {
+        OutputMode::Text => println!("{}", output),
+        OutputMode::Json => {
+            let json_string =
+                serde_json::to_string_pretty(output).expect("Failed to serialize output as json.");
+            println!("{}", json_string);
+        }
+    }
 }
 
 fn main() {
+    let opts = Opts::parse();
     solana_logger::setup_with_default("solana=info");
 
-    let matches = App::new(crate_name!())
-        .about(crate_description!())
-        .version(crate_version!())
-        .setting(AppSettings::SubcommandRequiredElseHelp)
-        .arg({
-            let arg = Arg::with_name("config_file")
-                .short("C")
-                .long("config")
-                .value_name("PATH")
-                .takes_value(true)
-                .global(true)
-                .help("Configuration file to use");
-            if let Some(ref config_file) = *solana_cli_config::CONFIG_FILE {
-                arg.default_value(&config_file)
-            } else {
-                arg
-            }
-        })
-        .arg(
-            Arg::with_name("verbose")
-                .long("verbose")
-                .short("v")
-                .takes_value(false)
-                .global(true)
-                .help("Show additional information"),
-        )
-        .arg(
-            Arg::with_name("dry_run")
-                .long("dry-run")
-                .takes_value(false)
-                .global(true)
-                .help("Simulate transaction instead of executing"),
-        )
-        .arg(
-            Arg::with_name("json_rpc_url")
-                .long("url")
-                .value_name("URL")
-                .takes_value(true)
-                .validator(is_url)
-                .help("JSON RPC URL for the cluster.  Default from the configuration file."),
-        )
-        .arg(
-            Arg::with_name("staker")
-                .long("staker")
-                .value_name("KEYPAIR")
-                .validator(is_keypair)
-                .takes_value(true)
-                .help(
-                    "Specify the stake pool staker. \
-                     This may be a keypair file, the ASK keyword. \
-                     Defaults to the client keypair.",
-                ),
-        )
-        .arg(
-            Arg::with_name("manager")
-                .long("manager")
-                .value_name("KEYPAIR")
-                .validator(is_keypair)
-                .takes_value(true)
-                .help(
-                    "Specify the stake pool manager. \
-                     This may be a keypair file, the ASK keyword. \
-                     Defaults to the client keypair.",
-                ),
-        )
-        .arg(
-            Arg::with_name("fee_payer")
-                .long("fee-payer")
-                .value_name("KEYPAIR")
-                .validator(is_keypair)
-                .takes_value(true)
-                .help(
-                    "Specify the fee-payer account. \
-                     This may be a keypair file, the ASK keyword. \
-                     Defaults to the client keypair.",
-                ),
-        )
-        .subcommand(
-            SubCommand::with_name("create")
-                .about("Create a new lido")
-                .arg(
-                    Arg::with_name("stake-pool")
-                        .long("stake-pool")
-                        .short("s")
-                        .validator(is_pubkey)
-                        .value_name("STAKE-POOL")
-                        .takes_value(true)
-                        .help("Specifies a stake pool. If none is specified, one is created."),
-                )
-                .arg(
-                    Arg::with_name("fee-numerator")
-                        .long("fee-numerator")
-                        .validator(is_parsable::<u64>)
-                        .value_name("NUMBER")
-                        .takes_value(true)
-                        .help("Fee numerator, fee amount is numerator divided by denominator."),
-                )
-                .arg(
-                    Arg::with_name("fee-denominator")
-                        .long("fee-denominator")
-                        .validator(is_parsable::<u64>)
-                        .value_name("NUMBER")
-                        .takes_value(true)
-                        .help("Fee denominator, fee amount is numerator divided by denominator."),
-                )
-                .arg(
-                    Arg::with_name("max-validators")
-                        .long("max-validators")
-                        .validator(is_parsable::<u64>)
-                        .value_name("NUMBER")
-                        .takes_value(true)
-                        .help("Max number of validators included in the stake pool"),
-                ),
-        )
-        .subcommand(SubCommand::with_name("deposit").about("Deposits to lido"))
-        .get_matches();
+    let payer_keypair_path = match opts.keypair_path {
+        Some(path) => path,
+        None => get_default_keypair_path(),
+    };
+    let keypair = read_keypair_file(&payer_keypair_path).expect(&format!(
+        "Failed to read key pair from {:?}.",
+        payer_keypair_path
+    ));
 
-    let mut wallet_manager = None;
-    let config = {
-        let cli_config = if let Some(config_file) = matches.value_of("config_file") {
-            solana_cli_config::Config::load(config_file).unwrap_or_default()
-        } else {
-            solana_cli_config::Config::default()
-        };
-        let json_rpc_url = value_t!(matches, "json_rpc_url", String)
-            .unwrap_or_else(|_| cli_config.json_rpc_url.clone());
-
-        let staker = signer_from_path(
-            &matches,
-            &cli_config.keypair_path,
-            "staker",
-            &mut wallet_manager,
-        )
-        .unwrap_or_else(|e| {
-            eprintln!("error: {}", e);
-            exit(1);
-        });
-        let manager = signer_from_path(
-            &matches,
-            &cli_config.keypair_path,
-            "manager",
-            &mut wallet_manager,
-        )
-        .unwrap_or_else(|e| {
-            eprintln!("error: {}", e);
-            exit(1);
-        });
-        let fee_payer = signer_from_path(
-            &matches,
-            &cli_config.keypair_path,
-            "fee_payer",
-            &mut wallet_manager,
-        )
-        .unwrap_or_else(|e| {
-            eprintln!("error: {}", e);
-            exit(1);
-        });
-        let verbose = matches.is_present("verbose");
-        let dry_run = matches.is_present("dry_run");
-
-        Config {
-            rpc_client: RpcClient::new_with_commitment(json_rpc_url, CommitmentConfig::confirmed()),
-            verbose,
-            manager,
-            staker,
-            fee_payer,
-            dry_run,
-        }
+    let config = Config {
+        rpc_client: RpcClient::new_with_commitment(
+            opts.cluster.url().to_string(),
+            CommitmentConfig::confirmed(),
+        ),
+        // For now, we'll assume that the provided key pair fulfils all of these
+        // roles. We need a better way to configure keys in the future.
+        manager: &keypair,
+        staker: &keypair,
+        fee_payer: &keypair,
+        // TODO: Do we want a dry-run option in the MVP at all?
+        dry_run: false,
+        output_mode: opts.output_mode,
     };
 
-    let _ = match matches.subcommand() {
-        ("create", Some(arg_matches)) => {
-            let stake_pool = pubkey_of(arg_matches, "stake-pool");
-            let stake_pool_args = match stake_pool {
-                Some(pubkey) => StakePoolArgs::Existing(pubkey),
-                None => {
-                    let keypair = Keypair::new();
-                    println!("Creating stake pool {}", &keypair.pubkey());
-                    let numerator = value_t_or_exit!(arg_matches, "fee-numerator", u64);
-                    let denominator = value_t_or_exit!(arg_matches, "fee-denominator", u64);
-                    let max_validators = value_t_or_exit!(arg_matches, "max-validators", u32);
-                    StakePoolArgs::New(NewStakePoolArgs {
-                        keypair,
-                        numerator,
-                        denominator,
-                        max_validators,
-                    })
-                }
-            };
-            command_create_solido(&config, stake_pool_args)
+    match opts.subcommand {
+        SubCommand::CreateSolido(cmd_opts) => {
+            let output = command_create_solido(&config, cmd_opts)
+                .expect("Failed to create Solido instance.");
+            print_output(opts.output_mode, &output);
         }
-
-        _ => unreachable!(),
+        SubCommand::Multisig(cmd_opts) => {
+            let payer = keypair;
+            multisig::main(payer, opts.cluster, opts.output_mode, cmd_opts);
+        }
     }
-    .map_err(|err| {
-        eprintln!("{}", err);
-        exit(1);
-    });
 }

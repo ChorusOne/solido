@@ -165,8 +165,8 @@ macro_rules! accounts_struct {
                 // if not.
                 $(
                     let $var_account = accounts_iter.next().ok_or(ProgramError::NotEnoughAccountKeys)?;
-                    if ($var_account.is_signer == true && $var_account.is_signer != $is_signer)
-                        || $var_account.is_writable != $is_writable {
+                    if (($is_signer && !$var_account.is_signer)
+                        || ($is_writable && !$var_account.is_writable)) {
                         return Err(LidoError::InvalidAccountInfo.into());
                     }
                 )*
@@ -204,7 +204,7 @@ macro_rules! accounts_struct {
 accounts_struct! {
     InitializeAccountsMeta, InitializeAccountsInfo {
         pub lido {
-            is_signer: true,
+            is_signer: false,
             is_writable: true,
         },
         pub stake_pool {

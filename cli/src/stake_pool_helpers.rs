@@ -1,8 +1,9 @@
 use solana_program::sysvar;
-
+use std::fmt;
 use {
     crate::helpers::{check_fee_payer_balance, send_transaction},
-    crate::{CommandResult, Config},
+    crate::Config,
+    serde::Serialize,
     solana_program::{borsh::get_packed_len, program_pack::Pack, pubkey::Pubkey},
     solana_sdk::{
         signature::{Keypair, Signer},
@@ -20,31 +21,63 @@ use {
 
 const STAKE_STATE_LEN: usize = 200;
 
-pub(crate) fn command_create_pool(
+#[derive(Serialize)]
+pub struct CreatePoolOutput {
+    /// Account that holds the stake pool data structure.
+    pub stake_pool_address: Pubkey,
+
+    /// TODO(fynn): What's the reserve stake?
+    pub reserve_stake_address: Pubkey,
+
+    /// SPL token mint account for stake pool tokens.
+    pub mint_address: Pubkey,
+
+    /// Account that collected fees get deposited into.
+    pub fee_address: Pubkey,
+
+    /// Account that stores the validator list data structure.
+    pub validator_list_address: Pubkey,
+
+    /// Program-derived account that can mint stake pool tokens.
+    pub withdraw_authority: Pubkey,
+}
+
+impl fmt::Display for CreatePoolOutput {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        // All output is indented by two spaces because we expect to call this
+        // from `CreateSolidoOutput::fmt`.
+        writeln!(f, "  Stake pool address:     {}", self.stake_pool_address)?;
+        writeln!(
+            f,
+            "  Reserve stake address:  {}",
+            self.reserve_stake_address
+        )?;
+        writeln!(
+            f,
+            "  Stake pool token mint:  {}",
+            self.reserve_stake_address
+        )?;
+        writeln!(f, "  Fee deposit address:    {}", self.fee_address)?;
+        writeln!(
+            f,
+            "  Validator list address: {}",
+            self.validator_list_address
+        )?;
+        writeln!(f, "  Withdraw authority:     {}", self.withdraw_authority)?;
+        Ok(())
+    }
+}
+
+pub fn command_create_pool(
     config: &Config,
     deposit_authority: &Pubkey,
     fee: Fee,
     max_validators: u32,
-    stake_pool_keypair: Option<Keypair>,
-    mint_keypair: Option<Keypair>,
-) -> CommandResult {
+) -> Result<CreatePoolOutput, crate::Error> {
     let reserve_stake = Keypair::new();
-    println!(
-        "Creating stake pool reserve stake {}",
-        reserve_stake.pubkey()
-    );
-
-    let mint_keypair = mint_keypair.unwrap_or_else(Keypair::new);
-    println!("Creating stake pool mint {}", mint_keypair.pubkey());
-
+    let mint_keypair = Keypair::new();
     let pool_fee_account = Keypair::new();
-    println!(
-        "Creating stake pool fee collection account {}",
-        pool_fee_account.pubkey()
-    );
-
-    let stake_pool_keypair = stake_pool_keypair.unwrap_or_else(Keypair::new);
-
+    let stake_pool_keypair = Keypair::new();
     let validator_list = Keypair::new();
 
     let reserve_stake_balance = config
@@ -78,10 +111,6 @@ pub(crate) fn command_create_pool(
         &spl_stake_pool::id(),
         &stake_pool_keypair.pubkey(),
     );
-
-    if config.verbose {
-        println!("Stake pool withdraw authority {}", withdraw_authority);
-    }
 
     let mut setup_transaction = Transaction::new_with_payer(
         &[
@@ -185,7 +214,7 @@ pub(crate) fn command_create_pool(
             + fee_calculator.calculate_fee(&initialize_transaction.message()),
     )?;
     let setup_signers = vec![
-        config.fee_payer.as_ref(),
+        config.fee_payer,
         &mint_keypair,
         &pool_fee_account,
         &reserve_stake,
@@ -194,12 +223,21 @@ pub(crate) fn command_create_pool(
     send_transaction(&config, setup_transaction)?;
 
     let initialize_signers = vec![
-        config.fee_payer.as_ref(),
+        config.fee_payer,
         &stake_pool_keypair,
         &validator_list,
-        config.manager.as_ref(),
+        config.manager,
     ];
     initialize_transaction.sign(&initialize_signers, recent_blockhash);
     send_transaction(&config, initialize_transaction)?;
-    Ok(())
+
+    let result = CreatePoolOutput {
+        stake_pool_address: stake_pool_keypair.pubkey(),
+        reserve_stake_address: reserve_stake.pubkey(),
+        mint_address: mint_keypair.pubkey(),
+        fee_address: pool_fee_account.pubkey(),
+        validator_list_address: validator_list.pubkey(),
+        withdraw_authority: withdraw_authority,
+    };
+    Ok(result)
 }

@@ -1,4 +1,8 @@
+use std::fmt;
+
+use clap::Clap;
 use lido::{DEPOSIT_AUTHORITY_ID, FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY_ID};
+use serde::Serialize;
 use solana_program::{
     borsh::get_packed_len, native_token::Sol, program_pack::Pack, pubkey::Pubkey,
     system_instruction,
@@ -11,10 +15,10 @@ use spl_stake_pool::state::Fee;
 
 use crate::{
     stake_pool_helpers::{command_create_pool, CreatePoolOutput},
-    CommandResult, Config, Error,
+    CommandResult, Config, Error, OutputMode,
 };
 
-pub(crate) fn check_fee_payer_balance(config: &Config, required_balance: u64) -> Result<(), Error> {
+pub fn check_fee_payer_balance(config: &Config, required_balance: u64) -> Result<(), Error> {
     let balance = config.rpc_client.get_balance(&config.fee_payer.pubkey())?;
     if balance < required_balance {
         Err(format!(
@@ -29,39 +33,88 @@ pub(crate) fn check_fee_payer_balance(config: &Config, required_balance: u64) ->
     }
 }
 
-pub(crate) fn send_transaction(
+pub fn send_transaction(
     config: &Config,
     transaction: Transaction,
 ) -> solana_client::client_error::Result<()> {
     if config.dry_run {
-        let result = config.rpc_client.simulate_transaction(&transaction)?;
-        println!("Simulate result: {:?}", result);
+        config.rpc_client.simulate_transaction(&transaction)?;
     } else {
-        let signature = config
-            .rpc_client
-            .send_and_confirm_transaction_with_spinner(&transaction)?;
-        println!("Signature: {}", signature);
+        let _signature = match config.output_mode {
+            OutputMode::Text => {
+                // In text mode, we can display a spinner.
+                config
+                    .rpc_client
+                    .send_and_confirm_transaction_with_spinner(&transaction)?
+            }
+            OutputMode::Json => {
+                // In json mode, printing a spinner to stdout would break the
+                // json that we also print to stdout, so opt for the silent
+                // version.
+                config
+                    .rpc_client
+                    .send_and_confirm_transaction(&transaction)?
+            }
+        };
     }
     Ok(())
 }
 
-pub(crate) struct NewStakePoolArgs {
-    pub(crate) keypair: Keypair,
-    pub(crate) numerator: u64,
-    pub(crate) denominator: u64,
-    pub(crate) max_validators: u32,
-}
-pub(crate) enum StakePoolArgs {
-    New(NewStakePoolArgs),
-    Existing(Pubkey),
+#[derive(Clap, Debug)]
+pub struct CreateSolidoOpts {
+    /// Numerator of the fee fraction.
+    pub fee_numerator: u64,
+
+    /// Denominator of the fee fraction.
+    pub fee_denominator: u64,
+
+    /// The maximum number of validators that this Solido instance will support.
+    pub max_validators: u32,
 }
 
-pub(crate) fn command_create_solido(
+#[derive(Serialize)]
+pub struct CreateSolidoOutput {
+    /// Account that stores the data for this Solido instance.
+    pub solido_address: Pubkey,
+
+    /// TODO(fynn): What is the role of the reserve authority?
+    pub reserve_authority: Pubkey,
+
+    /// TODO(fynn): What is the role of the fee authority?
+    pub fee_authority: Pubkey,
+
+    /// TODO(fynn): What does the fee account do?
+    pub fee_address: Pubkey,
+
+    /// SPL token mint account for LSOL tokens.
+    pub mint_address: Pubkey,
+
+    /// TODO(fynn): What is the role of this account?
+    pub pool_token_to: Pubkey,
+
+    /// Details of the stake pool managed by Solido.
+    pub stake_pool: CreatePoolOutput,
+}
+
+impl fmt::Display for CreateSolidoOutput {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        writeln!(f, "Solido details:")?;
+        writeln!(f, "  Solido address:         {}", self.solido_address)?;
+        writeln!(f, "  Reserve authority:      {}", self.reserve_authority)?;
+        writeln!(f, "  Fee authority:          {}", self.fee_authority)?;
+        writeln!(f, "  Fee address:            {}", self.fee_address)?;
+        writeln!(f, "  stSOL mint:             {}", self.mint_address)?;
+        writeln!(f, "  Solido's pool account:  {}", self.pool_token_to)?;
+        writeln!(f, "Stake pool details:\n{}", self.stake_pool)?;
+        Ok(())
+    }
+}
+
+pub fn command_create_solido(
     config: &Config,
-    stake_pool_args: StakePoolArgs,
-) -> CommandResult {
+    opts: CreateSolidoOpts,
+) -> Result<CreateSolidoOutput, crate::Error> {
     let lido_keypair = Keypair::new();
-    println!("Creating lido {}", lido_keypair.pubkey());
 
     let (reserve_authority, _) = lido::find_authority_program_address(
         &lido::id(),
@@ -75,45 +128,25 @@ pub(crate) fn command_create_solido(
         FEE_MANAGER_AUTHORITY,
     );
 
-    let stake_pool_pubkey = match stake_pool_args {
-        StakePoolArgs::New(NewStakePoolArgs {
-            keypair,
-            numerator,
-            denominator,
-            max_validators,
-        }) => {
-            let (deposit_authority, _) = lido::find_authority_program_address(
-                &lido::id(),
-                &lido_keypair.pubkey(),
-                DEPOSIT_AUTHORITY_ID,
-            );
-            let stake_pool_public_key = keypair.pubkey();
-            command_create_pool(
-                &config,
-                &deposit_authority,
-                Fee {
-                    denominator,
-                    numerator,
-                },
-                max_validators,
-                Some(keypair),
-                None,
-            )?;
-            stake_pool_public_key
-        }
-        StakePoolArgs::Existing(stake_pool_pubkey) => stake_pool_pubkey,
-    };
+    let (deposit_authority, _) = lido::find_authority_program_address(
+        &lido::id(),
+        &lido_keypair.pubkey(),
+        DEPOSIT_AUTHORITY_ID,
+    );
+
+    let stake_pool = command_create_pool(
+        config,
+        &deposit_authority,
+        Fee {
+            numerator: opts.fee_numerator,
+            denominator: opts.fee_denominator,
+        },
+        opts.max_validators,
+    )?;
 
     let mint_keypair = Keypair::new();
-    println!("Creating mint {}", mint_keypair.pubkey());
     let fee_keypair = Keypair::new();
-    println!("Creating fee account {}", fee_keypair.pubkey());
-
     let pool_token_to = Keypair::new();
-    println!(
-        "Creating lido's account in stake pool: {}",
-        pool_token_to.pubkey()
-    );
 
     let mint_account_balance = config
         .rpc_client
@@ -173,11 +206,25 @@ pub(crate) fn command_create_solido(
                 &mint_keypair.pubkey(),
                 &fee_authority,
             )?,
+            system_instruction::create_account(
+                &config.fee_payer.pubkey(),
+                &pool_token_to.pubkey(),
+                fee_token_balance,
+                spl_token::state::Account::LEN as u64,
+                &spl_token::id(),
+            ),
+            // Initialize fee receiver account
+            spl_token::instruction::initialize_account(
+                &spl_token::id(),
+                &pool_token_to.pubkey(),
+                &stake_pool.mint_address,
+                &lido::id(),
+            )?,
             lido::instruction::initialize(
                 &lido::id(),
                 &lido::instruction::InitializeAccountsMeta {
                     lido: lido_keypair.pubkey(),
-                    stake_pool: stake_pool_pubkey,
+                    stake_pool: stake_pool.stake_pool_address,
                     owner: config.staker.pubkey(),
                     mint_program: mint_keypair.pubkey(),
                     pool_token_to: pool_token_to.pubkey(), // to define
@@ -193,9 +240,24 @@ pub(crate) fn command_create_solido(
         config,
         total_rent_free_balances + fee_calculator.calculate_fee(&lido_transaction.message()),
     )?;
-    let signers = vec![config.fee_payer.as_ref(), &mint_keypair, &lido_keypair];
+    let signers = vec![
+        config.fee_payer,
+        &mint_keypair,
+        &lido_keypair,
+        &pool_token_to,
+        &fee_keypair,
+    ];
     lido_transaction.sign(&signers, recent_blockhash);
     send_transaction(&config, lido_transaction)?;
 
-    Ok(())
+    let result = CreateSolidoOutput {
+        solido_address: lido_keypair.pubkey(),
+        reserve_authority: reserve_authority,
+        fee_authority: fee_authority,
+        mint_address: mint_keypair.pubkey(),
+        fee_address: fee_keypair.pubkey(),
+        pool_token_to: pool_token_to.pubkey(),
+        stake_pool: stake_pool,
+    };
+    Ok(result)
 }

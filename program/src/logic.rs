@@ -70,8 +70,13 @@ pub fn calc_stakepool_lamports(
     Ok(stake_pool_lamports)
 }
 
-pub fn calc_total_lamports(reserve_lamports: u64, stake_pool_lamports: u64) -> u64 {
-    reserve_lamports + stake_pool_lamports
+pub fn calc_total_lamports(
+    reserve_lamports: u64,
+    stake_pool_lamports: u64,
+) -> Result<u64, LidoError> {
+    reserve_lamports
+        .checked_add(stake_pool_lamports)
+        .ok_or(LidoError::CalculationFailure)
 }
 
 #[cfg(test)]
@@ -80,10 +85,16 @@ mod test {
 
     #[test]
     fn test_calc_total_lamports() {
-        assert_eq!(calc_total_lamports(0, 0), 0);
-        assert_eq!(calc_total_lamports(10, 10), 20);
-        assert_eq!(calc_total_lamports(45, 74), 119);
-        assert_eq!(calc_total_lamports(95, 37), 132);
+        assert_eq!(calc_total_lamports(0, 0).unwrap(), 0);
+        assert_eq!(calc_total_lamports(34, 10).unwrap(), 44);
+        assert_eq!(
+            calc_total_lamports(u64::MAX, 1).err(),
+            Some(LidoError::CalculationFailure)
+        );
+        assert_eq!(
+            calc_total_lamports(1, u64::MAX).err(),
+            Some(LidoError::CalculationFailure)
+        );
     }
 
     #[test]
