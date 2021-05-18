@@ -15,7 +15,7 @@ use spl_stake_pool::state::Fee;
 
 use crate::{
     stake_pool_helpers::{command_create_pool, CreatePoolOutput},
-    CommandResult, Config, Error, OutputMode,
+    Config, Error, OutputMode,
 };
 
 pub fn check_fee_payer_balance(config: &Config, required_balance: u64) -> Result<(), Error> {
