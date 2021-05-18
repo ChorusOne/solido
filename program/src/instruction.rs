@@ -495,12 +495,12 @@ accounts_struct! {
 pub fn stake_pool_deposit(
     program_id: &Pubkey,
     accounts: &StakePoolDepositAccountsMeta,
-) -> Instruction {
-    Instruction {
+) -> Result<Instruction, ProgramError> {
+    Ok(Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
-        data: StakePoolInstruction::Deposit.try_to_vec().unwrap(),
-    }
+        data: StakePoolInstruction::Deposit.try_to_vec()?,
+    })
 }
 
 accounts_struct! {
@@ -602,12 +602,12 @@ accounts_struct! {
 pub fn change_fee_distribution(
     program_id: &Pubkey,
     accounts: &ChangeFeeDistributionMeta,
-) -> Instruction {
-    Instruction {
+) -> Result<Instruction, ProgramError> {
+    Ok(Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
-        data: LidoInstruction::ChangeFeeDistribution.try_to_vec().unwrap(),
-    }
+        data: LidoInstruction::ChangeFeeDistribution.try_to_vec()?,
+    })
 }
 
 accounts_struct! {
@@ -658,12 +658,15 @@ accounts_struct! {
     }
 }
 
-pub fn add_validator(program_id: &Pubkey, accounts: &AddValidatorMeta) -> Instruction {
-    Instruction {
+pub fn add_validator(
+    program_id: &Pubkey,
+    accounts: &AddValidatorMeta,
+) -> Result<Instruction, ProgramError> {
+    Ok(Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
-        data: LidoInstruction::AddValidator.try_to_vec().unwrap(),
-    }
+        data: LidoInstruction::AddValidator.try_to_vec()?,
+    })
 }
 
 accounts_struct! {
@@ -729,12 +732,15 @@ accounts_struct! {
     }
 }
 
-pub fn distribute_fees(program_id: &Pubkey, accounts: &DistributeFeesMeta) -> Instruction {
-    Instruction {
+pub fn distribute_fees(
+    program_id: &Pubkey,
+    accounts: &DistributeFeesMeta,
+) -> Result<Instruction, ProgramError> {
+    Ok(Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
-        data: LidoInstruction::DistributeFees.try_to_vec().unwrap(),
-    }
+        data: LidoInstruction::DistributeFees.try_to_vec()?,
+    })
 }
 
 accounts_struct! {
@@ -783,26 +789,22 @@ accounts_struct! {
 pub fn create_validator_stake_account(
     program_id: &Pubkey,
     accounts: &CreateValidatorStakeAccountMeta,
-) -> Instruction {
-    Instruction {
+) -> Result<Instruction, ProgramError> {
+    Ok(Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
-        data: LidoInstruction::CreateValidatorStakeAccount
-            .try_to_vec()
-            .unwrap(),
-    }
+        data: LidoInstruction::CreateValidatorStakeAccount.try_to_vec()?,
+    })
 }
 
 pub fn claim_validator_fees(
     program_id: &Pubkey,
     start_idx: u32,
     accounts: Vec<AccountMeta>,
-) -> Instruction {
-    Instruction {
+) -> Result<Instruction, ProgramError> {
+    Ok(Instruction {
         program_id: *program_id,
         accounts,
-        data: LidoInstruction::ClaimValidatorFees { start_idx }
-            .try_to_vec()
-            .unwrap(),
-    }
+        data: LidoInstruction::ClaimValidatorFees { start_idx }.try_to_vec()?,
+    })
 }
