@@ -659,19 +659,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cli"
-version = "0.0.0"
-dependencies = [
- "anchor-client",
- "anchor-lang",
- "borsh 0.8.2",
- "clap 3.0.0-beta.2",
- "multisig",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "cloudabi"
 version = "0.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3735,12 +3722,14 @@ name = "solido-cli"
 version = "0.1.0"
 dependencies = [
  "anchor-client",
+ "anchor-lang",
  "bincode",
  "borsh 0.8.2",
  "bs58 0.4.0",
  "clap 3.0.0-beta.2",
  "lazy_static",
  "lido",
+ "multisig",
  "serde",
  "serde_json",
  "solana-account-decoder",

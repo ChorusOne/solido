@@ -15,7 +15,7 @@ use spl_stake_pool::state::Fee;
 
 use crate::{
     stake_pool_helpers::{command_create_pool, CreatePoolOutput},
-    Config, Error,
+    Config, Error, OutputMode
 };
 
 pub fn check_fee_payer_balance(config: &Config, required_balance: u64) -> Result<(), Error> {
@@ -40,9 +40,22 @@ pub fn send_transaction(
     if config.dry_run {
         config.rpc_client.simulate_transaction(&transaction)?;
     } else {
-        let _signature = config
-            .rpc_client
-            .send_and_confirm_transaction_with_spinner(&transaction)?;
+        let _signature = match config.output_mode {
+            OutputMode::Text => {
+                // In text mode, we can display a spinner.
+                config
+                    .rpc_client
+                    .send_and_confirm_transaction_with_spinner(&transaction)?
+            }
+            OutputMode::Json => {
+                // In json mode, printing a spinner to stdout would break the
+                // json that we also print to stdout, so opt for the silent
+                // version.
+                config
+                    .rpc_client
+                    .send_and_confirm_transaction(&transaction)?
+            }
+        };
     }
     Ok(())
 }
@@ -193,6 +206,20 @@ pub fn command_create_solido(
                 &mint_keypair.pubkey(),
                 &fee_authority,
             )?,
+            system_instruction::create_account(
+                &config.fee_payer.pubkey(),
+                &pool_token_to.pubkey(),
+                fee_token_balance,
+                spl_token::state::Account::LEN as u64,
+                &spl_token::id(),
+            ),
+            // Initialize fee receiver account
+            spl_token::instruction::initialize_account(
+                &spl_token::id(),
+                &pool_token_to.pubkey(),
+                &stake_pool.mint_address,
+                &lido::id(),
+            )?,
             lido::instruction::initialize(
                 &lido::id(),
                 &lido::instruction::InitializeAccountsMeta {
@@ -213,7 +240,13 @@ pub fn command_create_solido(
         config,
         total_rent_free_balances + fee_calculator.calculate_fee(&lido_transaction.message()),
     )?;
-    let signers = vec![config.fee_payer, &mint_keypair, &lido_keypair];
+    let signers = vec![
+        config.fee_payer,
+        &mint_keypair,
+        &lido_keypair,
+        &pool_token_to,
+        &fee_keypair,
+    ];
     lido_transaction.sign(&signers, recent_blockhash);
     send_transaction(&config, lido_transaction)?;
 
