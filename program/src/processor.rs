@@ -408,7 +408,7 @@ pub fn process_stake_pool_delegate(
                 pool_tokens_to: *accounts.pool_token_to.key,
                 pool_mint: *accounts.stake_pool_mint.key,
             },
-        ),
+        )?,
         &[
             accounts.stake_pool_program.clone(),
             accounts.stake_pool.clone(),
