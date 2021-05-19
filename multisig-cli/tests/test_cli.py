@@ -108,7 +108,12 @@ def multisig(*args: str, keypair_path: Optional[str] = None) -> Any:
     if output == '':
         return {}
     else:
-        return json.loads(output)
+        try:
+            return json.loads(output)
+        except json.JSONDecodeError:
+            print('Failed to decode output as json, output was:')
+            print(output)
+            raise
 
 
 print('\nCreating new multisig ...')

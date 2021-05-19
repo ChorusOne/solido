@@ -612,6 +612,14 @@ fn propose_instruction(
     // funds will be locked forever.
     let transaction_account = Keypair::new();
 
+    // We are going to build a dummy version of the `multisig::Transaction`, to
+    // compute its size, which we need to allocate an account for it. And to
+    // build the dummy transaction, we need to know how many owners the multisig
+    // has.
+    let multisig: multisig::Multisig = program
+        .account(multisig_address)
+        .expect("Failed to read multisig state from account.");
+
     // Build the data that the account will hold, just to measure its size, so
     // we can allocate an account of the right size.
     let dummy_tx = multisig::Transaction {
@@ -619,21 +627,22 @@ fn propose_instruction(
         program_id: instruction.program_id,
         accounts: accounts.clone(),
         data: instruction.data.clone(),
-        signers: accounts.iter().map(|_| false).collect(),
+        signers: multisig
+            .owners
+            .iter()
+            .map(|a| a == &program.payer())
+            .collect(),
         did_execute: false,
-        owner_set_seqno: 0,
+        owner_set_seqno: multisig.owner_set_seqno,
     };
 
     // The space used is the serialization of the transaction itself, plus the
     // discriminator that Anchor uses to identify the account type.
-    let mut account_bytes = dummy_tx
-        .try_to_vec()
+    let mut account_bytes = multisig::Transaction::discriminator().to_vec();
+    dummy_tx
+        .serialize(&mut account_bytes)
         .expect("Failed to serialize dummy transaction.");
-    account_bytes.extend(&multisig::Transaction::discriminator()[..]);
-
-    // Taking the just the length of the account is insufficient, apparently
-    // there is more going on than just this. Add a margin of 10 bytes.
-    let tx_account_size = account_bytes.len() + 10;
+    let tx_account_size = account_bytes.len();
 
     program
         .request()
