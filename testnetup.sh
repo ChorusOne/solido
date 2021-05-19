@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 COMD=$1
 ARGERR="Please supply first argument to the script as either 'start' or 'stop'"
@@ -6,6 +6,7 @@ ARGERR="Please supply first argument to the script as either 'start' or 'stop'"
 
 if [ -z $COMD ]; then
   echo $ARGERR
+  exit 1
 fi
 
 remove(){

@@ -40,7 +40,7 @@ To use any of the Solana SDK tools or deploy the Solido contract, you can execut
 minikube kubectl exec ....
 ```
 
-An more efficient way is to use k9s that comes with the nix-shell. Spin up an additional nix shell from the root of the project and run the k9s binary.  This will allow you to see the solido namespace and pod.  Run a shell into the solido pod with the 's' command and you will be able to access the Solana SDK tools and interact with the running test validator.
+A more efficient way is to use k9s that comes with the nix-shell. Spin up an additional nix shell from the root of the project and run the k9s binary.  This will allow you to see the solido namespace and pod.  Run a shell into the solido pod with the 's' command and you will be able to access the Solana SDK tools and interact with the running test validator.
 
 ### Terminating the testnet
 
