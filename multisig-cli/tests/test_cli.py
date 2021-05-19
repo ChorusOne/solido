@@ -30,8 +30,13 @@ def run(*args: str) -> str:
         result = subprocess.run(args, check=True, capture_output=True, encoding='utf-8')
 
     except subprocess.CalledProcessError as err:
-        print('Stdout:', err.stdout)
-        print('Stderr:', err.stderr)
+        # If a test fails, it is helpful to print stdout and stderr here, but
+        # we don't print them by default because some calls are expected to
+        # fail, and we don't want to pollute the output in that case, because
+        # a log full of errors makes it difficult to locate the actual error in
+        # the noise.
+        # print('Stdout:', err.stdout)
+        # print('Stderr:', err.stderr)
         raise
 
     return result.stdout
