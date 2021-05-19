@@ -71,7 +71,7 @@ jobs:
         solana config set --url http://127.0.0.1:8899
         solana airdrop 500.0
 
-        multisig-cli/tests/test_cli.py
+        tests/test_multisig.py
         kill $validator
 
   clippy:
