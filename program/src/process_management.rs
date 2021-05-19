@@ -142,7 +142,8 @@ pub fn process_add_validator(program_id: &Pubkey, accounts: &[AccountInfo]) -> P
     let mut validator_credit_accounts = try_from_slice_unchecked::<ValidatorCreditAccounts>(
         &validator_credit_accounts_info.data.borrow(),
     )?;
-    // This should fail in the stake pool call above
+    // If the condition below is false, the stake pool operation should have failed, but
+    // we double check to be sure
     if validator_credit_accounts.validator_accounts.len() as u32
         == validator_credit_accounts.max_validators
     {
