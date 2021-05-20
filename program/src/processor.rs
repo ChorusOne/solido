@@ -99,9 +99,8 @@ pub fn process_initialize(
         try_from_slice_unchecked::<FeeDistribution>(&accounts.fee_distribution.data.borrow())?;
     fee_distribution.check_sum()?;
 
-    let expected_max_validators = ValidatorCreditAccounts::maximum_byte_capacity(
-        accounts.validator_credit_accounts.data_len(),
-    );
+    let expected_max_validators =
+        ValidatorCreditAccounts::maximum_accounts(accounts.validator_credit_accounts.data_len());
     if expected_max_validators != max_validators as usize || max_validators == 0 {
         msg!(
             "Incorrect validator list size provided, expected {}, provided {}",

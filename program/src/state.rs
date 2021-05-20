@@ -105,7 +105,7 @@ impl ValidatorCreditAccounts {
             validator_accounts: vec![ValidatorCredit::default(); max_validators as usize],
         }
     }
-    pub fn maximum_byte_capacity(buffer_size: usize) -> usize {
+    pub fn maximum_accounts(buffer_size: usize) -> usize {
         return buffer_size.saturating_sub(8) / 40;
     }
     fn add(&mut self, address: Pubkey) -> Result<(), LidoError> {
@@ -114,7 +114,7 @@ impl ValidatorCreditAccounts {
         }
         self.validator_accounts.push(ValidatorCredit {
             address: address,
-            amount: 0,
+            st_sol_amount: 0,
         });
         Ok(())
     }
@@ -158,7 +158,7 @@ fn test_n_val() {
     let size = get_instance_packed_len(&ValidatorCreditAccounts::new(n_validators as u32)).unwrap();
 
     assert_eq!(
-        ValidatorCreditAccounts::maximum_byte_capacity(size) as u64,
+        ValidatorCreditAccounts::maximum_accounts(size) as u64,
         n_validators
     );
 }
