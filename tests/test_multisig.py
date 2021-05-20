@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-This script calls 'solana' and 'multisig' to go through two multisig flows:
+This script calls 'solana' and 'solido multisig' to go through two flows:
 
  * Upgrade a program managed by a multisig.
  * Change the owners of a multisig.
@@ -41,7 +41,7 @@ print(f'> Multisig program id is {multisig_program_id}.')
 
 def multisig(*args: str, keypair_path: Optional[str] = None) -> Any:
     """
-    Run 'multisig' against localhost, return its parsed json output.
+    Run 'solido multisig' against localhost, return its parsed json output.
     """
     output = run(
         'target/debug/solido',
