@@ -29,7 +29,6 @@ In the context of the `Serum Multisig` program that we are using, `0xGovernance`
 ### Staker Role 
 
 - Set to Lido Program 
-    - ~~This might involve a chicken-egg situation at init.~~ [Comment](https://github.com/ChorusOne/solido/pull/55/commits/97815b7586a31bccbfe1936a5eb505a8704df5f1#r633346997)
 
 --- 
 
