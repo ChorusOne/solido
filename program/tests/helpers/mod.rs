@@ -18,7 +18,7 @@ use stakepool_account::StakePoolAccounts;
 use self::stakepool_account::{create_mint, transfer, ValidatorStakeAccount};
 
 pub mod stakepool_account;
-const MAX_VALIDATORS: u32 = 255;
+pub const MAX_VALIDATORS: u32 = 10_000;
 
 pub fn program_test() -> ProgramTest {
     let mut program = ProgramTest::new("lido", id(), processor!(processor::process));
