@@ -74,6 +74,7 @@ jobs:
 
   coverage:
     runs-on:  ubuntu-latest
+    continue-on-error: true
 
     steps:
       - name: Checkout repository
@@ -94,7 +95,7 @@ jobs:
         run: |
           sudo apt update
           sudo apt install libudev-dev
-          cargo install cargo-tarpaulin
+          cargo install --version 0.16.0 cargo-tarpaulin 
           cargo tarpaulin --verbose --workspace --out Xml
       - name: Upload to codecov.io
         uses: codecov/codecov-action@v1
