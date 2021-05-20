@@ -618,8 +618,7 @@ impl StakePoolAccounts {
                 &self.pool_mint.pubkey(),
                 &spl_token::id(),
                 amount,
-            )
-            .unwrap()],
+            )],
             Some(&payer.pubkey()),
             &[payer, user_transfer_authority],
             *recent_blockhash,

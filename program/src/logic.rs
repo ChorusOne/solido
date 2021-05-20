@@ -1,13 +1,11 @@
-use std::fmt::Display;
-
 use solana_program::{
     account_info::AccountInfo, msg, program::invoke_signed, program_error::ProgramError,
     pubkey::Pubkey, rent::Rent,
 };
 use spl_stake_pool::state::StakePool;
-use std::convert::TryFrom;
+use std::{convert::TryFrom, fmt::Display};
 
-use crate::{error::LidoError, RESERVE_AUTHORITY};
+use crate::{error::LidoError, state::StLamports, RESERVE_AUTHORITY};
 
 pub(crate) fn rent_exemption(
     rent: &Rent,
@@ -40,8 +38,6 @@ pub fn check_reserve_authority(
 pub(crate) enum AccountType {
     StakePool,
     Lido,
-    FeeDistribution,
-    ValidatorCreditAccounts,
 }
 
 impl Display for AccountType {
@@ -49,8 +45,6 @@ impl Display for AccountType {
         let printable = match *self {
             Self::StakePool => "Stake pool",
             Self::Lido => "Lido",
-            Self::FeeDistribution => "FeeDistribution",
-            Self::ValidatorCreditAccounts => "ValidatorCreditAccounts",
         };
         write!(f, "{}", printable)
     }
@@ -62,9 +56,7 @@ pub fn calc_stakepool_lamports(
 ) -> Result<u64, ProgramError> {
     let stake_pool_lamports = if stake_pool.pool_token_supply != 0 {
         u64::try_from(
-            (stake_pool.total_stake_lamports as u128)
-                .checked_mul(pool_to_token_account.amount as u128)
-                .ok_or(LidoError::CalculationFailure)?
+            (stake_pool.total_stake_lamports as u128 * pool_to_token_account.amount as u128)
                 .checked_div(stake_pool.pool_token_supply as u128)
                 .ok_or(LidoError::CalculationFailure)?,
         )
@@ -94,7 +86,7 @@ pub fn token_mint_to<'a>(
     authority: AccountInfo<'a>,
     authority_type: &[u8],
     bump_seed: u8,
-    amount: u64,
+    amount: StLamports,
 ) -> Result<(), ProgramError> {
     let me_bytes = lido.to_bytes();
     let authority_signature_seeds = [&me_bytes[..32], authority_type, &[bump_seed]];
@@ -106,7 +98,7 @@ pub fn token_mint_to<'a>(
         destination.key,
         authority.key,
         &[],
-        amount,
+        amount.0,
     )?;
 
     invoke_signed(&ix, &[mint, destination, authority, token_program], signers)

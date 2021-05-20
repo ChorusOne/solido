@@ -2,7 +2,7 @@ use lido::{
     id,
     instruction::{self, initialize},
     processor,
-    state::{FeeDistribution, Lido, ValidatorCreditAccounts},
+    state::{FeeSpec, Lido, ValidatorCreditAccounts, LIDO_CONSTANT_SIZE},
     DEPOSIT_AUTHORITY, FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY, STAKE_POOL_AUTHORITY,
 };
 use solana_program::{
@@ -12,13 +12,13 @@ use solana_program::{
 use solana_program_test::*;
 use solana_sdk::{signature::Keypair, transport::TransportError};
 use solana_sdk::{signature::Signer, transaction::Transaction};
-use spl_stake_pool::borsh::get_instance_packed_len;
+use spl_stake_pool::{borsh::get_instance_packed_len, state::Fee};
 use stakepool_account::StakePoolAccounts;
 
 use self::stakepool_account::{create_mint, transfer, ValidatorStakeAccount};
 
 pub mod stakepool_account;
-const MAX_VALIDATORS: u32 = 10_000;
+const MAX_VALIDATORS: u32 = 255;
 
 pub fn program_test() -> ProgramTest {
     let mut program = ProgramTest::new("lido", id(), processor!(processor::process));
@@ -34,15 +34,13 @@ pub struct LidoAccounts {
     pub manager: Keypair,
     pub lido: Keypair,
     pub mint_program: Keypair,
-    pub fee_distribution: Keypair,
-    pub validator_credit_accounts: Keypair,
     pub pool_token_to: Keypair,
 
     // Fees
     pub insurance_account: Keypair,
     pub treasury_account: Keypair,
     pub manager_fee_account: Keypair,
-    pub fee_structure: FeeDistribution,
+    pub fee_structure: FeeSpec,
 
     pub reserve_authority: Pubkey,
     pub deposit_authority: Pubkey,
@@ -56,8 +54,6 @@ impl LidoAccounts {
         let manager = Keypair::new();
         let lido = Keypair::new();
         let mint_program = Keypair::new();
-        let fee_distribution = Keypair::new();
-        let validator_credit_accounts = Keypair::new();
         let pool_token_to = Keypair::new();
 
         // Fees
@@ -65,12 +61,11 @@ impl LidoAccounts {
         let treasury_account = Keypair::new();
         let manager_fee_account = Keypair::new();
 
-        let fee_structure = FeeDistribution {
-            insurance_fee_numerator: 2,
-            treasury_fee_numerator: 2,
-            validators_fee_numerator: 2,
-            manager_fee_numerator: 4,
-            denominator: 10,
+        let fee_structure = FeeSpec {
+            insurance_fee: 2,
+            treasury_fee: 2,
+            validation_fee: 2,
+            manager_fee: 4,
 
             insurance_account: insurance_account.pubkey(),
             treasury_account: treasury_account.pubkey(),
@@ -102,8 +97,6 @@ impl LidoAccounts {
             manager,
             lido,
             mint_program,
-            fee_distribution,
-            validator_credit_accounts,
             pool_token_to,
             insurance_account,
             treasury_account,
@@ -188,31 +181,16 @@ impl LidoAccounts {
 
         let validator_accounts_len =
             get_instance_packed_len(&ValidatorCreditAccounts::new(MAX_VALIDATORS)).unwrap();
+        let lido_size = LIDO_CONSTANT_SIZE + validator_accounts_len;
         let rent = banks_client.get_rent().await.unwrap();
-        let rent_lido = rent.minimum_balance(get_packed_len::<Lido>());
-        let rent_fee_distribution = rent.minimum_balance(get_packed_len::<FeeDistribution>());
-        let rent_validator_credit_accounts = rent.minimum_balance(validator_accounts_len);
+        let rent_lido = rent.minimum_balance(lido_size);
         let mut transaction = Transaction::new_with_payer(
             &[
                 system_instruction::create_account(
                     &payer.pubkey(),
                     &self.lido.pubkey(),
                     rent_lido,
-                    get_packed_len::<Lido>() as u64,
-                    &id(),
-                ),
-                system_instruction::create_account(
-                    &payer.pubkey(),
-                    &self.fee_distribution.pubkey(),
-                    rent_fee_distribution,
-                    get_packed_len::<FeeDistribution>() as u64,
-                    &id(),
-                ),
-                system_instruction::create_account(
-                    &payer.pubkey(),
-                    &self.validator_credit_accounts.pubkey(),
-                    rent_validator_credit_accounts,
-                    validator_accounts_len as u64,
+                    lido_size as u64,
                     &id(),
                 ),
                 initialize(
@@ -223,8 +201,6 @@ impl LidoAccounts {
                         lido: self.lido.pubkey(),
                         stake_pool: self.stake_pool_accounts.stake_pool.pubkey(),
                         manager: self.manager.pubkey(),
-                        fee_distribution: self.fee_distribution.pubkey(),
-                        validator_credit_accounts: self.validator_credit_accounts.pubkey(),
                         mint_program: self.mint_program.pubkey(),
                         pool_token_to: self.pool_token_to.pubkey(),
                         fee_token: self.stake_pool_accounts.pool_fee_account.pubkey(),
@@ -237,15 +213,7 @@ impl LidoAccounts {
             ],
             Some(&payer.pubkey()),
         );
-        transaction.sign(
-            &[
-                payer,
-                &self.lido,
-                &self.fee_distribution,
-                &self.validator_credit_accounts,
-            ],
-            *recent_blockhash,
-        );
+        transaction.sign(&[payer, &self.lido], *recent_blockhash);
         banks_client.process_transaction(transaction).await?;
 
         Ok(())
@@ -389,7 +357,8 @@ impl LidoAccounts {
                     stake_account: *stake_account,
                     validator: *validator,
                 },
-            )],
+            )
+            .unwrap()],
             Some(&payer.pubkey()),
             &[payer, &self.manager],
             *recent_blockhash,
@@ -412,7 +381,6 @@ impl LidoAccounts {
                     lido: self.lido.pubkey(),
                     manager: self.manager.pubkey(),
                     stake_pool_manager_authority: self.stake_pool_authority,
-                    validator_credit_accounts: self.validator_credit_accounts.pubkey(),
                     stake_pool_program_id: spl_stake_pool::id(),
                     stake_pool: self.stake_pool_accounts.stake_pool.pubkey(),
                     stake_pool_withdraw_authority: self.stake_pool_accounts.withdraw_authority,
@@ -420,7 +388,8 @@ impl LidoAccounts {
                     stake_account: *stake,
                     validator_token_account: *validator_token_account,
                 },
-            )],
+            )
+            .unwrap()],
             Some(&payer.pubkey()),
             &[payer, &self.manager],
             *recent_blockhash,
@@ -440,8 +409,6 @@ impl LidoAccounts {
                 &lido::instruction::DistributeFeesMeta {
                     lido: self.lido.pubkey(),
                     manager: self.manager.pubkey(),
-                    validator_credit_accounts: self.validator_credit_accounts.pubkey(),
-                    fee_distribution: self.fee_distribution.pubkey(),
                     token_holder_stake_pool: self.pool_token_to.pubkey(),
                     mint_program: self.mint_program.pubkey(),
                     reserve_authority: self.reserve_authority,
@@ -449,11 +416,11 @@ impl LidoAccounts {
                     treasury_account: self.treasury_account.pubkey(),
                     manager_fee_account: self.manager_fee_account.pubkey(),
                     stake_pool: self.stake_pool_accounts.stake_pool.pubkey(),
-                    stake_pool_validator_list: self.stake_pool_accounts.validator_list.pubkey(),
                     stake_pool_fee_account: self.stake_pool_accounts.pool_fee_account.pubkey(),
                     stake_pool_manager_fee_account: self.fee_manager_authority,
                 },
-            )],
+            )
+            .unwrap()],
             Some(&payer.pubkey()),
             &[payer, &self.manager],
             *recent_blockhash,
@@ -466,28 +433,19 @@ impl LidoAccounts {
         banks_client: &mut BanksClient,
         payer: &Keypair,
         recent_blockhash: &Hash,
-        start_idx: u32,
-        validator_token_accounts: &Vec<Pubkey>,
+        validator_token: &Pubkey,
     ) -> Result<(), TransportError> {
-        let mut accounts = vec![
-            AccountMeta::new_readonly(self.lido.pubkey(), false),
-            AccountMeta::new(self.validator_credit_accounts.pubkey(), false),
-            AccountMeta::new(self.mint_program.pubkey(), false),
-            AccountMeta::new_readonly(self.reserve_authority, false),
-            AccountMeta::new_readonly(spl_token::id(), false),
-        ];
-        accounts.append(
-            &mut validator_token_accounts
-                .iter()
-                .map(|val| AccountMeta::new(*val, false))
-                .collect::<Vec<AccountMeta>>(),
-        );
         let transaction = Transaction::new_signed_with_payer(
             &[lido::instruction::claim_validator_fees(
                 &id(),
-                start_idx,
-                accounts,
-            )],
+                &lido::instruction::ClaimValidatorFeeMeta {
+                    lido: self.lido.pubkey(),
+                    mint_program: self.mint_program.pubkey(),
+                    reserve_authority: self.reserve_authority,
+                    validator_token: *validator_token,
+                },
+            )
+            .unwrap()],
             Some(&payer.pubkey()),
             &[payer],
             *recent_blockhash,

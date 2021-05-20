@@ -1,7 +1,7 @@
 use std::fmt;
 
 use clap::Clap;
-use lido::{DEPOSIT_AUTHORITY_ID, FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY_ID};
+use lido::{DEPOSIT_AUTHORITY, FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY};
 use serde::Serialize;
 use solana_program::{
     borsh::get_packed_len, native_token::Sol, program_pack::Pack, pubkey::Pubkey,
@@ -119,7 +119,7 @@ pub fn command_create_solido(
     let (reserve_authority, _) = lido::find_authority_program_address(
         &lido::id(),
         &lido_keypair.pubkey(),
-        RESERVE_AUTHORITY_ID,
+        RESERVE_AUTHORITY,
     );
 
     let (fee_authority, _) = lido::find_authority_program_address(
@@ -131,7 +131,7 @@ pub fn command_create_solido(
     let (deposit_authority, _) = lido::find_authority_program_address(
         &lido::id(),
         &lido_keypair.pubkey(),
-        DEPOSIT_AUTHORITY_ID,
+        DEPOSIT_AUTHORITY,
     );
 
     let stake_pool = command_create_pool(
@@ -213,7 +213,7 @@ pub fn command_create_solido(
                 spl_token::state::Account::LEN as u64,
                 &spl_token::id(),
             ),
-            // Initialize fee receiver account
+            // Initialize Lido's account in Stake Pool
             spl_token::instruction::initialize_account(
                 &spl_token::id(),
                 &pool_token_to.pubkey(),
@@ -252,12 +252,12 @@ pub fn command_create_solido(
 
     let result = CreateSolidoOutput {
         solido_address: lido_keypair.pubkey(),
-        reserve_authority: reserve_authority,
-        fee_authority: fee_authority,
+        reserve_authority,
+        fee_authority,
         mint_address: mint_keypair.pubkey(),
         fee_address: fee_keypair.pubkey(),
         pool_token_to: pool_token_to.pubkey(),
-        stake_pool: stake_pool,
+        stake_pool,
     };
     Ok(result)
 }

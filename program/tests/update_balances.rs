@@ -140,18 +140,18 @@ async fn test_successful_update_balance() {
         stake_pool.total_stake_lamports,
     );
 
-    let lido_tokens = get_token_balance(
+    let lido_tokens_for_a = get_token_balance(
         &mut context.banks_client,
         &lido_accounts.pool_token_to.pubkey(),
     )
     .await;
-    assert_eq!(lido_tokens, TEST_A_DEPOSIT_AMOUNT);
+    assert_eq!(lido_tokens_for_a, TEST_A_DEPOSIT_AMOUNT);
 
     // Check amount new user received
-    let received_tokens = get_token_balance(&mut context.banks_client, &recipient.pubkey()).await;
+    let received_tokens_b = get_token_balance(&mut context.banks_client, &recipient.pubkey()).await;
 
     assert_eq!(
-        received_tokens,
+        received_tokens_b,
         ((TEST_B_DEPOSIT_AMOUNT as u128 * stake_pool.pool_token_supply as u128)
             / stake_pool.total_stake_lamports as u128) as u64
     );
