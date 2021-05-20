@@ -29,17 +29,9 @@ In the context of the `Serum Multisig` program that we are using, `0xGovernance`
 ### Staker Role 
 
 - Set to Lido Program 
-    - This might involve a chicken-egg situation at init. 
-    - One potential resolution
-      - 1. On initialisation of Stake Pool : set `Staker Role` of `Stake Pool Program` to be `0xGovernance`
-      - 2. Then deploy and initialise the Lido Program (say, at `0xLido`)
-      - 3. Then modify `Staker Role` of `Stake Pool Program` = `0xLido`     
-           - use the `SetStaker` instruction of StakePool Program
-
+    - ~~This might involve a chicken-egg situation at init.~~ [Comment](https://github.com/ChorusOne/solido/pull/55/commits/97815b7586a31bccbfe1936a5eb505a8704df5f1#r633346997)
 
 --- 
-
-
 
 ## 2. Lido Program
 
