@@ -20,10 +20,19 @@ num_enum = "0.5.1"
 serde = "1.0.121"
 serde_derive = "1.0.103"
 solana-program = "1.6.2"
-spl-math = {version = "*", features = ["no-entrypoint"]}
-spl-stake-pool = {version = "*", features = ["no-entrypoint"]}
-spl-token = {version = "*", features = ["no-entrypoint"]}
 thiserror = "1.0"
+
+[dependencies.spl-math]
+features = ["no-entrypoint"]
+path = "../solana-program-library/libraries/math"
+
+[dependencies.spl-stake-pool]
+features = ["no-entrypoint"]
+path = "../solana-program-library/stake-pool/program"
+
+[dependencies.spl-token]
+features = ["no-entrypoint"]
+path = "../solana-program-library/token/program"
 
 [dev-dependencies]
 proptest = "0.10"

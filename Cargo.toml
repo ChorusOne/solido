@@ -3,4 +3,5 @@ members = [
     "cli",
     "multisig/programs/multisig",
     "program",
+    "solana-program-library/stake-pool/program",
 ]
