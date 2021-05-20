@@ -71,3 +71,34 @@ jobs:
       run: |
         sudo apt-get install -y libudev-dev
         cargo clippy -- -W clippy::pedantic
+
+  coverage:
+    runs-on:  ubuntu-latest
+    continue-on-error: true
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          submodules: true
+
+      - name: cache-build-artifacts
+        uses: actions/cache@v2
+        with:
+          path: target
+          key: cargo-tarpaulin-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            cargo-tarpaulin-${{ hashFiles('Cargo.lock') }}
+            cargo-tarpaulin
+
+      - name: Generate code coverage
+        run: |
+          sudo apt update
+          sudo apt install libudev-dev
+          cargo install --version 0.16.0 cargo-tarpaulin 
+          cargo tarpaulin --verbose --workspace --out Xml
+      - name: Upload to codecov.io
+        uses: codecov/codecov-action@v1
+        with:
+          token: ${{secrets.CODECOV_TOKEN}} 
+          fail_ci_if_error:     true
