@@ -108,14 +108,14 @@ async fn test_successful_fee_distribution() {
         )
         .await;
     assert!(error.is_none());
-    let error = lido_accounts
+    let fee_error = lido_accounts
         .distribute_fees(
             &mut context.banks_client,
             &context.payer,
             &context.last_blockhash,
         )
         .await;
-    assert!(error.is_none());
+    assert!(fee_error.is_none());
 
     let insurance_token_amount = get_token_balance(
         &mut context.banks_client,
