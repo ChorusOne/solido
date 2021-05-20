@@ -10,17 +10,64 @@ use solana_program::{
 };
 use spl_stake_pool::{
     error::StakePoolError,
-    instruction::add_validator_to_pool,
+    instruction::{add_validator_to_pool, create_validator_stake_account},
     state::{StakePool, ValidatorList},
 };
 
 use crate::{
     error::LidoError,
-    instruction::{AddValidatorInfo, ChangeFeeDistributionInfo, DistributeFeesInfo},
+    instruction::{
+        AddValidatorInfo, ChangeFeeDistributionInfo, CreateValidatorStakeAccountInfo,
+        DistributeFeesInfo,
+    },
     logic::{token_mint_to, transfer_to},
-    state::{FeeDistribution, Lido, ValidatorCredit, ValidatorCreditAccounts},
+    state::{FeeDistribution, Lido, ValidatorCreditAccounts},
     FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY, STAKE_POOL_AUTHORITY,
 };
+
+pub fn process_create_validator_stake_account(
+    program_id: &Pubkey,
+    accounts_raw: &[AccountInfo],
+) -> ProgramResult {
+    let accounts = CreateValidatorStakeAccountInfo::try_from_slice(accounts_raw)?;
+    let (stake_pool_authority, stake_pool_authority_bump_seed) = Pubkey::find_program_address(
+        &[&accounts.lido.key.to_bytes()[..32], STAKE_POOL_AUTHORITY],
+        program_id,
+    );
+    if &stake_pool_authority != accounts.staker.key {
+        msg!("Wrong stake pool staker");
+        return Err(LidoError::InvalidStaker.into());
+    }
+
+    invoke_signed(
+        &create_validator_stake_account(
+            &spl_stake_pool::id(),
+            accounts.stake_pool.key,
+            accounts.staker.key,
+            accounts.funder.key,
+            accounts.stake_account.key,
+            accounts.validator.key,
+        )?,
+        &[
+            accounts.stake_pool_program.clone(),
+            accounts.staker.clone(),
+            accounts.funder.clone(),
+            accounts.stake_account.clone(),
+            accounts.validator.clone(),
+            accounts.sysvar_rent.clone(),
+            accounts.sysvar_clock.clone(),
+            accounts.sysvar_stake_history.clone(),
+            accounts.stake_program_config.clone(),
+            accounts.system_program.clone(),
+            accounts.stake_program.clone(),
+        ],
+        &[&[
+            &accounts.lido.key.to_bytes()[..32],
+            STAKE_POOL_AUTHORITY,
+            &[stake_pool_authority_bump_seed],
+        ]],
+    )
+}
 
 pub fn process_change_fee_distribution(
     program_id: &Pubkey,
@@ -38,10 +85,6 @@ pub fn process_change_fee_distribution(
         msg!("Invalid current fee distribution account");
         return Err(LidoError::InvalidFeeDistributionAccount.into());
     }
-
-    let current_fee_distribution = try_from_slice_unchecked::<FeeDistribution>(
-        &accounts.current_fee_distribution.data.borrow(),
-    )?;
 
     if &lido.validator_credit_accounts != accounts.validator_credit_accounts.key {
         msg!("Invalid validators credit accounts");
@@ -62,6 +105,10 @@ pub fn process_add_validator(program_id: &Pubkey, accounts_raw: &[AccountInfo]) 
     let accounts = AddValidatorInfo::try_from_slice(accounts_raw)?;
 
     let lido = try_from_slice_unchecked::<Lido>(&accounts.lido.data.borrow())?;
+    if accounts.lido.owner != program_id {
+        msg!("Lido state has an invalid owner, should be the Lido program");
+        return Err(LidoError::InvalidOwner.into());
+    }
     if &lido.stake_pool_account != accounts.stake_pool.key {
         msg!("Invalid stake pool");
         return Err(LidoError::InvalidStakePool.into());
@@ -103,11 +150,12 @@ pub fn process_add_validator(program_id: &Pubkey, accounts_raw: &[AccountInfo]) 
             accounts.stake_account.clone(),
             accounts.sysvar_clock.clone(),
             accounts.sysvar_stake_history.clone(),
+            accounts.sysvar_stake_program.clone(),
         ],
         &[&[
             &accounts.lido.key.to_bytes()[..32],
             STAKE_POOL_AUTHORITY,
-            &[lido.sol_reserve_authority_bump_seed],
+            &[lido.stake_pool_authority_bump_seed],
         ]],
     )?;
 
@@ -122,36 +170,89 @@ pub fn process_add_validator(program_id: &Pubkey, accounts_raw: &[AccountInfo]) 
         return Err(LidoError::UnexpectedValidatorCreditAccountSize.into());
     }
 
-    validator_credit_accounts
-        .validator_accounts
-        .push(ValidatorCredit {
-            address: *accounts.validator_token_account.key,
-            amount: 0,
-        });
-
+    validator_credit_accounts.add(*accounts.validator_token_account.key)?;
     validator_credit_accounts
         .serialize(&mut *accounts.validator_credit_accounts.data.borrow_mut())
         .map_err(|err| err.into())
 }
 
 /// TODO
-pub fn process_remove_validator(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
+pub fn process_remove_validator(_program_id: &Pubkey, _accounts: &[AccountInfo]) -> ProgramResult {
     unimplemented!()
 }
 
-/// TODO
 pub fn process_claim_validators_fee(
     program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    start_idx: u32,
+    accounts_raw: &[AccountInfo],
 ) -> ProgramResult {
-    unimplemented!()
+    let account_info_iter = &mut accounts_raw.iter();
+    let lido_info = next_account_info(account_info_iter)?;
+    let validator_credit_accounts_info = next_account_info(account_info_iter)?;
+    let mint_program_info = next_account_info(account_info_iter)?;
+    let reserve_authority_info = next_account_info(account_info_iter)?;
+    let spl_token = next_account_info(account_info_iter)?;
+    let validator_token_accounts = account_info_iter.as_slice();
+
+    if lido_info.owner != program_id {
+        msg!("Lido has an invalid owner");
+        return Err(LidoError::InvalidOwner.into());
+    }
+
+    let lido = try_from_slice_unchecked::<Lido>(&lido_info.data.borrow())?;
+    if &lido.validator_credit_accounts != validator_credit_accounts_info.key {
+        msg!("Invalid validator credit accounts");
+        return Err(LidoError::InvalidValidatorCreditAccount.into());
+    }
+
+    let mut validator_credit_accounts = try_from_slice_unchecked::<ValidatorCreditAccounts>(
+        &validator_credit_accounts_info.data.borrow(),
+    )?;
+
+    validator_credit_accounts
+        .validator_accounts
+        .iter_mut()
+        .skip(start_idx as usize)
+        .zip(validator_token_accounts)
+        .try_for_each::<_, ProgramResult>(|(validator_credit, validator_account)| {
+            if validator_credit.amount != 0 {
+                msg!(
+                    "Minting {} tokens to validator {}",
+                    validator_credit.amount,
+                    validator_account.key
+                );
+                token_mint_to(
+                    lido_info.key,
+                    spl_token.clone(),
+                    mint_program_info.clone(),
+                    validator_account.clone(),
+                    reserve_authority_info.clone(),
+                    RESERVE_AUTHORITY,
+                    lido.sol_reserve_authority_bump_seed,
+                    validator_credit.amount,
+                )?;
+                validator_credit.amount = 0;
+            } else {
+                msg!(
+                    "Attempting to mint 0 tokens to validator {}",
+                    validator_account.key
+                );
+            }
+            Ok(())
+        })?;
+    validator_credit_accounts
+        .serialize(&mut *validator_credit_accounts_info.data.borrow_mut())
+        .map_err(|err| err.into())
 }
 
 pub fn process_distribute_fees(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> ProgramResult {
     let accounts = DistributeFeesInfo::try_from_slice(accounts_raw)?;
+    if accounts.lido.owner != program_id {
+        msg!("Lido state has an invalid owner, should be the Lido program");
+        return Err(LidoError::InvalidOwner.into());
+    }
 
     let lido = try_from_slice_unchecked::<Lido>(&accounts.lido.data.borrow())?;
-
     if &lido.stake_pool_account != accounts.stake_pool.key {
         msg!("Invalid stake pool");
         return Err(LidoError::InvalidStakePool.into());
@@ -198,9 +299,9 @@ pub fn process_distribute_fees(program_id: &Pubkey, accounts_raw: &[AccountInfo]
     transfer_to(
         accounts.lido.key,
         accounts.spl_token.clone(),
-        accounts.stake_pool_manager_fee_account.clone(),
+        accounts.stake_pool_fee_account.clone(),
         accounts.token_holder_stake_pool.clone(),
-        accounts.fee_manager_account.clone(),
+        accounts.stake_pool_manager_fee_account.clone(),
         FEE_MANAGER_AUTHORITY,
         lido.fee_manager_bump_seed,
         stake_pool_fee_account.amount,
@@ -233,7 +334,7 @@ pub fn process_distribute_fees(program_id: &Pubkey, accounts_raw: &[AccountInfo]
         accounts.lido.key,
         accounts.spl_token.clone(),
         accounts.mint_program.clone(),
-        accounts.manager.clone(),
+        accounts.manager_fee_account.clone(),
         accounts.reserve_authority.clone(),
         RESERVE_AUTHORITY,
         lido.sol_reserve_authority_bump_seed,
@@ -253,9 +354,9 @@ pub fn process_distribute_fees(program_id: &Pubkey, accounts_raw: &[AccountInfo]
 /// TODO
 /// Called by the validator, changes the fee account which the validator
 /// receives tokens
-pub fn process_change_validator_fee_account(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+pub fn _process_change_validator_fee_account(
+    _program_id: &Pubkey,
+    _accounts: &[AccountInfo],
 ) -> ProgramResult {
     unimplemented!()
 }

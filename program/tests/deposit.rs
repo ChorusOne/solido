@@ -4,7 +4,7 @@ mod helpers;
 
 use helpers::{
     program_test,
-    stakepool_account::{create_token_account, get_token_balance, transfer},
+    stakepool_account::{get_token_balance, transfer},
     LidoAccounts,
 };
 use lido::{id, instruction};
@@ -14,6 +14,8 @@ use solana_sdk::{
     signature::{Keypair, Signer},
     transaction::Transaction,
 };
+
+use crate::helpers::create_token_account;
 
 async fn setup() -> (BanksClient, Keypair, Hash, LidoAccounts) {
     let (mut banks_client, payer, recent_blockhash) = program_test().start().await;
