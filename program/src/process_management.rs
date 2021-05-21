@@ -16,7 +16,7 @@ use crate::{
         CreateValidatorStakeAccountInfo, DistributeFeesInfo,
     },
     logic::{token_mint_to, transfer_to},
-    state::{distribute_fees, FeeSpec, Lido, StLamports, StakePoolTokenLamports},
+    state::{distribute_fees, FeeDistribution, Lido, StLamports, StakePoolTokenLamports},
     FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY, STAKE_POOL_AUTHORITY,
 };
 
@@ -66,7 +66,7 @@ pub fn process_create_validator_stake_account(
 
 pub fn process_change_fee_spec(
     program_id: &Pubkey,
-    new_fee: FeeSpec,
+    new_fee_distribution: FeeDistribution,
     accounts_raw: &[AccountInfo],
 ) -> ProgramResult {
     let accounts = ChangeFeeSpecInfo::try_from_slice(accounts_raw)?;
@@ -77,23 +77,14 @@ pub fn process_change_fee_spec(
 
     let mut lido = try_from_slice_unchecked::<Lido>(&accounts.lido.data.borrow())?;
 
-    Lido::check_valid_minter_program(
-        &lido.st_sol_mint_program,
-        accounts.insurance_account,
-        &lido.fee_spec.insurance_account,
-    )?;
-    Lido::check_valid_minter_program(
-        &lido.st_sol_mint_program,
-        accounts.treasury_account,
-        &lido.fee_spec.treasury_account,
-    )?;
-    Lido::check_valid_minter_program(
-        &lido.st_sol_mint_program,
-        accounts.manager_fee_account,
-        &lido.fee_spec.manager_account,
-    )?;
+    Lido::check_valid_minter_program(&lido.st_sol_mint_program, accounts.insurance_account)?;
+    Lido::check_valid_minter_program(&lido.st_sol_mint_program, accounts.treasury_account)?;
+    Lido::check_valid_minter_program(&lido.st_sol_mint_program, accounts.manager_fee_account)?;
 
-    lido.fee_spec = new_fee;
+    lido.fee_distribution = new_fee_distribution;
+    lido.fee_recipients.insurance_account = *accounts.insurance_account.key;
+    lido.fee_recipients.treasury_account = *accounts.treasury_account.key;
+    lido.fee_recipients.manager_account = *accounts.manager_fee_account.key;
 
     lido.serialize(&mut *accounts.lido.data.borrow_mut())
         .map_err(|e| e.into())
@@ -152,14 +143,19 @@ pub fn process_add_validator(program_id: &Pubkey, accounts_raw: &[AccountInfo]) 
 
     // If the condition below is false, the stake pool operation should have failed, but
     // we double check to be sure
-    if lido.validator_credit_accounts.validator_accounts.len() as u32
-        == lido.validator_credit_accounts.max_validators
+    if lido
+        .fee_recipients
+        .validator_credit_accounts
+        .validator_accounts
+        .len() as u32
+        == lido.fee_recipients.validator_credit_accounts.max_validators
     {
         msg!("Maximum number of validators reached");
         return Err(LidoError::UnexpectedValidatorCreditAccountSize.into());
     }
 
-    lido.validator_credit_accounts
+    lido.fee_recipients
+        .validator_credit_accounts
         .add(*accounts.validator_token_account.key)?;
     lido.serialize(&mut *accounts.lido.data.borrow_mut())
         .map_err(|err| err.into())
@@ -184,6 +180,7 @@ pub fn process_claim_validator_fee(
     let mut lido = try_from_slice_unchecked::<Lido>(&accounts.lido.data.borrow())?;
 
     let validator_account = lido
+        .fee_recipients
         .validator_credit_accounts
         .validator_accounts
         .iter_mut()
@@ -227,8 +224,11 @@ pub fn process_distribute_fees(program_id: &Pubkey, accounts_raw: &[AccountInfo]
     )?;
 
     let token_shares = distribute_fees(
-        &lido.fee_spec,
-        lido.validator_credit_accounts.validator_accounts.len() as u64,
+        &lido.fee_distribution,
+        lido.fee_recipients
+            .validator_credit_accounts
+            .validator_accounts
+            .len() as u64,
         StakePoolTokenLamports(stake_pool_fee_account.amount),
     )
     .ok_or(LidoError::CalculationFailure)?;
@@ -280,7 +280,12 @@ pub fn process_distribute_fees(program_id: &Pubkey, accounts_raw: &[AccountInfo]
     )?;
 
     // Update validator list that can be claimed at a later time
-    for vc in lido.validator_credit_accounts.validator_accounts.iter_mut() {
+    for vc in lido
+        .fee_recipients
+        .validator_credit_accounts
+        .validator_accounts
+        .iter_mut()
+    {
         vc.st_sol_amount = (vc.st_sol_amount + token_shares.reward_per_validator)
             .ok_or(LidoError::CalculationFailure)?;
     }

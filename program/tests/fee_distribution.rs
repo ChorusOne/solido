@@ -139,7 +139,7 @@ async fn test_successful_fee_distribution() {
         / lido_accounts.stake_pool_accounts.fee.denominator as u128) as u64;
 
     let calculated_fee_structure = lido::state::distribute_fees(
-        &lido_accounts.fee_structure,
+        &lido_accounts.fee_distribution,
         NUMBER_VALIDATORS,
         StakePoolTokenLamports(total_fees),
     )

@@ -11,14 +11,14 @@ use solana_program::{
 };
 use spl_stake_pool::{instruction::StakePoolInstruction, stake_program, state::Fee};
 
-use crate::{error::LidoError, state::FeeSpec};
+use crate::{error::LidoError, state::FeeDistribution};
 
 #[repr(C)]
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
 pub enum LidoInstruction {
     Initialize {
         #[allow(dead_code)] // but it's not
-        fee_structure: FeeSpec,
+        fee_distribution: FeeDistribution,
         #[allow(dead_code)] // but it's not
         max_validators: u32,
     },
@@ -41,7 +41,7 @@ pub enum LidoInstruction {
     ClaimValidatorFees,
     ChangeFeeSpec {
         #[allow(dead_code)] // but it's not
-        new_fee: FeeSpec,
+        new_fee_distribution: FeeDistribution,
     },
     CreateValidatorStakeAccount,
     AddValidator,
@@ -260,12 +260,12 @@ accounts_struct! {
 
 pub fn initialize(
     program_id: &Pubkey,
-    fee_structure: FeeSpec,
+    fee_distribution: FeeDistribution,
     max_validators: u32,
     accounts: &InitializeAccountsMeta,
 ) -> Result<Instruction, ProgramError> {
     let init_data = LidoInstruction::Initialize {
-        fee_structure,
+        fee_distribution,
         max_validators,
     };
     let data = init_data.try_to_vec()?;
@@ -566,9 +566,9 @@ pub fn initialize_stake_pool_with_authority(
     })
 }
 
-/// Changes the Fee spec
-/// The new FeeSpec is passed by argument but we still need to pass the recipient
-/// fee accounts so we check that they are valid StSol holders
+// Changes the Fee spec
+// The new FeeSpec is passed by argument but we still need to pass the recipient
+// fee accounts so we check that they are valid StSol holders
 accounts_struct! {
     ChangeFeeSpecMeta, ChangeFeeSpecInfo {
         pub lido {
@@ -596,13 +596,16 @@ accounts_struct! {
 
 pub fn change_fee_distribution(
     program_id: &Pubkey,
-    new_fee: FeeSpec,
+    new_fee_distribution: FeeDistribution,
     accounts: &ChangeFeeSpecMeta,
 ) -> Result<Instruction, ProgramError> {
     Ok(Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
-        data: LidoInstruction::ChangeFeeSpec { new_fee }.try_to_vec()?,
+        data: LidoInstruction::ChangeFeeSpec {
+            new_fee_distribution,
+        }
+        .try_to_vec()?,
     })
 }
 
