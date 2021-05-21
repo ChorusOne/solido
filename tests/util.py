@@ -5,6 +5,7 @@ Utilities that help writing tests, mainly for invoking programs.
 import json
 import os.path
 import subprocess
+import sys
 
 from typing import List, NamedTuple
 
@@ -22,8 +23,10 @@ def run(*args: str) -> str:
         # fail, and we don't want to pollute the output in that case, because
         # a log full of errors makes it difficult to locate the actual error in
         # the noise.
-        # print('Stdout:', err.stdout)
-        # print('Stderr:', err.stderr)
+        if '--verbose' in sys.argv:
+            print('Command failed:', ' '.join(args))
+            print('Stdout:', err.stdout)
+            print('Stderr:', err.stderr)
         raise
 
     return result.stdout
