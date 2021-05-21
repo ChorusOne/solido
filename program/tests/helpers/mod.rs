@@ -1,18 +1,16 @@
+#![allow(dead_code)] // Some methods are used for tests
 use lido::{
     id,
     instruction::{self, initialize},
     processor,
-    state::{FeeDistribution, Lido, ValidatorCreditAccounts, LIDO_CONSTANT_SIZE},
+    state::{FeeDistribution, ValidatorCreditAccounts, LIDO_CONSTANT_SIZE},
     DEPOSIT_AUTHORITY, FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY, STAKE_POOL_AUTHORITY,
 };
-use solana_program::{
-    borsh::get_packed_len, hash::Hash, instruction::AccountMeta, program_pack::Pack,
-    pubkey::Pubkey, system_instruction,
-};
+use solana_program::{hash::Hash, program_pack::Pack, pubkey::Pubkey, system_instruction};
 use solana_program_test::*;
 use solana_sdk::{signature::Keypair, transport::TransportError};
 use solana_sdk::{signature::Signer, transaction::Transaction};
-use spl_stake_pool::{borsh::get_instance_packed_len, state::Fee};
+use spl_stake_pool::borsh::get_instance_packed_len;
 use stakepool_account::StakePoolAccounts;
 
 use self::stakepool_account::{create_mint, transfer, ValidatorStakeAccount};

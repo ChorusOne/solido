@@ -237,7 +237,7 @@ pub fn command_create_pool(
         mint_address: mint_keypair.pubkey(),
         fee_address: pool_fee_account.pubkey(),
         validator_list_address: validator_list.pubkey(),
-        withdraw_authority: withdraw_authority,
+        withdraw_authority,
     };
     Ok(result)
 }
