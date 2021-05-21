@@ -77,9 +77,21 @@ pub fn process_change_fee_spec(
 
     let mut lido = try_from_slice_unchecked::<Lido>(&accounts.lido.data.borrow())?;
 
-    Lido::check_valid_minter_program(&lido.st_sol_mint_program, accounts.insurance_account)?;
-    Lido::check_valid_minter_program(&lido.st_sol_mint_program, accounts.treasury_account)?;
-    Lido::check_valid_minter_program(&lido.st_sol_mint_program, accounts.manager_fee_account)?;
+    Lido::check_valid_minter_program(
+        &lido.st_sol_mint_program,
+        accounts.insurance_account,
+        &lido.fee_spec.insurance_account,
+    )?;
+    Lido::check_valid_minter_program(
+        &lido.st_sol_mint_program,
+        accounts.treasury_account,
+        &lido.fee_spec.treasury_account,
+    )?;
+    Lido::check_valid_minter_program(
+        &lido.st_sol_mint_program,
+        accounts.manager_fee_account,
+        &lido.fee_spec.manager_account,
+    )?;
 
     lido.fee_spec = new_fee;
 

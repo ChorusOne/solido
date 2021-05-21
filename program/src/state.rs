@@ -167,14 +167,18 @@ impl Lido {
         Ok(())
     }
 
+    /// Checks if the `recipient_account.key == recipient_address` and
+    /// the token is minted by the `minter_program`
     pub fn check_valid_minter_program(
         minter_program: &Pubkey,
-        recipient: &AccountInfo,
+        token_account_info: &AccountInfo,
+        token_address: &Pubkey,
     ) -> Result<(), LidoError> {
-        if &spl_token::state::Account::unpack_from_slice(&recipient.data.borrow())
+        if (&spl_token::state::Account::unpack_from_slice(&token_account_info.data.borrow())
             .map_err(|_| LidoError::InvalidFeeRecipient)?
             .mint
-            != minter_program
+            != minter_program)
+            || (token_account_info.key != token_address)
         {
             return Err(LidoError::InvalidFeeRecipient);
         }
