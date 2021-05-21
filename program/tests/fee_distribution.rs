@@ -12,7 +12,7 @@ use solana_program::pubkey::Pubkey;
 use solana_program_test::{tokio, ProgramTestContext};
 use solana_sdk::signature::Signer;
 
-use lido::state::StLamports;
+use lido::state::{StLamports, StakePoolTokenLamports};
 use spl_stake_pool::state::StakePool;
 
 async fn setup() -> (ProgramTestContext, LidoAccounts, Vec<ValidatorStakeAccount>) {
@@ -141,7 +141,7 @@ async fn test_successful_fee_distribution() {
     let calculated_fee_structure = lido::state::distribute_fees(
         &lido_accounts.fee_structure,
         NUMBER_VALIDATORS,
-        StLamports(total_fees),
+        StakePoolTokenLamports(total_fees),
     )
     .unwrap();
 

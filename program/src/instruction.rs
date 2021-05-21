@@ -566,6 +566,9 @@ pub fn initialize_stake_pool_with_authority(
     })
 }
 
+/// Changes the Fee spec
+/// The new FeeSpec is passed by argument but we still need to pass the recipient
+/// fee accounts so we check that they are valid StSol holders
 accounts_struct! {
     ChangeFeeSpecMeta, ChangeFeeSpecInfo {
         pub lido {
@@ -578,15 +581,15 @@ accounts_struct! {
         },
         pub insurance_account {
             is_signer: false,
-            is_writable: true,
+            is_writable: false,
         },
         pub treasury_account {
             is_signer: false,
-            is_writable: true,
+            is_writable: false,
         },
-        pub manager_accounts {
+        pub manager_fee_account {
             is_signer: false,
-            is_writable: true,
+            is_writable: false,
         },
     }
 }

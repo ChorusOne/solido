@@ -81,12 +81,9 @@ pub fn process_initialize(
     }
 
     // Check if fee structure is valid
-    fee_structure.check_recipient_accounts(
-        &accounts.mint_program.key,
-        accounts.insurance_account,
-        accounts.treasury_account,
-        accounts.manager_fee_account,
-    )?;
+    Lido::check_valid_minter_program(&accounts.mint_program.key, accounts.insurance_account)?;
+    Lido::check_valid_minter_program(&accounts.mint_program.key, accounts.treasury_account)?;
+    Lido::check_valid_minter_program(&accounts.mint_program.key, accounts.manager_fee_account)?;
 
     let expected_max_validators =
         ValidatorCreditAccounts::maximum_accounts(accounts.lido.data_len() - LIDO_CONSTANT_SIZE);

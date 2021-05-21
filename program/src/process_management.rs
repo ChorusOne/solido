@@ -16,7 +16,7 @@ use crate::{
         CreateValidatorStakeAccountInfo, DistributeFeesInfo,
     },
     logic::{token_mint_to, transfer_to},
-    state::{distribute_fees, FeeSpec, Lido, StLamports},
+    state::{distribute_fees, FeeSpec, Lido, StLamports, StakePoolTokenLamports},
     FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY, STAKE_POOL_AUTHORITY,
 };
 
@@ -77,12 +77,9 @@ pub fn process_change_fee_spec(
 
     let mut lido = try_from_slice_unchecked::<Lido>(&accounts.lido.data.borrow())?;
 
-    new_fee.check_recipient_accounts(
-        &lido.st_sol_mint_program,
-        accounts.insurance_account,
-        accounts.treasury_account,
-        accounts.manager_accounts,
-    )?;
+    Lido::check_valid_minter_program(&lido.st_sol_mint_program, accounts.insurance_account)?;
+    Lido::check_valid_minter_program(&lido.st_sol_mint_program, accounts.treasury_account)?;
+    Lido::check_valid_minter_program(&lido.st_sol_mint_program, accounts.manager_fee_account)?;
 
     lido.fee_spec = new_fee;
 
@@ -220,7 +217,7 @@ pub fn process_distribute_fees(program_id: &Pubkey, accounts_raw: &[AccountInfo]
     let token_shares = distribute_fees(
         &lido.fee_spec,
         lido.validator_credit_accounts.validator_accounts.len() as u64,
-        StLamports(stake_pool_fee_account.amount),
+        StakePoolTokenLamports(stake_pool_fee_account.amount),
     )
     .ok_or(LidoError::CalculationFailure)?;
 

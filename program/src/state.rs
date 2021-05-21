@@ -25,6 +25,7 @@ use crate::error::LidoError;
     BorshSchema,
 )]
 pub struct StLamports(pub u64);
+pub struct StakePoolTokenLamports(pub u64);
 
 impl fmt::Debug for StLamports {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -165,6 +166,20 @@ impl Lido {
         }
         Ok(())
     }
+
+    pub fn check_valid_minter_program(
+        minter_program: &Pubkey,
+        recipient: &AccountInfo,
+    ) -> Result<(), LidoError> {
+        if &spl_token::state::Account::unpack_from_slice(&recipient.data.borrow())
+            .map_err(|_| LidoError::InvalidFeeRecipient)?
+            .mint
+            != minter_program
+        {
+            return Err(LidoError::InvalidFeeRecipient);
+        }
+        Ok(())
+    }
 }
 
 #[repr(C)]
@@ -247,42 +262,6 @@ impl FeeSpec {
             denominator: self.sum(),
         }
     }
-    pub fn check_recipient_accounts(
-        &self,
-        minter_program: &Pubkey,
-        insurance_account_info: &AccountInfo,
-        treasury_account_info: &AccountInfo,
-        manager_accounts_info: &AccountInfo,
-    ) -> Result<(), LidoError> {
-        if &spl_token::state::Account::unpack_from_slice(&insurance_account_info.data.borrow())
-            .map_err(|_| LidoError::InvalidFeeRecipient)?
-            .mint
-            != minter_program
-        {
-            return Err(LidoError::InvalidFeeRecipient);
-        };
-        if &spl_token::state::Account::unpack_from_slice(&treasury_account_info.data.borrow())
-            .map_err(|_| LidoError::InvalidFeeRecipient)?
-            .mint
-            != minter_program
-        {
-            return Err(LidoError::InvalidFeeRecipient);
-        };
-        if &spl_token::state::Account::unpack_from_slice(&manager_accounts_info.data.borrow())
-            .map_err(|_| LidoError::InvalidFeeRecipient)?
-            .mint
-            != minter_program
-        {
-            return Err(LidoError::InvalidFeeRecipient);
-        };
-        if insurance_account_info.key != &self.insurance_account
-            || treasury_account_info.key != &self.treasury_account
-            || manager_accounts_info.key != &self.manager_account
-        {
-            return Err(LidoError::InvalidFeeRecipient);
-        }
-        Ok(())
-    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -293,13 +272,18 @@ pub struct Fees {
     pub manager_amount: StLamports,
 }
 
-pub fn distribute_fees(spec: &FeeSpec, num_validators: u64, amount: StLamports) -> Option<Fees> {
+pub fn distribute_fees(
+    spec: &FeeSpec,
+    num_validators: u64,
+    amount_spt: StakePoolTokenLamports,
+) -> Option<Fees> {
+    let amount = StLamports(amount_spt.0);
     let insurance_amount = (amount * spec.insurance_fraction())?;
     let treasury_amount = (amount * spec.treasury_fraction())?;
 
     // The actual amount that goes to validation can be a tiny bit lower
     // than the target amount, when the number of validators does not divide
-    // the target amount. The loss is at most `num_validators` μstSOL.
+    // the target amount. The loss is at most `num_validators` stLamports.
     let validation_target = (amount * spec.validation_fraction())?;
     let reward_per_validator = (validation_target / num_validators)?;
     let validation_actual = (reward_per_validator * num_validators)?;
@@ -484,7 +468,7 @@ mod test_lido {
     }
     #[test]
     fn test_fee_distribution() {
-        let spec_equal = FeeSpec {
+        let spec = FeeSpec {
             insurance_fee: 3,
             treasury_fee: 3,
             validation_fee: 2,
@@ -498,12 +482,12 @@ mod test_lido {
                 insurance_amount: StLamports(333),
                 treasury_amount: StLamports(333),
                 reward_per_validator: StLamports(222),
-                manager_amount: StLamports(112),
+                manager_amount: StLamports(111),
             },
-            distribute_fees(&spec_equal, 1, StLamports(1_000)).unwrap()
+            // Test no rounding errors
+            distribute_fees(&spec, 1, StakePoolTokenLamports(999)).unwrap()
         );
-        // Validation fee of 250 μstSOL is not a multiple of the number of
-        // validators, rounding error goes to the manager.
+
         assert_eq!(
             Fees {
                 insurance_amount: StLamports(333),
@@ -511,7 +495,8 @@ mod test_lido {
                 reward_per_validator: StLamports(55),
                 manager_amount: StLamports(114),
             },
-            distribute_fees(&spec_equal, 4, StLamports(1_000)).unwrap()
+            // Test rounding errors going to manager
+            distribute_fees(&spec, 4, StakePoolTokenLamports(1_000)).unwrap()
         );
         let spec_coprime = FeeSpec {
             insurance_fee: 13,
@@ -529,7 +514,7 @@ mod test_lido {
                 reward_per_validator: StLamports(319),
                 manager_amount: StLamports(265),
             },
-            distribute_fees(&spec_coprime, 1, StLamports(1_000)).unwrap()
+            distribute_fees(&spec_coprime, 1, StakePoolTokenLamports(1_000)).unwrap()
         );
     }
     #[test]
