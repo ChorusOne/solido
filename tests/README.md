@@ -6,3 +6,7 @@ to interact with them. This requires a local validator to be running.
 
 The tests are scripts that exit with status code 0 when the test passes, or with
 a nonzero status code when the test fails.
+
+In addition to the “black-box” tests here, there are also tests in the
+`program/tests` directory of the repository. Those tests do not require a
+local validator.
