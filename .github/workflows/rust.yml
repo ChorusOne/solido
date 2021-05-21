@@ -48,6 +48,7 @@ jobs:
         sudo apt-get install -y libudev-dev
         sh -c "$(curl -sSfL https://release.solana.com/v1.6.7/install)"
         export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
+        cargo build-bpf
         cargo test-bpf
 
     - name: Build and test Multisig
