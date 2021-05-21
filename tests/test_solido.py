@@ -41,7 +41,6 @@ def solido(*args: str, keypair_path: Optional[str] = None) -> Any:
         '--cluster', 'localnet',
         '--output', 'json',
         *([] if keypair_path is None else ['--keypair-path', keypair_path]),
-        '--stake-pool-program-id', stake_pool_program_id,
         '--lido-program-id', lido_program_id,
         *args,
     )
