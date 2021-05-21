@@ -1,6 +1,5 @@
 #![allow(dead_code)] // Some methods are used for tests
 use lido::{
-    id,
     instruction::{self, initialize},
     processor,
     state::{FeeDistribution, ValidatorCreditAccounts, LIDO_CONSTANT_SIZE},
@@ -18,8 +17,12 @@ use self::stakepool_account::{create_mint, transfer, ValidatorStakeAccount};
 pub mod stakepool_account;
 pub const MAX_VALIDATORS: u32 = 10_000;
 
+// This id is only used throughout these tests.
+solana_program::declare_id!("3kEkdGe68DuTKg6FhVrLPZ3Wm8EcUPCPjhCeu8WrGDoc");
+
 pub fn program_test() -> ProgramTest {
-    let mut program = ProgramTest::new("lido", id(), processor!(processor::process));
+    let mut program = ProgramTest::new("lido",
+        id(), processor!(processor::process));
     program.add_program(
         "spl_stake_pool",
         spl_stake_pool::id(),

@@ -22,14 +22,9 @@ addr1 = create_test_account('test-key-1.json')
 print(f'> {addr1}')
 
 
-print('\nUploading SPL stake pool program ...')
-stake_pool_program_id = solana_program_deploy('target/deploy/spl_stake_pool.so')
-print(f'> Stake pool program id is {stake_pool_program_id}.')
-
-
-print('\nUploading Lido program ...')
-lido_program_id = solana_program_deploy('target/deploy/lido.so')
-print(f'> Lido program id is {lido_program_id}.')
+print('\nUploading Solido program ...')
+solido_program_id = solana_program_deploy('target/deploy/lido.so')
+print(f'> Solido program id is {solido_program_id}.')
 
 
 def solido(*args: str, keypair_path: Optional[str] = None) -> Any:
@@ -41,7 +36,6 @@ def solido(*args: str, keypair_path: Optional[str] = None) -> Any:
         '--cluster', 'localnet',
         '--output', 'json',
         *([] if keypair_path is None else ['--keypair-path', keypair_path]),
-        '--lido-program-id', lido_program_id,
         *args,
     )
     if output == '':
@@ -53,3 +47,14 @@ def solido(*args: str, keypair_path: Optional[str] = None) -> Any:
             print('Failed to decode output as json, output was:')
             print(output)
             raise
+
+
+print('\nCreating Solido instance')
+result = solido(
+    'create-solido',
+    '--solido-program-id', solido_program_id,
+    '--fee-numerator', '4',
+    '--fee-denominator', '31',
+    '--max-validators', '251',
+)
+print(result)

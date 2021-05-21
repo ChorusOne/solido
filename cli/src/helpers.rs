@@ -62,6 +62,10 @@ pub fn send_transaction(
 
 #[derive(Clap, Debug)]
 pub struct CreateSolidoOpts {
+    /// Address of the Solido program.
+    #[clap(long)]
+    pub solido_program_id: Pubkey,
+
     /// Numerator of the fee fraction.
     #[clap(long)]
     pub fee_numerator: u64,
@@ -147,19 +151,19 @@ pub fn command_create_solido(
     let lido_keypair = Keypair::new();
 
     let (reserve_authority, _) = lido::find_authority_program_address(
-        &lido::id(),
+        &opts.solido_program_id,
         &lido_keypair.pubkey(),
         RESERVE_AUTHORITY,
     );
 
     let (fee_authority, _) = lido::find_authority_program_address(
-        &lido::id(),
+        &opts.solido_program_id,
         &lido_keypair.pubkey(),
         FEE_MANAGER_AUTHORITY,
     );
 
     let (deposit_authority, _) = lido::find_authority_program_address(
-        &lido::id(),
+        &opts.solido_program_id,
         &lido_keypair.pubkey(),
         DEPOSIT_AUTHORITY,
     );
@@ -219,7 +223,7 @@ pub fn command_create_solido(
                 &lido_keypair.pubkey(),
                 lido_account_balance,
                 lido_size as u64,
-                &lido::id(),
+                &opts.solido_program_id,
             ),
             // Account for the pool fee accumulation
             system_instruction::create_account(
@@ -241,17 +245,17 @@ pub fn command_create_solido(
                 &pool_token_to.pubkey(),
                 fee_token_balance,
                 spl_token::state::Account::LEN as u64,
-                &spl_token::id(),
+                &opts.solido_program_id,
             ),
             // Initialize Lido's account in Stake Pool
             spl_token::instruction::initialize_account(
                 &spl_token::id(),
                 &pool_token_to.pubkey(),
                 &stake_pool.mint_address,
-                &lido::id(),
+                &opts.solido_program_id,
             )?,
             lido::instruction::initialize(
-                &lido::id(),
+                &opts.solido_program_id,
                 FeeDistribution {
                     insurance_fee: opts.insurance_fee,
                     treasury_fee: opts.treasury_fee,
