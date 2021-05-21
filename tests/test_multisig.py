@@ -19,14 +19,26 @@ import subprocess
 import sys
 import tempfile
 
-from typing import Any, Dict, NamedTuple
+from typing import Any, Dict, Optional, NamedTuple
 
 
 def run(*args: str) -> str:
     """
     Run a program, ensure it exits with code 0, return its stdout.
     """
-    result = subprocess.run(args, check=True, capture_output=True, encoding='utf-8')
+    try:
+        result = subprocess.run(args, check=True, capture_output=True, encoding='utf-8')
+
+    except subprocess.CalledProcessError as err:
+        # If a test fails, it is helpful to print stdout and stderr here, but
+        # we don't print them by default because some calls are expected to
+        # fail, and we don't want to pollute the output in that case, because
+        # a log full of errors makes it difficult to locate the actual error in
+        # the noise.
+        # print('Stdout:', err.stdout)
+        # print('Stderr:', err.stderr)
+        raise
+
     return result.stdout
 
 
@@ -80,21 +92,28 @@ multisig_program_id = solana_program_deploy('target/deploy/multisig.so')
 print(f'> Multisig program id is {multisig_program_id}.')
 
 
-def multisig(*args: str) -> Any:
+def multisig(*args: str, keypair_path: Optional[str] = None) -> Any:
     """
     Run 'multisig' against localhost, return its parsed json output.
     """
     output = run(
-        'target/debug/multisig',
+        'target/debug/solido',
         '--cluster', 'localnet',
+        '--output', 'json',
+        *([] if keypair_path is None else ['--keypair-path', keypair_path]),
+        'multisig',
         '--multisig-program-id', multisig_program_id,
-        '--output-json',
         *args,
     )
     if output == '':
         return {}
     else:
-        return json.loads(output)
+        try:
+            return json.loads(output)
+        except json.JSONDecodeError:
+            print('Failed to decode output as json, output was:')
+            print(output)
+            raise
 
 
 print('\nCreating new multisig ...')
@@ -209,12 +228,12 @@ else:
 
 print('\nProposing program upgrade ...')
 result = multisig(
-    '--keypair-path', 'test-key-1.json',
     'propose-upgrade',
     '--multisig-address', multisig_address,
     '--program-address', program_id,
     '--buffer-address', buffer_address,
     '--spill-address', addr1,
+    keypair_path='test-key-1.json',
 )
 upgrade_transaction_address = result['transaction_address']
 print(f'> Transaction address is {upgrade_transaction_address}.')
@@ -251,7 +270,11 @@ try:
     )
 except subprocess.CalledProcessError as err:
     assert err.returncode != 0
-    assert 'Not enough owners signed this transaction' in err.stderr
+    # assert 'Not enough owners signed this transaction' in err.stderr
+    # TODO: Previously the error included a human-readable message, why does it
+    # only include the error code now? Something to do with different Anchor
+    # versions?
+    assert 'custom program error: 0x65' in err.stderr
     new_info = solana_program_show(program_id)
     assert new_info == upload_info, 'Program should not have changed.'
     print('> Execution failed as expected.')
@@ -262,10 +285,10 @@ else:
 
 print('\nApproving transaction from a second account ...')
 multisig(
-    '--keypair-path', 'test-key-2.json',
     'approve',
     '--multisig-address', multisig_address,
     '--transaction-address', upgrade_transaction_address,
+    keypair_path='test-key-2.json',
 )
 result = multisig(
     'show-transaction',
@@ -306,7 +329,11 @@ try:
     )
 except subprocess.CalledProcessError as err:
     assert err.returncode != 0
-    assert 'The given transaction has already been executed.' in err.stderr
+    # assert 'The given transaction has already been executed.' in err.stderr
+    # TODO: Previously the error included a human-readable message, why does it
+    # only include the error code now? Something to do with different Anchor
+    # versions?
+    assert 'custom program error: 0x69' in err.stderr
     new_info = solana_program_show(program_id)
     assert new_info == upgrade_info, 'Program should not have changed.'
     print('> Execution failed as expected.')
@@ -328,12 +355,12 @@ assert multisig_before == {
 print('\nProposing to remove the third owner from the multisig ...')
 # This time we omit the third owner. The threshold remains 2.
 result = multisig(
-    '--keypair-path', 'test-key-1.json',
     'propose-change-multisig',
     '--multisig-address', multisig_address,
     '--threshold', '2',
     '--owner', addr1,
     '--owner', addr2,
+    keypair_path='test-key-1.json',
 )
 change_multisig_transaction_address = result['transaction_address']
 print(f'> Transaction address is {change_multisig_transaction_address}.')
@@ -341,10 +368,10 @@ print(f'> Transaction address is {change_multisig_transaction_address}.')
 
 print('\nApproving transaction from a second account ...')
 multisig(
-    '--keypair-path', 'test-key-3.json',
     'approve',
     '--multisig-address', multisig_address,
     '--transaction-address', change_multisig_transaction_address,
+    keypair_path='test-key-3.json',
 )
 result = multisig(
     'show-transaction',
@@ -397,12 +424,12 @@ print('> Owners ids are gone, but approval count is preserved as expected.')
 # is no longer allowed to approve.
 print('\nProposing new program upgrade ...')
 result = multisig(
-    '--keypair-path', 'test-key-1.json',
     'propose-upgrade',
     '--multisig-address', multisig_address,
     '--program-address', program_id,
     '--buffer-address', buffer_address,
     '--spill-address', addr1,
+    keypair_path='test-key-1.json',
 )
 upgrade_transaction_address = result['transaction_address']
 print(f'> Transaction address is {upgrade_transaction_address}.')
@@ -411,14 +438,18 @@ print(f'> Transaction address is {upgrade_transaction_address}.')
 print('\nApproving this transaction from owner 3, which should fail ...')
 try:
     multisig(
-        '--keypair-path', 'test-key-3.json',
         'approve',
         '--multisig-address', multisig_address,
         '--transaction-address', upgrade_transaction_address,
+        keypair_path='test-key-3.json',
     )
 except subprocess.CalledProcessError as err:
     assert err.returncode != 0
-    assert 'The given owner is not part of this multisig.' in err.stderr
+    # assert 'The given owner is not part of this multisig.' in err.stderr
+    # TODO: Previously the error included a human-readable message, why does it
+    # only include the error code now? Something to do with different Anchor
+    # versions?
+    assert 'custom program error: 0x64' in err.stderr
     result = multisig(
         'show-transaction',
         '--transaction-address', upgrade_transaction_address,

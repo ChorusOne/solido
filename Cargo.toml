@@ -1,14 +1,6 @@
 [workspace]
 members = [
     "cli",
+    "multisig/programs/multisig",
     "program",
-]
-
-# We include the "multisig" repository as a submodule so we can depend on the
-# "multisig" program and library in there, but it also contains a workspace,
-# which interferes with this one, because there can only be one root. So
-# explicitly exclude it, we can still have a path dependency to the library in
-# there.
-exclude = [
-    "multisig"
 ]
