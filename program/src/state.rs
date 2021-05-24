@@ -233,7 +233,7 @@ impl ValidatorCreditAccounts {
 /// Determines how fees are split up among these parties, represented as the
 /// number of parts of the total. For example, if each party has 1 part, then
 /// they all get an equal share of the fee.
-#[derive(Clone, Default, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
+#[derive(Clone, Default, PartialEq, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
 pub struct FeeDistribution {
     pub insurance_fee: u32,
     pub treasury_fee: u32,

@@ -1820,6 +1820,7 @@ dependencies = [
  "num-traits",
  "num_enum",
  "proptest",
+ "rand 0.8.3",
  "serde",
  "serde_derive",
  "solana-program",

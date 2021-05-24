@@ -567,8 +567,7 @@ pub fn initialize_stake_pool_with_authority(
 }
 
 // Changes the Fee spec
-// The new FeeSpec is passed by argument but we still need to pass the recipient
-// fee accounts so we check that they are valid StSol holders
+// The new Fee structure is passed by argument and the recipients are passed here
 accounts_struct! {
     ChangeFeeSpecMeta, ChangeFeeSpecInfo {
         pub lido {
