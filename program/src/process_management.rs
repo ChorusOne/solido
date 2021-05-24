@@ -15,7 +15,7 @@ use crate::{
         AddValidatorInfo, ChangeFeeSpecInfo, ClaimValidatorFeeInfo,
         CreateValidatorStakeAccountInfo, DistributeFeesInfo,
     },
-    logic::{token_mint_to, transfer_to},
+    logic::{get_stake_state, token_mint_to, transfer_to},
     state::{distribute_fees, FeeDistribution, Lido, StLamports, StakePoolTokenLamports},
     FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY, STAKE_POOL_AUTHORITY,
 };
@@ -154,9 +154,12 @@ pub fn process_add_validator(program_id: &Pubkey, accounts_raw: &[AccountInfo]) 
         return Err(LidoError::UnexpectedValidatorCreditAccountSize.into());
     }
 
-    lido.fee_recipients
-        .validator_credit_accounts
-        .add(*accounts.validator_token_account.key)?;
+    let (meta, stake) = get_stake_state(accounts.stake_account)?;
+
+    lido.fee_recipients.validator_credit_accounts.add(
+        stake.delegation.voter_pubkey,
+        *accounts.validator_token_account.key,
+    )?;
     lido.serialize(&mut *accounts.lido.data.borrow_mut())
         .map_err(|err| err.into())
 }
@@ -184,7 +187,7 @@ pub fn process_claim_validator_fee(
         .validator_credit_accounts
         .validator_accounts
         .iter_mut()
-        .find(|vc| &vc.address == accounts.validator_token.key)
+        .find(|vc| &vc.token_address == accounts.validator_token.key)
         .ok_or(LidoError::InvalidValidatorCreditAccount)?;
     token_mint_to(
         accounts.lido.key,

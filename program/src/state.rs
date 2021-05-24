@@ -193,7 +193,8 @@ pub struct ValidatorCreditAccounts {
 #[repr(C)]
 #[derive(Clone, Debug, Default, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema)]
 pub struct ValidatorCredit {
-    pub address: Pubkey,
+    pub vote_address: Pubkey,
+    pub token_address: Pubkey,
     pub st_sol_amount: StLamports,
 }
 
@@ -206,18 +207,25 @@ impl ValidatorCreditAccounts {
     }
     pub fn maximum_accounts(buffer_size: usize) -> usize {
         // 8 bytes: 4 bytes for `max_validators` + 4 bytes for number of validators in vec
-        // 40 bytes for each validator = 32 bytes + 8 bytes for st_sol_amount
-        // TODO: Make a test for this
-        buffer_size.saturating_sub(8) / 40
+        // 32*2+8 bytes for each validator = 2 public keys + amount in StLamports
+        buffer_size.saturating_sub(8) / (32 * 2 + 8)
     }
-    pub fn add(&mut self, address: Pubkey) -> Result<(), LidoError> {
+    pub fn add(&mut self, vote_address: Pubkey, token_address: Pubkey) -> Result<(), LidoError> {
         if self.validator_accounts.len() == self.max_validators as usize {
             return Err(LidoError::MaximumValidatorsExceeded);
         }
-        self.validator_accounts.push(ValidatorCredit {
-            address,
-            st_sol_amount: StLamports(0),
-        });
+        // Adds if vote account is different
+        if !self
+            .validator_accounts
+            .iter()
+            .any(|v| v.vote_address == vote_address)
+        {
+            self.validator_accounts.push(ValidatorCredit {
+                vote_address,
+                token_address,
+                st_sol_amount: StLamports(0),
+            });
+        }
         Ok(())
     }
 }
@@ -323,13 +331,10 @@ mod test_lido {
     fn test_validator_credit_size() {
         let one_val = get_instance_packed_len(&ValidatorCreditAccounts::new(1)).unwrap();
         let two_val = get_instance_packed_len(&ValidatorCreditAccounts::new(2)).unwrap();
-        assert_eq!(two_val - one_val, 40);
+        assert_eq!(two_val - one_val, 72);
     }
     #[test]
     fn test_lido_serialization() {
-        let one_val = get_instance_packed_len(&ValidatorCreditAccounts::new(1)).unwrap();
-        let two_val = get_instance_packed_len(&ValidatorCreditAccounts::new(2)).unwrap();
-        assert_eq!(two_val - one_val, 40);
         let mut data = Vec::new();
         let lido = Lido {
             stake_pool_account: Pubkey::new_unique(),
@@ -355,7 +360,8 @@ mod test_lido {
                 validator_credit_accounts: ValidatorCreditAccounts {
                     max_validators: 10000,
                     validator_accounts: vec![ValidatorCredit {
-                        address: Pubkey::new_unique(),
+                        vote_address: Pubkey::new_unique(),
+                        token_address: Pubkey::new_unique(),
                         st_sol_amount: StLamports(10000),
                     }],
                 },
@@ -363,9 +369,9 @@ mod test_lido {
         };
         let validator_accounts_len =
             get_instance_packed_len(&ValidatorCreditAccounts::new(10000)).unwrap();
-        assert_eq!(validator_accounts_len, 10000 * 40 + 8);
+        assert_eq!(validator_accounts_len, 10000 * (32 * 2 + 8) + 8);
         lido.serialize(&mut data).unwrap();
-        assert_eq!(data.len(), LIDO_CONSTANT_SIZE + 48);
+        assert_eq!(data.len(), LIDO_CONSTANT_SIZE + (32 * 2 + 8) + 8);
     }
 
     #[test]
