@@ -2,13 +2,13 @@
 module.exports = {
   title: 'Lido for Solana',
   tagline: 'Awesome liquid staking on Solana, the high-performance, permissionless blockchain',
-  url: 'https://docs.lidoforsolana.com',
+  url: 'https://solido.chorusone.github.io',
   baseUrl: '/',
   onBrokenLinks: 'ignore',
   onBrokenMarkdownLinks: 'warn',
   favicon: 'img/favicon.ico',
   organizationName: 'chorusone',
-  projectName: 'lidoforsolana',
+  projectName: 'solido',
   i18n: {
     defaultLocale: 'en',
     locales: [ 'en'],
@@ -18,8 +18,8 @@ module.exports = {
       title: 'Lido for Solana',
       logo: {
         alt: 'Lido for Solana Logo',
-        src: 'img/logo.svg',
-        srcDark: 'img/logo.svg',
+        src: 'img/lido-droplet-round.svg',
+        srcDark: 'img/lido-droplet-round.svg',
       },
       items: [
         {
