@@ -622,9 +622,9 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
-        pub stake_pool_program_id {
+        pub stake_pool_program {
             is_signer: false,
-            is_writable: true,
+            is_writable: false,
         },
         pub stake_pool {
             is_signer: false,
@@ -677,9 +677,9 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
-        pub stake_pool_program_id {
+        pub stake_pool_program {
             is_signer: false,
-            is_writable: true,
+            is_writable: false,
         },
         pub stake_pool {
             is_signer: false,
@@ -689,17 +689,21 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
+        pub new_withdraw_authority {
+            is_signer: false,
+            is_writable: false,
+        },
         pub stake_pool_validator_list {
             is_signer: false,
             is_writable: true,
         },
-        pub stake_account {
+        pub stake_remove {
             is_signer: false,
-            is_writable: true,
+            is_writable:  true,
         },
-        pub validator_token_account {
+        pub transient_stake {
             is_signer: false,
-            is_writable: false,
+            is_writable:  false,
         },
         const sysvar_clock = sysvar::clock::id(),
         const sysvar_stake_program = stake_program::id(),

@@ -375,12 +375,45 @@ impl LidoAccounts {
                     lido: self.lido.pubkey(),
                     manager: self.manager.pubkey(),
                     stake_pool_manager_authority: self.stake_pool_authority,
-                    stake_pool_program_id: spl_stake_pool::id(),
+                    stake_pool_program: spl_stake_pool::id(),
                     stake_pool: self.stake_pool_accounts.stake_pool.pubkey(),
                     stake_pool_withdraw_authority: self.stake_pool_accounts.withdraw_authority,
                     stake_pool_validator_list: self.stake_pool_accounts.validator_list.pubkey(),
                     stake_account: *stake,
                     validator_token_account: *validator_token_account,
+                },
+            )
+            .unwrap()],
+            Some(&payer.pubkey()),
+            &[payer, &self.manager],
+            *recent_blockhash,
+        );
+        banks_client.process_transaction(transaction).await.err()
+    }
+
+    pub async fn remove_validator(
+        &self,
+        banks_client: &mut BanksClient,
+        payer: &Keypair,
+        recent_blockhash: &Hash,
+        new_authority: &Pubkey,
+        validator_stake: &Pubkey,
+        transient_stake: &Pubkey,
+    ) -> Option<TransportError> {
+        let transaction = Transaction::new_signed_with_payer(
+            &[lido::instruction::remove_validator(
+                &id(),
+                &lido::instruction::RemoveValidatorMeta {
+                    lido: self.lido.pubkey(),
+                    manager: self.manager.pubkey(),
+                    stake_pool_manager_authority: self.stake_pool_authority,
+                    stake_pool_program: spl_stake_pool::id(),
+                    stake_pool: self.stake_pool_accounts.stake_pool.pubkey(),
+                    stake_pool_withdraw_authority: self.stake_pool_accounts.withdraw_authority,
+                    new_withdraw_authority: *new_authority,
+                    stake_pool_validator_list: self.stake_pool_accounts.validator_list.pubkey(),
+                    stake_remove: *validator_stake,
+                    transient_stake: *transient_stake,
                 },
             )
             .unwrap()],

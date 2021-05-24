@@ -85,6 +85,12 @@ pub enum LidoError {
     /// There is a stake account with the same key present in the validator credit list.
     #[error("DuplicatedValidatorCreditStakeAccount")]
     DuplicatedValidatorCreditStakeAccount,
+    /// Validator credit account was not found
+    #[error("ValidatorCreditNotFound")]
+    ValidatorCreditNotFound,
+    /// Validator has unclaimed credit, should mint the tokens before the validator removal
+    #[error("ValidatorHasUnclaimedCredit")]
+    ValidatorHasUnclaimedCredit,
 }
 impl From<LidoError> for ProgramError {
     fn from(e: LidoError) -> Self {
