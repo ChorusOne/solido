@@ -4,7 +4,7 @@ module.exports = {
   tagline: 'Awesome liquid staking on Solana, the high-performance, permissionless blockchain',
   url: 'https://docs.lidoforsolana.com',
   baseUrl: '/',
-  onBrokenLinks: 'throw',
+  onBrokenLinks: 'ignore',
   onBrokenMarkdownLinks: 'warn',
   favicon: 'img/favicon.ico',
   organizationName: 'chorusone',
@@ -79,9 +79,6 @@ module.exports = {
       '@docusaurus/preset-classic',
       {
         docs: {
-          path: "docs",
-          routeBasePath: "/",
-          homePageId: "introduction",
           sidebarPath: require.resolve('./sidebars.js'),
         },
         blog: {
