@@ -5,7 +5,9 @@ use solana_program::{
 };
 use spl_stake_pool::{
     error::StakePoolError,
-    instruction::{add_validator_to_pool, create_validator_stake_account},
+    instruction::{
+        add_validator_to_pool, create_validator_stake_account, remove_validator_from_pool,
+    },
     state::StakePool,
 };
 
@@ -13,7 +15,7 @@ use crate::{
     error::LidoError,
     instruction::{
         AddValidatorInfo, ChangeFeeSpecInfo, ClaimValidatorFeeInfo,
-        CreateValidatorStakeAccountInfo, DistributeFeesInfo,
+        CreateValidatorStakeAccountInfo, DistributeFeesInfo, RemoveValidatorInfo,
     },
     logic::{token_mint_to, transfer_to},
     state::{distribute_fees, FeeDistribution, Lido, StLamports, StakePoolTokenLamports},
@@ -163,7 +165,43 @@ pub fn process_add_validator(program_id: &Pubkey, accounts_raw: &[AccountInfo]) 
 }
 
 /// TODO
-pub fn process_remove_validator(_program_id: &Pubkey, _accounts: &[AccountInfo]) -> ProgramResult {
+pub fn process_remove_validator(
+    program_id: &Pubkey,
+    accounts_raw: &[AccountInfo],
+) -> ProgramResult {
+    let accounts = RemoveValidatorInfo::try_from_slice(accounts_raw)?;
+    if accounts.lido.owner != program_id {
+        msg!("Lido state has an invalid owner, should be the Lido program");
+        return Err(LidoError::InvalidOwner.into());
+    }
+
+    invoke_signed(
+        &remove_validator_from_pool(
+            accounts.stake_pool_program_id.key,
+            accounts.stake_pool.key,
+            accounts.stake_pool_manager_authority.key,
+            accounts.stake_pool_withdraw_authority.key,
+            accounts.stake_pool_validator_list.key,
+            accounts.stake_account.key,
+        ),
+        &[
+            accounts.stake_pool_program_id.clone(),
+            accounts.stake_pool.clone(),
+            accounts.stake_pool_manager_authority.clone(),
+            accounts.stake_pool_withdraw_authority.clone(),
+            accounts.stake_pool_validator_list.clone(),
+            accounts.stake_account.clone(),
+            accounts.sysvar_clock.clone(),
+            accounts.sysvar_stake_history.clone(),
+            accounts.sysvar_stake_program.clone(),
+        ],
+        &[&[
+            &accounts.lido.key.to_bytes()[..32],
+            STAKE_POOL_AUTHORITY,
+            &[lido.stake_pool_authority_bump_seed],
+        ]],
+    )?;
+
     unimplemented!()
 }
 

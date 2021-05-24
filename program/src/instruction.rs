@@ -664,6 +664,60 @@ pub fn add_validator(
 }
 
 accounts_struct! {
+    RemoveValidatorMeta, RemoveValidatorInfo {
+        pub lido {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub manager {
+            is_signer: true,
+            is_writable: false,
+        },
+        pub stake_pool_manager_authority {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub stake_pool_program_id {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub stake_pool {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub stake_pool_withdraw_authority {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub stake_pool_validator_list {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub stake_account {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub validator_token_account {
+            is_signer: false,
+            is_writable: false,
+        },
+        const sysvar_clock = sysvar::clock::id(),
+        const sysvar_stake_program = stake_program::id(),
+    }
+}
+
+pub fn remove_validator(
+    program_id: &Pubkey,
+    accounts: &RemoveValidatorMeta,
+) -> Result<Instruction, ProgramError> {
+    Ok(Instruction {
+        program_id: *program_id,
+        accounts: accounts.to_vec(),
+        data: LidoInstruction::RemoveValidator.try_to_vec()?,
+    })
+}
+
+accounts_struct! {
     DistributeFeesMeta, DistributeFeesInfo {
         pub lido {
             is_signer: false,
