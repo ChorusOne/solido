@@ -18,6 +18,8 @@ extern crate spl_stake_pool;
 mod helpers;
 mod multisig;
 mod stake_pool_helpers;
+mod util;
+
 type Error = Box<dyn std::error::Error>;
 
 #[derive(Copy, Clone, Debug)]

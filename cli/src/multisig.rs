@@ -15,9 +15,10 @@ use borsh::ser::BorshSerialize;
 use clap::Clap;
 use multisig::accounts as multisig_accounts;
 use multisig::instruction as multisig_instruction;
-use serde::{Serialize, Serializer};
+use serde::{Serialize};
 
 use crate::{print_output, OutputMode};
+use crate::util::PubkeyBase58;
 
 #[derive(Clap, Debug)]
 pub struct MultisigOpts {
@@ -201,34 +202,6 @@ pub fn main(
 fn get_multisig_program_address(program: &Program, multisig_pubkey: &Pubkey) -> (Pubkey, u8) {
     let seeds = [multisig_pubkey.as_ref()];
     Pubkey::find_program_address(&seeds, &program.id())
-}
-
-/// Wrapper for `Pubkey` to serialize it as base58 in json, instead of a list of numbers.
-struct PubkeyBase58(Pubkey);
-
-impl fmt::Display for PubkeyBase58 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
-impl Serialize for PubkeyBase58 {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        // Defer to the Display impl, which formats as base58.
-        serializer.collect_str(&self.0)
-    }
-}
-
-impl From<Pubkey> for PubkeyBase58 {
-    fn from(pk: Pubkey) -> PubkeyBase58 {
-        PubkeyBase58(pk)
-    }
-}
-
-impl From<&Pubkey> for PubkeyBase58 {
-    fn from(pk: &Pubkey) -> PubkeyBase58 {
-        PubkeyBase58(*pk)
-    }
 }
 
 #[derive(Serialize)]

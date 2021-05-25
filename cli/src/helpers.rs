@@ -15,6 +15,7 @@ use spl_stake_pool::state::Fee;
 
 use crate::{
     stake_pool_helpers::{command_create_pool, CreatePoolOutput},
+    util::PubkeyBase58,
     Config, Error, OutputMode,
 };
 
@@ -108,23 +109,23 @@ pub struct CreateSolidoOpts {
 #[derive(Serialize)]
 pub struct CreateSolidoOutput {
     /// Account that stores the data for this Solido instance.
-    pub solido_address: Pubkey,
+    pub solido_address: PubkeyBase58,
 
     /// Manages the deposited sol and token minting.
-    pub reserve_authority: Pubkey,
+    pub reserve_authority: PubkeyBase58,
 
     /// Owner of the `fee_address`.
-    pub fee_authority: Pubkey,
+    pub fee_authority: PubkeyBase58,
 
     /// Solido-managed account that the stake pool deposits fees in SPT into
     /// after a balance update. Holds Stake Pool tokens.
-    pub fee_address: Pubkey,
+    pub fee_address: PubkeyBase58,
 
     /// SPL token mint account for StSol tokens.
-    pub mint_address: Pubkey,
+    pub mint_address: PubkeyBase58,
 
     /// The only depositor of the stake pool.
-    pub pool_token_to: Pubkey,
+    pub pool_token_to: PubkeyBase58,
 
     /// Details of the stake pool managed by Solido.
     pub stake_pool: CreatePoolOutput,
@@ -251,7 +252,7 @@ pub fn command_create_solido(
             spl_token::instruction::initialize_account(
                 &spl_token::id(),
                 &pool_token_to.pubkey(),
-                &stake_pool.mint_address,
+                &stake_pool.mint_address.0,
                 &opts.solido_program_id,
             )?,
             lido::instruction::initialize(
@@ -265,11 +266,11 @@ pub fn command_create_solido(
                 opts.max_validators,
                 &lido::instruction::InitializeAccountsMeta {
                     lido: lido_keypair.pubkey(),
-                    stake_pool: stake_pool.stake_pool_address,
-                    manager: config.staker.pubkey(),
+                    stake_pool: stake_pool.stake_pool_address.0,
                     mint_program: mint_keypair.pubkey(),
-                    pool_token_to: pool_token_to.pubkey(), // to define
-                    fee_token: fee_keypair.pubkey(),
+                    pool_token_to: pool_token_to.pubkey(),
+                    fee_token: fee_keypair.pubkey(), // to define
+                    manager: config.staker.pubkey(),
                     insurance_account: opts.insurance_account,
                     treasury_account: opts.treasury_account,
                     manager_fee_account: opts.manager_fee_account,
@@ -296,12 +297,12 @@ pub fn command_create_solido(
     send_transaction(&config, lido_transaction)?;
 
     let result = CreateSolidoOutput {
-        solido_address: lido_keypair.pubkey(),
-        reserve_authority,
-        fee_authority,
-        mint_address: mint_keypair.pubkey(),
-        fee_address: fee_keypair.pubkey(),
-        pool_token_to: pool_token_to.pubkey(),
+        solido_address: lido_keypair.pubkey().into(),
+        reserve_authority: reserve_authority.into(),
+        fee_authority: fee_authority.into(),
+        mint_address: mint_keypair.pubkey().into(),
+        fee_address: fee_keypair.pubkey().into(),
+        pool_token_to: pool_token_to.pubkey().into(),
         stake_pool,
     };
     Ok(result)

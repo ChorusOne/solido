@@ -3,6 +3,7 @@ use std::fmt;
 use {
     crate::helpers::{check_fee_payer_balance, send_transaction},
     crate::Config,
+    crate::util::PubkeyBase58,
     serde::Serialize,
     solana_program::{borsh::get_packed_len, program_pack::Pack, pubkey::Pubkey},
     solana_sdk::{
@@ -24,22 +25,22 @@ const STAKE_STATE_LEN: usize = 200;
 #[derive(Serialize)]
 pub struct CreatePoolOutput {
     /// Account that holds the stake pool data structure.
-    pub stake_pool_address: Pubkey,
+    pub stake_pool_address: PubkeyBase58,
 
     /// TODO(fynn): What's the reserve stake?
-    pub reserve_stake_address: Pubkey,
+    pub reserve_stake_address: PubkeyBase58,
 
     /// SPL token mint account for stake pool tokens.
-    pub mint_address: Pubkey,
+    pub mint_address: PubkeyBase58,
 
     /// Account that collected fees get deposited into.
-    pub fee_address: Pubkey,
+    pub fee_address: PubkeyBase58,
 
     /// Account that stores the validator list data structure.
-    pub validator_list_address: Pubkey,
+    pub validator_list_address: PubkeyBase58,
 
     /// Program-derived account that can mint stake pool tokens.
-    pub withdraw_authority: Pubkey,
+    pub withdraw_authority: PubkeyBase58,
 }
 
 impl fmt::Display for CreatePoolOutput {
@@ -232,12 +233,12 @@ pub fn command_create_pool(
     send_transaction(&config, initialize_transaction)?;
 
     let result = CreatePoolOutput {
-        stake_pool_address: stake_pool_keypair.pubkey(),
-        reserve_stake_address: reserve_stake.pubkey(),
-        mint_address: mint_keypair.pubkey(),
-        fee_address: pool_fee_account.pubkey(),
-        validator_list_address: validator_list.pubkey(),
-        withdraw_authority,
+        stake_pool_address: stake_pool_keypair.pubkey().into(),
+        reserve_stake_address: reserve_stake.pubkey().into(),
+        mint_address: mint_keypair.pubkey().into(),
+        fee_address: pool_fee_account.pubkey().into(),
+        validator_list_address: validator_list.pubkey().into(),
+        withdraw_authority: withdraw_authority.into(),
     };
     Ok(result)
 }
