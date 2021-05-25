@@ -82,18 +82,23 @@ In the context of the `Serum Multisig` program that we are using, `0xGovernance`
   - `Staker Role` corresponds to following responsibilities (instructions) in the Stake Pool Program
 
       ```
-    -  1. Set_Staker (needs signature of both manager and staker)
-    -  2. CreateValidatorStakeAccount
-    -  3. AddValidatorFromPool
-    -  4. RemoveValidatorFromPool
+    -  1. Set_Staker (needs signature of both manager and staker). [Update : This is not needed]
+    -  2. CreateValidatorStakeAccount [restrict to onlyManager and check with Fynn why we need this separately]
+    -  3. AddValidatorFromPool [restrict to onlyManager once Fynn has completed this]
+    -  4. RemoveValidatorFromPool [restrict to onlyManager once Fynn has completed this]
 
-    -  5. DecreaseValidatorStake
-    -  6. IncreaseValidatorStake
+    -  5. DecreaseValidatorStake [restrict to onlyMaintainers once Fynn has completed this]
+    -  6. IncreaseValidatorStake [restrict to onlyMaintainers once Fynn has completed this]
 
       ```
   - We need to proxy these instructions via the Lido Program 
     - Proxy Instructions 1. to 4. and gate them to `onlyLidoOwner`
     - Proxy Instructions 5., 6. and gate them to `onlyMaintainers` 
+
+
+  - CLI Requirements 
+      - Rebalancing Bot that intelligently calls 5. and 6. [Ruud <> Jon as Jon is building something similar]
+      - Post MVP : Consider rebalance function in the on-chain program 
 
 
 
@@ -104,7 +109,11 @@ In the context of the `Serum Multisig` program that we are using, `0xGovernance`
   - We will need to add functions to modify these params - and gate them to onlyLidoOwner
 
 
+  - CLI Entrypoint 
+
+
 ### PauseDeposits
+  - Not needed in MVP 
   - Discuss if we need a way to pause deposits
     - We might need this early on, when the Lido Program is initialised but we are still setting up params, validators etc
     - There might be a reason to pause deposits - at some later point too. eg. bug discovered, need to upgrade Lido
