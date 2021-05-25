@@ -21,6 +21,15 @@ print('Creating test accounts ...')
 addr1 = create_test_account('test-key-1.json')
 print(f'> {addr1}')
 
+treasury_account = create_test_account('treasury-key.json')
+print(f'> Treasury account:    {treasury_account}')
+
+insurance_account = create_test_account('insurance-key.json')
+print(f'> Insurance account: {insurance_account}')
+
+manager_fee_account = create_test_account('manager-fee-key.json')
+print(f'> Manager fee account: {manager_fee_account}')
+
 
 print('\nUploading Solido program ...')
 solido_program_id = solana_program_deploy('target/deploy/lido.so')
@@ -56,5 +65,12 @@ result = solido(
     '--fee-numerator', '4',
     '--fee-denominator', '31',
     '--max-validators', '251',
+    '--insurance-fee', '7',
+    '--treasury-fee', '5',
+    '--validation-fee', '3',
+    '--manager-fee', '2',
+    '--treasury-account', treasury_account,
+    '--manager-fee-account', manager_fee_account,
+    '--insurance-account', insurance_account,
 )
 print(result)
