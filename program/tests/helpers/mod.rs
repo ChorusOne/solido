@@ -1,18 +1,16 @@
+#![allow(dead_code)] // Some methods are used for tests
 use lido::{
     id,
     instruction::{self, initialize},
     processor,
-    state::{FeeSpec, Lido, ValidatorCreditAccounts, LIDO_CONSTANT_SIZE},
+    state::{FeeDistribution, ValidatorCreditAccounts, LIDO_CONSTANT_SIZE},
     DEPOSIT_AUTHORITY, FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY, STAKE_POOL_AUTHORITY,
 };
-use solana_program::{
-    borsh::get_packed_len, hash::Hash, instruction::AccountMeta, program_pack::Pack,
-    pubkey::Pubkey, system_instruction,
-};
+use solana_program::{hash::Hash, program_pack::Pack, pubkey::Pubkey, system_instruction};
 use solana_program_test::*;
 use solana_sdk::{signature::Keypair, transport::TransportError};
 use solana_sdk::{signature::Signer, transaction::Transaction};
-use spl_stake_pool::{borsh::get_instance_packed_len, state::Fee};
+use spl_stake_pool::borsh::get_instance_packed_len;
 use stakepool_account::StakePoolAccounts;
 
 use self::stakepool_account::{create_mint, transfer, ValidatorStakeAccount};
@@ -40,7 +38,7 @@ pub struct LidoAccounts {
     pub insurance_account: Keypair,
     pub treasury_account: Keypair,
     pub manager_fee_account: Keypair,
-    pub fee_structure: FeeSpec,
+    pub fee_distribution: FeeDistribution,
 
     pub reserve_authority: Pubkey,
     pub deposit_authority: Pubkey,
@@ -61,15 +59,11 @@ impl LidoAccounts {
         let treasury_account = Keypair::new();
         let manager_fee_account = Keypair::new();
 
-        let fee_structure = FeeSpec {
+        let fee_distribution = FeeDistribution {
             insurance_fee: 2,
             treasury_fee: 2,
             validation_fee: 2,
             manager_fee: 4,
-
-            insurance_account: insurance_account.pubkey(),
-            treasury_account: treasury_account.pubkey(),
-            manager_account: manager_fee_account.pubkey(),
         };
 
         let (reserve_authority, _) = Pubkey::find_program_address(
@@ -101,7 +95,7 @@ impl LidoAccounts {
             insurance_account,
             treasury_account,
             manager_fee_account,
-            fee_structure,
+            fee_distribution,
             reserve_authority,
             deposit_authority,
             stake_pool_authority,
@@ -195,7 +189,7 @@ impl LidoAccounts {
                 ),
                 initialize(
                     &id(),
-                    self.fee_structure.clone(),
+                    self.fee_distribution.clone(),
                     MAX_VALIDATORS,
                     &instruction::InitializeAccountsMeta {
                         lido: self.lido.pubkey(),

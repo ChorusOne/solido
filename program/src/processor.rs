@@ -18,7 +18,7 @@ use crate::{
         process_add_validator, process_change_fee_spec, process_claim_validator_fee,
         process_create_validator_stake_account, process_distribute_fees, process_remove_validator,
     },
-    state::{FeeSpec, Lido, ValidatorCreditAccounts, LIDO_CONSTANT_SIZE},
+    state::{FeeDistribution, FeeRecipients, Lido, ValidatorCreditAccounts, LIDO_CONSTANT_SIZE},
     DEPOSIT_AUTHORITY, FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY, STAKE_POOL_AUTHORITY,
 };
 
@@ -52,7 +52,7 @@ fn get_stake_state(
 /// Program state handler.
 pub fn process_initialize(
     program_id: &Pubkey,
-    fee_structure: FeeSpec,
+    fee_distribution: FeeDistribution,
     max_validators: u32,
     accounts_raw: &[AccountInfo],
 ) -> ProgramResult {
@@ -81,21 +81,9 @@ pub fn process_initialize(
     }
 
     // Check if fee structure is valid
-    Lido::check_valid_minter_program(
-        &accounts.mint_program.key,
-        accounts.insurance_account,
-        &fee_structure.insurance_account,
-    )?;
-    Lido::check_valid_minter_program(
-        &accounts.mint_program.key,
-        accounts.treasury_account,
-        &fee_structure.treasury_account,
-    )?;
-    Lido::check_valid_minter_program(
-        &accounts.mint_program.key,
-        accounts.manager_fee_account,
-        &fee_structure.manager_account,
-    )?;
+    Lido::check_valid_minter_program(&accounts.mint_program.key, accounts.insurance_account)?;
+    Lido::check_valid_minter_program(&accounts.mint_program.key, accounts.treasury_account)?;
+    Lido::check_valid_minter_program(&accounts.mint_program.key, accounts.manager_fee_account)?;
 
     let expected_max_validators =
         ValidatorCreditAccounts::maximum_accounts(accounts.lido.data_len() - LIDO_CONSTANT_SIZE);
@@ -107,9 +95,16 @@ pub fn process_initialize(
         );
         return Err(LidoError::UnexpectedValidatorCreditAccountSize.into());
     }
-    lido.validator_credit_accounts.max_validators = max_validators;
-    lido.validator_credit_accounts.validator_accounts.clear();
-
+    // Initialize fee structure
+    lido.fee_recipients = FeeRecipients {
+        insurance_account: *accounts.insurance_account.key,
+        treasury_account: *accounts.treasury_account.key,
+        manager_account: *accounts.manager_fee_account.key,
+        validator_credit_accounts: ValidatorCreditAccounts {
+            max_validators,
+            validator_accounts: Vec::new(),
+        },
+    };
     let (_, reserve_bump_seed) = Pubkey::find_program_address(
         &[&accounts.lido.key.to_bytes()[..32], RESERVE_AUTHORITY],
         program_id,
@@ -158,7 +153,7 @@ pub fn process_initialize(
     lido.stake_pool_authority_bump_seed = stake_pool_authority_bump_seed;
     lido.fee_manager_bump_seed = fee_manager_bump_seed;
 
-    lido.fee_spec = fee_structure;
+    lido.fee_distribution = fee_distribution;
 
     lido.serialize(&mut *accounts.lido.data.borrow_mut())
         .map_err(|e| e.into())
@@ -436,9 +431,9 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
     let instruction = LidoInstruction::try_from_slice(input)?;
     match instruction {
         LidoInstruction::Initialize {
-            fee_structure,
+            fee_distribution,
             max_validators,
-        } => process_initialize(program_id, fee_structure, max_validators, accounts),
+        } => process_initialize(program_id, fee_distribution, max_validators, accounts),
         LidoInstruction::Deposit { amount } => process_deposit(program_id, amount, accounts),
         LidoInstruction::DelegateDeposit { amount } => {
             process_delegate_deposit(program_id, amount, accounts)
@@ -447,9 +442,9 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
         LidoInstruction::Withdraw { amount } => process_withdraw(program_id, amount, accounts),
         LidoInstruction::DistributeFees => process_distribute_fees(program_id, accounts),
         LidoInstruction::ClaimValidatorFees => process_claim_validator_fee(program_id, accounts),
-        LidoInstruction::ChangeFeeSpec { new_fee } => {
-            process_change_fee_spec(program_id, new_fee, accounts)
-        }
+        LidoInstruction::ChangeFeeSpec {
+            new_fee_distribution,
+        } => process_change_fee_spec(program_id, new_fee_distribution, accounts),
         LidoInstruction::CreateValidatorStakeAccount => {
             process_create_validator_stake_account(program_id, accounts)
         }

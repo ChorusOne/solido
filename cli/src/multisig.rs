@@ -227,7 +227,7 @@ impl From<Pubkey> for PubkeyBase58 {
 
 impl From<&Pubkey> for PubkeyBase58 {
     fn from(pk: &Pubkey) -> PubkeyBase58 {
-        PubkeyBase58(pk.clone())
+        PubkeyBase58(*pk)
     }
 }
 
@@ -299,7 +299,7 @@ fn create_multisig(program: Program, opts: CreateMultisigOpts) -> CreateMultisig
         .args(multisig_instruction::CreateMultisig {
             owners: opts.owners,
             threshold: opts.threshold,
-            nonce: nonce,
+            nonce,
         })
         .send()
         .expect("Failed to send transaction.");
@@ -545,7 +545,7 @@ fn show_transaction(program: Program, opts: ShowTransactionOpts) -> ShowTransact
             buffer_address: instr.accounts[2].pubkey.into(),
             spill_address: instr.accounts[3].pubkey.into(),
         }
-    } else
+    }
     // Try to deserialize the known multisig instructions. The instruction
     // data starts with an 8-byte tag derived from the name of the function,
     // and then the struct data itself, so we need to skip the first 8 bytes
@@ -554,8 +554,8 @@ fn show_transaction(program: Program, opts: ShowTransactionOpts) -> ShowTransact
     // currently (https://github.com/project-serum/anchor/issues/243), so we
     // hard-code the tag here (it is stable as long as the namespace and
     // function name do not change).
-    if instr.program_id == program.id()
-        && &instr.data[..8] == &[122, 49, 168, 177, 231, 28, 167, 204]
+    else if instr.program_id == program.id()
+        && instr.data[..8] == [122, 49, 168, 177, 231, 28, 167, 204]
     {
         if let Ok(instr) =
             multisig_instruction::SetOwnersAndChangeThreshold::try_from_slice(&instr.data[8..])
@@ -574,7 +574,7 @@ fn show_transaction(program: Program, opts: ShowTransactionOpts) -> ShowTransact
     ShowTransactionOutput {
         multisig_address: transaction.multisig.into(),
         did_execute: transaction.did_execute,
-        signers: signers,
+        signers,
         instruction: instr,
         parsed_instruction: parsed_instr,
     }

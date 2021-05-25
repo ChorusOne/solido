@@ -112,8 +112,8 @@ pub struct Lido {
     pub fee_manager_bump_seed: u8,
 
     /// Fees
-    pub fee_spec: FeeSpec,
-    pub validator_credit_accounts: ValidatorCreditAccounts,
+    pub fee_distribution: FeeDistribution,
+    pub fee_recipients: FeeRecipients,
 }
 
 impl Lido {
@@ -167,18 +167,15 @@ impl Lido {
         Ok(())
     }
 
-    /// Checks if the `recipient_account.key == recipient_address` and
-    /// the token is minted by the `minter_program`
+    /// Checks if the token is minted by the `minter_program`
     pub fn check_valid_minter_program(
         minter_program: &Pubkey,
         token_account_info: &AccountInfo,
-        token_address: &Pubkey,
     ) -> Result<(), LidoError> {
-        if (&spl_token::state::Account::unpack_from_slice(&token_account_info.data.borrow())
+        if &spl_token::state::Account::unpack_from_slice(&token_account_info.data.borrow())
             .map_err(|_| LidoError::InvalidFeeRecipient)?
             .mint
-            != minter_program)
-            || (token_account_info.key != token_address)
+            != minter_program
         {
             return Err(LidoError::InvalidFeeRecipient);
         }
@@ -196,7 +193,8 @@ pub struct ValidatorCreditAccounts {
 #[repr(C)]
 #[derive(Clone, Debug, Default, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema)]
 pub struct ValidatorCredit {
-    pub address: Pubkey,
+    pub stake_address: Pubkey,
+    pub token_address: Pubkey,
     pub st_sol_amount: StLamports,
 }
 
@@ -209,18 +207,27 @@ impl ValidatorCreditAccounts {
     }
     pub fn maximum_accounts(buffer_size: usize) -> usize {
         // 8 bytes: 4 bytes for `max_validators` + 4 bytes for number of validators in vec
-        // 40 bytes for each validator = 32 bytes + 8 bytes for st_sol_amount
-        // TODO: Make a test for this
-        buffer_size.saturating_sub(8) / 40
+        // 32*2+8 bytes for each validator = 2 public keys + amount in StLamports
+        buffer_size.saturating_sub(8) / (32 * 2 + 8)
     }
-    pub fn add(&mut self, address: Pubkey) -> Result<(), LidoError> {
+    pub fn add(&mut self, stake_address: Pubkey, token_address: Pubkey) -> Result<(), LidoError> {
         if self.validator_accounts.len() == self.max_validators as usize {
             return Err(LidoError::MaximumValidatorsExceeded);
         }
-        self.validator_accounts.push(ValidatorCredit {
-            address,
-            st_sol_amount: StLamports(0),
-        });
+        // Adds if vote account is different
+        if !self
+            .validator_accounts
+            .iter()
+            .any(|v| v.stake_address == stake_address)
+        {
+            self.validator_accounts.push(ValidatorCredit {
+                stake_address,
+                token_address,
+                st_sol_amount: StLamports(0),
+            });
+        } else {
+            return Err(LidoError::DuplicatedValidatorCreditStakeAccount);
+        }
         Ok(())
     }
 }
@@ -228,19 +235,24 @@ impl ValidatorCreditAccounts {
 /// Determines how fees are split up among these parties, represented as the
 /// number of parts of the total. For example, if each party has 1 part, then
 /// they all get an equal share of the fee.
-#[derive(Clone, Default, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
-pub struct FeeSpec {
+#[derive(Clone, Default, PartialEq, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
+pub struct FeeDistribution {
     pub insurance_fee: u32,
     pub treasury_fee: u32,
     pub validation_fee: u32,
     pub manager_fee: u32,
+}
 
+/// Specifies the fee recipients, accounts that should be created by Lido's minter
+#[derive(Clone, Default, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
+pub struct FeeRecipients {
     pub insurance_account: Pubkey,
     pub treasury_account: Pubkey,
     pub manager_account: Pubkey,
+    pub validator_credit_accounts: ValidatorCreditAccounts,
 }
 
-impl FeeSpec {
+impl FeeDistribution {
     pub fn sum(&self) -> u64 {
         // These adds don't overflow because we widen from u32 to u64 first.
         self.insurance_fee as u64
@@ -277,18 +289,18 @@ pub struct Fees {
 }
 
 pub fn distribute_fees(
-    spec: &FeeSpec,
+    fee_distribution: &FeeDistribution,
     num_validators: u64,
     amount_spt: StakePoolTokenLamports,
 ) -> Option<Fees> {
     let amount = StLamports(amount_spt.0);
-    let insurance_amount = (amount * spec.insurance_fraction())?;
-    let treasury_amount = (amount * spec.treasury_fraction())?;
+    let insurance_amount = (amount * fee_distribution.insurance_fraction())?;
+    let treasury_amount = (amount * fee_distribution.treasury_fraction())?;
 
     // The actual amount that goes to validation can be a tiny bit lower
     // than the target amount, when the number of validators does not divide
     // the target amount. The loss is at most `num_validators` stLamports.
-    let validation_target = (amount * spec.validation_fraction())?;
+    let validation_target = (amount * fee_distribution.validation_fraction())?;
     let reward_per_validator = (validation_target / num_validators)?;
     let validation_actual = (reward_per_validator * num_validators)?;
 
@@ -321,13 +333,10 @@ mod test_lido {
     fn test_validator_credit_size() {
         let one_val = get_instance_packed_len(&ValidatorCreditAccounts::new(1)).unwrap();
         let two_val = get_instance_packed_len(&ValidatorCreditAccounts::new(2)).unwrap();
-        assert_eq!(two_val - one_val, 40);
+        assert_eq!(two_val - one_val, 72);
     }
     #[test]
     fn test_lido_serialization() {
-        let one_val = get_instance_packed_len(&ValidatorCreditAccounts::new(1)).unwrap();
-        let two_val = get_instance_packed_len(&ValidatorCreditAccounts::new(2)).unwrap();
-        assert_eq!(two_val - one_val, 40);
         let mut data = Vec::new();
         let lido = Lido {
             stake_pool_account: Pubkey::new_unique(),
@@ -340,28 +349,31 @@ mod test_lido {
             deposit_authority_bump_seed: 2,
             stake_pool_authority_bump_seed: 3,
             fee_manager_bump_seed: 4,
-            fee_spec: FeeSpec {
+            fee_distribution: FeeDistribution {
                 insurance_fee: 1,
                 treasury_fee: 2,
                 validation_fee: 3,
                 manager_fee: 4,
+            },
+            fee_recipients: FeeRecipients {
                 insurance_account: Pubkey::new_unique(),
                 treasury_account: Pubkey::new_unique(),
                 manager_account: Pubkey::new_unique(),
-            },
-            validator_credit_accounts: ValidatorCreditAccounts {
-                validator_accounts: vec![ValidatorCredit {
-                    address: Pubkey::new_unique(),
-                    st_sol_amount: StLamports(10000),
-                }],
-                max_validators: 10000,
+                validator_credit_accounts: ValidatorCreditAccounts {
+                    max_validators: 10000,
+                    validator_accounts: vec![ValidatorCredit {
+                        stake_address: Pubkey::new_unique(),
+                        token_address: Pubkey::new_unique(),
+                        st_sol_amount: StLamports(10000),
+                    }],
+                },
             },
         };
         let validator_accounts_len =
             get_instance_packed_len(&ValidatorCreditAccounts::new(10000)).unwrap();
-        assert_eq!(validator_accounts_len, 10000 * 40 + 8);
+        assert_eq!(validator_accounts_len, 10000 * (32 * 2 + 8) + 8);
         lido.serialize(&mut data).unwrap();
-        assert_eq!(data.len(), LIDO_CONSTANT_SIZE + 48);
+        assert_eq!(data.len(), LIDO_CONSTANT_SIZE + (32 * 2 + 8) + 8);
     }
 
     #[test]
@@ -472,14 +484,11 @@ mod test_lido {
     }
     #[test]
     fn test_fee_distribution() {
-        let spec = FeeSpec {
+        let spec = FeeDistribution {
             insurance_fee: 3,
             treasury_fee: 3,
             validation_fee: 2,
             manager_fee: 1,
-            insurance_account: Pubkey::default(),
-            treasury_account: Pubkey::default(),
-            manager_account: Pubkey::default(),
         };
         assert_eq!(
             Fees {
@@ -502,14 +511,11 @@ mod test_lido {
             // Test rounding errors going to manager
             distribute_fees(&spec, 4, StakePoolTokenLamports(1_000)).unwrap()
         );
-        let spec_coprime = FeeSpec {
+        let spec_coprime = FeeDistribution {
             insurance_fee: 13,
             treasury_fee: 17,
             validation_fee: 23,
             manager_fee: 19,
-            insurance_account: Pubkey::default(),
-            treasury_account: Pubkey::default(),
-            manager_account: Pubkey::default(),
         };
         assert_eq!(
             Fees {

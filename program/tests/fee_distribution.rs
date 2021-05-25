@@ -2,10 +2,9 @@
 
 mod helpers;
 
-use borsh::BorshDeserialize;
 use helpers::{
     program_test, simple_add_validator_to_pool,
-    stakepool_account::{get_account, get_token_balance, transfer, ValidatorStakeAccount},
+    stakepool_account::{get_token_balance, transfer, ValidatorStakeAccount},
     LidoAccounts,
 };
 use solana_program::pubkey::Pubkey;
@@ -13,7 +12,6 @@ use solana_program_test::{tokio, ProgramTestContext};
 use solana_sdk::signature::Signer;
 
 use lido::state::{StLamports, StakePoolTokenLamports};
-use spl_stake_pool::state::StakePool;
 
 async fn setup() -> (ProgramTestContext, LidoAccounts, Vec<ValidatorStakeAccount>) {
     let mut context = program_test().start_with_context().await;
@@ -138,23 +136,23 @@ async fn test_successful_fee_distribution() {
         * lido_accounts.stake_pool_accounts.fee.numerator as u128)
         / lido_accounts.stake_pool_accounts.fee.denominator as u128) as u64;
 
-    let calculated_fee_structure = lido::state::distribute_fees(
-        &lido_accounts.fee_structure,
+    let calculated_fee_distribution = lido::state::distribute_fees(
+        &lido_accounts.fee_distribution,
         NUMBER_VALIDATORS,
         StakePoolTokenLamports(total_fees),
     )
     .unwrap();
 
     assert_eq!(
-        calculated_fee_structure.insurance_amount,
+        calculated_fee_distribution.insurance_amount,
         StLamports(insurance_token_amount)
     );
     assert_eq!(
-        calculated_fee_structure.treasury_amount,
+        calculated_fee_distribution.treasury_amount,
         StLamports(treasury_token_account)
     );
     assert_eq!(
-        calculated_fee_structure.manager_amount,
+        calculated_fee_distribution.manager_amount,
         StLamports(manager_token_account)
     );
 
@@ -178,7 +176,7 @@ async fn test_successful_fee_distribution() {
 
     for val_acc in &validator_token_accounts {
         assert_eq!(
-            calculated_fee_structure.reward_per_validator,
+            calculated_fee_distribution.reward_per_validator,
             StLamports(get_token_balance(&mut context.banks_client, val_acc).await)
         );
     }
@@ -196,7 +194,7 @@ async fn test_successful_fee_distribution() {
     }
     for val_acc in validator_token_accounts {
         assert_eq!(
-            calculated_fee_structure.reward_per_validator,
+            calculated_fee_distribution.reward_per_validator,
             StLamports(get_token_balance(&mut context.banks_client, &val_acc).await)
         );
     }

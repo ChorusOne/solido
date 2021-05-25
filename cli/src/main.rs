@@ -108,10 +108,8 @@ fn main() {
         Some(path) => path,
         None => get_default_keypair_path(),
     };
-    let keypair = read_keypair_file(&payer_keypair_path).expect(&format!(
-        "Failed to read key pair from {:?}.",
-        payer_keypair_path
-    ));
+    let keypair = read_keypair_file(&payer_keypair_path)
+        .unwrap_or_else(|_| panic!("Failed to read key pair from {:?}.", payer_keypair_path));
 
     let config = Config {
         rpc_client: RpcClient::new_with_commitment(
