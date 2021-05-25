@@ -262,13 +262,14 @@ pub fn command_create_solido(
                 &lido::instruction::InitializeAccountsMeta {
                     lido: lido_keypair.pubkey(),
                     stake_pool: stake_pool.stake_pool_address,
-                    mint_program: mint_keypair.pubkey(),
-                    pool_token_to: pool_token_to.pubkey(),
-                    fee_token: fee_keypair.pubkey(), // to define
                     manager: config.staker.pubkey(),
+                    mint_program: mint_keypair.pubkey(),
+                    pool_token_to: pool_token_to.pubkey(), // to define
+                    fee_token: fee_keypair.pubkey(),
                     insurance_account: opts.insurance_account,
                     treasury_account: opts.treasury_account,
                     manager_fee_account: opts.manager_fee_account,
+                    reserve_account: reserve_authority,
                 },
             )?,
         ],
