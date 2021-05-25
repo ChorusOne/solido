@@ -245,7 +245,7 @@ pub fn command_create_solido(
                 &pool_token_to.pubkey(),
                 fee_token_balance,
                 spl_token::state::Account::LEN as u64,
-                &opts.solido_program_id,
+                &spl_token::id(),
             ),
             // Initialize Lido's account in Stake Pool
             spl_token::instruction::initialize_account(
