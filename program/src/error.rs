@@ -82,6 +82,9 @@ pub enum LidoError {
     /// One of the fee recipients is invalid
     #[error("InvalidFeeRecipient")]
     InvalidFeeRecipient,
+    /// There is a stake account with the same key present in the validator credit list.
+    #[error("DuplicatedValidatorCreditStakeAccount")]
+    DuplicatedValidatorCreditStakeAccount,
 }
 impl From<LidoError> for ProgramError {
     fn from(e: LidoError) -> Self {

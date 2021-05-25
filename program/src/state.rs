@@ -225,6 +225,8 @@ impl ValidatorCreditAccounts {
                 token_address,
                 st_sol_amount: StLamports(0),
             });
+        } else {
+            return Err(LidoError::DuplicatedValidatorCreditStakeAccount);
         }
         Ok(())
     }
