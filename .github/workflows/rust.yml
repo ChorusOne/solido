@@ -42,7 +42,7 @@ jobs:
           cargo-bpf-${{ hashFiles('Cargo.lock') }}
           cargo-bpf
 
-    - name: Solana contract test
+    - name: Build on-chain BPF programs
       run: |
         sudo apt-get install -y libudev-dev
         sh -c "$(curl -sSfL https://release.solana.com/v1.6.7/install)"
@@ -52,25 +52,36 @@ jobs:
         # because we will need them later to test Solido.
         cargo build-bpf
 
+    - name: Test on-chain BPF programs
+      run: |
+        export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
+
         # But only run the tests for Solido itself, the SPL tests are already
         # executed upstream.
         cargo test-bpf --manifest-path program/Cargo.toml
 
-    - name: Build and test Multisig
+    - name: Build CLI client
+      run: cargo build --bin solido
+
+    - name: Run Solido integration test
       run: |
         export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
         solana-test-validator > /dev/null &
         validator="$!"
 
-        # Build the CLI while the validator is starting.
-        cargo build --bin solido
+        # Perform initial Solana setup.
+        solana-keygen new --no-bip39-passphrase --silent
+        solana config set --url http://127.0.0.1:8899
+        solana airdrop 500.0
 
-        # Build the on-chain multisig program.
-        cd multisig
-        cargo install --git https://github.com/project-serum/anchor --tag v0.4.5 anchor-cli --locked
-        export PATH="$HOME/.cargo/bin:$PATH"
-        anchor build
-        cd ..
+        tests/test_solido.py
+        kill $validator
+
+    - name: Run Multisig integration test
+      run: |
+        export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
+        solana-test-validator > /dev/null &
+        validator="$!"
 
         # Perform initial Solana setup.
         solana-keygen new --no-bip39-passphrase --silent
