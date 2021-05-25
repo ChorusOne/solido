@@ -412,7 +412,7 @@ impl LidoAccounts {
                     stake_pool_withdraw_authority: self.stake_pool_accounts.withdraw_authority,
                     new_withdraw_authority: *new_authority,
                     stake_pool_validator_list: self.stake_pool_accounts.validator_list.pubkey(),
-                    stake_remove: *validator_stake,
+                    stake_account_to_remove: *validator_stake,
                     transient_stake: *transient_stake,
                 },
             )

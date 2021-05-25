@@ -699,7 +699,7 @@ accounts_struct! {
             is_writable: true,
         },
         // Stake account to remove
-        pub stake_remove {
+        pub stake_account_to_remove {
             is_signer: false,
             is_writable:  true,
         },

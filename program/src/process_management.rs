@@ -191,7 +191,7 @@ pub fn process_remove_validator(
             accounts.stake_pool_withdraw_authority.key,
             accounts.new_withdraw_authority.key,
             accounts.stake_pool_validator_list.key,
-            accounts.stake_remove.key,
+            accounts.stake_account_to_remove.key,
             accounts.transient_stake.key,
         ),
         &[
@@ -201,7 +201,7 @@ pub fn process_remove_validator(
             accounts.stake_pool_withdraw_authority.clone(),
             accounts.new_withdraw_authority.clone(),
             accounts.stake_pool_validator_list.clone(),
-            accounts.stake_remove.clone(),
+            accounts.stake_account_to_remove.clone(),
             accounts.sysvar_clock.clone(),
             accounts.sysvar_stake_program.clone(),
         ],
@@ -218,7 +218,7 @@ pub fn process_remove_validator(
         .validator_credit_accounts
         .validator_accounts
         .iter()
-        .position(|v| &v.stake_address == accounts.stake_remove.key)
+        .position(|v| &v.stake_address == accounts.stake_account_to_remove.key)
         .ok_or(LidoError::ValidatorCreditNotFound)?;
 
     if lido
