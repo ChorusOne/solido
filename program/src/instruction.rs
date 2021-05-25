@@ -11,12 +11,17 @@ use solana_program::{
 };
 use spl_stake_pool::{instruction::StakePoolInstruction, stake_program, state::Fee};
 
-use crate::error::LidoError;
+use crate::{error::LidoError, state::FeeDistribution};
 
 #[repr(C)]
-#[derive(Clone, Debug, PartialEq, BorshSerialize, BorshDeserialize, BorshSchema)]
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
 pub enum LidoInstruction {
-    Initialize,
+    Initialize {
+        #[allow(dead_code)] // but it's not
+        fee_distribution: FeeDistribution,
+        #[allow(dead_code)] // but it's not
+        max_validators: u32,
+    },
     /// Deposit with amount
     Deposit {
         #[allow(dead_code)] // but it's not
@@ -32,6 +37,15 @@ pub enum LidoInstruction {
         #[allow(dead_code)] // but it's not
         amount: u64,
     },
+    DistributeFees,
+    ClaimValidatorFees,
+    ChangeFeeSpec {
+        #[allow(dead_code)] // but it's not
+        new_fee_distribution: FeeDistribution,
+    },
+    CreateValidatorStakeAccount,
+    AddValidator,
+    RemoveValidator,
 }
 
 macro_rules! accounts_struct_meta {
@@ -211,7 +225,7 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
-        pub owner {
+        pub manager {
             is_signer: false,
             is_writable: false,
         },
@@ -227,6 +241,18 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
+        pub insurance_account {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub treasury_account {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub manager_fee_account {
+            is_signer: false,
+            is_writable: false,
+        },
         const sysvar_rent = sysvar::rent::id(),
         const spl_token = spl_token::id(),
     }
@@ -234,9 +260,14 @@ accounts_struct! {
 
 pub fn initialize(
     program_id: &Pubkey,
+    fee_distribution: FeeDistribution,
+    max_validators: u32,
     accounts: &InitializeAccountsMeta,
 ) -> Result<Instruction, ProgramError> {
-    let init_data = LidoInstruction::Initialize;
+    let init_data = LidoInstruction::Initialize {
+        fee_distribution,
+        max_validators,
+    };
     let data = init_data.try_to_vec()?;
     Ok(Instruction {
         program_id: *program_id,
@@ -259,7 +290,7 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
-        pub owner {
+        pub manager {
             is_signer: false,
             is_writable: false,
         },
@@ -456,12 +487,12 @@ accounts_struct! {
 pub fn stake_pool_deposit(
     program_id: &Pubkey,
     accounts: &StakePoolDepositAccountsMeta,
-) -> Instruction {
-    Instruction {
+) -> Result<Instruction, ProgramError> {
+    Ok(Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
-        data: StakePoolInstruction::Deposit.try_to_vec().unwrap(),
-    }
+        data: StakePoolInstruction::Deposit.try_to_vec()?,
+    })
 }
 
 accounts_struct! {
@@ -477,7 +508,7 @@ accounts_struct! {
         },
         pub staker {
             is_signer: false,
-            is_writable: true,
+            is_writable: false,
         },
         pub validator_list {
             is_signer: false,
@@ -491,7 +522,7 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
-        pub manager_pool_account {
+        pub manager_fee_account {
             is_signer: false,
             is_writable: false,
         },
@@ -532,5 +563,251 @@ pub fn initialize_stake_pool_with_authority(
         program_id: *program_id,
         accounts: accounts.to_vec(),
         data,
+    })
+}
+
+// Changes the Fee spec
+// The new Fee structure is passed by argument and the recipients are passed here
+accounts_struct! {
+    ChangeFeeSpecMeta, ChangeFeeSpecInfo {
+        pub lido {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub manager {
+            is_signer: true,
+            is_writable: false,
+        },
+        pub insurance_account {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub treasury_account {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub manager_fee_account {
+            is_signer: false,
+            is_writable: false,
+        },
+    }
+}
+
+pub fn change_fee_distribution(
+    program_id: &Pubkey,
+    new_fee_distribution: FeeDistribution,
+    accounts: &ChangeFeeSpecMeta,
+) -> Result<Instruction, ProgramError> {
+    Ok(Instruction {
+        program_id: *program_id,
+        accounts: accounts.to_vec(),
+        data: LidoInstruction::ChangeFeeSpec {
+            new_fee_distribution,
+        }
+        .try_to_vec()?,
+    })
+}
+
+accounts_struct! {
+    AddValidatorMeta, AddValidatorInfo {
+        pub lido {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub manager {
+            is_signer: true,
+            is_writable: false,
+        },
+        pub stake_pool_manager_authority {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub stake_pool_program_id {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub stake_pool {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub stake_pool_withdraw_authority {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub stake_pool_validator_list {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub stake_account {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub validator_token_account {
+            is_signer: false,
+            is_writable: false,
+        },
+        const sysvar_clock = sysvar::clock::id(),
+        const sysvar_stake_history = sysvar::stake_history::id(),
+        const sysvar_stake_program = stake_program::id(),
+    }
+}
+
+pub fn add_validator(
+    program_id: &Pubkey,
+    accounts: &AddValidatorMeta,
+) -> Result<Instruction, ProgramError> {
+    Ok(Instruction {
+        program_id: *program_id,
+        accounts: accounts.to_vec(),
+        data: LidoInstruction::AddValidator.try_to_vec()?,
+    })
+}
+
+accounts_struct! {
+    DistributeFeesMeta, DistributeFeesInfo {
+        pub lido {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub manager {
+            is_signer: true,
+            is_writable: false,
+        },
+        pub token_holder_stake_pool {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub mint_program {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub reserve_authority {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub insurance_account {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub treasury_account {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub manager_fee_account {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub stake_pool {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub stake_pool_fee_account {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub stake_pool_manager_fee_account {
+            is_signer: false,
+            is_writable: false,
+        },
+
+        const spl_token = spl_token::id(),
+    }
+}
+
+pub fn distribute_fees(
+    program_id: &Pubkey,
+    accounts: &DistributeFeesMeta,
+) -> Result<Instruction, ProgramError> {
+    Ok(Instruction {
+        program_id: *program_id,
+        accounts: accounts.to_vec(),
+        data: LidoInstruction::DistributeFees.try_to_vec()?,
+    })
+}
+
+accounts_struct! {
+    CreateValidatorStakeAccountMeta, CreateValidatorStakeAccountInfo {
+        pub lido {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub manager {
+            is_signer: true,
+            is_writable: false,
+        },
+        pub stake_pool_program {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub stake_pool {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub staker {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub funder {
+            is_signer: true,
+            is_writable: true,
+        },
+        pub stake_account {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub validator {
+            is_signer: false,
+            is_writable: false,
+        },
+        const sysvar_rent = sysvar::rent::id(),
+        const sysvar_clock = sysvar::clock::id(),
+        const sysvar_stake_history = stake_history::id(),
+        const stake_program_config = stake_program::config_id(),
+        const system_program = system_program::id(),
+        const stake_program = stake_program::id(),
+    }
+}
+
+pub fn create_validator_stake_account(
+    program_id: &Pubkey,
+    accounts: &CreateValidatorStakeAccountMeta,
+) -> Result<Instruction, ProgramError> {
+    Ok(Instruction {
+        program_id: *program_id,
+        accounts: accounts.to_vec(),
+        data: LidoInstruction::CreateValidatorStakeAccount.try_to_vec()?,
+    })
+}
+
+accounts_struct! {
+    ClaimValidatorFeeMeta, ClaimValidatorFeeInfo {
+        pub lido {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub mint_program {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub reserve_authority {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub validator_token {
+            is_signer: false,
+            is_writable: true,
+        },
+        const spl_token = spl_token::id(),
+    }
+}
+
+pub fn claim_validator_fees(
+    program_id: &Pubkey,
+    accounts: &ClaimValidatorFeeMeta,
+) -> Result<Instruction, ProgramError> {
+    Ok(Instruction {
+        program_id: *program_id,
+        accounts: accounts.to_vec(),
+        data: LidoInstruction::ClaimValidatorFees.try_to_vec()?,
     })
 }

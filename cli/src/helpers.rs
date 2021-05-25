@@ -1,7 +1,7 @@
 use std::fmt;
 
 use clap::Clap;
-use lido::{DEPOSIT_AUTHORITY_ID, FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY_ID};
+use lido::{state::FeeDistribution, DEPOSIT_AUTHORITY, FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY};
 use serde::Serialize;
 use solana_program::{
     borsh::get_packed_len, native_token::Sol, program_pack::Pack, pubkey::Pubkey,
@@ -63,13 +63,42 @@ pub fn send_transaction(
 #[derive(Clap, Debug)]
 pub struct CreateSolidoOpts {
     /// Numerator of the fee fraction.
+    #[clap(long)]
     pub fee_numerator: u64,
 
     /// Denominator of the fee fraction.
+    #[clap(long)]
     pub fee_denominator: u64,
 
     /// The maximum number of validators that this Solido instance will support.
+    #[clap(long)]
     pub max_validators: u32,
+
+    /// Fees are divided proportionally to the sum of all specified fees, for instance,
+    /// if all the fees are the same value, they will be divided equally.
+
+    /// Insurance fee proportion
+    #[clap(long)]
+    pub insurance_fee: u32,
+    /// Treasury fee proportion
+    #[clap(long)]
+    pub treasury_fee: u32,
+    /// Validation fee proportion, to be divided equally among validators
+    #[clap(long)]
+    pub validation_fee: u32,
+    /// Manager fee
+    #[clap(long)]
+    pub manager_fee: u32,
+
+    /// Account to receive the `insurance_fee` proportion.
+    #[clap(long)]
+    pub insurance_account: Pubkey,
+    /// Account to receive the `treasury_fee` proportion.
+    #[clap(long)]
+    pub treasury_account: Pubkey,
+    /// Account to receive the `manager_fee` proportion.
+    #[clap(long)]
+    pub manager_fee_account: Pubkey,
 }
 
 #[derive(Serialize)]
@@ -77,19 +106,20 @@ pub struct CreateSolidoOutput {
     /// Account that stores the data for this Solido instance.
     pub solido_address: Pubkey,
 
-    /// TODO(fynn): What is the role of the reserve authority?
+    /// Manages the deposited sol and token minting.
     pub reserve_authority: Pubkey,
 
-    /// TODO(fynn): What is the role of the fee authority?
+    /// Owner of the `fee_address`.
     pub fee_authority: Pubkey,
 
-    /// TODO(fynn): What does the fee account do?
+    /// Solido-managed account that the stake pool deposits fees in SPT into
+    /// after a balance update. Holds Stake Pool tokens.
     pub fee_address: Pubkey,
 
-    /// SPL token mint account for LSOL tokens.
+    /// SPL token mint account for StSol tokens.
     pub mint_address: Pubkey,
 
-    /// TODO(fynn): What is the role of this account?
+    /// The only depositor of the stake pool.
     pub pool_token_to: Pubkey,
 
     /// Details of the stake pool managed by Solido.
@@ -119,7 +149,7 @@ pub fn command_create_solido(
     let (reserve_authority, _) = lido::find_authority_program_address(
         &lido::id(),
         &lido_keypair.pubkey(),
-        RESERVE_AUTHORITY_ID,
+        RESERVE_AUTHORITY,
     );
 
     let (fee_authority, _) = lido::find_authority_program_address(
@@ -131,7 +161,7 @@ pub fn command_create_solido(
     let (deposit_authority, _) = lido::find_authority_program_address(
         &lido::id(),
         &lido_keypair.pubkey(),
-        DEPOSIT_AUTHORITY_ID,
+        DEPOSIT_AUTHORITY,
     );
 
     let stake_pool = command_create_pool(
@@ -213,7 +243,7 @@ pub fn command_create_solido(
                 spl_token::state::Account::LEN as u64,
                 &spl_token::id(),
             ),
-            // Initialize fee receiver account
+            // Initialize Lido's account in Stake Pool
             spl_token::instruction::initialize_account(
                 &spl_token::id(),
                 &pool_token_to.pubkey(),
@@ -222,13 +252,23 @@ pub fn command_create_solido(
             )?,
             lido::instruction::initialize(
                 &lido::id(),
+                FeeDistribution {
+                    insurance_fee: opts.insurance_fee,
+                    treasury_fee: opts.treasury_fee,
+                    validation_fee: opts.validation_fee,
+                    manager_fee: opts.manager_fee,
+                },
+                opts.max_validators,
                 &lido::instruction::InitializeAccountsMeta {
                     lido: lido_keypair.pubkey(),
                     stake_pool: stake_pool.stake_pool_address,
-                    owner: config.staker.pubkey(),
                     mint_program: mint_keypair.pubkey(),
-                    pool_token_to: pool_token_to.pubkey(), // to define
-                    fee_token: fee_keypair.pubkey(),
+                    pool_token_to: pool_token_to.pubkey(),
+                    fee_token: fee_keypair.pubkey(), // to define
+                    manager: config.staker.pubkey(),
+                    insurance_account: opts.insurance_account,
+                    treasury_account: opts.treasury_account,
+                    manager_fee_account: opts.manager_fee_account,
                 },
             )?,
         ],
@@ -252,12 +292,12 @@ pub fn command_create_solido(
 
     let result = CreateSolidoOutput {
         solido_address: lido_keypair.pubkey(),
-        reserve_authority: reserve_authority,
-        fee_authority: fee_authority,
+        reserve_authority,
+        fee_authority,
         mint_address: mint_keypair.pubkey(),
         fee_address: fee_keypair.pubkey(),
         pool_token_to: pool_token_to.pubkey(),
-        stake_pool: stake_pool,
+        stake_pool,
     };
     Ok(result)
 }

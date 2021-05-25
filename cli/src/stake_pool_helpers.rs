@@ -193,11 +193,11 @@ pub fn command_create_pool(
                     validator_list: validator_list.pubkey(),
                     reserve_stake: reserve_stake.pubkey(),
                     pool_mint: mint_keypair.pubkey(),
-                    manager_pool_account: pool_fee_account.pubkey(),
-                    deposit_authority: *deposit_authority,
                     sysvar_clock: sysvar::clock::id(),
                     sysvar_rent: sysvar::rent::id(),
                     sysvar_token: spl_token::id(),
+                    deposit_authority: *deposit_authority,
+                    manager_fee_account: pool_fee_account.pubkey(),
                 },
                 fee,
                 max_validators,
@@ -237,7 +237,7 @@ pub fn command_create_pool(
         mint_address: mint_keypair.pubkey(),
         fee_address: pool_fee_account.pubkey(),
         validator_list_address: validator_list.pubkey(),
-        withdraw_authority: withdraw_authority,
+        withdraw_authority,
     };
     Ok(result)
 }

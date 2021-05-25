@@ -2,17 +2,16 @@
 
 mod helpers;
 
-use borsh::BorshDeserialize;
 use helpers::{
     program_test, simple_add_validator_to_pool,
-    stakepool_account::{get_account, get_token_balance, transfer, ValidatorStakeAccount},
+    stakepool_account::{get_token_balance, transfer, ValidatorStakeAccount},
     LidoAccounts,
 };
 use solana_program::pubkey::Pubkey;
 use solana_program_test::{tokio, ProgramTestContext};
 use solana_sdk::signature::Signer;
 
-use spl_stake_pool::state::StakePool;
+use lido::state::{StLamports, StakePoolTokenLamports};
 
 async fn setup() -> (ProgramTestContext, LidoAccounts, Vec<ValidatorStakeAccount>) {
     let mut context = program_test().start_with_context().await;
@@ -27,7 +26,7 @@ async fn setup() -> (ProgramTestContext, LidoAccounts, Vec<ValidatorStakeAccount
         .unwrap();
 
     let mut stake_accounts = Vec::new();
-    for _ in 0..STAKE_ACCOUNTS {
+    for _ in 0..NUMBER_VALIDATORS {
         let validator_stake_account = simple_add_validator_to_pool(
             &mut context.banks_client,
             &context.payer,
@@ -40,13 +39,12 @@ async fn setup() -> (ProgramTestContext, LidoAccounts, Vec<ValidatorStakeAccount
     }
     (context, lido_accounts, stake_accounts)
 }
-const STAKE_ACCOUNTS: u64 = 4;
-const TEST_A_DEPOSIT_AMOUNT: u64 = 200_000_000_000;
-const TEST_B_DEPOSIT_AMOUNT: u64 = 100_000_000_000;
+const NUMBER_VALIDATORS: u64 = 4;
+const TEST_DEPOSIT_AMOUNT: u64 = 100_000_000_000;
 const EXTRA_STAKE_AMOUNT: u64 = 50_000_000_000;
 
 #[tokio::test]
-async fn test_successful_update_balance() {
+async fn test_successful_fee_distribution() {
     let (mut context, lido_accounts, stake_accounts) = setup().await;
 
     lido_accounts
@@ -54,7 +52,7 @@ async fn test_successful_update_balance() {
             &mut context.banks_client,
             &context.payer,
             &context.last_blockhash,
-            TEST_A_DEPOSIT_AMOUNT,
+            TEST_DEPOSIT_AMOUNT,
         )
         .await;
 
@@ -66,7 +64,7 @@ async fn test_successful_update_balance() {
             &context.payer,
             &context.last_blockhash,
             validator_account,
-            TEST_A_DEPOSIT_AMOUNT,
+            TEST_DEPOSIT_AMOUNT,
         )
         .await;
 
@@ -109,53 +107,95 @@ async fn test_successful_update_balance() {
         )
         .await;
     assert!(error.is_none());
-
-    let recipient = lido_accounts
-        .deposit(
+    let fee_error = lido_accounts
+        .distribute_fees(
             &mut context.banks_client,
             &context.payer,
             &context.last_blockhash,
-            TEST_B_DEPOSIT_AMOUNT,
         )
         .await;
+    assert!(fee_error.is_none());
 
-    let stake_pool = get_account(
+    let insurance_token_amount = get_token_balance(
         &mut context.banks_client,
-        &lido_accounts.stake_pool_accounts.stake_pool.pubkey(),
+        &lido_accounts.insurance_account.pubkey(),
     )
     .await;
-    let stake_pool = StakePool::try_from_slice(&stake_pool.data.as_slice()).unwrap();
-
-    let reward = STAKE_ACCOUNTS * EXTRA_STAKE_AMOUNT;
-    let fee_tokens = reward * lido_accounts.stake_pool_accounts.fee.numerator
-        / lido_accounts.stake_pool_accounts.fee.denominator;
-    let fee_balance = get_token_balance(
+    let treasury_token_account = get_token_balance(
         &mut context.banks_client,
-        &lido_accounts.stake_pool_accounts.pool_fee_account.pubkey(),
+        &lido_accounts.treasury_account.pubkey(),
     )
     .await;
-    assert_eq!(fee_balance, fee_tokens);
-    assert_eq!(
-        reward + TEST_A_DEPOSIT_AMOUNT,
-        stake_pool.total_stake_lamports,
-    );
-
-    let lido_tokens_for_a = get_token_balance(
+    let manager_token_account = get_token_balance(
         &mut context.banks_client,
-        &lido_accounts.pool_token_to.pubkey(),
+        &lido_accounts.manager_fee_account.pubkey(),
     )
     .await;
-    assert_eq!(lido_tokens_for_a, TEST_A_DEPOSIT_AMOUNT);
+    let total_fees = ((NUMBER_VALIDATORS as u128
+        * EXTRA_STAKE_AMOUNT as u128
+        * lido_accounts.stake_pool_accounts.fee.numerator as u128)
+        / lido_accounts.stake_pool_accounts.fee.denominator as u128) as u64;
 
-    // Check amount new user received
-    let received_tokens_b = get_token_balance(&mut context.banks_client, &recipient.pubkey()).await;
+    let calculated_fee_distribution = lido::state::distribute_fees(
+        &lido_accounts.fee_distribution,
+        NUMBER_VALIDATORS,
+        StakePoolTokenLamports(total_fees),
+    )
+    .unwrap();
 
     assert_eq!(
-        received_tokens_b,
-        ((TEST_B_DEPOSIT_AMOUNT as u128 * stake_pool.pool_token_supply as u128)
-            / stake_pool.total_stake_lamports as u128) as u64
+        calculated_fee_distribution.insurance_amount,
+        StLamports(insurance_token_amount)
     );
+    assert_eq!(
+        calculated_fee_distribution.treasury_amount,
+        StLamports(treasury_token_account)
+    );
+    assert_eq!(
+        calculated_fee_distribution.manager_amount,
+        StLamports(manager_token_account)
+    );
+
+    let validator_token_accounts: Vec<Pubkey> = stake_accounts
+        .iter()
+        .map(|stake_accounts| stake_accounts.validator_token_account.pubkey())
+        .collect();
+
+    // Claim validator fees
+    for validator_token_account in validator_token_accounts.iter() {
+        lido_accounts
+            .claim_validator_fees(
+                &mut context.banks_client,
+                &context.payer,
+                &context.last_blockhash,
+                validator_token_account,
+            )
+            .await
+            .unwrap();
+    }
+
+    for val_acc in &validator_token_accounts {
+        assert_eq!(
+            calculated_fee_distribution.reward_per_validator,
+            StLamports(get_token_balance(&mut context.banks_client, val_acc).await)
+        );
+    }
+    // Should mint rewards only once, balances should be the same
+    for validator_token_account in validator_token_accounts.iter() {
+        lido_accounts
+            .claim_validator_fees(
+                &mut context.banks_client,
+                &context.payer,
+                &context.last_blockhash,
+                validator_token_account,
+            )
+            .await
+            .unwrap();
+    }
+    for val_acc in validator_token_accounts {
+        assert_eq!(
+            calculated_fee_distribution.reward_per_validator,
+            StLamports(get_token_balance(&mut context.banks_client, &val_acc).await)
+        );
+    }
 }
-
-#[tokio::test]
-async fn test_stake_exists_delegate_deposit() {} // TODO

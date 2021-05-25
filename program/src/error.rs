@@ -11,41 +11,80 @@ pub enum LidoError {
     /// Address is already initialized
     #[error("AlreadyInUse")]
     AlreadyInUse,
-    /// Lido members account mismatch the one stored in the Lido program
+    /// Lido account mismatch the one stored in the Lido program
     #[error("InvalidOwner")]
     InvalidOwner,
-    /// Invalid stake pool
+    /// Stake pool is in an invalid state
     #[error("WrongStakePool")]
     InvalidStakePool,
-    /// Invalid stake pool
+    /// Invalid allocated amount
     #[error("InvalidAmount")]
     InvalidAmount,
-    /// Invalid stake pool
+    /// A required signature is missing
     #[error("SignatureMissing")]
     SignatureMissing,
     // 5.
-    /// Invalid stake pool
-    #[error("InvalidToken")]
-    InvalidToken,
+    /// The token minter is different from Lido's
+    #[error("InvalidTokenMinter")]
+    InvalidTokenMinter,
+    /// The reserve authority is invalid
     #[error("InvalidReserveAuthority")]
     InvalidReserveAuthority,
+    /// Calculation failed due to division by zero or overflow
     #[error("CalculationFailure")]
     CalculationFailure,
     #[error("InvalidStaker")]
+    /// Invalid manager
     InvalidStaker,
     #[error("WrongStakeState")]
+    /// Stake account does not exist or is in an invalid state
     WrongStakeState,
     // 10.
+    /// Token program
     #[error("InvalidTokenProgram")]
+    /// Token token program ID is different from Lido's
     InvalidTokenProgram,
     #[error("InvalidPoolToken")]
+    /// Owner of the Stake pool token is invalid
     InvalidPoolToken,
+    /// The sum of numerators should be equal to the denominators
+    #[error("InvalidFeeAmount")]
+    InvalidFeeAmount,
+    /// Number of maximum validators reached
+    #[error("InvalidFeeAmount")]
+    MaximumValidatorsExceeded,
+    /// An invalid validator credit account size was supplied
+    #[error("UnexpectedValidatorCreditAccountSize")]
+    UnexpectedValidatorCreditAccountSize,
+    // 15
+    /// Wrong manager trying  to alter the state
+    #[error("InvalidManager")]
+    InvalidManager,
     /// One of the provided accounts had a mismatch in is_writable or is_signer.
-    #[error("InvalidAccountInto")]
+    #[error("InvalidAccountInfo")]
     InvalidAccountInfo,
     /// More accounts were provided than the program expects.
     #[error("TooManyAccountKeys")]
     TooManyAccountKeys,
+    /// Wrong fee distribution account
+    #[error("InvalidFeeDistributionAccount")]
+    InvalidFeeDistributionAccount,
+    /// Wrong validator credits account
+    #[error("InvalidValidatorCreditAccount")]
+    InvalidValidatorCreditAccount,
+    // 20
+    /// Validator credit account was changed
+    #[error("ValidatorCreditChanged")]
+    ValidatorCreditChanged,
+    /// Fee account should be the same as the Stake pool fee'
+    #[error("ValidatorCreditChanged")]
+    InvalidFeeAccount,
+    /// One of the fee recipients is invalid
+    #[error("InvalidFeeRecipient")]
+    InvalidFeeRecipient,
+    /// There is a stake account with the same key present in the validator credit list.
+    #[error("DuplicatedValidatorCreditStakeAccount")]
+    DuplicatedValidatorCreditStakeAccount,
 }
 impl From<LidoError> for ProgramError {
     fn from(e: LidoError) -> Self {
