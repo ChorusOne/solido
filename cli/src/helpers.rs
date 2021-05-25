@@ -4,7 +4,7 @@ use clap::Clap;
 use lido::{state::FeeDistribution, DEPOSIT_AUTHORITY, FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY};
 use serde::Serialize;
 use solana_program::{
-    borsh::get_packed_len, native_token::Sol, program_pack::Pack, pubkey::Pubkey,
+    native_token::Sol, program_pack::Pack, pubkey::Pubkey,
     system_instruction,
 };
 use solana_sdk::{
@@ -186,7 +186,9 @@ pub fn command_create_solido(
     let mint_account_balance = config
         .rpc_client
         .get_minimum_balance_for_rent_exemption(spl_token::state::Mint::LEN)?;
-    let lido_size = get_packed_len::<lido::state::Lido>();
+    // TODO(fynn): get_packed_len panics on https://docs.rs/solana-program/1.6.9/src/solana_program/borsh.rs.html#40,
+    // so we need to compute the size in a different way.
+    let lido_size = 999; //get_packed_len::<lido::state::Lido>();
     let lido_account_balance = config
         .rpc_client
         .get_minimum_balance_for_rent_exemption(lido_size)?;
