@@ -112,10 +112,11 @@ pub struct CreateSolidoOutput {
     /// Owner of the `fee_address`.
     pub fee_authority: Pubkey,
 
-    /// Address for receiving fees.
+    /// Solido-managed account that the stake pool deposits fees in SPT into
+    /// after a balance update. Holds Stake Pool tokens.
     pub fee_address: Pubkey,
 
-    /// SPL token mint account for LSOL tokens.
+    /// SPL token mint account for StSol tokens.
     pub mint_address: Pubkey,
 
     /// The only depositor of the stake pool.
