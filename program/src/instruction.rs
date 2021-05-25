@@ -689,6 +689,7 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
+        // New Staker and Withdrawer authority of the stake account
         pub new_withdraw_authority {
             is_signer: false,
             is_writable: false,
@@ -697,10 +698,12 @@ accounts_struct! {
             is_signer: false,
             is_writable: true,
         },
+        // Stake account to remove
         pub stake_remove {
             is_signer: false,
             is_writable:  true,
         },
+        // Validator's transient stake
         pub transient_stake {
             is_signer: false,
             is_writable:  false,
