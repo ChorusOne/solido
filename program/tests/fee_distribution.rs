@@ -138,7 +138,7 @@ async fn test_successful_fee_distribution() {
         * lido_accounts.stake_pool_accounts.fee.numerator as u128)
         / lido_accounts.stake_pool_accounts.fee.denominator as u128) as u64;
 
-    let calculated_fee_structure = lido::state::distribute_fees(
+    let calculated_fee_distribution = lido::state::distribute_fees(
         &lido_accounts.fee_distribution,
         NUMBER_VALIDATORS,
         StakePoolTokenLamports(total_fees),
@@ -146,15 +146,15 @@ async fn test_successful_fee_distribution() {
     .unwrap();
 
     assert_eq!(
-        calculated_fee_structure.insurance_amount,
+        calculated_fee_distribution.insurance_amount,
         StLamports(insurance_token_amount)
     );
     assert_eq!(
-        calculated_fee_structure.treasury_amount,
+        calculated_fee_distribution.treasury_amount,
         StLamports(treasury_token_account)
     );
     assert_eq!(
-        calculated_fee_structure.manager_amount,
+        calculated_fee_distribution.manager_amount,
         StLamports(manager_token_account)
     );
 
@@ -178,7 +178,7 @@ async fn test_successful_fee_distribution() {
 
     for val_acc in &validator_token_accounts {
         assert_eq!(
-            calculated_fee_structure.reward_per_validator,
+            calculated_fee_distribution.reward_per_validator,
             StLamports(get_token_balance(&mut context.banks_client, val_acc).await)
         );
     }
@@ -196,7 +196,7 @@ async fn test_successful_fee_distribution() {
     }
     for val_acc in validator_token_accounts {
         assert_eq!(
-            calculated_fee_structure.reward_per_validator,
+            calculated_fee_distribution.reward_per_validator,
             StLamports(get_token_balance(&mut context.banks_client, &val_acc).await)
         );
     }

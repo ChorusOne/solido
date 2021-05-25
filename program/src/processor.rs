@@ -52,7 +52,7 @@ fn get_stake_state(
 /// Program state handler.
 pub fn process_initialize(
     program_id: &Pubkey,
-    fee_structure: FeeDistribution,
+    fee_distribution: FeeDistribution,
     max_validators: u32,
     accounts_raw: &[AccountInfo],
 ) -> ProgramResult {
@@ -153,7 +153,7 @@ pub fn process_initialize(
     lido.stake_pool_authority_bump_seed = stake_pool_authority_bump_seed;
     lido.fee_manager_bump_seed = fee_manager_bump_seed;
 
-    lido.fee_distribution = fee_structure;
+    lido.fee_distribution = fee_distribution;
 
     lido.serialize(&mut *accounts.lido.data.borrow_mut())
         .map_err(|e| e.into())
