@@ -174,6 +174,3 @@ async fn test_successful_update_balance() {
             / stake_pool.total_stake_lamports as u128) as u64
     );
 }
-
-#[tokio::test]
-async fn test_stake_exists_delegate_deposit() {} // TODO
