@@ -4,7 +4,7 @@ on:
   push:
     branches: [ main ]
   pull_request:
-    branches: [ main ]
+    branches: '*'
 
 env:
   CARGO_TERM_COLOR: always
@@ -44,11 +44,17 @@ jobs:
 
     - name: Solana contract test
       run: |
-        cd program
         sudo apt-get install -y libudev-dev
         sh -c "$(curl -sSfL https://release.solana.com/v1.6.7/install)"
         export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
-        cargo test-bpf
+
+        # Build all BPF programs in the workspace, including the SPL stake pool,
+        # because we will need them later to test Solido.
+        cargo build-bpf
+
+        # But only run the tests for Solido itself, the SPL tests are already
+        # executed upstream.
+        cargo test-bpf --manifest-path program/Cargo.toml
 
     - name: Build and test Multisig
       run: |

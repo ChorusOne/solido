@@ -49,6 +49,7 @@ const EXTRA_STAKE_AMOUNT: u64 = 50_000_000_000;
 async fn test_successful_update_balance() {
     let (mut context, lido_accounts, stake_accounts) = setup().await;
 
+    // Make a deposit to the Lido reserve.
     lido_accounts
         .deposit(
             &mut context.banks_client,
@@ -58,7 +59,7 @@ async fn test_successful_update_balance() {
         )
         .await;
 
-    // Delegate the deposit
+    // Create a stake account from the now-funded Lido reserve.
     let validator_account = stake_accounts.get(0).unwrap();
     let validator_stake = lido_accounts
         .delegate_deposit(
@@ -70,6 +71,7 @@ async fn test_successful_update_balance() {
         )
         .await;
 
+    // Delegate the newly created stake account to Lido's stake pool.
     lido_accounts
         .delegate_stakepool_deposit(
             &mut context.banks_client,
@@ -80,6 +82,8 @@ async fn test_successful_update_balance() {
         )
         .await;
 
+    // Transfer EXTRA_STAKE_AMOUNT Lamports to every validator outside of Lido
+    // and the stake pool, to simulate validation rewards being paid out.
     for stake_account in &stake_accounts {
         transfer(
             &mut context.banks_client,
@@ -91,9 +95,11 @@ async fn test_successful_update_balance() {
         .await;
     }
 
+    // Warp to the next epoch, such that the next balance refresh is not a
+    // no-op.
     context.warp_to_slot(50_000).unwrap();
 
-    // Update list and pool
+    // Refresh Lido's view of the stake account balances, and its own balance.
     let error = lido_accounts
         .stake_pool_accounts
         .update_all(
@@ -110,6 +116,7 @@ async fn test_successful_update_balance() {
         .await;
     assert!(error.is_none());
 
+    // Make another deposit to the Lido reserve.
     let recipient = lido_accounts
         .deposit(
             &mut context.banks_client,
@@ -126,15 +133,26 @@ async fn test_successful_update_balance() {
     .await;
     let stake_pool = StakePool::try_from_slice(&stake_pool.data.as_slice()).unwrap();
 
+    // The total reward is the the sum of what each stake account received.
     let reward = STAKE_ACCOUNTS * EXTRA_STAKE_AMOUNT;
-    let fee_tokens = reward * lido_accounts.stake_pool_accounts.fee.numerator
+
+    // Of that reward, Lido claims a fraction as fee.
+    let fee_lamports_expected = reward * lido_accounts.stake_pool_accounts.fee.numerator
         / lido_accounts.stake_pool_accounts.fee.denominator;
-    let fee_balance = get_token_balance(
+
+    // Confirm that the value of the tokens we received, is equal to the fee we
+    // claimed.
+    let fee_pool_tokens_received = get_token_balance(
         &mut context.banks_client,
         &lido_accounts.stake_pool_accounts.pool_fee_account.pubkey(),
     )
     .await;
-    assert_eq!(fee_balance, fee_tokens);
+    // One Lamport is lost due to rounding down.
+    assert_eq!(
+        stake_pool.calc_lamports_withdraw_amount(fee_pool_tokens_received),
+        Some(fee_lamports_expected - 1)
+    );
+
     assert_eq!(
         reward + TEST_A_DEPOSIT_AMOUNT,
         stake_pool.total_stake_lamports,

@@ -24,8 +24,14 @@ solana-client = "1.6.6"
 solana-logger = "1.6.6"
 solana-program = "1.6.6"
 solana-sdk = "1.6.6"
-spl-stake-pool = {version = "*", features = ["no-entrypoint"]}
-spl-token = {version = "*", features = ["no-entrypoint"]}
+
+[dependencies.spl-stake-pool]
+features = ["no-entrypoint"]
+path = "../solana-program-library/stake-pool/program"
+
+[dependencies.spl-token]
+features = ["no-entrypoint"]
+path = "../solana-program-library/token/program"
 
 [[bin]]
 name = "solido"

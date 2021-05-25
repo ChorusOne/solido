@@ -2,14 +2,16 @@
 
 mod helpers;
 
+use borsh::BorshDeserialize;
 use helpers::{
     program_test, simple_add_validator_to_pool,
-    stakepool_account::{get_token_balance, transfer, ValidatorStakeAccount},
+    stakepool_account::{get_account, get_token_balance, transfer, ValidatorStakeAccount},
     LidoAccounts,
 };
 use solana_program::pubkey::Pubkey;
 use solana_program_test::{tokio, ProgramTestContext};
 use solana_sdk::signature::Signer;
+use spl_stake_pool::state::StakePool;
 
 use lido::state::{StLamports, StakePoolTokenLamports};
 
@@ -78,6 +80,8 @@ async fn test_successful_fee_distribution() {
         )
         .await;
 
+    // Make `EXTRA_STAKE_AMOUNT` appear in every validator account, to simulate
+    // validation rewards being paid out.
     for stake_account in &stake_accounts {
         transfer(
             &mut context.banks_client,
@@ -89,9 +93,32 @@ async fn test_successful_fee_distribution() {
         .await;
     }
 
-    context.warp_to_slot(50_000).unwrap();
+    // Before the update, the fee account that rewards get paid into by the
+    // update, should be empty.
+    let fee_account_balance_before = get_token_balance(
+        &mut context.banks_client,
+        &lido_accounts.stake_pool_accounts.pool_fee_account.pubkey(),
+    )
+    .await;
+    assert_eq!(fee_account_balance_before, 0);
 
-    // Update list and pool
+    let stake_pool = get_account(
+        &mut context.banks_client,
+        &lido_accounts.stake_pool_accounts.stake_pool.pubkey(),
+    )
+    .await;
+    let stake_pool = StakePool::try_from_slice(&stake_pool.data.as_slice()).unwrap();
+
+    // The total reward is the the sum of what each stake account received.
+    let reward_lamports = NUMBER_VALIDATORS * EXTRA_STAKE_AMOUNT;
+
+    // Of that reward, Lido claims a fraction as fee.
+    let fee_stake_pool_tokens_expected = stake_pool.calc_fee_amount(reward_lamports).unwrap();
+
+    // Now we are going to warp to the next epoch and actually update the pool
+    // balance, which should cause rewards to be minted and deposited into the
+    // fee account.
+    context.warp_to_slot(50_000).unwrap();
     let error = lido_accounts
         .stake_pool_accounts
         .update_all(
@@ -107,6 +134,15 @@ async fn test_successful_fee_distribution() {
         )
         .await;
     assert!(error.is_none());
+
+    let fee_in_stake_pool_tokens = get_token_balance(
+        &mut context.banks_client,
+        &lido_accounts.stake_pool_accounts.pool_fee_account.pubkey(),
+    )
+    .await;
+
+    assert_eq!(fee_in_stake_pool_tokens, fee_stake_pool_tokens_expected,);
+
     let fee_error = lido_accounts
         .distribute_fees(
             &mut context.banks_client,
@@ -131,29 +167,25 @@ async fn test_successful_fee_distribution() {
         &lido_accounts.manager_fee_account.pubkey(),
     )
     .await;
-    let total_fees = ((NUMBER_VALIDATORS as u128
-        * EXTRA_STAKE_AMOUNT as u128
-        * lido_accounts.stake_pool_accounts.fee.numerator as u128)
-        / lido_accounts.stake_pool_accounts.fee.denominator as u128) as u64;
 
     let calculated_fee_distribution = lido::state::distribute_fees(
         &lido_accounts.fee_distribution,
         NUMBER_VALIDATORS,
-        StakePoolTokenLamports(total_fees),
+        StakePoolTokenLamports(fee_stake_pool_tokens_expected),
     )
     .unwrap();
 
     assert_eq!(
+        StLamports(insurance_token_amount),
         calculated_fee_distribution.insurance_amount,
-        StLamports(insurance_token_amount)
     );
     assert_eq!(
+        StLamports(treasury_token_account),
         calculated_fee_distribution.treasury_amount,
-        StLamports(treasury_token_account)
     );
     assert_eq!(
+        StLamports(manager_token_account),
         calculated_fee_distribution.manager_amount,
-        StLamports(manager_token_account)
     );
 
     let validator_token_accounts: Vec<Pubkey> = stake_accounts
