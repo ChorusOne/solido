@@ -91,6 +91,9 @@ pub enum LidoError {
     /// Validator has unclaimed credit, should mint the tokens before the validator removal
     #[error("ValidatorHasUnclaimedCredit")]
     ValidatorHasUnclaimedCredit,
+    /// The reserve account is not rent exempt
+    #[error("ReserveIsNotRentExempt")]
+    ReserveIsNotRentExempt,
 }
 impl From<LidoError> for ProgramError {
     fn from(e: LidoError) -> Self {
