@@ -211,29 +211,13 @@ pub fn process_remove_validator(
         ]],
     )?;
 
-    let (_meta, val_stake) = get_stake_state(accounts.stake_remove)?;
-
-    for x in lido
-        .fee_recipients
-        .validator_credit_accounts
-        .validator_accounts
-        .iter()
-    {
-        msg!(
-            "VAL: {} {} {:?}",
-            x.vote_address,
-            x.token_address,
-            x.st_sol_amount
-        )
-    }
-
     // finds the validator index, this should never return an error
     let validator_idx = lido
         .fee_recipients
         .validator_credit_accounts
         .validator_accounts
         .iter()
-        .position(|v| v.vote_address == val_stake.delegation.voter_pubkey)
+        .position(|v| &v.stake_address == accounts.stake_remove.key)
         .ok_or(LidoError::ValidatorCreditNotFound)?;
 
     if lido
