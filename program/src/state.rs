@@ -193,7 +193,7 @@ pub struct ValidatorCreditAccounts {
 #[repr(C)]
 #[derive(Clone, Debug, Default, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema)]
 pub struct ValidatorCredit {
-    pub vote_address: Pubkey,
+    pub stake_address: Pubkey,
     pub token_address: Pubkey,
     pub st_sol_amount: StLamports,
 }
@@ -210,7 +210,7 @@ impl ValidatorCreditAccounts {
         // 32*2+8 bytes for each validator = 2 public keys + amount in StLamports
         buffer_size.saturating_sub(8) / (32 * 2 + 8)
     }
-    pub fn add(&mut self, vote_address: Pubkey, token_address: Pubkey) -> Result<(), LidoError> {
+    pub fn add(&mut self, stake_address: Pubkey, token_address: Pubkey) -> Result<(), LidoError> {
         if self.validator_accounts.len() == self.max_validators as usize {
             return Err(LidoError::MaximumValidatorsExceeded);
         }
@@ -218,10 +218,10 @@ impl ValidatorCreditAccounts {
         if !self
             .validator_accounts
             .iter()
-            .any(|v| v.vote_address == vote_address)
+            .any(|v| v.stake_address == stake_address)
         {
             self.validator_accounts.push(ValidatorCredit {
-                vote_address,
+                stake_address,
                 token_address,
                 st_sol_amount: StLamports(0),
             });
@@ -360,7 +360,7 @@ mod test_lido {
                 validator_credit_accounts: ValidatorCreditAccounts {
                     max_validators: 10000,
                     validator_accounts: vec![ValidatorCredit {
-                        vote_address: Pubkey::new_unique(),
+                        stake_address: Pubkey::new_unique(),
                         token_address: Pubkey::new_unique(),
                         st_sol_amount: StLamports(10000),
                     }],

@@ -1,8 +1,8 @@
 use solana_program::{
-    account_info::AccountInfo, borsh::try_from_slice_unchecked, msg, program::invoke_signed,
-    program_error::ProgramError, pubkey::Pubkey, rent::Rent,
+    account_info::AccountInfo, msg, program::invoke_signed, program_error::ProgramError,
+    pubkey::Pubkey, rent::Rent,
 };
-use spl_stake_pool::{stake_program, state::StakePool};
+use spl_stake_pool::state::StakePool;
 use std::{convert::TryFrom, fmt::Display};
 
 use crate::{error::LidoError, state::StLamports, RESERVE_AUTHORITY};
@@ -133,18 +133,6 @@ pub fn transfer_to<'a>(
         &[source, destination, authority, token_program],
         signers,
     )
-}
-
-/// Deserialize the stake state from AccountInfo
-pub(crate) fn get_stake_state(
-    stake_account_info: &AccountInfo,
-) -> Result<(stake_program::Meta, stake_program::Stake), ProgramError> {
-    let stake_state =
-        try_from_slice_unchecked::<stake_program::StakeState>(&stake_account_info.data.borrow())?;
-    match stake_state {
-        stake_program::StakeState::Stake(meta, stake) => Ok((meta, stake)),
-        _ => Err(LidoError::WrongStakeState.into()),
-    }
 }
 
 #[cfg(test)]
