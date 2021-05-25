@@ -164,9 +164,10 @@ pub fn process_add_validator(program_id: &Pubkey, accounts_raw: &[AccountInfo]) 
         .map_err(|err| err.into())
 }
 
-/// Removes a validator from the stake pool, notice that the validator might
-/// not be immediately removed from the validators list in the stake pool
-/// after this instruction is executed, but we do send and erase its credits
+/// Removes a validator from the stake pool, notice that the validator might not
+/// be immediately removed from the validators list in the stake pool after this
+/// instruction is executed, this function requires the validator has no
+/// unclaimed fees.
 pub fn process_remove_validator(
     program_id: &Pubkey,
     accounts_raw: &[AccountInfo],
