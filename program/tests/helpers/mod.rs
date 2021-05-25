@@ -21,8 +21,7 @@ pub const MAX_VALIDATORS: u32 = 10_000;
 solana_program::declare_id!("3kEkdGe68DuTKg6FhVrLPZ3Wm8EcUPCPjhCeu8WrGDoc");
 
 pub fn program_test() -> ProgramTest {
-    let mut program = ProgramTest::new("lido",
-        id(), processor!(processor::process));
+    let mut program = ProgramTest::new("lido", id(), processor!(processor::process));
     program.add_program(
         "spl_stake_pool",
         spl_stake_pool::id(),

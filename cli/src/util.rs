@@ -1,7 +1,7 @@
 use std::fmt;
 
-use solana_program::pubkey::Pubkey;
 use serde::{Serialize, Serializer};
+use solana_program::pubkey::Pubkey;
 
 /// Wrapper for `Pubkey` to serialize it as base58 in json, instead of a list of numbers.
 pub struct PubkeyBase58(pub Pubkey);
@@ -30,4 +30,3 @@ impl From<&Pubkey> for PubkeyBase58 {
         PubkeyBase58(pk.clone())
     }
 }
-

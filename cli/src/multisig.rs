@@ -15,10 +15,10 @@ use borsh::ser::BorshSerialize;
 use clap::Clap;
 use multisig::accounts as multisig_accounts;
 use multisig::instruction as multisig_instruction;
-use serde::{Serialize};
+use serde::Serialize;
 
-use crate::{print_output, OutputMode};
 use crate::util::PubkeyBase58;
+use crate::{print_output, OutputMode};
 
 #[derive(Clap, Debug)]
 pub struct MultisigOpts {

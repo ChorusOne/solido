@@ -4,8 +4,7 @@ mod helpers;
 
 use crate::helpers::create_token_account;
 use helpers::{
-    id,
-    program_test,
+    id, program_test,
     stakepool_account::{create_mint, get_account},
     LidoAccounts,
 };

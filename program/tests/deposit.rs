@@ -3,12 +3,11 @@
 mod helpers;
 
 use helpers::{
-    id,
-    program_test,
+    id, program_test,
     stakepool_account::{get_token_balance, transfer},
     LidoAccounts,
 };
-use lido::{instruction};
+use lido::instruction;
 use solana_program::hash::Hash;
 use solana_program_test::{tokio, BanksClient};
 use solana_sdk::{

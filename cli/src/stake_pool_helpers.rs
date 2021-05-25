@@ -2,8 +2,8 @@ use solana_program::sysvar;
 use std::fmt;
 use {
     crate::helpers::{check_fee_payer_balance, send_transaction},
-    crate::Config,
     crate::util::PubkeyBase58,
+    crate::Config,
     serde::Serialize,
     solana_program::{borsh::get_packed_len, program_pack::Pack, pubkey::Pubkey},
     solana_sdk::{
