@@ -66,8 +66,7 @@ jobs:
     - name: Run Solido integration test
       run: |
         export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
-        solana-test-validator > /dev/null &
-        validator="$!"
+        validator=$(tests/start_test_validator.py)
 
         # Perform initial Solana setup.
         solana-keygen new --no-bip39-passphrase --silent
@@ -80,8 +79,7 @@ jobs:
     - name: Run Multisig integration test
       run: |
         export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
-        solana-test-validator > /dev/null &
-        validator="$!"
+        validator=$(tests/start_test_validator.py)
 
         # Perform initial Solana setup.
         solana-keygen new --no-bip39-passphrase --silent
