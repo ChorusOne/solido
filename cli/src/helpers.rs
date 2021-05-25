@@ -63,31 +63,41 @@ pub fn send_transaction(
 #[derive(Clap, Debug)]
 pub struct CreateSolidoOpts {
     /// Numerator of the fee fraction.
+    #[clap(long)]
     pub fee_numerator: u64,
 
     /// Denominator of the fee fraction.
+    #[clap(long)]
     pub fee_denominator: u64,
 
     /// The maximum number of validators that this Solido instance will support.
+    #[clap(long)]
     pub max_validators: u32,
 
     /// Fees are divided proportionally to the sum of all specified fees, for instance,
     /// if all the fees are the same value, they will be divided equally.
 
     /// Insurance fee proportion
+    #[clap(long)]
     pub insurance_fee: u32,
     /// Treasury fee proportion
+    #[clap(long)]
     pub treasury_fee: u32,
     /// Validation fee proportion, to be divided equally among validators
+    #[clap(long)]
     pub validation_fee: u32,
     /// Manager fee
+    #[clap(long)]
     pub manager_fee: u32,
 
     /// Account to receive the `insurance_fee` proportion.
+    #[clap(long)]
     pub insurance_account: Pubkey,
     /// Account to receive the `treasury_fee` proportion.
+    #[clap(long)]
     pub treasury_account: Pubkey,
     /// Account to receive the `manager_fee` proportion.
+    #[clap(long)]
     pub manager_fee_account: Pubkey,
 }
 
