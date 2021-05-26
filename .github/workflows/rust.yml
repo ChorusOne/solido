@@ -71,6 +71,9 @@ jobs:
         # Perform initial Solana setup.
         solana-keygen new --no-bip39-passphrase --silent
         solana config set --url http://127.0.0.1:8899
+        # TODO: It *should* be online, that's what the start script enforces ...
+        # but still, let's see if a sleep fixes this.
+        sleep 5.0
         solana airdrop 500.0
 
         tests/test_solido.py
@@ -84,6 +87,7 @@ jobs:
         # Perform initial Solana setup.
         solana-keygen new --no-bip39-passphrase --silent
         solana config set --url http://127.0.0.1:8899
+        sleep 5.0
         solana airdrop 500.0
 
         tests/test_multisig.py
