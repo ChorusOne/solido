@@ -15,8 +15,9 @@ use crate::{
         token_mint_to, AccountType,
     },
     process_management::{
-        process_add_validator, process_change_fee_spec, process_claim_validator_fee,
-        process_create_validator_stake_account, process_distribute_fees, process_remove_validator,
+        process_add_maintainer, process_add_validator, process_change_fee_spec,
+        process_claim_validator_fee, process_create_validator_stake_account,
+        process_distribute_fees, process_remove_validator,
     },
     state::{
         FeeDistribution, FeeRecipients, Lido, Maintainers, ValidatorCreditAccounts,
@@ -82,13 +83,6 @@ pub fn process_initialize(
 
     // Bytes required for maintainers
     let bytes_for_maintainers = Maintainers::required_bytes(max_maintainers);
-    msg!(
-        "TOTAL BYTES: {}, BYTES: {}, CONSTANT: {}",
-        accounts.lido.data_len(),
-        bytes_for_maintainers,
-        LIDO_CONSTANT_SIZE
-    );
-
     // Calculate the expected number of validators
     let expected_max_validators = ValidatorCreditAccounts::maximum_accounts(
         accounts
@@ -174,6 +168,10 @@ pub fn process_initialize(
         return Err(LidoError::InvalidOwner.into());
     }
 
+    lido.maintainers = Maintainers {
+        max_maintainers,
+        maintainers_accounts: Vec::new(),
+    };
     lido.stake_pool_account = *accounts.stake_pool.key;
     lido.manager = *accounts.manager.key;
     lido.st_sol_mint_program = *accounts.mint_program.key;
@@ -463,5 +461,7 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
         }
         LidoInstruction::AddValidator => process_add_validator(program_id, accounts),
         LidoInstruction::RemoveValidator => process_remove_validator(program_id, accounts),
+        LidoInstruction::AddMaintainer => process_add_maintainer(program_id, accounts),
+        LidoInstruction::RemoveMaintainer => unimplemented!(),
     }
 }

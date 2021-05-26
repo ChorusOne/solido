@@ -22,6 +22,7 @@ async fn test_success_initialize() {
         lido.data.len(),
         LIDO_CONSTANT_SIZE
             + get_instance_packed_len(&ValidatorCreditAccounts::new(MAX_VALIDATORS)).unwrap()
+            + get_instance_packed_len(&Maintainers::new(MAX_MAINTAINERS)).unwrap()
     );
     assert_eq!(lido.owner, id());
 }

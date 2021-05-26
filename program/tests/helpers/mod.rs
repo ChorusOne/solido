@@ -2,7 +2,7 @@
 use lido::{
     instruction::{self, initialize},
     processor,
-    state::{FeeDistribution, ValidatorCreditAccounts, LIDO_CONSTANT_SIZE},
+    state::{FeeDistribution, Maintainers, ValidatorCreditAccounts, LIDO_CONSTANT_SIZE},
     DEPOSIT_AUTHORITY, FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY, STAKE_POOL_AUTHORITY,
 };
 use solana_program::{hash::Hash, program_pack::Pack, pubkey::Pubkey, system_instruction};
@@ -182,7 +182,7 @@ impl LidoAccounts {
         let validator_accounts_len =
             get_instance_packed_len(&ValidatorCreditAccounts::new(MAX_VALIDATORS)).unwrap();
         let manager_accounts_len =
-            get_instance_packed_len(&ValidatorCreditAccounts::new(MAX_MAINTAINERS)).unwrap();
+            get_instance_packed_len(&Maintainers::new(MAX_MAINTAINERS)).unwrap();
         let lido_size = LIDO_CONSTANT_SIZE + validator_accounts_len + manager_accounts_len;
         let rent = banks_client.get_rent().await.unwrap();
         let rent_lido = rent.minimum_balance(lido_size);
@@ -224,6 +224,22 @@ impl LidoAccounts {
             Some(&payer.pubkey()),
         );
         transaction.sign(&[payer, &self.lido], *recent_blockhash);
+        banks_client.process_transaction(transaction).await?;
+
+        // Add a maintainer
+        let mut transaction = Transaction::new_with_payer(
+            &[add_maintainer(
+                &id(),
+                &instruction::AddMaintainerMeta {
+                    lido: self.lido.pubkey(),
+                    manager: self.manager.pubkey(),
+                    maintainer: self.maintainer.pubkey(),
+                },
+            )
+            .unwrap()],
+            Some(&payer.pubkey()),
+        );
+        transaction.sign(&[payer, &self.manager], *recent_blockhash);
         banks_client.process_transaction(transaction).await?;
 
         Ok(())

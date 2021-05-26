@@ -54,6 +54,8 @@ pub enum LidoInstruction {
     CreateValidatorStakeAccount,
     AddValidator,
     RemoveValidator,
+    AddMaintainer,
+    RemoveMaintainer,
 }
 
 macro_rules! accounts_struct_meta {
@@ -888,5 +890,61 @@ pub fn claim_validator_fees(
         program_id: *program_id,
         accounts: accounts.to_vec(),
         data: LidoInstruction::ClaimValidatorFees.try_to_vec()?,
+    })
+}
+
+accounts_struct! {
+    AddMaintainerMeta, AddMaintainerInfo {
+        pub lido {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub manager {
+            is_signer: true,
+            is_writable: false,
+        },
+        pub maintainer {
+            is_signer: false,
+            is_writable: false,
+        },
+    }
+}
+
+pub fn add_maintainer(
+    program_id: &Pubkey,
+    accounts: &AddMaintainerMeta,
+) -> Result<Instruction, ProgramError> {
+    Ok(Instruction {
+        program_id: *program_id,
+        accounts: accounts.to_vec(),
+        data: LidoInstruction::AddMaintainer.try_to_vec()?,
+    })
+}
+
+accounts_struct! {
+    RemoveMaintainerMeta, RemoveMaintainerInfo {
+        pub lido {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub manager {
+            is_signer: true,
+            is_writable: false,
+        },
+        pub maintainer {
+            is_signer: false,
+            is_writable: false,
+        },
+    }
+}
+
+pub fn remove_maintainer(
+    program_id: &Pubkey,
+    accounts: &RemoveMaintainerMeta,
+) -> Result<Instruction, ProgramError> {
+    Ok(Instruction {
+        program_id: *program_id,
+        accounts: accounts.to_vec(),
+        data: LidoInstruction::RemoveMaintainer.try_to_vec()?,
     })
 }

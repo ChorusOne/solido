@@ -246,6 +246,8 @@ impl ValidatorCreditAccounts {
         buffer_size.saturating_sub(8) / (32 * 2 + 8)
     }
     pub fn add(&mut self, stake_address: Pubkey, token_address: Pubkey) -> Result<(), LidoError> {
+        // If the condition below is false, the stake pool operation should have failed, but
+        // we double check to be sure
         if self.validator_accounts.len() == self.max_validators as usize {
             return Err(LidoError::MaximumValidatorsExceeded);
         }
@@ -362,8 +364,8 @@ pub fn distribute_fees(
 /// by the manager
 #[derive(Clone, Default, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
 pub struct Maintainers {
-    maintainers_accounts: Vec<Pubkey>,
-    max_maintainers: u32,
+    pub maintainers_accounts: Vec<Pubkey>,
+    pub max_maintainers: u32,
 }
 
 impl Maintainers {
@@ -388,13 +390,24 @@ impl Maintainers {
         if self.maintainers_accounts.len() == self.max_maintainers as usize {
             return Err(LidoError::MaximumMaintainersExceeded);
         }
-        // Adds if vote account is different
         if !self
             .maintainers_accounts
             .iter()
             .any(|&v| v == new_maintainer)
         {
             self.maintainers_accounts.push(new_maintainer);
+        } else {
+            return Err(LidoError::DuplicatedMaintainer);
+        }
+        Ok(())
+    }
+    pub fn remove(&mut self, new_maintainer: Pubkey) -> Result<(), LidoError> {
+        if !self
+            .maintainers_accounts
+            .iter()
+            .any(|&v| v == new_maintainer)
+        {
+            return Err(LidoError::InvalidMaintainer);
         } else {
             return Err(LidoError::DuplicatedMaintainer);
         }

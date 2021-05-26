@@ -14,8 +14,9 @@ use spl_stake_pool::{
 use crate::{
     error::LidoError,
     instruction::{
-        AddValidatorInfo, ChangeFeeSpecInfo, ClaimValidatorFeeInfo,
-        CreateValidatorStakeAccountInfo, DistributeFeesInfo, RemoveValidatorInfo,
+        AddMaintainerInfo, AddValidatorInfo, ChangeFeeSpecInfo, ClaimValidatorFeeInfo,
+        CreateValidatorStakeAccountInfo, DistributeFeesInfo, RemoveMaintainerInfo,
+        RemoveValidatorInfo,
     },
     logic::{token_mint_to, transfer_to},
     state::{distribute_fees, FeeDistribution, Lido, StLamports, StakePoolTokenLamports},
@@ -167,19 +168,6 @@ pub fn process_add_validator(program_id: &Pubkey, accounts_raw: &[AccountInfo]) 
             &[lido.stake_pool_authority_bump_seed],
         ]],
     )?;
-
-    // If the condition below is false, the stake pool operation should have failed, but
-    // we double check to be sure
-    if lido
-        .fee_recipients
-        .validator_credit_accounts
-        .validator_accounts
-        .len() as u32
-        == lido.fee_recipients.validator_credit_accounts.max_validators
-    {
-        msg!("Maximum number of validators reached");
-        return Err(LidoError::UnexpectedValidatorCreditAccountSize.into());
-    }
 
     lido.fee_recipients.validator_credit_accounts.add(
         *accounts.stake_account.key,
@@ -397,6 +385,39 @@ pub fn process_distribute_fees(program_id: &Pubkey, accounts_raw: &[AccountInfo]
         vc.st_sol_amount = (vc.st_sol_amount + token_shares.reward_per_validator)
             .ok_or(LidoError::CalculationFailure)?;
     }
+    lido.serialize(&mut *accounts.lido.data.borrow_mut())
+        .map_err(|err| err.into())
+}
+
+/// Adds a maintainer to the list of maintainers
+pub fn process_add_maintainer(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> ProgramResult {
+    let accounts = AddMaintainerInfo::try_from_slice(accounts_raw)?;
+    if accounts.lido.owner != program_id {
+        msg!("Lido has an invalid owner");
+        return Err(LidoError::InvalidOwner.into());
+    }
+    let mut lido = try_from_slice_unchecked::<Lido>(&accounts.lido.data.borrow())?;
+    lido.check_manager(accounts.manager)?;
+
+    lido.maintainers.add(*accounts.maintainer.key)?;
+    lido.serialize(&mut *accounts.lido.data.borrow_mut())
+        .map_err(|err| err.into())
+}
+
+/// Removes a maintainer to the list of maintainers
+pub fn process_remove_maintainer(
+    program_id: &Pubkey,
+    accounts_raw: &[AccountInfo],
+) -> ProgramResult {
+    let accounts = RemoveMaintainerInfo::try_from_slice(accounts_raw)?;
+    if accounts.lido.owner != program_id {
+        msg!("Lido has an invalid owner");
+        return Err(LidoError::InvalidOwner.into());
+    }
+    let mut lido = try_from_slice_unchecked::<Lido>(&accounts.lido.data.borrow())?;
+    lido.check_manager(accounts.manager)?;
+
+    lido.maintainers.add(*accounts.maintainer.key)?;
     lido.serialize(&mut *accounts.lido.data.borrow_mut())
         .map_err(|err| err.into())
 }
