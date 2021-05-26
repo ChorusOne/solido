@@ -21,14 +21,14 @@ print('Creating test accounts ...')
 addr1 = create_test_account('test-key-1.json')
 print(f'> {addr1}')
 
-treasury_account = create_test_account('treasury-key.json')
-print(f'> Treasury account:    {treasury_account}')
+treasury_account_owner = create_test_account('treasury-key.json')
+print(f'> Treasury account owner:    {treasury_account_owner}')
 
-insurance_account = create_test_account('insurance-key.json')
-print(f'> Insurance account: {insurance_account}')
+insurance_account_owner = create_test_account('insurance-key.json')
+print(f'> Insurance account owner:   {insurance_account_owner}')
 
-manager_fee_account = create_test_account('manager-fee-key.json')
-print(f'> Manager fee account: {manager_fee_account}')
+manager_fee_account_owner = create_test_account('manager-fee-key.json')
+print(f'> Manager fee account owner: {manager_fee_account_owner}')
 
 
 print('\nUploading Solido program ...')
@@ -69,8 +69,8 @@ result = solido(
     '--treasury-fee', '5',
     '--validation-fee', '3',
     '--manager-fee', '2',
-    '--treasury-account', treasury_account,
-    '--manager-fee-account', manager_fee_account,
-    '--insurance-account', insurance_account,
+    '--treasury-account-owner', treasury_account_owner,
+    '--insurance-account-owner', insurance_account_owner,
+    '--manager-fee-account-owner', manager_fee_account_owner,
 )
 print(result)

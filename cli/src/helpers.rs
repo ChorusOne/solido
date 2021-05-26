@@ -8,7 +8,9 @@ use solana_program::{
     system_instruction,
 };
 use solana_sdk::{
+    instruction::Instruction,
     signature::{Keypair, Signer},
+    signer::signers::Signers,
     transaction::Transaction,
 };
 use spl_stake_pool::state::Fee;
@@ -193,6 +195,18 @@ fn push_create_spl_token_account(
     Ok(keypair)
 }
 
+fn sign_and_send_transaction<T: Signers>(config: &Config, instructions: &[Instruction], signers: &T) -> Result<(), crate::Error> {
+    let mut tx = Transaction::new_with_payer(instructions,
+        Some(&config.fee_payer.pubkey()),
+    );
+
+    let (recent_blockhash, _fee_calculator) = config.rpc_client.get_recent_blockhash()?;
+    tx.sign(signers, recent_blockhash);
+    send_transaction(&config, tx)?;
+
+    Ok(())
+}
+
 pub fn command_create_solido(
     config: &Config,
     opts: CreateSolidoOpts,
@@ -258,17 +272,23 @@ pub fn command_create_solido(
         default_decimals,
     )?);
 
-    // Create the account that holds the Solido instance itself.
-    instructions.push(system_instruction::create_account(
-        &config.fee_payer.pubkey(),
-        &lido_keypair.pubkey(),
-        lido_account_balance,
-        lido_size as u64,
-        &opts.solido_program_id,
-    ));
+    // Ideally we would set up the entire instance in a single transaction, but
+    // Solana transaction size limits are so low that we need to break our
+    // instructions down into multiple transactions. So set up the mint first,
+    // then continue.
+    sign_and_send_transaction(
+        config,
+        &instructions[..],
+        &[
+            config.fee_payer,
+            &st_sol_mint_keypair,
+        ],
+    )?;
+    instructions.clear();
+    eprintln!("Did send mint init.");
 
     // Set up the SPL token account that holds Lido's stake pool tokens.
-    let pool_token_to = push_create_spl_token_account(
+    let pool_token_to_keypair = push_create_spl_token_account(
         config,
         &mut instructions,
         &stake_pool.mint_address.0,
@@ -282,6 +302,18 @@ pub fn command_create_solido(
         &stake_pool.mint_address.0,
         &fee_authority,
     )?;
+
+    sign_and_send_transaction(
+        config,
+        &instructions[..],
+        &vec![
+            config.fee_payer,
+            &pool_token_to_keypair,
+            &fee_keypair,
+        ]
+    )?;
+    instructions.clear();
+    eprintln!("Did send SPL account inits part 1.");
 
     // Set up the SPL token account that receive the fees in stSOL.
     let insurance_keypair = push_create_spl_token_account(
@@ -302,6 +334,27 @@ pub fn command_create_solido(
         &st_sol_mint_keypair.pubkey(),
         &opts.manager_fee_account_owner,
     )?;
+    sign_and_send_transaction(
+        config,
+        &instructions[..],
+        &vec![
+            config.fee_payer,
+            &insurance_keypair,
+            &treasury_keypair,
+            &manager_fee_keypair,
+        ]
+    )?;
+    instructions.clear();
+    eprintln!("Did send SPL account inits.");
+
+    // Create the account that holds the Solido instance itself.
+    instructions.push(system_instruction::create_account(
+        &config.fee_payer.pubkey(),
+        &lido_keypair.pubkey(),
+        lido_account_balance,
+        lido_size as u64,
+        &opts.solido_program_id,
+    ));
 
     instructions.push(lido::instruction::initialize(
         &opts.solido_program_id,
@@ -316,7 +369,7 @@ pub fn command_create_solido(
             lido: lido_keypair.pubkey(),
             stake_pool: stake_pool.stake_pool_address.0,
             mint_program: st_sol_mint_keypair.pubkey(),
-            pool_token_to: pool_token_to.pubkey(),
+            pool_token_to: pool_token_to_keypair.pubkey(),
             fee_token: fee_keypair.pubkey(), // to define
             manager: config.staker.pubkey(),
             insurance_account: insurance_keypair.pubkey(),
@@ -326,24 +379,15 @@ pub fn command_create_solido(
         },
     )?);
 
-    let mut lido_transaction = Transaction::new_with_payer(
+    sign_and_send_transaction(
+        config,
         &instructions[..],
-        Some(&config.fee_payer.pubkey()),
-    );
-
-    let (recent_blockhash, _fee_calculator) = config.rpc_client.get_recent_blockhash()?;
-    let signers = vec![
-        config.fee_payer,
-        &st_sol_mint_keypair,
-        &lido_keypair,
-        &pool_token_to,
-        &fee_keypair,
-        &insurance_keypair,
-        &treasury_keypair,
-        &manager_fee_keypair
-    ];
-    lido_transaction.sign(&signers, recent_blockhash);
-    send_transaction(&config, lido_transaction)?;
+        &[
+            config.fee_payer,
+            &lido_keypair,
+        ],
+    )?;
+    eprintln!("Did send Lido init.");
 
     let result = CreateSolidoOutput {
         solido_address: lido_keypair.pubkey().into(),
@@ -351,7 +395,7 @@ pub fn command_create_solido(
         fee_authority: fee_authority.into(),
         st_sol_mint_address: st_sol_mint_keypair.pubkey().into(),
         fee_address: fee_keypair.pubkey().into(),
-        pool_token_to: pool_token_to.pubkey().into(),
+        pool_token_to: pool_token_to_keypair.pubkey().into(),
         insurance_account: insurance_keypair.pubkey().into(),
         treasury_account: treasury_keypair.pubkey().into(),
         manager_fee_account: manager_fee_keypair.pubkey().into(),
