@@ -4,7 +4,7 @@ use clap::Clap;
 use lido::{state::FeeDistribution, DEPOSIT_AUTHORITY, FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY, STAKE_POOL_AUTHORITY};
 use serde::Serialize;
 use solana_program::{
-    native_token::Sol, program_pack::Pack, pubkey::Pubkey,
+    pubkey::Pubkey,
     system_instruction,
 };
 use solana_sdk::{
@@ -16,25 +16,14 @@ use solana_sdk::{
 use spl_stake_pool::state::Fee;
 
 use crate::{
+    spl_token_utils::{
+        push_create_spl_token_mint,
+        push_create_spl_token_account,
+    },
     stake_pool_helpers::{command_create_pool, CreatePoolOutput},
     util::PubkeyBase58,
-    Config, Error, OutputMode,
+    Config, OutputMode,
 };
-
-pub fn check_fee_payer_balance(config: &Config, required_balance: u64) -> Result<(), Error> {
-    let balance = config.rpc_client.get_balance(&config.fee_payer.pubkey())?;
-    if balance < required_balance {
-        Err(format!(
-            "Fee payer, {}, has insufficient balance: {} required, {} available",
-            config.fee_payer.pubkey(),
-            Sol(required_balance),
-            Sol(balance)
-        )
-        .into())
-    } else {
-        Ok(())
-    }
-}
 
 pub fn send_transaction(
     config: &Config,
@@ -62,6 +51,19 @@ pub fn send_transaction(
     }
     Ok(())
 }
+
+pub fn sign_and_send_transaction<T: Signers>(config: &Config, instructions: &[Instruction], signers: &T) -> Result<(), crate::Error> {
+    let mut tx = Transaction::new_with_payer(instructions,
+        Some(&config.fee_payer.pubkey()),
+    );
+
+    let (recent_blockhash, _fee_calculator) = config.rpc_client.get_recent_blockhash()?;
+    tx.sign(signers, recent_blockhash);
+    send_transaction(&config, tx)?;
+
+    Ok(())
+}
+
 
 #[derive(Clap, Debug)]
 pub struct CreateSolidoOpts {
@@ -158,54 +160,6 @@ impl fmt::Display for CreateSolidoOutput {
     }
 }
 
-/// Push instructions to create and initialize an SPL token account.
-///
-/// Returns the keypair for the account. This keypair needs to sign the
-/// transaction.
-fn push_create_spl_token_account(
-    config: &Config,
-    instructions: &mut Vec<solana_program::instruction::Instruction>,
-    mint: &Pubkey,
-    owner: &Pubkey,
-) -> Result<Keypair, crate::Error> {
-
-    let spl_token_min_sol_balance = config
-        .rpc_client
-        .get_minimum_balance_for_rent_exemption(spl_token::state::Account::LEN)?;
-
-    let keypair = Keypair::new();
-
-    instructions.push(system_instruction::create_account(
-        &config.fee_payer.pubkey(),
-        &keypair.pubkey(),
-        // Deposit enough SOL to make it rent-exempt.
-        spl_token_min_sol_balance,
-        spl_token::state::Account::LEN as u64,
-        // The new account should be owned by the SPL token program.
-        &spl_token::id(),
-    ));
-    instructions.push(spl_token::instruction::initialize_account(
-        &spl_token::id(),
-        &keypair.pubkey(),
-        mint,
-        owner,
-    )?);
-
-    Ok(keypair)
-}
-
-fn sign_and_send_transaction<T: Signers>(config: &Config, instructions: &[Instruction], signers: &T) -> Result<(), crate::Error> {
-    let mut tx = Transaction::new_with_payer(instructions,
-        Some(&config.fee_payer.pubkey()),
-    );
-
-    let (recent_blockhash, _fee_calculator) = config.rpc_client.get_recent_blockhash()?;
-    tx.sign(signers, recent_blockhash);
-    send_transaction(&config, tx)?;
-
-    Ok(())
-}
-
 pub fn command_create_solido(
     config: &Config,
     opts: CreateSolidoOpts,
@@ -247,11 +201,6 @@ pub fn command_create_solido(
         opts.max_validators,
     )?;
 
-    let st_sol_mint_keypair = Keypair::new();
-
-    let mint_account_balance = config
-        .rpc_client
-        .get_minimum_balance_for_rent_exemption(spl_token::state::Mint::LEN)?;
     // TODO(fynn): get_packed_len panics on https://docs.rs/solana-program/1.6.9/src/solana_program/borsh.rs.html#40,
     // so we need to compute the size in a different way.
     let lido_size = 999; //get_packed_len::<lido::state::Lido>();
@@ -272,23 +221,12 @@ pub fn command_create_solido(
         min_balance_empty_data_account,
     ));
 
-    let default_decimals = spl_token::native_mint::DECIMALS;
-
     // Set up the Lido stSOL SPL token mint account.
-    instructions.push(system_instruction::create_account(
-        &config.fee_payer.pubkey(),
-        &st_sol_mint_keypair.pubkey(),
-        mint_account_balance,
-        spl_token::state::Mint::LEN as u64,
-        &spl_token::id(),
-    ));
-    instructions.push(spl_token::instruction::initialize_mint(
-        &spl_token::id(),
-        &st_sol_mint_keypair.pubkey(),
+    let st_sol_mint_keypair = push_create_spl_token_mint(
+        config,
+        &mut instructions,
         &reserve_authority,
-        None,
-        default_decimals,
-    )?);
+    )?;
 
     // Ideally we would set up the entire instance in a single transaction, but
     // Solana transaction size limits are so low that we need to break our

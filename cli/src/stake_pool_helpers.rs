@@ -1,11 +1,15 @@
 use solana_program::sysvar;
 use std::fmt;
 use {
-    crate::helpers::{check_fee_payer_balance, send_transaction},
+    crate::helpers::{send_transaction, sign_and_send_transaction},
+    crate::spl_token_utils::{
+        push_create_spl_token_mint,
+        push_create_spl_token_account,
+    },
     crate::util::PubkeyBase58,
     crate::Config,
     serde::Serialize,
-    solana_program::{borsh::get_packed_len, program_pack::Pack, pubkey::Pubkey},
+    solana_program::{borsh::get_packed_len, pubkey::Pubkey},
     solana_sdk::{
         signature::{Keypair, Signer},
         system_instruction,
@@ -77,8 +81,6 @@ pub fn command_create_pool(
     max_validators: u32,
 ) -> Result<CreatePoolOutput, crate::Error> {
     let reserve_stake = Keypair::new();
-    let mint_keypair = Keypair::new();
-    let pool_fee_account = Keypair::new();
     let stake_pool_keypair = Keypair::new();
     let validator_list = Keypair::new();
 
@@ -86,12 +88,6 @@ pub fn command_create_pool(
         .rpc_client
         .get_minimum_balance_for_rent_exemption(STAKE_STATE_LEN)?
         + 1;
-    let mint_account_balance = config
-        .rpc_client
-        .get_minimum_balance_for_rent_exemption(spl_token::state::Mint::LEN)?;
-    let pool_fee_account_balance = config
-        .rpc_client
-        .get_minimum_balance_for_rent_exemption(spl_token::state::Account::LEN)?;
     let stake_pool_account_lamports = config
         .rpc_client
         .get_minimum_balance_for_rent_exemption(get_packed_len::<StakePool>())?;
@@ -100,13 +96,6 @@ pub fn command_create_pool(
     let validator_list_balance = config
         .rpc_client
         .get_minimum_balance_for_rent_exemption(validator_list_size)?;
-    let total_rent_free_balances = reserve_stake_balance
-        + mint_account_balance
-        + pool_fee_account_balance
-        + stake_pool_account_lamports
-        + validator_list_balance;
-
-    let default_decimals = spl_token::native_mint::DECIMALS;
 
     // Calculate withdraw authority used for minting pool tokens
     let (withdraw_authority, _) = find_withdraw_authority_program_address(
@@ -114,58 +103,48 @@ pub fn command_create_pool(
         &stake_pool_keypair.pubkey(),
     );
 
-    let mut setup_transaction = Transaction::new_with_payer(
+    let mut instructions = Vec::new();
+
+    // Account for the stake pool reserve
+    instructions.push(system_instruction::create_account(
+        &config.fee_payer.pubkey(),
+        &reserve_stake.pubkey(),
+        reserve_stake_balance,
+        STAKE_STATE_LEN as u64,
+        &stake_program::id(),
+    ));
+    instructions.push(stake_program::initialize(
+        &reserve_stake.pubkey(),
+        &stake_program::Authorized {
+            staker: withdraw_authority,
+            withdrawer: withdraw_authority,
+        },
+        &stake_program::Lockup::default(),
+    ));
+
+    let mint_keypair = push_create_spl_token_mint(
+        config,
+        &mut instructions,
+        &withdraw_authority,
+    )?;
+
+    // Set up the SPL token account that will receive the fees.
+    let pool_fee_account_keypair = push_create_spl_token_account(
+        config,
+        &mut instructions,
+        &mint_keypair.pubkey(),
+        &config.manager.pubkey(),
+    )?;
+    sign_and_send_transaction(
+        config,
+        &instructions[..],
         &[
-            // Account for the stake pool reserve
-            system_instruction::create_account(
-                &config.fee_payer.pubkey(),
-                &reserve_stake.pubkey(),
-                reserve_stake_balance,
-                STAKE_STATE_LEN as u64,
-                &stake_program::id(),
-            ),
-            stake_program::initialize(
-                &reserve_stake.pubkey(),
-                &stake_program::Authorized {
-                    staker: withdraw_authority,
-                    withdrawer: withdraw_authority,
-                },
-                &stake_program::Lockup::default(),
-            ),
-            // Account for the stake pool mint
-            system_instruction::create_account(
-                &config.fee_payer.pubkey(),
-                &mint_keypair.pubkey(),
-                mint_account_balance,
-                spl_token::state::Mint::LEN as u64,
-                &spl_token::id(),
-            ),
-            // Account for the pool fee accumulation
-            system_instruction::create_account(
-                &config.fee_payer.pubkey(),
-                &pool_fee_account.pubkey(),
-                pool_fee_account_balance,
-                spl_token::state::Account::LEN as u64,
-                &spl_token::id(),
-            ),
-            // Initialize pool token mint account
-            spl_token::instruction::initialize_mint(
-                &spl_token::id(),
-                &mint_keypair.pubkey(),
-                &withdraw_authority,
-                None,
-                default_decimals,
-            )?,
-            // Initialize fee receiver account
-            spl_token::instruction::initialize_account(
-                &spl_token::id(),
-                &pool_fee_account.pubkey(),
-                &mint_keypair.pubkey(),
-                &config.manager.pubkey(),
-            )?,
+            config.fee_payer,
+            &reserve_stake,
+            &mint_keypair,
+            &pool_fee_account_keypair,
         ],
-        Some(&config.fee_payer.pubkey()),
-    );
+    )?;
 
     let mut initialize_transaction = Transaction::new_with_payer(
         &[
@@ -199,7 +178,7 @@ pub fn command_create_pool(
                     sysvar_rent: sysvar::rent::id(),
                     sysvar_token: spl_token::id(),
                     deposit_authority: *deposit_authority,
-                    manager_fee_account: pool_fee_account.pubkey(),
+                    manager_fee_account: pool_fee_account_keypair.pubkey(),
                 },
                 fee,
                 max_validators,
@@ -208,21 +187,7 @@ pub fn command_create_pool(
         Some(&config.fee_payer.pubkey()),
     );
 
-    let (recent_blockhash, fee_calculator) = config.rpc_client.get_recent_blockhash()?;
-    check_fee_payer_balance(
-        config,
-        total_rent_free_balances
-            + fee_calculator.calculate_fee(&setup_transaction.message())
-            + fee_calculator.calculate_fee(&initialize_transaction.message()),
-    )?;
-    let setup_signers = vec![
-        config.fee_payer,
-        &mint_keypair,
-        &pool_fee_account,
-        &reserve_stake,
-    ];
-    setup_transaction.sign(&setup_signers, recent_blockhash);
-    send_transaction(&config, setup_transaction)?;
+    let (recent_blockhash, _fee_calculator) = config.rpc_client.get_recent_blockhash()?;
 
     let initialize_signers = vec![
         config.fee_payer,
@@ -237,7 +202,7 @@ pub fn command_create_pool(
         stake_pool_address: stake_pool_keypair.pubkey().into(),
         reserve_stake_address: reserve_stake.pubkey().into(),
         mint_address: mint_keypair.pubkey().into(),
-        fee_address: pool_fee_account.pubkey().into(),
+        fee_address: pool_fee_account_keypair.pubkey().into(),
         validator_list_address: validator_list.pubkey().into(),
         withdraw_authority: withdraw_authority.into(),
     };

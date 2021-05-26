@@ -17,6 +17,7 @@ extern crate spl_stake_pool;
 
 mod helpers;
 mod multisig;
+mod spl_token_utils;
 mod stake_pool_helpers;
 mod util;
 
