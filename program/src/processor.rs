@@ -213,8 +213,8 @@ pub fn process_deposit(
     lido.check_stake_pool(accounts.stake_pool)?;
 
     let stake_pool = StakePool::try_from_slice(&accounts.stake_pool.data.borrow())?;
-    let reserve_lamports = accounts.reserve_authority.lamports();
 
+    let rent = &Rent::from_account_info(accounts.sysvar_rent)?;
     let pool_to_token_account =
         spl_token::state::Account::unpack_from_slice(&accounts.pool_token_to.data.borrow())?;
 
