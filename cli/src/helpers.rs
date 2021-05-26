@@ -85,6 +85,13 @@ pub struct CreateSolidoOpts {
     #[clap(long, value_name = "int")]
     pub max_validators: u32,
 
+    /// The maximum number of maintainers that this Solido instance will support.
+    #[clap(long)]
+    pub max_maintainers: u32,
+
+    /// Fees are divided proportionally to the sum of all specified fees, for instance,
+    /// if all the fees are the same value, they will be divided equally.
+
     // Fees are divided proportionally to the sum of all specified fees, for instance,
     // if all the fees are the same value, they will be divided equally.
     /// Insurance fee share
