@@ -182,7 +182,7 @@ impl LidoAccounts {
         let validator_accounts_len =
             get_instance_packed_len(&ValidatorCreditAccounts::new(MAX_VALIDATORS)).unwrap();
         let manager_accounts_len =
-            get_instance_packed_len(&ValidatorCreditAccounts::new(MAX_MAINTAINERS)).unwrap();
+            get_instance_packed_len(&Maintainers::new(MAX_MAINTAINERS)).unwrap();
         let lido_size = LIDO_CONSTANT_SIZE + validator_accounts_len + manager_accounts_len;
         let rent = banks_client.get_rent().await.unwrap();
         let rent_lido = rent.minimum_balance(lido_size);
