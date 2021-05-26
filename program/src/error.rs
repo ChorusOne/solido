@@ -89,17 +89,23 @@ pub enum LidoError {
     /// Validator credit account was not found
     #[error("ValidatorCreditNotFound")]
     ValidatorCreditNotFound,
+    // 25
     /// Validator has unclaimed credit, should mint the tokens before the validator removal
     #[error("ValidatorHasUnclaimedCredit")]
     ValidatorHasUnclaimedCredit,
     /// The reserve account is not rent exempt
     #[error("ReserveIsNotRentExempt")]
     ReserveIsNotRentExempt,
-    // 25
     /// The requested amount for reserve withdrawal exceeds the maximum held in
     /// the reserve account considering rent exemption
     #[error("AmountExceedsReserve")]
     AmountExceedsReserve,
+    /// Number of maximum maintainers reached
+    #[error("MaximumMaintainersExceeded")]
+    MaximumMaintainersExceeded,
+    /// The same maintainer's public key already exists in the structure
+    #[error("DuplicatedMaintainer")]
+    DuplicatedMaintainer,
 }
 impl From<LidoError> for ProgramError {
     fn from(e: LidoError) -> Self {

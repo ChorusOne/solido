@@ -114,6 +114,7 @@ pub struct Lido {
     /// Fees
     pub fee_distribution: FeeDistribution,
     pub fee_recipients: FeeRecipients,
+    pub maintainers: Maintainers,
 }
 
 impl Lido {
@@ -322,6 +323,48 @@ pub fn distribute_fees(
     Some(result)
 }
 
+/// Maintainers are granted low security risk privileges, they can call
+/// `IncreaseValidatorStake` and `DecreaseValidatorStake`. Maintainers are set
+/// by the manager
+#[derive(Clone, Default, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
+pub struct Maintainers {
+    maintainers_accounts: Vec<Pubkey>,
+    max_maintainers: u32,
+}
+
+impl Maintainers {
+    /// Creates a new Maintainers structure with `max_maintainers` allocated
+    /// space, all set to `Pubkey::default()`
+    pub fn new(max_maintainers: u32) -> Self {
+        Self {
+            max_maintainers,
+            maintainers_accounts: vec![Pubkey::default(); max_maintainers as usize],
+        }
+    }
+    /// Given a buffer size, calculate the maximum number of maintainers that can be fit
+    pub fn maximum_accounts(buffer_size: usize) -> usize {
+        // 8 bytes: 4 bytes for `max_maintainers` + 4 bytes for number of maintainers in vec
+        // 32 bytes for each maintainer = maintainer address
+        buffer_size.saturating_sub(8) / (32 * 2 + 8)
+    }
+    pub fn add(&mut self, new_maintainer: Pubkey) -> Result<(), LidoError> {
+        if self.maintainers_accounts.len() == self.max_maintainers as usize {
+            return Err(LidoError::MaximumMaintainersExceeded);
+        }
+        // Adds if vote account is different
+        if !self
+            .maintainers_accounts
+            .iter()
+            .any(|&v| v == new_maintainer)
+        {
+            self.maintainers_accounts.push(new_maintainer);
+        } else {
+            return Err(LidoError::DuplicatedMaintainer);
+        }
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod test_lido {
     use super::*;
@@ -367,6 +410,10 @@ mod test_lido {
                         st_sol_amount: StLamports(10000),
                     }],
                 },
+            },
+            maintainers: Maintainers {
+                maintainers_accounts: Vec::new(),
+                max_maintainers: 1,
             },
         };
         let validator_accounts_len =
