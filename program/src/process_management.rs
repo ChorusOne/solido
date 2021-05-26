@@ -417,7 +417,7 @@ pub fn process_remove_maintainer(
     let mut lido = try_from_slice_unchecked::<Lido>(&accounts.lido.data.borrow())?;
     lido.check_manager(accounts.manager)?;
 
-    lido.maintainers.add(*accounts.maintainer.key)?;
+    lido.maintainers.remove(*accounts.maintainer.key)?;
     lido.serialize(&mut *accounts.lido.data.borrow_mut())
         .map_err(|err| err.into())
 }

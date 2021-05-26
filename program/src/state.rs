@@ -401,16 +401,15 @@ impl Maintainers {
         }
         Ok(())
     }
-    pub fn remove(&mut self, new_maintainer: Pubkey) -> Result<(), LidoError> {
-        if !self
+    /// Removes the maintainer from the list of maintainers, errors if the
+    /// maintainer is not part of the list
+    pub fn remove(&mut self, maintainer: Pubkey) -> Result<(), LidoError> {
+        let maintainer_idx = self
             .maintainers_accounts
             .iter()
-            .any(|&v| v == new_maintainer)
-        {
-            return Err(LidoError::InvalidMaintainer);
-        } else {
-            return Err(LidoError::DuplicatedMaintainer);
-        }
+            .position(|&v| v == maintainer)
+            .ok_or(LidoError::InvalidMaintainer)?;
+        self.maintainers_accounts.swap_remove(maintainer_idx);
         Ok(())
     }
 }
