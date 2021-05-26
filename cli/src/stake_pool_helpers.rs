@@ -2,10 +2,7 @@ use solana_program::sysvar;
 use std::fmt;
 use {
     crate::helpers::{send_transaction, sign_and_send_transaction},
-    crate::spl_token_utils::{
-        push_create_spl_token_mint,
-        push_create_spl_token_account,
-    },
+    crate::spl_token_utils::{push_create_spl_token_account, push_create_spl_token_mint},
     crate::util::PubkeyBase58,
     crate::Config,
     serde::Serialize,
@@ -123,11 +120,7 @@ pub fn command_create_pool(
         &stake_program::Lockup::default(),
     ));
 
-    let mint_keypair = push_create_spl_token_mint(
-        config,
-        &mut instructions,
-        &withdraw_authority,
-    )?;
+    let mint_keypair = push_create_spl_token_mint(config, &mut instructions, &withdraw_authority)?;
 
     // Set up the SPL token account that will receive the fees.
     let pool_fee_account_keypair = push_create_spl_token_account(

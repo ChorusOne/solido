@@ -1,14 +1,10 @@
+use crate::Config;
+use solana_program::{program_pack::Pack, pubkey::Pubkey, system_instruction};
 use solana_sdk::{
     instruction::Instruction,
     signature::{Keypair, Signer},
 };
-use solana_program::{
-    system_instruction,
-    pubkey::Pubkey,
-    program_pack::Pack,
-};
 use spl_token;
-use crate::Config;
 
 /// Push instructions to create and initialize and SPL token mint.
 ///
@@ -18,7 +14,6 @@ pub fn push_create_spl_token_mint(
     instructions: &mut Vec<Instruction>,
     mint_authority: &Pubkey,
 ) -> Result<Keypair, crate::Error> {
-
     let mint_account_min_sol_balance = config
         .rpc_client
         .get_minimum_balance_for_rent_exemption(spl_token::state::Mint::LEN)?;
@@ -60,7 +55,6 @@ pub fn push_create_spl_token_account(
     mint: &Pubkey,
     owner: &Pubkey,
 ) -> Result<Keypair, crate::Error> {
-
     let spl_token_min_sol_balance = config
         .rpc_client
         .get_minimum_balance_for_rent_exemption(spl_token::state::Account::LEN)?;
