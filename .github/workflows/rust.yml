@@ -84,11 +84,10 @@ jobs:
         export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
         validator=$(tests/start_test_validator.py)
 
-        # Perform initial Solana setup.
-        solana-keygen new --no-bip39-passphrase --silent
-        solana config set --url http://127.0.0.1:8899
+        # We don't need to run keygen/setup again, the private key and state
+        # should still be there from the previous run. Do wait for the validator
+        # to have started.
         sleep 5.0
-        solana airdrop 500.0
 
         tests/test_multisig.py
         kill $validator
