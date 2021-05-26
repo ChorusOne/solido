@@ -178,8 +178,14 @@ impl LidoAccounts {
         let lido_size = LIDO_CONSTANT_SIZE + validator_accounts_len;
         let rent = banks_client.get_rent().await.unwrap();
         let rent_lido = rent.minimum_balance(lido_size);
+        let rent_reserve = rent.minimum_balance(0);
         let mut transaction = Transaction::new_with_payer(
             &[
+                system_instruction::transfer(
+                    &payer.pubkey(),
+                    &self.reserve_authority,
+                    rent_reserve,
+                ),
                 system_instruction::create_account(
                     &payer.pubkey(),
                     &self.lido.pubkey(),
@@ -201,6 +207,7 @@ impl LidoAccounts {
                         insurance_account: self.insurance_account.pubkey(),
                         treasury_account: self.treasury_account.pubkey(),
                         manager_fee_account: self.manager_fee_account.pubkey(),
+                        reserve_account: self.reserve_authority,
                     },
                 )
                 .unwrap(),
@@ -254,7 +261,7 @@ impl LidoAccounts {
                     user: user.pubkey(),
                     recipient: recipient.pubkey(),
                     mint_program: self.mint_program.pubkey(),
-                    reserve_authority: self.reserve_authority,
+                    reserve_account: self.reserve_authority,
                 },
                 deposit_amount,
             )

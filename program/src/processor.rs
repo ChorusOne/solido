@@ -11,7 +11,7 @@ use crate::{
         StakePoolDepositAccountsMeta,
     },
     logic::{
-        calc_stakepool_lamports, calc_total_lamports, check_reserve_authority, rent_exemption,
+        calc_total_lamports, check_reserve_authority, get_reserve_available_amount, rent_exemption,
         token_mint_to, AccountType,
     },
     process_management::{
@@ -60,6 +60,7 @@ pub fn process_initialize(
     let rent = &Rent::from_account_info(accounts.sysvar_rent)?;
     rent_exemption(rent, accounts.stake_pool, AccountType::StakePool)?;
     rent_exemption(rent, accounts.lido, AccountType::Lido)?;
+    rent_exemption(rent, accounts.reserve_account, AccountType::ReserveAccount)?;
 
     let mut lido = try_from_slice_unchecked::<Lido>(&accounts.lido.data.borrow())?;
     lido.is_initialized()?;
@@ -179,7 +180,7 @@ pub fn process_deposit(
         accounts.mint_program.key,
     )?;
     lido.check_token_program_id(accounts.spl_token.key)?;
-    check_reserve_authority(accounts.lido, program_id, accounts.reserve_authority)?;
+    check_reserve_authority(accounts.lido, program_id, accounts.reserve_account)?;
 
     if &lido.stake_pool_account != accounts.stake_pool.key {
         msg!("Invalid stake pool");
@@ -199,21 +200,22 @@ pub fn process_deposit(
         msg!("Invalid stake pool token");
         return Err(LidoError::InvalidPoolToken.into());
     }
-
-    let reserve_lamports = accounts.reserve_authority.lamports();
+    let rent = &Rent::from_account_info(accounts.sysvar_rent)?;
 
     let pool_to_token_account =
         spl_token::state::Account::unpack_from_slice(&accounts.pool_token_to.data.borrow())?;
 
-    // stake_pool_total_sol * stake_pool_token(pool_token_to_info)/stake_pool_total_tokens
-    let stake_pool_lamports = calc_stakepool_lamports(stake_pool, pool_to_token_account)?;
-
-    let total_lamports = calc_total_lamports(reserve_lamports, stake_pool_lamports)?;
+    let total_lamports = calc_total_lamports(
+        &stake_pool,
+        &pool_to_token_account,
+        accounts.reserve_account,
+        rent,
+    )?;
     invoke(
-        &system_instruction::transfer(accounts.user.key, accounts.reserve_authority.key, amount),
+        &system_instruction::transfer(accounts.user.key, accounts.reserve_account.key, amount),
         &[
             accounts.user.clone(),
-            accounts.reserve_authority.clone(),
+            accounts.reserve_account.clone(),
             accounts.system_program.clone(),
         ],
     )?;
@@ -227,7 +229,7 @@ pub fn process_deposit(
         accounts.spl_token.clone(),
         accounts.mint_program.clone(),
         accounts.recipient.clone(),
-        accounts.reserve_authority.clone(),
+        accounts.reserve_account.clone(),
         RESERVE_AUTHORITY,
         lido.sol_reserve_authority_bump_seed,
         st_sol_amount,
@@ -267,6 +269,11 @@ pub fn process_delegate_deposit(
 
     if amount < rent.minimum_balance(std::mem::size_of::<stake_program::StakeState>()) {
         return Err(LidoError::InvalidAmount.into());
+    }
+    let available_reserve_amount = get_reserve_available_amount(accounts.reserve, rent)?;
+    if amount > available_reserve_amount {
+        msg!("The requested amount {} is greater than the available amount {}, considering rent-exemption", amount, available_reserve_amount);
+        return Err(LidoError::AmountExceedsReserve.into());
     }
 
     // TODO: Reference more validators

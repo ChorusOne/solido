@@ -38,6 +38,7 @@ pub fn check_reserve_authority(
 pub(crate) enum AccountType {
     StakePool,
     Lido,
+    ReserveAccount,
 }
 
 impl Display for AccountType {
@@ -45,15 +46,16 @@ impl Display for AccountType {
         let printable = match *self {
             Self::StakePool => "Stake pool",
             Self::Lido => "Lido",
+            Self::ReserveAccount => "Reserve account",
         };
         write!(f, "{}", printable)
     }
 }
 
 pub fn calc_stakepool_lamports(
-    stake_pool: StakePool,
-    pool_to_token_account: spl_token::state::Account,
-) -> Result<u64, ProgramError> {
+    stake_pool: &StakePool,
+    pool_to_token_account: &spl_token::state::Account,
+) -> Result<u64, LidoError> {
     let stake_pool_lamports = if stake_pool.pool_token_supply != 0 {
         u64::try_from(
             (stake_pool.total_stake_lamports as u128 * pool_to_token_account.amount as u128)
@@ -67,10 +69,30 @@ pub fn calc_stakepool_lamports(
     Ok(stake_pool_lamports)
 }
 
-pub fn calc_total_lamports(
-    reserve_lamports: u64,
-    stake_pool_lamports: u64,
+/// Gets the amount of lamports in reserve. The rent is subtracted from the total amount
+/// If the reserve's balance minus rent is < 0, fails
+pub fn get_reserve_available_amount(
+    reserve_account: &AccountInfo,
+    sysvar_rent: &Rent,
 ) -> Result<u64, LidoError> {
+    reserve_account
+        .lamports()
+        .checked_sub(sysvar_rent.minimum_balance(0))
+        .ok_or(LidoError::ReserveIsNotRentExempt)
+}
+
+/// Calculates the sum of lamports available in the reserve and the stake pool
+/// Discounts the rent payed
+pub fn calc_total_lamports(
+    stake_pool: &StakePool,
+    program_share_of_stake_pool: &spl_token::state::Account,
+    reserve_account: &AccountInfo,
+    sysvar_rent: &Rent,
+) -> Result<u64, LidoError> {
+    let reserve_lamports = get_reserve_available_amount(reserve_account, sysvar_rent)?;
+    // Get the total available lamports in the stake pool
+    let stake_pool_lamports = calc_stakepool_lamports(stake_pool, program_share_of_stake_pool)?;
+
     reserve_lamports
         .checked_add(stake_pool_lamports)
         .ok_or(LidoError::CalculationFailure)
@@ -137,19 +159,47 @@ pub fn transfer_to<'a>(
 
 #[cfg(test)]
 mod test {
+    use std::{cell::RefCell, rc::Rc};
+
     use super::*;
 
     #[test]
     fn test_calc_total_lamports() {
-        assert_eq!(calc_total_lamports(0, 0).unwrap(), 0);
-        assert_eq!(calc_total_lamports(34, 10).unwrap(), 44);
+        let rent = &Rent::default();
+        let mut stake_pool = StakePool::default();
+        stake_pool.pool_token_supply = 1;
+        let mut token_account = spl_token::state::Account::default();
+        token_account.amount = 1;
+        let key = Pubkey::default();
+        let mut amount = rent.minimum_balance(0);
+        let mut reserve_account =
+            AccountInfo::new(&key, true, true, &mut amount, &mut [], &key, false, 0);
+
         assert_eq!(
-            calc_total_lamports(u64::MAX, 1).err(),
-            Some(LidoError::CalculationFailure)
+            calc_total_lamports(&stake_pool, &token_account, &reserve_account, rent).unwrap(),
+            0
         );
+        let mut new_amount = rent.minimum_balance(0) + 10;
+        reserve_account.lamports = Rc::new(RefCell::new(&mut new_amount));
+        stake_pool.total_stake_lamports = 34;
         assert_eq!(
-            calc_total_lamports(1, u64::MAX).err(),
-            Some(LidoError::CalculationFailure)
+            calc_total_lamports(&stake_pool, &token_account, &reserve_account, rent).unwrap(),
+            44
+        );
+
+        stake_pool.total_stake_lamports = u64::MAX;
+
+        assert_eq!(
+            calc_total_lamports(&stake_pool, &token_account, &reserve_account, rent),
+            Err(LidoError::CalculationFailure)
+        );
+        let mut new_amount = u64::MAX;
+        reserve_account.lamports = Rc::new(RefCell::new(&mut new_amount));
+        stake_pool.total_stake_lamports = rent.minimum_balance(0) + 1;
+
+        assert_eq!(
+            calc_total_lamports(&stake_pool, &token_account, &reserve_account, rent),
+            Err(LidoError::CalculationFailure)
         );
     }
 
@@ -189,7 +239,7 @@ mod test {
         let stakepool = StakePool::default();
         let pool = spl_token::state::Account::default();
 
-        let result = calc_stakepool_lamports(stakepool, pool);
+        let result = calc_stakepool_lamports(&stakepool, &pool);
 
         assert_eq!(result.unwrap(), 0);
     }
@@ -201,7 +251,7 @@ mod test {
         stakepool.total_stake_lamports = 50;
         let pool = spl_token::state::Account::default();
 
-        let result = calc_stakepool_lamports(stakepool, pool);
+        let result = calc_stakepool_lamports(&stakepool, &pool);
 
         assert_eq!(result.unwrap(), 0);
     }
@@ -214,7 +264,7 @@ mod test {
         let mut pool = spl_token::state::Account::default();
         pool.amount = 30;
 
-        let result = calc_stakepool_lamports(stakepool, pool);
+        let result = calc_stakepool_lamports(&stakepool, &pool);
 
         assert_eq!(result.unwrap(), 15);
     }
@@ -226,7 +276,7 @@ mod test {
         let mut pool = spl_token::state::Account::default();
         pool.amount = 30;
 
-        let result = calc_stakepool_lamports(stakepool, pool);
+        let result = calc_stakepool_lamports(&stakepool, &pool);
 
         assert_eq!(result.unwrap(), 0);
     }

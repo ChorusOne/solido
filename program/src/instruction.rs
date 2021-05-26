@@ -253,6 +253,10 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
+        pub reserve_account {
+            is_signer: false,
+            is_writable: false,
+        },
         const sysvar_rent = sysvar::rent::id(),
         const spl_token = spl_token::id(),
     }
@@ -306,7 +310,7 @@ accounts_struct! {
             is_signer: false,
             is_writable: true,
         },
-        pub reserve_authority {
+        pub reserve_account {
             is_signer: false,
             is_writable: true,
         },

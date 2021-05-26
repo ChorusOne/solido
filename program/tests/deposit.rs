@@ -67,7 +67,7 @@ async fn test_successful_deposit() {
                 user: user.pubkey(),
                 recipient: recipient.pubkey(),
                 mint_program: lido_accounts.mint_program.pubkey(),
-                reserve_authority: lido_accounts.reserve_authority,
+                reserve_account: lido_accounts.reserve_authority,
             },
             TEST_DEPOSIT_AMOUNT,
         )
@@ -85,6 +85,10 @@ async fn test_successful_deposit() {
         .unwrap()
         .unwrap();
 
-    assert_eq!(reserve_account.lamports, TEST_DEPOSIT_AMOUNT);
+    let rent = banks_client.get_rent().await.unwrap();
+    assert_eq!(
+        reserve_account.lamports,
+        TEST_DEPOSIT_AMOUNT + rent.minimum_balance(0)
+    );
     assert_eq!(balance, TEST_DEPOSIT_AMOUNT);
 }
