@@ -5,7 +5,9 @@ use solana_program::{
 };
 use spl_stake_pool::{
     error::StakePoolError,
-    instruction::{add_validator_to_pool, create_validator_stake_account},
+    instruction::{
+        add_validator_to_pool, create_validator_stake_account, remove_validator_from_pool,
+    },
     state::StakePool,
 };
 
@@ -13,7 +15,7 @@ use crate::{
     error::LidoError,
     instruction::{
         AddValidatorInfo, ChangeFeeSpecInfo, ClaimValidatorFeeInfo,
-        CreateValidatorStakeAccountInfo, DistributeFeesInfo,
+        CreateValidatorStakeAccountInfo, DistributeFeesInfo, RemoveValidatorInfo,
     },
     logic::{token_mint_to, transfer_to},
     state::{distribute_fees, FeeDistribution, Lido, StLamports, StakePoolTokenLamports},
@@ -116,7 +118,7 @@ pub fn process_add_validator(program_id: &Pubkey, accounts_raw: &[AccountInfo]) 
 
     invoke_signed(
         &add_validator_to_pool(
-            accounts.stake_pool_program_id.key,
+            &spl_stake_pool::id(),
             accounts.stake_pool.key,
             accounts.stake_pool_manager_authority.key,
             accounts.stake_pool_withdraw_authority.key,
@@ -124,7 +126,7 @@ pub fn process_add_validator(program_id: &Pubkey, accounts_raw: &[AccountInfo]) 
             accounts.stake_account.key,
         ),
         &[
-            accounts.stake_pool_program_id.clone(),
+            accounts.stake_pool_program.clone(),
             accounts.stake_pool.clone(),
             accounts.stake_pool_manager_authority.clone(),
             accounts.stake_pool_withdraw_authority.clone(),
@@ -162,9 +164,84 @@ pub fn process_add_validator(program_id: &Pubkey, accounts_raw: &[AccountInfo]) 
         .map_err(|err| err.into())
 }
 
-/// TODO
-pub fn process_remove_validator(_program_id: &Pubkey, _accounts: &[AccountInfo]) -> ProgramResult {
-    unimplemented!()
+/// Removes a validator from the stake pool, notice that the validator might not
+/// be immediately removed from the validators list in the stake pool after this
+/// instruction is executed, this function requires the validator has no
+/// unclaimed fees.
+/// The validator stake account to be removed:
+/// `accounts::stake_account_to_remove` should have exactly 1 Sol + rent for
+/// holding a Stake account, this is checked in `remove_validator_from_pool` from
+/// the Stake Pool.
+pub fn process_remove_validator(
+    program_id: &Pubkey,
+    accounts_raw: &[AccountInfo],
+) -> ProgramResult {
+    let accounts = RemoveValidatorInfo::try_from_slice(accounts_raw)?;
+    if accounts.lido.owner != program_id {
+        msg!("Lido state has an invalid owner, should be the Lido program");
+        return Err(LidoError::InvalidOwner.into());
+    }
+    let mut lido = try_from_slice_unchecked::<Lido>(&accounts.lido.data.borrow())?;
+    if &lido.stake_pool_account != accounts.stake_pool.key {
+        msg!("Invalid stake pool");
+        return Err(LidoError::InvalidStakePool.into());
+    }
+
+    invoke_signed(
+        &remove_validator_from_pool(
+            &spl_stake_pool::id(),
+            accounts.stake_pool.key,
+            accounts.stake_pool_manager_authority.key,
+            accounts.stake_pool_withdraw_authority.key,
+            accounts.new_withdraw_authority.key,
+            accounts.stake_pool_validator_list.key,
+            accounts.stake_account_to_remove.key,
+            accounts.transient_stake.key,
+        ),
+        &[
+            accounts.stake_pool_program.clone(),
+            accounts.stake_pool.clone(),
+            accounts.stake_pool_manager_authority.clone(),
+            accounts.stake_pool_withdraw_authority.clone(),
+            accounts.new_withdraw_authority.clone(),
+            accounts.stake_pool_validator_list.clone(),
+            accounts.stake_account_to_remove.clone(),
+            accounts.sysvar_clock.clone(),
+            accounts.sysvar_stake_program.clone(),
+        ],
+        &[&[
+            &accounts.lido.key.to_bytes(),
+            STAKE_POOL_AUTHORITY,
+            &[lido.stake_pool_authority_bump_seed],
+        ]],
+    )?;
+
+    // finds the validator index, this should never return an error
+    let validator_idx = lido
+        .fee_recipients
+        .validator_credit_accounts
+        .validator_accounts
+        .iter()
+        .position(|v| &v.stake_address == accounts.stake_account_to_remove.key)
+        .ok_or(LidoError::ValidatorCreditNotFound)?;
+
+    if lido
+        .fee_recipients
+        .validator_credit_accounts
+        .validator_accounts[validator_idx]
+        .st_sol_amount
+        != StLamports(0)
+    {
+        msg!("Validator still has tokens to claim. Reclaim tokens before removing the validator");
+        return Err(LidoError::ValidatorHasUnclaimedCredit.into());
+    }
+
+    lido.fee_recipients
+        .validator_credit_accounts
+        .validator_accounts
+        .swap_remove(validator_idx);
+    lido.serialize(&mut *accounts.lido.data.borrow_mut())
+        .map_err(|err| err.into())
 }
 
 pub fn process_claim_validator_fee(

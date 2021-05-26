@@ -622,9 +622,9 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
-        pub stake_pool_program_id {
+        pub stake_pool_program {
             is_signer: false,
-            is_writable: true,
+            is_writable: false,
         },
         pub stake_pool {
             is_signer: false,
@@ -660,6 +660,67 @@ pub fn add_validator(
         program_id: *program_id,
         accounts: accounts.to_vec(),
         data: LidoInstruction::AddValidator.try_to_vec()?,
+    })
+}
+
+accounts_struct! {
+    RemoveValidatorMeta, RemoveValidatorInfo {
+        pub lido {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub manager {
+            is_signer: true,
+            is_writable: false,
+        },
+        pub stake_pool_manager_authority {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub stake_pool_program {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub stake_pool {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub stake_pool_withdraw_authority {
+            is_signer: false,
+            is_writable: false,
+        },
+        // New Staker and Withdrawer authority of the stake account
+        pub new_withdraw_authority {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub stake_pool_validator_list {
+            is_signer: false,
+            is_writable: true,
+        },
+        // Stake account to remove
+        pub stake_account_to_remove {
+            is_signer: false,
+            is_writable:  true,
+        },
+        // Validator's transient stake
+        pub transient_stake {
+            is_signer: false,
+            is_writable:  false,
+        },
+        const sysvar_clock = sysvar::clock::id(),
+        const sysvar_stake_program = stake_program::id(),
+    }
+}
+
+pub fn remove_validator(
+    program_id: &Pubkey,
+    accounts: &RemoveValidatorMeta,
+) -> Result<Instruction, ProgramError> {
+    Ok(Instruction {
+        program_id: *program_id,
+        accounts: accounts.to_vec(),
+        data: LidoInstruction::RemoveValidator.try_to_vec()?,
     })
 }
 
