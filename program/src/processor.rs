@@ -11,7 +11,7 @@ use crate::{
         StakePoolDepositAccountsMeta,
     },
     logic::{
-        calc_stakepool_lamports, calc_total_lamports, check_reserve_authority, rent_exemption,
+        calc_total_lamports, check_reserve_authority, get_reserve_available_amount, rent_exemption,
         token_mint_to, AccountType,
     },
     process_management::{
@@ -201,21 +201,16 @@ pub fn process_deposit(
         return Err(LidoError::InvalidPoolToken.into());
     }
     let rent = &Rent::from_account_info(accounts.sysvar_rent)?;
-    // Amount of lamports in reserve. The rent is subtracted from the total amount
-    // If the reserve's balance minus rent is < 0, fails
-    let reserve_lamports = accounts
-        .reserve_account
-        .lamports()
-        .checked_sub(rent.minimum_balance(0))
-        .ok_or(LidoError::ReserveIsNotRentExempt)?;
 
     let pool_to_token_account =
         spl_token::state::Account::unpack_from_slice(&accounts.pool_token_to.data.borrow())?;
 
-    // Get the total available lamports
-    let stake_pool_lamports = calc_stakepool_lamports(stake_pool, pool_to_token_account)?;
-
-    let total_lamports = calc_total_lamports(reserve_lamports, stake_pool_lamports)?;
+    let total_lamports = calc_total_lamports(
+        &stake_pool,
+        &pool_to_token_account,
+        accounts.reserve_account,
+        rent,
+    )?;
     invoke(
         &system_instruction::transfer(accounts.user.key, accounts.reserve_account.key, amount),
         &[
@@ -274,6 +269,11 @@ pub fn process_delegate_deposit(
 
     if amount < rent.minimum_balance(std::mem::size_of::<stake_program::StakeState>()) {
         return Err(LidoError::InvalidAmount.into());
+    }
+    let available_reserve_amount = get_reserve_available_amount(accounts.reserve, rent)?;
+    if amount > available_reserve_amount {
+        msg!("The requested amount {} is greater than the available amount {}, considering rent-exemption", amount, available_reserve_amount);
+        return Err(LidoError::AmountExceedsReserve.into());
     }
 
     // TODO: Reference more validators
