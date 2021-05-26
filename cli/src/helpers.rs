@@ -194,6 +194,7 @@ pub fn command_create_solido(
         config,
         &stake_pool_authority,
         &deposit_authority,
+        &fee_authority,
         Fee {
             numerator: opts.fee_numerator,
             denominator: opts.fee_denominator,

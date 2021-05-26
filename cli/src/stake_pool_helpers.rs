@@ -77,6 +77,7 @@ pub fn command_create_pool(
     config: &Config,
     stake_pool_authority: &Pubkey,
     deposit_authority: &Pubkey,
+    fee_authority: &Pubkey,
     fee: Fee,
     max_validators: u32,
 ) -> Result<CreatePoolOutput, crate::Error> {
@@ -133,7 +134,7 @@ pub fn command_create_pool(
         config,
         &mut instructions,
         &mint_keypair.pubkey(),
-        &config.manager.pubkey(),
+        fee_authority,
     )?;
     sign_and_send_transaction(
         config,
