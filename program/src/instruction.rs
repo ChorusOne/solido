@@ -21,6 +21,8 @@ pub enum LidoInstruction {
         fee_distribution: FeeDistribution,
         #[allow(dead_code)] // but it's not
         max_validators: u32,
+        #[allow(dead_code)] // but it's not
+        max_maintainers: u32,
     },
     /// Deposit with amount
     Deposit {
@@ -272,11 +274,13 @@ pub fn initialize(
     program_id: &Pubkey,
     fee_distribution: FeeDistribution,
     max_validators: u32,
+    max_maintainers: u32,
     accounts: &InitializeAccountsMeta,
 ) -> Result<Instruction, ProgramError> {
     let init_data = LidoInstruction::Initialize {
         fee_distribution,
         max_validators,
+        max_maintainers,
     };
     let data = init_data.try_to_vec()?;
     Ok(Instruction {
@@ -390,6 +394,10 @@ accounts_struct! {
         pub lido {
             is_signer: false,
             is_writable: true,
+        },
+        pub maintainer {
+            is_signer: true,
+            is_writable: false,
         },
         pub validator {
             is_signer: false,

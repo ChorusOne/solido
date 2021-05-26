@@ -172,13 +172,44 @@ impl Lido {
     pub fn check_valid_minter_program(
         minter_program: &Pubkey,
         token_account_info: &AccountInfo,
-    ) -> Result<(), LidoError> {
+    ) -> ProgramResult {
         if &spl_token::state::Account::unpack_from_slice(&token_account_info.data.borrow())
             .map_err(|_| LidoError::InvalidFeeRecipient)?
             .mint
             != minter_program
         {
-            return Err(LidoError::InvalidFeeRecipient);
+            return Err(LidoError::InvalidFeeRecipient.into());
+        }
+        Ok(())
+    }
+
+    /// Checks if the passed manager is the same as the one stored in the state
+    pub fn check_stake_pool(&self, stake_pool: &AccountInfo) -> ProgramResult {
+        if &self.stake_pool_account != stake_pool.key {
+            msg!("Invalid stake pool");
+            return Err(LidoError::InvalidStakePool.into());
+        }
+        Ok(())
+    }
+
+    /// Checks if the passed manager is the same as the one stored in the state
+    pub fn check_manager(&self, manager: &AccountInfo) -> ProgramResult {
+        if &self.manager != manager.key {
+            msg!("Invalid manager, not the same as the one stored in state");
+            return Err(LidoError::InvalidManager.into());
+        }
+        Ok(())
+    }
+
+    /// Checks if the passed maintainer belong to the list of maintainers
+    pub fn check_maintainer(&self, maintainer: &AccountInfo) -> ProgramResult {
+        if !&self
+            .maintainers
+            .maintainers_accounts
+            .contains(maintainer.key)
+        {
+            msg!("Invalid maintainer, not one stored in the maintainers list");
+            return Err(LidoError::InvalidManager.into());
         }
         Ok(())
     }
@@ -205,6 +236,9 @@ impl ValidatorCreditAccounts {
             max_validators,
             validator_accounts: vec![ValidatorCredit::default(); max_validators as usize],
         }
+    }
+    pub fn required_bytes(max_validators: u32) -> usize {
+        return (max_validators * (32 * 2 + 8) + 8) as usize;
     }
     pub fn maximum_accounts(buffer_size: usize) -> usize {
         // 8 bytes: 4 bytes for `max_validators` + 4 bytes for number of validators in vec
@@ -341,11 +375,14 @@ impl Maintainers {
             maintainers_accounts: vec![Pubkey::default(); max_maintainers as usize],
         }
     }
+    pub fn required_bytes(max_maintainers: u32) -> usize {
+        return (max_maintainers * 32 + 4 + 4) as usize;
+    }
     /// Given a buffer size, calculate the maximum number of maintainers that can be fit
     pub fn maximum_accounts(buffer_size: usize) -> usize {
         // 8 bytes: 4 bytes for `max_maintainers` + 4 bytes for number of maintainers in vec
         // 32 bytes for each maintainer = maintainer address
-        buffer_size.saturating_sub(8) / (32 * 2 + 8)
+        buffer_size.saturating_sub(8) / 32
     }
     pub fn add(&mut self, new_maintainer: Pubkey) -> Result<(), LidoError> {
         if self.maintainers_accounts.len() == self.max_maintainers as usize {
@@ -420,7 +457,10 @@ mod test_lido {
             get_instance_packed_len(&ValidatorCreditAccounts::new(10000)).unwrap();
         assert_eq!(validator_accounts_len, 10000 * (32 * 2 + 8) + 8);
         lido.serialize(&mut data).unwrap();
-        assert_eq!(data.len(), LIDO_CONSTANT_SIZE + (32 * 2 + 8) + 8);
+        // 32*2 +8 + 4 + 4 = key*2 + StSol + 4 max_validators + 4 size of vec
+        // +4 + 4  = for max_maintainers + 4 size of vec
+        const SIZE: usize = ((32 * 2 + 8) + 4 + 4) + (4 + 4);
+        assert_eq!(data.len(), LIDO_CONSTANT_SIZE + SIZE);
     }
 
     #[test]

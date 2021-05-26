@@ -16,6 +16,7 @@ use self::stakepool_account::{create_mint, transfer, ValidatorStakeAccount};
 
 pub mod stakepool_account;
 pub const MAX_VALIDATORS: u32 = 10_000;
+pub const MAX_MAINTAINERS: u32 = 100;
 
 // This id is only used throughout these tests.
 solana_program::declare_id!("3kEkdGe68DuTKg6FhVrLPZ3Wm8EcUPCPjhCeu8WrGDoc");
@@ -35,6 +36,7 @@ pub struct LidoAccounts {
     pub lido: Keypair,
     pub mint_program: Keypair,
     pub pool_token_to: Keypair,
+    pub maintainer: Keypair,
 
     // Fees
     pub insurance_account: Keypair,
@@ -55,6 +57,7 @@ impl LidoAccounts {
         let lido = Keypair::new();
         let mint_program = Keypair::new();
         let pool_token_to = Keypair::new();
+        let maintainer = Keypair::new();
 
         // Fees
         let insurance_account = Keypair::new();
@@ -94,6 +97,7 @@ impl LidoAccounts {
             lido,
             mint_program,
             pool_token_to,
+            maintainer,
             insurance_account,
             treasury_account,
             manager_fee_account,
@@ -177,7 +181,9 @@ impl LidoAccounts {
 
         let validator_accounts_len =
             get_instance_packed_len(&ValidatorCreditAccounts::new(MAX_VALIDATORS)).unwrap();
-        let lido_size = LIDO_CONSTANT_SIZE + validator_accounts_len;
+        let manager_accounts_len =
+            get_instance_packed_len(&ValidatorCreditAccounts::new(MAX_MAINTAINERS)).unwrap();
+        let lido_size = LIDO_CONSTANT_SIZE + validator_accounts_len + manager_accounts_len;
         let rent = banks_client.get_rent().await.unwrap();
         let rent_lido = rent.minimum_balance(lido_size);
         let rent_reserve = rent.minimum_balance(0);
@@ -199,6 +205,7 @@ impl LidoAccounts {
                     &id(),
                     self.fee_distribution.clone(),
                     MAX_VALIDATORS,
+                    MAX_MAINTAINERS,
                     &instruction::InitializeAccountsMeta {
                         lido: self.lido.pubkey(),
                         stake_pool: self.stake_pool_accounts.stake_pool.pubkey(),
@@ -319,6 +326,7 @@ impl LidoAccounts {
                 &id(),
                 &instruction::DepositActiveStakeToPoolAccountsMeta {
                     lido: self.lido.pubkey(),
+                    maintainer: self.maintainer.pubkey(),
                     validator: validator.vote.pubkey(),
                     stake: *stake_account,
                     deposit_authority: self.deposit_authority,
@@ -334,7 +342,7 @@ impl LidoAccounts {
             .unwrap()],
             Some(&payer.pubkey()),
         );
-        transaction.sign(&[payer], *recent_blockhash);
+        transaction.sign(&[payer, &self.maintainer], *recent_blockhash);
         banks_client.process_transaction(transaction).await.unwrap();
     }
 

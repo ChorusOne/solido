@@ -35,6 +35,13 @@ pub fn process_create_validator_stake_account(
         );
         return Err(LidoError::InvalidOwner.into());
     }
+    if accounts.lido.owner != program_id {
+        msg!("State has invalid owner");
+        return Err(LidoError::InvalidOwner.into());
+    }
+    let lido = try_from_slice_unchecked::<Lido>(&accounts.lido.data.borrow())?;
+    lido.check_manager(accounts.manager)?;
+    lido.check_stake_pool(accounts.stake_pool)?;
     let (stake_pool_authority, stake_pool_authority_bump_seed) = Pubkey::find_program_address(
         &[&accounts.lido.key.to_bytes()[..], STAKE_POOL_AUTHORITY],
         program_id,
@@ -86,6 +93,7 @@ pub fn process_change_fee_spec(
     }
 
     let mut lido = try_from_slice_unchecked::<Lido>(&accounts.lido.data.borrow())?;
+    lido.check_manager(accounts.manager)?;
 
     Lido::check_valid_minter_program(&lido.st_sol_mint_program, accounts.insurance_account)?;
     Lido::check_valid_minter_program(&lido.st_sol_mint_program, accounts.treasury_account)?;
@@ -102,8 +110,6 @@ pub fn process_change_fee_spec(
 
 pub fn process_add_validator(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> ProgramResult {
     let accounts = AddValidatorInfo::try_from_slice(accounts_raw)?;
-
-    let mut lido = try_from_slice_unchecked::<Lido>(&accounts.lido.data.borrow())?;
     if accounts.lido.owner != program_id {
         msg!("Lido state has an invalid owner, should be the Lido program");
         return Err(LidoError::InvalidOwner.into());
@@ -116,6 +122,9 @@ pub fn process_add_validator(program_id: &Pubkey, accounts_raw: &[AccountInfo]) 
         );
         return Err(LidoError::InvalidOwner.into());
     }
+    let mut lido = try_from_slice_unchecked::<Lido>(&accounts.lido.data.borrow())?;
+    lido.check_manager(accounts.manager)?;
+    lido.check_stake_pool(accounts.stake_pool)?;
     if &lido.stake_pool_account != accounts.stake_pool.key {
         msg!("Invalid stake pool");
         return Err(LidoError::InvalidStakePool.into());
@@ -311,10 +320,7 @@ pub fn process_distribute_fees(program_id: &Pubkey, accounts_raw: &[AccountInfo]
     }
 
     let mut lido = try_from_slice_unchecked::<Lido>(&accounts.lido.data.borrow())?;
-    if &lido.stake_pool_account != accounts.stake_pool.key {
-        msg!("Invalid stake pool");
-        return Err(LidoError::InvalidStakePool.into());
-    }
+    lido.check_stake_pool(accounts.stake_pool)?;
 
     let stake_pool = StakePool::try_from_slice(&accounts.stake_pool.data.borrow())?;
     if &stake_pool.manager_fee_account != accounts.stake_pool_fee_account.key {

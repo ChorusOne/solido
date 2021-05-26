@@ -106,6 +106,9 @@ pub enum LidoError {
     /// The same maintainer's public key already exists in the structure
     #[error("DuplicatedMaintainer")]
     DuplicatedMaintainer,
+    /// Maintainer not found
+    #[error("InvalidMaintainer")]
+    InvalidMaintainer,
 }
 impl From<LidoError> for ProgramError {
     fn from(e: LidoError) -> Self {
