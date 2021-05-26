@@ -33,7 +33,7 @@ pub struct CreatePoolOutput {
     /// SPL token mint account for stake pool tokens.
     pub mint_address: PubkeyBase58,
 
-    /// Account that collected fees get deposited into.
+    /// SPL token account that collected fees get deposited into, in stake pool tokens.
     pub fee_address: PubkeyBase58,
 
     /// Account that stores the validator list data structure.
@@ -71,6 +71,7 @@ impl fmt::Display for CreatePoolOutput {
 
 pub fn command_create_pool(
     config: &Config,
+    stake_pool_authority: &Pubkey,
     deposit_authority: &Pubkey,
     fee: Fee,
     max_validators: u32,
@@ -190,7 +191,7 @@ pub fn command_create_pool(
                 &lido::instruction::InitializeStakePoolWithAuthorityAccountsMeta {
                     stake_pool: stake_pool_keypair.pubkey(),
                     manager: config.manager.pubkey(),
-                    staker: config.staker.pubkey(),
+                    staker: *stake_pool_authority,
                     validator_list: validator_list.pubkey(),
                     reserve_stake: reserve_stake.pubkey(),
                     pool_mint: mint_keypair.pubkey(),

@@ -64,7 +64,7 @@ result = solido(
     '--solido-program-id', solido_program_id,
     '--fee-numerator', '4',
     '--fee-denominator', '31',
-    '--max-validators', '251',
+    '--max-validators', '9',
     '--insurance-fee', '7',
     '--treasury-fee', '5',
     '--validation-fee', '3',

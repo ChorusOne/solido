@@ -1,7 +1,7 @@
 use std::fmt;
 
 use clap::Clap;
-use lido::{state::FeeDistribution, DEPOSIT_AUTHORITY, FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY};
+use lido::{state::FeeDistribution, DEPOSIT_AUTHORITY, FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY, STAKE_POOL_AUTHORITY};
 use serde::Serialize;
 use solana_program::{
     native_token::Sol, program_pack::Pack, pubkey::Pubkey,
@@ -119,9 +119,8 @@ pub struct CreateSolidoOutput {
     /// Owner of the `fee_address`.
     pub fee_authority: PubkeyBase58,
 
-    /// Solido-managed account that the stake pool deposits fees in SPT into
-    /// after a balance update. Holds Stake Pool tokens.
-    pub fee_address: PubkeyBase58,
+    /// Manager of the stake pool, derived program address owned by the Solido instance.
+    pub stake_pool_authority: PubkeyBase58,
 
     /// SPL token mint account for StSol tokens.
     pub st_sol_mint_address: PubkeyBase58,
@@ -148,7 +147,7 @@ impl fmt::Display for CreateSolidoOutput {
         writeln!(f, "  Solido address:                {}", self.solido_address)?;
         writeln!(f, "  Reserve authority:             {}", self.reserve_authority)?;
         writeln!(f, "  Fee authority:                 {}", self.fee_authority)?;
-        writeln!(f, "  Stake pool fee address:        {}", self.fee_address)?;
+        writeln!(f, "  Stake pool authority:          {}", self.stake_pool_authority)?;
         writeln!(f, "  stSOL mint:                    {}", self.st_sol_mint_address)?;
         writeln!(f, "  Solido's pool account:         {}", self.pool_token_to)?;
         writeln!(f, "  Insurance SPL token account:   {}", self.insurance_account)?;
@@ -231,8 +230,15 @@ pub fn command_create_solido(
         DEPOSIT_AUTHORITY,
     );
 
+    let (stake_pool_authority, _) = lido::find_authority_program_address(
+        &opts.solido_program_id,
+        &lido_keypair.pubkey(),
+        STAKE_POOL_AUTHORITY,
+    );
+
     let stake_pool = command_create_pool(
         config,
+        &stake_pool_authority,
         &deposit_authority,
         Fee {
             numerator: opts.fee_numerator,
@@ -295,21 +301,12 @@ pub fn command_create_solido(
         &opts.solido_program_id,
     )?;
 
-    // Set up the SPL token account that holds fees in stake pool tokens.
-    let fee_keypair = push_create_spl_token_account(
-        config,
-        &mut instructions,
-        &stake_pool.mint_address.0,
-        &fee_authority,
-    )?;
-
     sign_and_send_transaction(
         config,
         &instructions[..],
         &vec![
             config.fee_payer,
             &pool_token_to_keypair,
-            &fee_keypair,
         ]
     )?;
     instructions.clear();
@@ -370,8 +367,8 @@ pub fn command_create_solido(
             stake_pool: stake_pool.stake_pool_address.0,
             mint_program: st_sol_mint_keypair.pubkey(),
             pool_token_to: pool_token_to_keypair.pubkey(),
-            fee_token: fee_keypair.pubkey(), // to define
-            manager: config.staker.pubkey(),
+            fee_token: stake_pool.fee_address.0,
+            manager: stake_pool_authority,
             insurance_account: insurance_keypair.pubkey(),
             treasury_account: treasury_keypair.pubkey(),
             manager_fee_account: manager_fee_keypair.pubkey(),
@@ -393,8 +390,8 @@ pub fn command_create_solido(
         solido_address: lido_keypair.pubkey().into(),
         reserve_authority: reserve_authority.into(),
         fee_authority: fee_authority.into(),
+        stake_pool_authority: stake_pool_authority.into(),
         st_sol_mint_address: st_sol_mint_keypair.pubkey().into(),
-        fee_address: fee_keypair.pubkey().into(),
         pool_token_to: pool_token_to_keypair.pubkey().into(),
         insurance_account: insurance_keypair.pubkey().into(),
         treasury_account: treasury_keypair.pubkey().into(),
