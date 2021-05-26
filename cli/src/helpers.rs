@@ -260,6 +260,18 @@ pub fn command_create_solido(
         .get_minimum_balance_for_rent_exemption(lido_size)?;
 
     let mut instructions = Vec::new();
+
+    // We need to fund Lido's reserve account so it is rent-exempt, otherwise it
+    // might disappear.
+    let min_balance_empty_data_account = config
+        .rpc_client
+        .get_minimum_balance_for_rent_exemption(0)?;
+    instructions.push(system_instruction::transfer(
+        &config.fee_payer.pubkey(),
+        &reserve_authority,
+        min_balance_empty_data_account,
+    ));
+
     let default_decimals = spl_token::native_mint::DECIMALS;
 
     // Set up the Lido stSOL SPL token mint account.
