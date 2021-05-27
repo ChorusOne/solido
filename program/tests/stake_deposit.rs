@@ -147,6 +147,5 @@ async fn test_successful_stake_deposit_stake_pool_deposit() {
         validator_stake_item.stake_lamports
     );
 }
-
 #[tokio::test]
 async fn test_stake_exists_stake_deposit() {} // TODO

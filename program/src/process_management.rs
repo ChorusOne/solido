@@ -6,7 +6,7 @@ use solana_program::{
 use spl_stake_pool::{
     error::StakePoolError,
     instruction::{
-        add_validator_to_pool, create_validator_stake_account, remove_validator_from_pool,
+        self, add_validator_to_pool, create_validator_stake_account, remove_validator_from_pool,
     },
     state::StakePool,
 };
@@ -15,8 +15,8 @@ use crate::{
     error::LidoError,
     instruction::{
         AddMaintainerInfo, AddValidatorInfo, ChangeFeeSpecInfo, ClaimValidatorFeeInfo,
-        CreateValidatorStakeAccountInfo, DistributeFeesInfo, RemoveMaintainerInfo,
-        RemoveValidatorInfo,
+        CreateValidatorStakeAccountInfo, DecreaseValidatorStakeInfo, DistributeFeesInfo,
+        IncreaseValidatorStakeInfo, RemoveMaintainerInfo, RemoveValidatorInfo,
     },
     logic::{deserialize_lido, token_mint_to, transfer_to},
     state::{
@@ -385,6 +385,104 @@ pub fn process_remove_maintainer(
     lido.maintainers.remove(*accounts.maintainer.key)?;
     lido.serialize(&mut *accounts.lido.data.borrow_mut())
         .map_err(|err| err.into())
+}
+
+/// Increases a validator's stake. This function is called by maintainers
+pub fn process_increase_validator_stake(
+    program_id: &Pubkey,
+    lamports: u64,
+    accounts_raw: &[AccountInfo],
+) -> ProgramResult {
+    let accounts = IncreaseValidatorStakeInfo::try_from_slice(accounts_raw)?;
+    if accounts.lido.owner != program_id {
+        msg!("Lido has an invalid owner");
+        return Err(LidoError::InvalidOwner.into());
+    }
+    let lido = try_from_slice_unchecked::<Lido>(&accounts.lido.data.borrow())?;
+    lido.check_maintainer(accounts.maintainer)?;
+    lido.check_stake_pool(accounts.stake_pool)?;
+
+    invoke_signed(
+        &instruction::increase_validator_stake(
+            &spl_stake_pool::id(),
+            accounts.stake_pool.key,
+            accounts.stake_pool_manager_authority.key,
+            accounts.stake_pool_withdraw_authority.key,
+            accounts.stake_pool_validator_list.key,
+            accounts.stake_pool_reserve_stake.key,
+            accounts.transient_stake.key,
+            accounts.validator_vote.key,
+            lamports,
+        ),
+        &[
+            accounts.stake_pool_program.clone(),
+            accounts.stake_pool.clone(),
+            accounts.stake_pool_manager_authority.clone(),
+            accounts.stake_pool_withdraw_authority.clone(),
+            accounts.stake_pool_validator_list.clone(),
+            accounts.stake_pool_reserve_stake.clone(),
+            accounts.transient_stake.clone(),
+            accounts.validator_vote.clone(),
+            accounts.sysvar_clock.clone(),
+            accounts.sysvar_rent.clone(),
+            accounts.stake_history.clone(),
+            accounts.stake_program_config.clone(),
+            accounts.system_program.clone(),
+            accounts.stake_program.clone(),
+        ],
+        &[&[
+            &accounts.lido.key.to_bytes(),
+            STAKE_POOL_AUTHORITY,
+            &[lido.stake_pool_authority_bump_seed],
+        ]],
+    )
+}
+
+/// Removes a maintainer to the list of maintainers
+pub fn process_decrease_validator_stake(
+    program_id: &Pubkey,
+    lamports: u64,
+    accounts_raw: &[AccountInfo],
+) -> ProgramResult {
+    let accounts = DecreaseValidatorStakeInfo::try_from_slice(accounts_raw)?;
+    if accounts.lido.owner != program_id {
+        msg!("Lido has an invalid owner");
+        return Err(LidoError::InvalidOwner.into());
+    }
+    let lido = try_from_slice_unchecked::<Lido>(&accounts.lido.data.borrow())?;
+    lido.check_maintainer(accounts.maintainer)?;
+    lido.check_stake_pool(accounts.stake_pool)?;
+
+    invoke_signed(
+        &instruction::decrease_validator_stake(
+            &spl_stake_pool::id(),
+            accounts.stake_pool.key,
+            accounts.stake_pool_manager_authority.key,
+            accounts.stake_pool_withdraw_authority.key,
+            accounts.stake_pool_validator_list.key,
+            accounts.validator_stake.key,
+            accounts.transient_stake.key,
+            lamports,
+        ),
+        &[
+            accounts.stake_pool_program.clone(),
+            accounts.stake_pool.clone(),
+            accounts.stake_pool_manager_authority.clone(),
+            accounts.stake_pool_withdraw_authority.clone(),
+            accounts.stake_pool_validator_list.clone(),
+            accounts.validator_stake.clone(),
+            accounts.transient_stake.clone(),
+            accounts.sysvar_clock.clone(),
+            accounts.sysvar_rent.clone(),
+            accounts.system_program.clone(),
+            accounts.stake_program.clone(),
+        ],
+        &[&[
+            &accounts.lido.key.to_bytes(),
+            STAKE_POOL_AUTHORITY,
+            &[lido.stake_pool_authority_bump_seed],
+        ]],
+    )
 }
 
 /// TODO
