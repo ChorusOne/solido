@@ -6,7 +6,8 @@ use solana_program::{
 use spl_stake_pool::{
     error::StakePoolError,
     instruction::{
-        self, add_validator_to_pool, create_validator_stake_account, remove_validator_from_pool,
+        add_validator_to_pool, create_validator_stake_account, decrease_validator_stake,
+        increase_validator_stake, remove_validator_from_pool,
     },
     state::StakePool,
 };
@@ -403,7 +404,7 @@ pub fn process_increase_validator_stake(
     lido.check_stake_pool(accounts.stake_pool)?;
 
     invoke_signed(
-        &instruction::increase_validator_stake(
+        &increase_validator_stake(
             &spl_stake_pool::id(),
             accounts.stake_pool.key,
             accounts.stake_pool_manager_authority.key,
@@ -454,7 +455,7 @@ pub fn process_decrease_validator_stake(
     lido.check_stake_pool(accounts.stake_pool)?;
 
     invoke_signed(
-        &instruction::decrease_validator_stake(
+        &decrease_validator_stake(
             &spl_stake_pool::id(),
             accounts.stake_pool.key,
             accounts.stake_pool_manager_authority.key,
