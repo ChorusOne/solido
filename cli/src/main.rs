@@ -17,7 +17,10 @@ extern crate spl_stake_pool;
 
 mod helpers;
 mod multisig;
+mod spl_token_utils;
 mod stake_pool_helpers;
+mod util;
+
 type Error = Box<dyn std::error::Error>;
 
 #[derive(Copy, Clone, Debug)]
@@ -75,7 +78,6 @@ enum SubCommand {
 pub struct Config<'a> {
     rpc_client: RpcClient,
     manager: &'a Keypair,
-    staker: &'a Keypair,
     fee_payer: &'a Keypair,
     dry_run: bool,
     output_mode: OutputMode,
@@ -119,7 +121,6 @@ fn main() {
         // For now, we'll assume that the provided key pair fulfils all of these
         // roles. We need a better way to configure keys in the future.
         manager: &keypair,
-        staker: &keypair,
         fee_payer: &keypair,
         // TODO: Do we want a dry-run option in the MVP at all?
         dry_run: false,

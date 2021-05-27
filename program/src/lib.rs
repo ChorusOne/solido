@@ -18,8 +18,6 @@ pub const FEE_MANAGER_AUTHORITY: &[u8] = b"fee_authority";
 /// Stake pool manager authority
 pub const STAKE_POOL_AUTHORITY: &[u8] = b"stake_pool_authority";
 
-solana_program::declare_id!("3kEkdGe68DuTKg6FhVrLPZ3Wm8EcUPCPjhCeu8WrGDoc");
-
 pub fn find_authority_program_address(
     program_id: &Pubkey,
     lido_address: &Pubkey,

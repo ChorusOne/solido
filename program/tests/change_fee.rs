@@ -4,13 +4,13 @@ mod helpers;
 
 use crate::helpers::create_token_account;
 use helpers::{
-    program_test,
+    id, program_test,
     stakepool_account::{create_mint, get_account},
     LidoAccounts,
 };
 use lido::{
     error::LidoError,
-    id, instruction,
+    instruction,
     state::{FeeDistribution, Lido},
 };
 use rand::{thread_rng, Rng};
