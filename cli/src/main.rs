@@ -68,6 +68,32 @@ struct Opts {
 #[derive(Clap, Debug)]
 enum SubCommand {
     /// Create a new Lido for Solana instance.
+    #[clap(after_help = r"ACCOUNTS:
+
+    This sets up a few things:
+
+    * An SPL token mint for stake pool tokens.
+    * An SPL token mint for stSOL.
+    * stSOL-denominated SPL token accounts for fee receivers.
+    * The stake pool managed by this Solido instance.
+    * The Solido instance itself.
+
+FEES:
+
+    Of the validation rewards that the stake pool receives, a fraction
+    «fee-numerator» / «fee-denominator» gets paid out as fees. The remaining
+    rewards get distributed implicitly to stSOL holders because they now own
+    a share of a larger pool of SOL.
+
+    The fees are distributed among the insurance, treasury, validators, and the
+    manager, according to the ratio
+
+    «insurance-fee» : «treasury-fee» : «validation-fee» : «manager-fee»
+
+    For example, if all fees are set to 1, then the four parties would each
+    receive 25% of the fees. Subsequently, the validation fee is divided equally
+    among all validators.
+    ")]
     CreateSolido(CreateSolidoOpts),
 
     /// Interact with a deployed Multisig program for governance tasks.

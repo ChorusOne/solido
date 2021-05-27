@@ -66,45 +66,44 @@ pub fn sign_and_send_transaction<T: Signers>(
 #[derive(Clap, Debug)]
 pub struct CreateSolidoOpts {
     /// Address of the Solido program.
-    #[clap(long)]
+    #[clap(long, value_name = "address")]
     pub solido_program_id: Pubkey,
 
     /// Numerator of the fee fraction.
-    #[clap(long)]
+    #[clap(long, value_name = "int")]
     pub fee_numerator: u64,
 
     /// Denominator of the fee fraction.
-    #[clap(long)]
+    #[clap(long, value_name = "int")]
     pub fee_denominator: u64,
 
     /// The maximum number of validators that this Solido instance will support.
-    #[clap(long)]
+    #[clap(long, value_name = "int")]
     pub max_validators: u32,
 
-    /// Fees are divided proportionally to the sum of all specified fees, for instance,
-    /// if all the fees are the same value, they will be divided equally.
-
-    /// Insurance fee proportion
-    #[clap(long)]
+    // Fees are divided proportionally to the sum of all specified fees, for instance,
+    // if all the fees are the same value, they will be divided equally.
+    /// Insurance fee share
+    #[clap(long, value_name = "int")]
     pub insurance_fee: u32,
-    /// Treasury fee proportion
-    #[clap(long)]
+    /// Treasury fee share
+    #[clap(long, value_name = "int")]
     pub treasury_fee: u32,
-    /// Validation fee proportion, to be divided equally among validators
-    #[clap(long)]
+    /// Validation fee share, to be divided equally among validators
+    #[clap(long, value_name = "int")]
     pub validation_fee: u32,
-    /// Manager fee
-    #[clap(long)]
+    /// Manager fee share
+    #[clap(long, value_name = "int")]
     pub manager_fee: u32,
 
     /// Account who will own the stSOL SPL token account that receives insurance fees.
-    #[clap(long)]
+    #[clap(long, value_name = "address")]
     pub insurance_account_owner: Pubkey,
     /// Account who will own the stSOL SPL token account that receives treasury fees.
-    #[clap(long)]
+    #[clap(long, value_name = "address")]
     pub treasury_account_owner: Pubkey,
     /// Account who will own the stSOL SPL token account that receives the manager fees.
-    #[clap(long)]
+    #[clap(long, value_name = "address")]
     pub manager_fee_account_owner: Pubkey,
 }
 
