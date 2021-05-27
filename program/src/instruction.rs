@@ -961,7 +961,7 @@ accounts_struct! {
     IncreaseValidatorStakeMeta, IncreaseValidatorStakeInfo {
         pub lido {
             is_signer: false,
-            is_writable: true,
+            is_writable: false,
         },
         pub maintainer {
             is_signer: true,
@@ -1024,7 +1024,7 @@ accounts_struct! {
     DecreaseValidatorStakeMeta, DecreaseValidatorStakeInfo {
         pub lido {
             is_signer: false,
-            is_writable: true,
+            is_writable: false,
         },
         pub maintainer {
             is_signer: true,
