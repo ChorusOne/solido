@@ -5,16 +5,12 @@ mod helpers;
 use bincode::deserialize;
 use helpers::{
     program_test, simple_add_validator_to_pool,
-    stakepool_account::{get_account, simple_deposit, ValidatorStakeAccount},
+    stakepool_account::{get_account, ValidatorStakeAccount},
     LidoAccounts,
 };
-use lido::state::Lido;
-use solana_program::{
-    borsh::try_from_slice_unchecked, epoch_schedule::Epoch, hash::Hash,
-    native_token::sol_to_lamports,
-};
-use solana_program_test::{tokio, BanksClient, ProgramTestContext};
-use solana_sdk::signature::{Keypair, Signer};
+use solana_program::epoch_schedule::Epoch;
+use solana_program_test::{tokio, ProgramTestContext};
+use solana_sdk::signature::Signer;
 use spl_stake_pool::stake_program;
 
 const TEST_DEPOSIT_AMOUNT: u64 = 100_000_000_000;

@@ -5,9 +5,7 @@ use lido::{
     state::{FeeDistribution, Maintainers, ValidatorCreditAccounts, LIDO_CONSTANT_SIZE},
     DEPOSIT_AUTHORITY, FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY, STAKE_POOL_AUTHORITY,
 };
-use solana_program::{
-    hash::Hash, program_error::ProgramError, program_pack::Pack, pubkey::Pubkey, system_instruction,
-};
+use solana_program::{hash::Hash, program_pack::Pack, pubkey::Pubkey, system_instruction};
 use solana_program_test::*;
 use solana_sdk::{signature::Keypair, transport::TransportError};
 use solana_sdk::{signature::Signer, transaction::Transaction};
