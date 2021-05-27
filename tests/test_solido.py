@@ -73,4 +73,8 @@ result = solido(
     '--insurance-account-owner', insurance_account_owner,
     '--manager-fee-account-owner', manager_fee_account_owner,
 )
-print(result)
+solido_address = result['solido_address']
+treasury_account = result['treasury_account']
+insurance_account = result['insurance_account']
+manager_fee_account = result['manager_fee_account']
+print(f'> Created instance at {solido_address}.')
