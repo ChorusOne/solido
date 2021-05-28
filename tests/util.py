@@ -114,6 +114,19 @@ def create_stake_account(keypair_fname: str) -> str:
     return pubkey
 
 
+def create_vote_account(vote_key_fname: str, validator_key_fname: str):
+    """
+    Generate a vote account for the validator
+    """
+    pubkey = create_test_account(vote_key_fname, fund=False)
+    solana(
+        'create-vote-account',
+        vote_key_fname,
+        validator_key_fname,
+    )
+    return pubkey
+
+
 def create_spl_token(owner_keypair_fname: str, minter: str) -> str:
     """
     Creates an spl token for the given minter

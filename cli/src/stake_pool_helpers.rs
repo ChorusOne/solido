@@ -138,7 +138,7 @@ pub fn command_create_pool(
         config,
         &instructions[..],
         &[
-            config.fee_payer,
+            &config.fee_payer,
             &reserve_stake,
             &mint_keypair,
             &pool_fee_account_keypair,
@@ -189,7 +189,7 @@ pub fn command_create_pool(
     let (recent_blockhash, _fee_calculator) = config.rpc().get_recent_blockhash()?;
 
     let initialize_signers = vec![
-        config.fee_payer,
+        &config.fee_payer,
         &stake_pool_keypair,
         &validator_list,
         &manager,

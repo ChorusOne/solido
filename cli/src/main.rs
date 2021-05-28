@@ -6,12 +6,13 @@ use anchor_client::Cluster;
 use anchor_client::Program;
 use clap::Clap;
 use helpers::AddValidatorOpts;
+use helpers::CreateValidatorStakeAccountOpts;
 use serde::Serialize;
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::{read_keypair_file, Keypair};
-use solana_sdk::signer::Signer;
 
+use crate::helpers::command_create_validator_stake_account;
 use crate::helpers::{
     command_add_validator, command_create_solido, get_anchor_program, CreateSolidoOpts,
 };
@@ -104,20 +105,23 @@ FEES:
     /// Add a new validator
     AddValidator(AddValidatorOpts),
 
+    /// Create a Validator Stake Account
+    CreateValidatorStakeAccount(CreateValidatorStakeAccountOpts),
+
     /// Interact with a deployed Multisig program for governance tasks.
     Multisig(MultisigOpts),
 }
 
 /// Determines which network to connect to, and who pays the fees.
-pub struct Config<'a> {
+pub struct Config {
     program: Program,
     // rpc_client: RpcClient,
-    fee_payer: &'a Keypair,
+    fee_payer: Keypair,
     dry_run: bool,
     output_mode: OutputMode,
 }
 
-impl<'a> Config<'a> {
+impl Config {
     pub fn rpc(&self) -> RpcClient {
         return self.program.rpc();
     }
@@ -169,26 +173,34 @@ fn main() {
         ),
         // For now, we'll assume that the provided key pair fulfils all of these
         // roles. We need a better way to configure keys in the future.
-        fee_payer: &keypair,
+        fee_payer: keypair,
         // TODO: Do we want a dry-run option in the MVP at all?
         dry_run: false,
         output_mode: opts.output_mode,
     };
-
     match opts.subcommand {
         SubCommand::CreateSolido(cmd_opts) => {
-            let output = command_create_solido(&config, cmd_opts)
-                .expect("Failed to create Solido instance.");
+            let output =
+                command_create_solido(config, cmd_opts).expect("Failed to create Solido instance.");
             print_output(opts.output_mode, &output);
         }
         SubCommand::Multisig(cmd_opts) => {
-            multisig::main(keypair, opts.cluster, opts.output_mode, cmd_opts);
+            multisig::main(config, opts.cluster, opts.output_mode, cmd_opts);
+        }
+        SubCommand::CreateValidatorStakeAccount(cmd_opts) => {
+            if let Some(output) =
+                command_create_validator_stake_account(config, opts.cluster, cmd_opts)
+                    .expect("Failed to create a validator stake account")
+            {
+                print_output(opts.output_mode, &output);
+            }
         }
         SubCommand::AddValidator(cmd_opts) => {
-            let payer = Keypair::from_bytes(&keypair.to_bytes())
-                .expect("Keypair returned an invalid secret");
-            command_add_validator(payer, &config, opts.cluster, cmd_opts)
-                .expect("Failed to add a validator");
+            if let Some(output) = command_add_validator(config, opts.cluster, cmd_opts)
+                .expect("Failed to add a validator")
+            {
+                print_output(opts.output_mode, &output);
+            }
         }
     }
 }
