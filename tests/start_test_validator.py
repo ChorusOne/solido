@@ -14,9 +14,6 @@ import time
 test_validator = subprocess.Popen(
     [
         'solana-test-validator',
-        '--bpf-program',
-        'poo1B9L9nR3CrcaziKVYVpRX6A9Y1LAXYasjjfCbApj',
-        'target/deploy/spl_stake_pool.so',
     ],
     stdout=subprocess.DEVNULL,
 )

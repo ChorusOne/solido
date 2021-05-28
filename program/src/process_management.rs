@@ -27,8 +27,16 @@ pub fn process_create_validator_stake_account(
     accounts_raw: &[AccountInfo],
 ) -> ProgramResult {
     let accounts = CreateValidatorStakeAccountInfo::try_from_slice(accounts_raw)?;
+    if accounts.stake_pool.owner != accounts.stake_pool_program.key {
+        msg!(
+            "Stake pool state is owned by {} but should be owned by {}",
+            accounts.stake_pool.owner,
+            accounts.stake_pool_program.key,
+        );
+        return Err(LidoError::InvalidOwner.into());
+    }
     let (stake_pool_authority, stake_pool_authority_bump_seed) = Pubkey::find_program_address(
-        &[&accounts.lido.key.to_bytes()[..32], STAKE_POOL_AUTHORITY],
+        &[&accounts.lido.key.to_bytes()[..], STAKE_POOL_AUTHORITY],
         program_id,
     );
     if &stake_pool_authority != accounts.staker.key {
@@ -38,7 +46,7 @@ pub fn process_create_validator_stake_account(
 
     invoke_signed(
         &create_validator_stake_account(
-            &spl_stake_pool::id(),
+            accounts.stake_pool_program.key,
             accounts.stake_pool.key,
             accounts.staker.key,
             accounts.funder.key,
@@ -100,6 +108,14 @@ pub fn process_add_validator(program_id: &Pubkey, accounts_raw: &[AccountInfo]) 
         msg!("Lido state has an invalid owner, should be the Lido program");
         return Err(LidoError::InvalidOwner.into());
     }
+    if accounts.stake_pool.owner != accounts.stake_pool_program.key {
+        msg!(
+            "Stake pool state is owned by {} but should be owned by {}",
+            accounts.stake_pool.owner,
+            accounts.stake_pool_program.key,
+        );
+        return Err(LidoError::InvalidOwner.into());
+    }
     if &lido.stake_pool_account != accounts.stake_pool.key {
         msg!("Invalid stake pool");
         return Err(LidoError::InvalidStakePool.into());
@@ -118,7 +134,7 @@ pub fn process_add_validator(program_id: &Pubkey, accounts_raw: &[AccountInfo]) 
 
     invoke_signed(
         &add_validator_to_pool(
-            &spl_stake_pool::id(),
+            accounts.stake_pool_program.key,
             accounts.stake_pool.key,
             accounts.stake_pool_manager_authority.key,
             accounts.stake_pool_withdraw_authority.key,
@@ -181,6 +197,14 @@ pub fn process_remove_validator(
         msg!("Lido state has an invalid owner, should be the Lido program");
         return Err(LidoError::InvalidOwner.into());
     }
+    if accounts.stake_pool.owner != accounts.stake_pool_program.key {
+        msg!(
+            "Stake pool state is owned by {} but should be owned by {}",
+            accounts.stake_pool.owner,
+            accounts.stake_pool_program.key,
+        );
+        return Err(LidoError::InvalidOwner.into());
+    }
     let mut lido = try_from_slice_unchecked::<Lido>(&accounts.lido.data.borrow())?;
     if &lido.stake_pool_account != accounts.stake_pool.key {
         msg!("Invalid stake pool");
@@ -189,7 +213,7 @@ pub fn process_remove_validator(
 
     invoke_signed(
         &remove_validator_from_pool(
-            &spl_stake_pool::id(),
+            accounts.stake_pool_program.key,
             accounts.stake_pool.key,
             accounts.stake_pool_manager_authority.key,
             accounts.stake_pool_withdraw_authority.key,

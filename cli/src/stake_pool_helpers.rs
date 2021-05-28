@@ -72,6 +72,7 @@ impl fmt::Display for CreatePoolOutput {
 
 pub fn command_create_pool(
     config: &Config,
+    stake_pool_program_id: &Pubkey,
     stake_pool_authority: &Pubkey,
     deposit_authority: &Pubkey,
     fee_authority: &Pubkey,
@@ -97,7 +98,7 @@ pub fn command_create_pool(
 
     // Calculate withdraw authority used for minting pool tokens
     let (withdraw_authority, _) = find_withdraw_authority_program_address(
-        &spl_stake_pool::id(),
+        stake_pool_program_id,
         &stake_pool_keypair.pubkey(),
     );
 
@@ -148,7 +149,7 @@ pub fn command_create_pool(
                 &validator_list.pubkey(),
                 validator_list_balance,
                 validator_list_size as u64,
-                &spl_stake_pool::id(),
+                stake_pool_program_id,
             ),
             // Account for the stake pool
             system_instruction::create_account(
@@ -156,11 +157,11 @@ pub fn command_create_pool(
                 &stake_pool_keypair.pubkey(),
                 stake_pool_account_lamports,
                 get_packed_len::<StakePool>() as u64,
-                &spl_stake_pool::id(),
+                stake_pool_program_id,
             ),
             // Initialize stake pool
             lido::instruction::initialize_stake_pool_with_authority(
-                &spl_stake_pool::id(),
+                stake_pool_program_id,
                 &lido::instruction::InitializeStakePoolWithAuthorityAccountsMeta {
                     stake_pool: stake_pool_keypair.pubkey(),
                     manager: config.manager.pubkey(),

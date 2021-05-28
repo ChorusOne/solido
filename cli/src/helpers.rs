@@ -69,6 +69,10 @@ pub struct CreateSolidoOpts {
     #[clap(long, value_name = "address")]
     pub solido_program_id: Pubkey,
 
+    /// Address of the SPL stake pool program.
+    #[clap(long, value_name = "address")]
+    pub stake_pool_program_id: Pubkey,
+
     /// Numerator of the fee fraction.
     #[clap(long, value_name = "int")]
     pub fee_numerator: u64,
@@ -217,6 +221,7 @@ pub fn command_create_solido(
 
     let stake_pool = command_create_pool(
         config,
+        &opts.stake_pool_program_id,
         &stake_pool_authority,
         &deposit_authority,
         &fee_authority,
