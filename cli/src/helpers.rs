@@ -540,6 +540,8 @@ pub fn command_create_token_account(
         token_account: token_keypair.pubkey().into(),
     })
 }
+#[derive(Clap, Debug)]
+pub struct CreateStakeAccountOpts {}
 
 /// Gets the Solido data structure
 fn get_solido(rpc_client: &RpcClient, solido_address: &Pubkey) -> Result<Lido, crate::Error> {

@@ -6,6 +6,7 @@ use anchor_client::Cluster;
 use anchor_client::Program;
 use clap::Clap;
 use helpers::AddValidatorOpts;
+use helpers::CreateStakeAccountOpts;
 use helpers::CreateTokenAccountOpts;
 use serde::Serialize;
 use solana_sdk::signature::{read_keypair_file, Keypair};
@@ -104,6 +105,9 @@ FEES:
     /// Creates an stSol token account
     CreateTokenAccount(CreateTokenAccountOpts),
 
+    /// Creates a stake account
+    CreateStakeAccount(CreateStakeAccountOpts),
+
     /// Add a new validator
     AddValidator(AddValidatorOpts),
 
@@ -188,11 +192,13 @@ fn main() {
                 .expect("Failed to create token account.");
             print_output(opts.output_mode, &output);
         }
+        SubCommand::CreateStakeAccount(cmd_opts) => {}
         SubCommand::AddValidator(cmd_opts) => {
             let payer = Keypair::from_bytes(&keypair.to_bytes())
                 .expect("Keypair returned an invalid secret");
-            command_add_validator(payer, &config, opts.cluster, cmd_opts)
+            let output = command_add_validator(payer, &config, opts.cluster, cmd_opts)
                 .expect("Failed to add a validator");
+            print_output(opts.output_mode, &output);
         }
     }
 }

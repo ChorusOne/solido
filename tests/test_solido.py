@@ -30,6 +30,10 @@ print(f'> Insurance account owner:   {insurance_account_owner}')
 manager_fee_account_owner = create_test_account('manager-fee-key.json')
 print(f'> Manager fee account owner: {manager_fee_account_owner}')
 
+validator_token_account_owner = create_test_account(
+    'validator-token-account.json')
+print(f'> Validator token account: {validator_token_account_owner}')
+
 
 print('\nUploading stake pool program ...')
 stake_pool_program_id = solana_program_deploy(
@@ -86,3 +90,24 @@ treasury_account = result['treasury_account']
 insurance_account = result['insurance_account']
 manager_fee_account = result['manager_fee_account']
 print(f'> Created instance at {solido_address}.')
+
+print('\nCreating an stSol token account')
+result = solido(
+    'create-token-account',
+    '--solido-address', solido_address,
+    '--owner', validator_token_account_owner,
+)
+validator_token_account = result['token_account']
+print(f'> Created a validator token account at {validator_token_account}.')
+
+print('\nAdding a validator')
+result = solido(
+    'add-validator',
+    '--solido-program-id', solido_address,
+    '--solido-address', validator_token_account_owner,
+    '--manager',
+    '--stake-address',
+    '--validator-rewards-address', validator_token_account,
+)
+validator_token_account = result['token_account']
+print(f'> Created a validator token account at {solido_address}.')
