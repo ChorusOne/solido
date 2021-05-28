@@ -33,7 +33,7 @@ pub fn send_transaction(
     transaction: Transaction,
 ) -> solana_client::client_error::Result<()> {
     if config.dry_run {
-        config.program.rpc().simulate_transaction(&transaction)?;
+        config.rpc().simulate_transaction(&transaction)?;
     } else {
         let _signature = match config.output_mode {
             OutputMode::Text => {
@@ -64,7 +64,7 @@ pub fn sign_and_send_transaction<T: Signers>(
 ) -> Result<(), crate::Error> {
     let mut tx = Transaction::new_with_payer(instructions, Some(&config.fee_payer.pubkey()));
 
-    let (recent_blockhash, _fee_calculator) = config.program.rpc().get_recent_blockhash()?;
+    let (recent_blockhash, _fee_calculator) = config.rpc().get_recent_blockhash()?;
     tx.sign(signers, recent_blockhash);
     send_transaction(&config, tx)?;
 
@@ -245,12 +245,14 @@ pub fn command_create_solido(
         STAKE_POOL_AUTHORITY,
     );
 
+    let manager = config.fee_payer;
     let stake_pool = command_create_pool(
         config,
         &opts.stake_pool_program_id,
         &stake_pool_authority,
         &deposit_authority,
         &fee_authority,
+        manager,
         Fee {
             numerator: opts.fee_numerator,
             denominator: opts.fee_denominator,
@@ -411,6 +413,9 @@ pub struct AddValidatorOpts {
     #[clap(long)]
     pub manager: Pubkey,
 
+    /// Stake pool program id
+    #[clap(long)]
+    stake_pool_program_id: Pubkey,
     /// Stake address to include to Lido.
     #[clap(long)]
     pub stake_address: Pubkey,
@@ -444,10 +449,9 @@ pub fn command_add_validator(
     config: &Config,
     cluster: Cluster,
     opts: AddValidatorOpts,
-) -> Result<AddValidatorOutput, crate::Error> {
-    let solido = get_solido(&config.program.rpc(), &opts.solido_address)?;
-    let stake_pool =
-        get_stake_pool_validator_list(&config.program.rpc(), &solido.stake_pool_account)?;
+) -> Result<(), crate::Error> {
+    let solido = get_solido(&config.rpc(), &opts.solido_address)?;
+    let stake_pool = get_stake_pool_validator_list(&config.rpc(), &solido.stake_pool_account)?;
 
     let (stake_pool_authority, _) = lido::find_authority_program_address(
         &opts.solido_program_id,
@@ -492,53 +496,9 @@ pub fn command_add_validator(
         );
     } else {
         eprintln!("Adding a validator with manager {}", &opts.manager);
-        sign_and_send_transaction(config, &[instruction], &[config.manager])?;
+        sign_and_send_transaction(config, &[instruction], &[config.fee_payer])?;
     }
-    Ok(AddValidatorOutput {})
-}
-
-#[derive(Clap, Debug)]
-pub struct CreateTokenAccountOpts {
-    /// Account that stores the data for this Solido instance
-    #[clap(long)]
-    pub solido_address: Pubkey,
-    /// Owner of the token
-    #[clap(long)]
-    pub owner: Pubkey,
-}
-
-#[derive(Serialize)]
-pub struct CreateTokenAccountOutput {
-    /// SPL token account that holds the token funds.
-    token_account: PubkeyBase58,
-}
-
-impl fmt::Display for CreateTokenAccountOutput {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        writeln!(f, "Token details:")?;
-        writeln!(f, "  Token address:                {}", self.token_account)?;
-        Ok(())
-    }
-}
-
-/// Creates an stSOL token account.
-pub fn command_create_token_account(
-    config: &Config,
-    opts: CreateTokenAccountOpts,
-) -> Result<CreateTokenAccountOutput, crate::Error> {
-    let mut instructions = Vec::new();
-    let lido = get_solido(&config.program.rpc(), &opts.solido_address)?;
-
-    let token_keypair = push_create_spl_token_account(
-        config,
-        &mut instructions,
-        &lido.st_sol_mint_program,
-        &opts.owner,
-    )?;
-    sign_and_send_transaction(config, &instructions, &[config.fee_payer, &token_keypair])?;
-    Ok(CreateTokenAccountOutput {
-        token_account: token_keypair.pubkey().into(),
-    })
+    Ok(())
 }
 
 /// Gets the Solido data structure

@@ -9,11 +9,12 @@ default localhost port, and it expects a keypair at ~/.config/solana/id.json
 that corresponds to a sufficiently funded account.
 """
 
+import sys
 import json
 
 from typing import Any, Optional
 
-from util import run, solana, create_test_account, solana_program_deploy, solana_program_show
+from util import run, solana, create_test_account, solana_program_deploy, solana_program_show, create_stake_account, create_spl_token
 
 
 # We start by generating three accounts that we will need later.
@@ -31,8 +32,12 @@ manager_fee_account_owner = create_test_account('manager-fee-key.json')
 print(f'> Manager fee account owner: {manager_fee_account_owner}')
 
 validator_token_account_owner = create_test_account(
-    'validator-token-account.json')
-print(f'> Validator token account: {validator_token_account_owner}')
+    'validator-token-account-key.json')
+print(f'> Validator token account owner: {validator_token_account_owner}')
+
+validator_stake_account = create_stake_account(
+    'validator-stake-account-key.json')
+print(f'> Validator stake account: {validator_stake_account}')
 
 
 print('\nUploading stake pool program ...')
@@ -89,24 +94,25 @@ solido_address = result['solido_address']
 treasury_account = result['treasury_account']
 insurance_account = result['insurance_account']
 manager_fee_account = result['manager_fee_account']
+st_sol_mint_account = result['st_sol_mint_address']
+
 print(f'> Created instance at {solido_address}.')
 
-print('\nCreating an stSol token account')
-result = solido(
-    'create-token-account',
-    '--solido-address', solido_address,
-    '--owner', validator_token_account_owner,
-)
-validator_token_account = result['token_account']
-print(f'> Created a validator token account at {validator_token_account}.')
 
 print('\nAdding a validator')
+print(
+    f'> Creating validator token account with owner {validator_token_account_owner}')
+
+validator_token_account = create_spl_token(
+    'validator-token-account-key.json', st_sol_mint_account)
+print(f'> Validator stSol token account: {validator_token_account}')
+
 result = solido(
     'add-validator',
     '--solido-program-id', solido_address,
     '--solido-address', validator_token_account_owner,
     '--manager',
-    '--stake-address',
+    '--stake-address', validator_stake_account,
     '--validator-rewards-address', validator_token_account,
 )
 validator_token_account = result['token_account']

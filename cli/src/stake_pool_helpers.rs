@@ -76,6 +76,7 @@ pub fn command_create_pool(
     stake_pool_authority: &Pubkey,
     deposit_authority: &Pubkey,
     fee_authority: &Pubkey,
+    manager: &Keypair,
     fee: Fee,
     max_validators: u32,
 ) -> Result<CreatePoolOutput, crate::Error> {
@@ -167,7 +168,7 @@ pub fn command_create_pool(
                 stake_pool_program_id,
                 &lido::instruction::InitializeStakePoolWithAuthorityAccountsMeta {
                     stake_pool: stake_pool_keypair.pubkey(),
-                    manager: config.manager.pubkey(),
+                    manager: manager.pubkey(),
                     staker: *stake_pool_authority,
                     validator_list: validator_list.pubkey(),
                     reserve_stake: reserve_stake.pubkey(),
@@ -185,13 +186,13 @@ pub fn command_create_pool(
         Some(&config.fee_payer.pubkey()),
     );
 
-    let (recent_blockhash, _fee_calculator) = config.program.rpc().get_recent_blockhash()?;
+    let (recent_blockhash, _fee_calculator) = config.rpc().get_recent_blockhash()?;
 
     let initialize_signers = vec![
         config.fee_payer,
         &stake_pool_keypair,
         &validator_list,
-        config.manager,
+        &manager,
     ];
     initialize_transaction.sign(&initialize_signers, recent_blockhash);
     send_transaction(&config, initialize_transaction)?;
