@@ -62,7 +62,7 @@ async fn test_successful_update_balance() {
     // Create a stake account from the now-funded Lido reserve.
     let validator_account = stake_accounts.get(0).unwrap();
     let validator_stake = lido_accounts
-        .delegate_deposit(
+        .stake_deposit(
             &mut context.banks_client,
             &context.payer,
             &context.last_blockhash,
@@ -73,7 +73,7 @@ async fn test_successful_update_balance() {
 
     // Delegate the newly created stake account to Lido's stake pool.
     lido_accounts
-        .delegate_stakepool_deposit(
+        .deposit_active_stake_to_pool(
             &mut context.banks_client,
             &context.payer,
             &context.last_blockhash,

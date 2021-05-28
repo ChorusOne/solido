@@ -44,10 +44,10 @@ async fn setup() -> (
     )
 }
 pub const TEST_DEPOSIT_AMOUNT: u64 = 100_000_000_000;
-pub const TEST_DELEGATE_DEPOSIT_AMOUNT: u64 = 10_000_000_000;
+pub const TEST_STAKE_DEPOSIT_AMOUNT: u64 = 10_000_000_000;
 
 #[tokio::test]
-async fn test_successful_delegate_deposit_stake_pool_deposit() {
+async fn test_successful_stake_deposit_stake_pool_deposit() {
     let (mut banks_client, payer, recent_blockhash, lido_accounts, stake_accounts) = setup().await;
     lido_accounts
         .deposit(
@@ -61,12 +61,12 @@ async fn test_successful_delegate_deposit_stake_pool_deposit() {
     // Delegate the deposit
     let validator_account = stake_accounts.get(0).unwrap();
     let stake_account = lido_accounts
-        .delegate_deposit(
+        .stake_deposit(
             &mut banks_client,
             &payer,
             &recent_blockhash,
             validator_account,
-            TEST_DELEGATE_DEPOSIT_AMOUNT,
+            TEST_STAKE_DEPOSIT_AMOUNT,
         )
         .await;
 
@@ -90,7 +90,7 @@ async fn test_successful_delegate_deposit_stake_pool_deposit() {
         .unwrap();
 
     lido_accounts
-        .delegate_stakepool_deposit(
+        .deposit_active_stake_to_pool(
             &mut banks_client,
             &payer,
             &recent_blockhash,
@@ -108,17 +108,17 @@ async fn test_successful_delegate_deposit_stake_pool_deposit() {
     let stake_pool = StakePool::try_from_slice(&stake_pool.data.as_slice()).unwrap();
     assert_eq!(
         stake_pool.total_stake_lamports,
-        stake_pool_before.total_stake_lamports + TEST_DELEGATE_DEPOSIT_AMOUNT
+        stake_pool_before.total_stake_lamports + TEST_STAKE_DEPOSIT_AMOUNT
     );
     assert_eq!(
         stake_pool.pool_token_supply,
-        stake_pool_before.pool_token_supply + TEST_DELEGATE_DEPOSIT_AMOUNT
+        stake_pool_before.pool_token_supply + TEST_STAKE_DEPOSIT_AMOUNT
     );
 
     // Check minted tokens
     let lido_token_balance =
         get_token_balance(&mut banks_client, &lido_accounts.pool_token_to.pubkey()).await;
-    assert_eq!(lido_token_balance, TEST_DELEGATE_DEPOSIT_AMOUNT);
+    assert_eq!(lido_token_balance, TEST_STAKE_DEPOSIT_AMOUNT);
 
     // Check balances in validator stake account list storage
     let validator_list = get_account(
@@ -133,7 +133,7 @@ async fn test_successful_delegate_deposit_stake_pool_deposit() {
         .unwrap();
     assert_eq!(
         validator_stake_item.stake_lamports,
-        validator_stake_item_before.stake_lamports + TEST_DELEGATE_DEPOSIT_AMOUNT
+        validator_stake_item_before.stake_lamports + TEST_STAKE_DEPOSIT_AMOUNT
     );
 
     // Check validator stake account actual SOL balance
@@ -149,4 +149,4 @@ async fn test_successful_delegate_deposit_stake_pool_deposit() {
 }
 
 #[tokio::test]
-async fn test_stake_exists_delegate_deposit() {} // TODO
+async fn test_stake_exists_stake_deposit() {} // TODO

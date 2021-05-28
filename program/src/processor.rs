@@ -6,8 +6,8 @@ use spl_stake_pool::{stake_program, state::StakePool};
 use crate::{
     error::LidoError,
     instruction::{
-        stake_pool_deposit, DelegateDepositAccountsInfo, DepositAccountsInfo,
-        InitializeAccountsInfo, LidoInstruction, StakePoolDelegateAccountsInfo,
+        stake_pool_deposit, DepositAccountsInfo, DepositActiveStakeToPoolAccountsInfo,
+        InitializeAccountsInfo, LidoInstruction, StakeDepositAccountsInfo,
         StakePoolDepositAccountsMeta,
     },
     logic::{
@@ -243,12 +243,12 @@ pub fn process_deposit(
         .map_err(|e| e.into())
 }
 
-pub fn process_delegate_deposit(
+pub fn process_stake_deposit(
     program_id: &Pubkey,
     amount: u64,
     raw_accounts: &[AccountInfo],
 ) -> ProgramResult {
-    let accounts = DelegateDepositAccountsInfo::try_from_slice(raw_accounts)?;
+    let accounts = StakeDepositAccountsInfo::try_from_slice(raw_accounts)?;
 
     let rent = &Rent::from_account_info(accounts.sysvar_rent)?;
     let lido = try_from_slice_unchecked::<Lido>(&accounts.lido.data.borrow())?;
@@ -347,11 +347,11 @@ pub fn process_delegate_deposit(
     )
 }
 
-pub fn process_stake_pool_delegate(
+pub fn process_deposit_active_stake_to_pool(
     program_id: &Pubkey,
     raw_accounts: &[AccountInfo],
 ) -> ProgramResult {
-    let accounts = StakePoolDelegateAccountsInfo::try_from_slice(raw_accounts)?;
+    let accounts = DepositActiveStakeToPoolAccountsInfo::try_from_slice(raw_accounts)?;
 
     let _rent = &Rent::from_account_info(accounts.sysvar_rent)?;
     let lido = try_from_slice_unchecked::<Lido>(&accounts.lido.data.borrow())?;
@@ -442,10 +442,12 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
             max_validators,
         } => process_initialize(program_id, fee_distribution, max_validators, accounts),
         LidoInstruction::Deposit { amount } => process_deposit(program_id, amount, accounts),
-        LidoInstruction::DelegateDeposit { amount } => {
-            process_delegate_deposit(program_id, amount, accounts)
+        LidoInstruction::StakeDeposit { amount } => {
+            process_stake_deposit(program_id, amount, accounts)
         }
-        LidoInstruction::StakePoolDelegate => process_stake_pool_delegate(program_id, accounts),
+        LidoInstruction::DepositActiveStakeToPool => {
+            process_deposit_active_stake_to_pool(program_id, accounts)
+        }
         LidoInstruction::Withdraw { amount } => process_withdraw(program_id, amount, accounts),
         LidoInstruction::DistributeFees => process_distribute_fees(program_id, accounts),
         LidoInstruction::ClaimValidatorFees => process_claim_validator_fee(program_id, accounts),

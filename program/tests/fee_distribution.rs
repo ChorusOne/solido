@@ -61,7 +61,7 @@ async fn test_successful_fee_distribution() {
     // Delegate the deposit
     let validator_account = stake_accounts.get(0).unwrap();
     let validator_stake = lido_accounts
-        .delegate_deposit(
+        .stake_deposit(
             &mut context.banks_client,
             &context.payer,
             &context.last_blockhash,
@@ -71,7 +71,7 @@ async fn test_successful_fee_distribution() {
         .await;
 
     lido_accounts
-        .delegate_stakepool_deposit(
+        .deposit_active_stake_to_pool(
             &mut context.banks_client,
             &context.payer,
             &context.last_blockhash,

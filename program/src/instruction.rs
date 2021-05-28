@@ -27,12 +27,18 @@ pub enum LidoInstruction {
         #[allow(dead_code)] // but it's not
         amount: u64,
     },
-    /// Deposit amount to member validator
-    DelegateDeposit {
+    /// Move deposits into a new stake account and delegate it to a member validator.
+    ///
+    /// This does not yet make the new stake account part of the stake pool;
+    /// must be followed up by [`DepositActiveStakeToPool`].
+    StakeDeposit {
         #[allow(dead_code)] // but it's not
         amount: u64,
     },
-    StakePoolDelegate,
+    /// Deposit an activated stake account into the stake pool. Must be preceded
+    /// by [`StakeDeposit`] to create the stake account. Once that stake account
+    /// is fully active, it can be deposited to the stake pool.
+    DepositActiveStakeToPool,
     Withdraw {
         #[allow(dead_code)] // but it's not
         amount: u64,
@@ -335,7 +341,7 @@ pub fn deposit(
 }
 
 accounts_struct! {
-    DelegateDepositAccountsMeta, DelegateDepositAccountsInfo {
+    StakeDepositAccountsMeta, StakeDepositAccountsInfo {
         pub lido {
             is_signer: false,
             is_writable: true,
@@ -365,12 +371,12 @@ accounts_struct! {
     }
 }
 
-pub fn delegate_deposit(
+pub fn stake_deposit(
     program_id: &Pubkey,
-    accounts: &DelegateDepositAccountsMeta,
+    accounts: &StakeDepositAccountsMeta,
     amount: u64,
 ) -> Result<Instruction, ProgramError> {
-    let init_data = LidoInstruction::DelegateDeposit { amount };
+    let init_data = LidoInstruction::StakeDeposit { amount };
     let data = init_data.try_to_vec()?;
     Ok(Instruction {
         program_id: *program_id,
@@ -380,7 +386,7 @@ pub fn delegate_deposit(
 }
 
 accounts_struct! {
-    StakePoolDelegateAccountsMeta, StakePoolDelegateAccountsInfo {
+    DepositActiveStakeToPoolAccountsMeta, DepositActiveStakeToPoolAccountsInfo {
         pub lido {
             is_signer: false,
             is_writable: true,
@@ -434,11 +440,11 @@ accounts_struct! {
     }
 }
 
-pub fn stake_pool_delegate(
+pub fn deposit_active_stake_to_pool(
     program_id: &Pubkey,
-    accounts: &StakePoolDelegateAccountsMeta,
+    accounts: &DepositActiveStakeToPoolAccountsMeta,
 ) -> Result<Instruction, ProgramError> {
-    let init_data = LidoInstruction::StakePoolDelegate;
+    let init_data = LidoInstruction::DepositActiveStakeToPool;
     let data = init_data.try_to_vec()?;
     Ok(Instruction {
         program_id: *program_id,
