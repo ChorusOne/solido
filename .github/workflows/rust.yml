@@ -71,9 +71,6 @@ jobs:
         # Perform initial Solana setup.
         solana-keygen new --no-bip39-passphrase --silent
         solana config set --url http://127.0.0.1:8899
-        # TODO: It *should* be online, that's what the start script enforces ...
-        # but still, let's see if a sleep fixes this.
-        sleep 5.0
         solana airdrop 500.0
 
         tests/test_solido.py
@@ -85,9 +82,7 @@ jobs:
         validator=$(tests/start_test_validator.py)
 
         # We don't need to run keygen/setup again, the private key and state
-        # should still be there from the previous run. Do wait for the validator
-        # to have started.
-        sleep 5.0
+        # should still be there from the previous run.
 
         tests/test_multisig.py
         kill $validator
