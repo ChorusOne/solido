@@ -31,6 +31,11 @@ manager_fee_account_owner = create_test_account('manager-fee-key.json')
 print(f'> Manager fee account owner: {manager_fee_account_owner}')
 
 
+print('\nUploading stake pool program ...')
+stake_pool_program_id = solana_program_deploy('target/deploy/spl_stake_pool.so')
+print(f'> Stake pool program id is {stake_pool_program_id}.')
+
+
 print('\nUploading Solido program ...')
 solido_program_id = solana_program_deploy('target/deploy/lido.so')
 print(f'> Solido program id is {solido_program_id}.')
@@ -61,6 +66,7 @@ def solido(*args: str, keypair_path: Optional[str] = None) -> Any:
 print('\nCreating Solido instance')
 result = solido(
     'create-solido',
+    '--stake-pool-program-id', stake_pool_program_id,
     '--solido-program-id', solido_program_id,
     '--fee-numerator', '4',
     '--fee-denominator', '31',
