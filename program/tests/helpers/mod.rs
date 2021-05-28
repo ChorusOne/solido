@@ -275,7 +275,7 @@ impl LidoAccounts {
         recipient
     }
 
-    pub async fn delegate_deposit(
+    pub async fn stake_deposit(
         &self,
         banks_client: &mut BanksClient,
         payer: &Keypair,
@@ -287,9 +287,9 @@ impl LidoAccounts {
             Pubkey::find_program_address(&[&validator.vote.pubkey().to_bytes()[..32]], &id());
 
         let mut transaction = Transaction::new_with_payer(
-            &[instruction::delegate_deposit(
+            &[instruction::stake_deposit(
                 &id(),
-                &instruction::DelegateDepositAccountsMeta {
+                &instruction::StakeDepositAccountsMeta {
                     lido: self.lido.pubkey(),
                     validator: validator.vote.pubkey(),
                     reserve: self.reserve_authority,
@@ -306,7 +306,7 @@ impl LidoAccounts {
         stake_account
     }
 
-    pub async fn delegate_stakepool_deposit(
+    pub async fn deposit_active_stake_to_pool(
         &self,
         banks_client: &mut BanksClient,
         payer: &Keypair,
@@ -315,9 +315,9 @@ impl LidoAccounts {
         stake_account: &Pubkey,
     ) {
         let mut transaction = Transaction::new_with_payer(
-            &[instruction::stake_pool_delegate(
+            &[instruction::deposit_active_stake_to_pool(
                 &id(),
-                &instruction::StakePoolDelegateAccountsMeta {
+                &instruction::DepositActiveStakeToPoolAccountsMeta {
                     lido: self.lido.pubkey(),
                     validator: validator.vote.pubkey(),
                     stake: *stake_account,
