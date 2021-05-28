@@ -1,13 +1,12 @@
 use std::fmt;
 
 use anchor_client::solana_sdk::bpf_loader_upgradeable;
-use anchor_client::solana_sdk::commitment_config::CommitmentConfig;
 use anchor_client::solana_sdk::instruction::Instruction;
 use anchor_client::solana_sdk::pubkey::Pubkey;
 use anchor_client::solana_sdk::signature::{Keypair, Signer};
 use anchor_client::solana_sdk::system_instruction;
 use anchor_client::solana_sdk::sysvar;
-use anchor_client::{Client, Cluster, Program};
+use anchor_client::{Cluster, Program};
 use anchor_lang::prelude::{AccountMeta, ToAccountMetas};
 use anchor_lang::{Discriminator, InstructionData};
 use borsh::de::BorshDeserialize;
@@ -17,6 +16,7 @@ use multisig::accounts as multisig_accounts;
 use multisig::instruction as multisig_instruction;
 use serde::Serialize;
 
+use crate::helpers::get_anchor_program;
 use crate::util::PubkeyBase58;
 use crate::{print_output, OutputMode};
 
@@ -164,15 +164,27 @@ struct ExecuteTransactionOpts {
     transaction_address: Pubkey,
 }
 
+/// Proposes an instruction and returns its address
+pub fn propose_multisig_raw_instruction(
+    payer: Keypair,
+    cluster: Cluster,
+    multisig_address: &Pubkey,
+    multisig_program_id: &Pubkey,
+    instruction: Instruction,
+) -> PubkeyBase58 {
+    let program = get_anchor_program(cluster, payer, multisig_program_id);
+    let (program_derived_address, _nonce) =
+        get_multisig_program_address(&program, multisig_address);
+    propose_instruction(program, program_derived_address, instruction).transaction_address
+}
+
 pub fn main(
     payer: Keypair,
     cluster: Cluster,
     output_mode: OutputMode,
     multisig_opts: MultisigOpts,
 ) {
-    let client = Client::new_with_options(cluster, payer, CommitmentConfig::confirmed());
-    let program = client.program(multisig_opts.multisig_program_id);
-
+    let program = get_anchor_program(cluster, payer, &multisig_opts.multisig_program_id);
     match multisig_opts.subcommand {
         SubCommand::CreateMultisig(cmd_opts) => {
             let output = create_multisig(program, cmd_opts);

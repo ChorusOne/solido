@@ -3,13 +3,18 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use anchor_client::Cluster;
+use anchor_client::Program;
 use clap::Clap;
+use helpers::AddValidatorOpts;
+use helpers::CreateTokenAccountOpts;
 use serde::Serialize;
-use solana_client::rpc_client::RpcClient;
-use solana_sdk::commitment_config::CommitmentConfig;
 use solana_sdk::signature::{read_keypair_file, Keypair};
+use solana_sdk::signer::Signer;
 
-use crate::helpers::{command_create_solido, CreateSolidoOpts};
+use crate::helpers::{
+    command_add_validator, command_create_solido, command_create_token_account, get_anchor_program,
+    CreateSolidoOpts,
+};
 use crate::multisig::MultisigOpts;
 
 extern crate lazy_static;
@@ -96,13 +101,20 @@ FEES:
     ")]
     CreateSolido(CreateSolidoOpts),
 
+    /// Creates an stSol token account
+    CreateTokenAccount(CreateTokenAccountOpts),
+
+    /// Add a new validator
+    AddValidator(AddValidatorOpts),
+
     /// Interact with a deployed Multisig program for governance tasks.
     Multisig(MultisigOpts),
 }
 
 /// Determines which network to connect to, and who pays the fees.
 pub struct Config<'a> {
-    rpc_client: RpcClient,
+    program: Program,
+    // rpc_client: RpcClient,
     manager: &'a Keypair,
     fee_payer: &'a Keypair,
     dry_run: bool,
@@ -139,10 +151,19 @@ fn main() {
     let keypair = read_keypair_file(&payer_keypair_path)
         .unwrap_or_else(|_| panic!("Failed to read key pair from {:?}.", payer_keypair_path));
 
+    // TODO: This is a bit hacky :|
+    // We need to pass the keypair to Anchor's program by value and to our config by reference.
+    // Cluster has to be passed as value as well
+    let key_pair_copy =
+        Keypair::from_bytes(&keypair.to_bytes()).expect("Keypair returned an invalid secret");
     let config = Config {
-        rpc_client: RpcClient::new_with_commitment(
-            opts.cluster.url().to_string(),
-            CommitmentConfig::confirmed(),
+        // Set the multisig_program_id to an invalid program, we use the program
+        // just to get the rpc client, when we need to use the multisig program,
+        // we'll create another instance of it.
+        program: get_anchor_program(
+            Cluster::from_str(&opts.cluster.to_string()).unwrap(),
+            key_pair_copy,
+            &Keypair::new().pubkey(),
         ),
         // For now, we'll assume that the provided key pair fulfils all of these
         // roles. We need a better way to configure keys in the future.
@@ -160,8 +181,18 @@ fn main() {
             print_output(opts.output_mode, &output);
         }
         SubCommand::Multisig(cmd_opts) => {
-            let payer = keypair;
-            multisig::main(payer, opts.cluster, opts.output_mode, cmd_opts);
+            multisig::main(keypair, opts.cluster, opts.output_mode, cmd_opts);
+        }
+        SubCommand::CreateTokenAccount(cmd_opts) => {
+            let output = command_create_token_account(&config, cmd_opts)
+                .expect("Failed to create token account.");
+            print_output(opts.output_mode, &output);
+        }
+        SubCommand::AddValidator(cmd_opts) => {
+            let payer = Keypair::from_bytes(&keypair.to_bytes())
+                .expect("Keypair returned an invalid secret");
+            command_add_validator(payer, &config, opts.cluster, cmd_opts)
+                .expect("Failed to add a validator");
         }
     }
 }
