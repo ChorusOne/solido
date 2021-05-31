@@ -11,7 +11,10 @@ use solana_program::{
 };
 use spl_stake_pool::{instruction::StakePoolInstruction, stake_program, state::Fee};
 
-use crate::{error::LidoError, state::FeeDistribution};
+use crate::{
+    error::LidoError, state::FeeDistribution,
+    token::{Lamports, StLamports},
+};
 
 #[repr(C)]
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
@@ -27,7 +30,7 @@ pub enum LidoInstruction {
     /// Deposit with amount
     Deposit {
         #[allow(dead_code)] // but it's not
-        amount: u64,
+        amount: Lamports,
     },
     /// Move deposits into a new stake account and delegate it to a member validator.
     ///
@@ -35,7 +38,7 @@ pub enum LidoInstruction {
     /// must be followed up by [`DepositActiveStakeToPool`].
     StakeDeposit {
         #[allow(dead_code)] // but it's not
-        amount: u64,
+        amount: Lamports,
     },
     /// Deposit an activated stake account into the stake pool. Must be preceded
     /// by [`StakeDeposit`] to create the stake account. Once that stake account
@@ -43,7 +46,7 @@ pub enum LidoInstruction {
     DepositActiveStakeToPool,
     Withdraw {
         #[allow(dead_code)] // but it's not
-        amount: u64,
+        amount: StLamports,
     },
     DistributeFees,
     ClaimValidatorFees,
@@ -343,7 +346,7 @@ accounts_struct! {
 pub fn deposit(
     program_id: &Pubkey,
     accounts: &DepositAccountsMeta,
-    amount: u64,
+    amount: Lamports,
 ) -> Result<Instruction, ProgramError> {
     let init_data = LidoInstruction::Deposit { amount };
     let data = init_data.try_to_vec()?;
@@ -388,7 +391,7 @@ accounts_struct! {
 pub fn stake_deposit(
     program_id: &Pubkey,
     accounts: &StakeDepositAccountsMeta,
-    amount: u64,
+    amount: Lamports,
 ) -> Result<Instruction, ProgramError> {
     let init_data = LidoInstruction::StakeDeposit { amount };
     let data = init_data.try_to_vec()?;

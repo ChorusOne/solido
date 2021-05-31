@@ -3,8 +3,8 @@ use solana_program::{
     program_error::ProgramError, pubkey::Pubkey, rent::Rent,
 };
 use spl_stake_pool::state::StakePool;
-use std::{convert::TryFrom, fmt::Display};
-use crate::{error::LidoError, token::StLamports, RESERVE_AUTHORITY, state::Lido};
+use crate::{error::LidoError, token::{Lamports, Rational, StLamports}, RESERVE_AUTHORITY, state::Lido};
+use std::fmt::Display;
 
 pub(crate) fn rent_exemption(
     rent: &Rent,
@@ -54,29 +54,28 @@ impl Display for AccountType {
 pub fn calc_stakepool_lamports(
     stake_pool: &StakePool,
     pool_to_token_account: &spl_token::state::Account,
-) -> Result<u64, LidoError> {
-    let stake_pool_lamports = if stake_pool.pool_token_supply != 0 {
-        u64::try_from(
-            (stake_pool.total_stake_lamports as u128 * pool_to_token_account.amount as u128)
-                .checked_div(stake_pool.pool_token_supply as u128)
-                .ok_or(LidoError::CalculationFailure)?,
-        )
-        .map_err(|_| LidoError::CalculationFailure)?
+) -> Result<Lamports, LidoError> {
+    if stake_pool.pool_token_supply == 0 {
+        Some(Lamports(0))
     } else {
-        0
-    };
-    Ok(stake_pool_lamports)
+        Lamports(stake_pool.total_stake_lamports) * Rational {
+            numerator: pool_to_token_account.amount,
+            denominator: stake_pool.pool_token_supply,
+        }
+    }
+    .ok_or(LidoError::CalculationFailure)
 }
 
-/// Gets the amount of lamports in reserve. The rent is subtracted from the total amount
-/// If the reserve's balance minus rent is < 0, fails
+/// Gets the amount of lamports in reserve. The rent is subtracted from the total amount.
+/// Fails if the reserve's balance minus rent is < 0.
 pub fn get_reserve_available_amount(
     reserve_account: &AccountInfo,
     sysvar_rent: &Rent,
-) -> Result<u64, LidoError> {
+) -> Result<Lamports, LidoError> {
     reserve_account
         .lamports()
         .checked_sub(sysvar_rent.minimum_balance(0))
+        .map(Lamports)
         .ok_or(LidoError::ReserveIsNotRentExempt)
 }
 
@@ -87,14 +86,12 @@ pub fn calc_total_lamports(
     program_share_of_stake_pool: &spl_token::state::Account,
     reserve_account: &AccountInfo,
     sysvar_rent: &Rent,
-) -> Result<u64, LidoError> {
+) -> Result<Lamports, LidoError> {
     let reserve_lamports = get_reserve_available_amount(reserve_account, sysvar_rent)?;
     // Get the total available lamports in the stake pool
     let stake_pool_lamports = calc_stakepool_lamports(stake_pool, program_share_of_stake_pool)?;
 
-    reserve_lamports
-        .checked_add(stake_pool_lamports)
-        .ok_or(LidoError::CalculationFailure)
+    (reserve_lamports + stake_pool_lamports).ok_or(LidoError::CalculationFailure)
 }
 
 /// Issue a spl_token `MintTo` instruction.
@@ -189,14 +186,14 @@ mod test {
 
         assert_eq!(
             calc_total_lamports(&stake_pool, &token_account, &reserve_account, rent).unwrap(),
-            0
+            Lamports(0)
         );
         let mut new_amount = rent.minimum_balance(0) + 10;
         reserve_account.lamports = Rc::new(RefCell::new(&mut new_amount));
         stake_pool.total_stake_lamports = 34;
         assert_eq!(
             calc_total_lamports(&stake_pool, &token_account, &reserve_account, rent).unwrap(),
-            44
+            Lamports(44)
         );
 
         stake_pool.total_stake_lamports = u64::MAX;
@@ -253,7 +250,7 @@ mod test {
 
         let result = calc_stakepool_lamports(&stakepool, &pool);
 
-        assert_eq!(result.unwrap(), 0);
+        assert_eq!(result.unwrap(), Lamports(0));
     }
 
     #[test]
@@ -265,7 +262,7 @@ mod test {
 
         let result = calc_stakepool_lamports(&stakepool, &pool);
 
-        assert_eq!(result.unwrap(), 0);
+        assert_eq!(result.unwrap(), Lamports(0));
     }
 
     #[test]
@@ -278,7 +275,7 @@ mod test {
 
         let result = calc_stakepool_lamports(&stakepool, &pool);
 
-        assert_eq!(result.unwrap(), 15);
+        assert_eq!(result.unwrap(), Lamports(15));
     }
 
     #[test]
@@ -290,6 +287,6 @@ mod test {
 
         let result = calc_stakepool_lamports(&stakepool, &pool);
 
-        assert_eq!(result.unwrap(), 0);
+        assert_eq!(result.unwrap(), Lamports(0));
     }
 }

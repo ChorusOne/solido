@@ -25,7 +25,7 @@ pub struct Rational {
 
 /// Generate a token type that wraps the minimal unit of the token, it’s
 /// “Lamport”. The symbol is for 10<sup>9</sup> of its minimal units and is
-/// only used for debug printing.
+/// only used for `Debug` and `Display` printing.
 macro_rules! impl_token {
     ($TokenLamports:ident, $symbol:expr) => {
 
@@ -43,7 +43,7 @@ macro_rules! impl_token {
         )]
         pub struct $TokenLamports(pub u64);
 
-        impl fmt::Debug for $TokenLamports {
+        impl fmt::Display for $TokenLamports {
             fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
                 write!(
                     f,
@@ -52,6 +52,12 @@ macro_rules! impl_token {
                     self.0 % 1_000_000_000,
                     $symbol
                 )
+            }
+        }
+
+        impl fmt::Debug for $TokenLamports {
+            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                fmt::Display::fmt(self, f)
             }
         }
 

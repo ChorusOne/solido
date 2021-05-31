@@ -9,7 +9,7 @@ use solana_program::{
 };
 
 use crate::error::LidoError;
-use crate::token::{Rational, StLamports, StakePoolTokenLamports};
+use crate::token::{Rational, Lamports, StLamports, StakePoolTokenLamports};
 
 
 /// Constant size of header size = 5 public keys, 1 u64, 4 u8
@@ -49,17 +49,17 @@ pub struct Lido {
 impl Lido {
     pub fn calc_pool_tokens_for_deposit(
         &self,
-        stake_lamports: u64,
-        total_lamports: u64,
+        stake_lamports: Lamports,
+        total_lamports: Lamports,
     ) -> Option<StLamports> {
-        if total_lamports == 0 {
-            return Some(StLamports(stake_lamports));
+        if total_lamports == Lamports(0) {
+            return Some(StLamports(stake_lamports.0));
         }
         let ratio = Rational {
             numerator: self.st_sol_total_shares.0,
-            denominator: total_lamports,
+            denominator: total_lamports.0,
         };
-        StLamports(stake_lamports) * ratio
+        StLamports(stake_lamports.0) * ratio
     }
 
     pub fn is_initialized(&self) -> ProgramResult {
@@ -391,7 +391,7 @@ mod test_lido {
     fn test_pool_tokens_when_total_lamports_is_zero() {
         let lido = Lido::default();
 
-        let pool_tokens_for_deposit = lido.calc_pool_tokens_for_deposit(123, 0);
+        let pool_tokens_for_deposit = lido.calc_pool_tokens_for_deposit(Lamports(123), Lamports(0));
 
         assert_eq!(pool_tokens_for_deposit, Some(StLamports(123)));
     }
@@ -400,7 +400,7 @@ mod test_lido {
     fn test_pool_tokens_when_st_sol_total_shares_is_default() {
         let lido = Lido::default();
 
-        let pool_tokens_for_deposit = lido.calc_pool_tokens_for_deposit(200, 100);
+        let pool_tokens_for_deposit = lido.calc_pool_tokens_for_deposit(Lamports(200), Lamports(100));
 
         assert_eq!(pool_tokens_for_deposit, Some(StLamports(0)));
     }
@@ -410,7 +410,7 @@ mod test_lido {
         let mut lido = Lido::default();
         lido.st_sol_total_shares = StLamports(120);
 
-        let pool_tokens_for_deposit = lido.calc_pool_tokens_for_deposit(200, 40);
+        let pool_tokens_for_deposit = lido.calc_pool_tokens_for_deposit(Lamports(200), Lamports(40));
 
         assert_eq!(pool_tokens_for_deposit, Some(StLamports(600)));
     }
@@ -420,7 +420,7 @@ mod test_lido {
         let mut lido = Lido::default();
         lido.st_sol_total_shares = StLamports(120);
 
-        let pool_tokens_for_deposit = lido.calc_pool_tokens_for_deposit(0, 40);
+        let pool_tokens_for_deposit = lido.calc_pool_tokens_for_deposit(Lamports(0), Lamports(40));
 
         assert_eq!(pool_tokens_for_deposit, Some(StLamports(0)));
     }
