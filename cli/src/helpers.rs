@@ -280,7 +280,7 @@ pub fn command_create_solido(
         config,
         &mut instructions,
         &stake_pool.mint_address.0,
-        &opts.solido_program_id,
+        &stake_pool_authority,
     )?;
 
     sign_and_send_transaction(
@@ -348,7 +348,7 @@ pub fn command_create_solido(
             mint_program: st_sol_mint_keypair.pubkey(),
             pool_token_to: pool_token_to_keypair.pubkey(),
             fee_token: stake_pool.fee_address.0,
-            manager: stake_pool_authority,
+            manager: config.fee_payer.pubkey(), // TODO: Give option to multisig
             insurance_account: insurance_keypair.pubkey(),
             treasury_account: treasury_keypair.pubkey(),
             manager_fee_account: manager_fee_keypair.pubkey(),
