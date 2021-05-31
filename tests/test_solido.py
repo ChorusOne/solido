@@ -93,8 +93,6 @@ validator_token_account = create_spl_token(
     'validator-token-account-key.json', st_sol_mint_account)
 print(f'> Validator stSol token account: {validator_token_account}')
 
-print('> Creating validator stake account')
-
 solido('create-validator-stake-account',
        '--solido-program-id', solido_program_id,
        '--solido-address', solido_address,
@@ -109,3 +107,6 @@ solido('add-validator',
        '--validator-vote', validator_vote_account,
        '--validator-rewards-address', validator_token_account,
        )
+
+# TODO: Implement a `solido show` to get the state of Solido and
+# confirm that the validator was added

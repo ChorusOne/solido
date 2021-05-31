@@ -66,7 +66,7 @@ def solana(*args: str) -> str:
 
 def spl_token(*args: str) -> str:
     """
-    Run 'solana' against localhost.
+    Run 'spl_token' against localhost.
     """
     return run('spl-token', '--url', 'localhost', *args)
 
@@ -106,7 +106,7 @@ def solana_program_show(program_id: str) -> SolanaProgramInfo:
     )
 
 
-def create_test_account(keypair_fname: str, fund=True) -> str:
+def create_test_account(keypair_fname: str, *, fund: bool = True) -> str:
     """
     Generate a key pair, fund the account with 1 SOL, and return its public key.
     """
@@ -154,6 +154,8 @@ def create_vote_account(vote_key_fname: str, validator_key_fname: str):
 def create_spl_token(owner_keypair_fname: str, minter: str) -> str:
     """
     Creates an spl token for the given minter
+    Returns 'Creating account <address>
+             Signature: <tx-signature>'
     """
     return spl_token('create-account', minter, '--owner', owner_keypair_fname).split('\n')[0].split(' ')[2]
 

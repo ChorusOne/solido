@@ -31,6 +31,8 @@ use crate::{
     Config, OutputMode,
 };
 
+const STAKE_POOL_WITHDRAW_AUTHORITY_ID: &[u8] = b"withdraw";
+
 pub fn send_transaction(
     config: &Config,
     transaction: Transaction,
@@ -449,7 +451,7 @@ pub fn command_add_validator(
     let stake_pool_withdraw_authority = Pubkey::create_program_address(
         &[
             &solido.stake_pool_account.to_bytes()[..],
-            b"withdraw",
+            STAKE_POOL_WITHDRAW_AUTHORITY_ID,
             &[stake_pool.withdraw_bump_seed],
         ],
         &opts.stake_pool_program_id,
@@ -464,7 +466,7 @@ pub fn command_add_validator(
     let execution_method = get_execution_method(
         config.fee_payer.pubkey(),
         opts.multisig_program_id,
-        opts.multisig_program_id,
+        opts.multisig_address,
     );
     let instruction = lido::instruction::add_validator(
         &opts.solido_program_id,
@@ -538,7 +540,7 @@ pub fn command_create_validator_stake_account(
     let execution_method = get_execution_method(
         config.fee_payer.pubkey(),
         opts.multisig_program_id,
-        opts.multisig_program_id,
+        opts.multisig_address,
     );
     let instruction = lido::instruction::create_validator_stake_account(
         &opts.solido_program_id,
