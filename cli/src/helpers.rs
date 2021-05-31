@@ -341,6 +341,7 @@ pub fn command_create_solido(
             manager_fee: opts.manager_fee,
         },
         opts.max_validators,
+        opts.max_maintainers,
         &lido::instruction::InitializeAccountsMeta {
             lido: lido_keypair.pubkey(),
             stake_pool: stake_pool.stake_pool_address.0,

@@ -32,7 +32,8 @@ print(f'> Manager fee account owner: {manager_fee_account_owner}')
 
 
 print('\nUploading stake pool program ...')
-stake_pool_program_id = solana_program_deploy('target/deploy/spl_stake_pool.so')
+stake_pool_program_id = solana_program_deploy(
+    'target/deploy/spl_stake_pool.so')
 print(f'> Stake pool program id is {stake_pool_program_id}.')
 
 
@@ -71,6 +72,7 @@ result = solido(
     '--fee-numerator', '4',
     '--fee-denominator', '31',
     '--max-validators', '9',
+    '--max-maintainers', '1',
     '--insurance-fee', '7',
     '--treasury-fee', '5',
     '--validation-fee', '3',

@@ -1,6 +1,6 @@
 #![allow(dead_code)] // Some methods are used for tests
 use lido::{
-    instruction::{self, initialize},
+    instruction::{self, add_maintainer, initialize},
     processor,
     state::{FeeDistribution, Maintainers, ValidatorCreditAccounts, LIDO_CONSTANT_SIZE},
     DEPOSIT_AUTHORITY, FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY, STAKE_POOL_AUTHORITY,
