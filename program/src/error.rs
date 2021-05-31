@@ -52,7 +52,7 @@ pub enum LidoError {
     InvalidFeeAmount,
     /// Number of maximum validators reached
     #[error("InvalidFeeAmount")]
-    MaximumValidatorsExceeded,
+    MaximumNumberOfAccountsExceeded,
     /// An invalid validator credit account size was supplied
     #[error("UnexpectedValidatorCreditAccountSize")]
     UnexpectedValidatorCreditAccountSize,
@@ -84,8 +84,8 @@ pub enum LidoError {
     InvalidFeeRecipient,
     /// There is a stake account with the same key present in the validator
     /// credit list.
-    #[error("DuplicatedValidatorCreditStakeAccount")]
-    DuplicatedValidatorCreditStakeAccount,
+    #[error("DuplicatedEntry")]
+    DuplicatedEntry,
     /// Validator credit account was not found
     #[error("ValidatorCreditNotFound")]
     ValidatorCreditNotFound,
@@ -100,15 +100,13 @@ pub enum LidoError {
     /// the reserve account considering rent exemption
     #[error("AmountExceedsReserve")]
     AmountExceedsReserve,
-    /// Number of maximum maintainers reached
-    #[error("MaximumMaintainersExceeded")]
-    MaximumMaintainersExceeded,
     /// The same maintainer's public key already exists in the structure
     #[error("DuplicatedMaintainer")]
     DuplicatedMaintainer,
-    /// Maintainer not found
-    #[error("InvalidMaintainer")]
-    InvalidMaintainer,
+    /// A member of the accounts list (maintainers or validators) is not present
+    /// in the structure
+    #[error("InvalidAccountMember")]
+    InvalidAccountMember,
 }
 impl From<LidoError> for ProgramError {
     fn from(e: LidoError) -> Self {

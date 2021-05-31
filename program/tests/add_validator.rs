@@ -35,26 +35,23 @@ async fn test_successful_add_validator() {
     let has_stake_account = lido
         .fee_recipients
         .validator_credit_accounts
-        .validator_accounts
+        .entries
         .iter()
-        .any(|vc| vc.stake_address == validator_stake.stake_account);
+        .any(|(v, _)| v == &validator_stake.stake_account);
     // Validator is inside the credit structure
     assert!(has_stake_account);
 
     let has_token_account = lido
         .fee_recipients
         .validator_credit_accounts
-        .validator_accounts
+        .entries
         .iter()
-        .any(|vc| vc.token_address == validator_stake.validator_token_account.pubkey());
+        .any(|(_, vc)| vc.token_address == validator_stake.validator_token_account.pubkey());
     // Validator token account is the same one as provided
     assert!(has_token_account);
 
     assert_eq!(
-        lido.fee_recipients
-            .validator_credit_accounts
-            .validator_accounts
-            .len(),
+        lido.fee_recipients.validator_credit_accounts.entries.len(),
         1,
     );
 

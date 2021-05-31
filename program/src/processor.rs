@@ -11,8 +11,8 @@ use crate::{
         StakePoolDepositAccountsMeta,
     },
     logic::{
-        calc_total_lamports, check_reserve_authority, get_reserve_available_amount, rent_exemption,
-        token_mint_to, AccountType,
+        calc_total_lamports, check_reserve_authority, deserialize_lido,
+        get_reserve_available_amount, rent_exemption, token_mint_to, AccountType,
     },
     process_management::{
         process_add_maintainer, process_add_validator, process_change_fee_spec,
@@ -67,7 +67,7 @@ pub fn process_initialize(
     rent_exemption(rent, accounts.lido, AccountType::Lido)?;
     rent_exemption(rent, accounts.reserve_account, AccountType::ReserveAccount)?;
 
-    let mut lido = try_from_slice_unchecked::<Lido>(&accounts.lido.data.borrow())?;
+    let mut lido = deserialize_lido(program_id, accounts.lido)?;
     lido.is_initialized()?;
 
     let stake_pool = StakePool::try_from_slice(&accounts.stake_pool.data.borrow())?;
@@ -106,10 +106,7 @@ pub fn process_initialize(
         insurance_account: *accounts.insurance_account.key,
         treasury_account: *accounts.treasury_account.key,
         manager_account: *accounts.manager_fee_account.key,
-        validator_credit_accounts: ValidatorCreditAccounts {
-            max_validators,
-            validator_accounts: Vec::new(),
-        },
+        validator_credit_accounts: ValidatorCreditAccounts::new(max_validators),
     };
     let (_, reserve_bump_seed) = Pubkey::find_program_address(
         &[&accounts.lido.key.to_bytes()[..32], RESERVE_AUTHORITY],
@@ -168,10 +165,7 @@ pub fn process_initialize(
         return Err(LidoError::InvalidOwner.into());
     }
 
-    lido.maintainers = Maintainers {
-        max_maintainers,
-        maintainers_accounts: Vec::new(),
-    };
+    lido.maintainers = Maintainers::new(max_maintainers);
     lido.stake_pool_account = *accounts.stake_pool.key;
     lido.manager = *accounts.manager.key;
     lido.st_sol_mint_program = *accounts.mint_program.key;
@@ -200,7 +194,7 @@ pub fn process_deposit(
         return Err(ProgramError::InvalidArgument);
     }
 
-    let mut lido = try_from_slice_unchecked::<Lido>(&accounts.lido.data.borrow())?;
+    let mut lido = deserialize_lido(program_id, accounts.lido)?;
 
     lido.check_lido_for_deposit(
         accounts.manager.key,
@@ -264,7 +258,7 @@ pub fn process_stake_deposit(
     let accounts = StakeDepositAccountsInfo::try_from_slice(raw_accounts)?;
 
     let rent = &Rent::from_account_info(accounts.sysvar_rent)?;
-    let lido = try_from_slice_unchecked::<Lido>(&accounts.lido.data.borrow())?;
+    let lido = deserialize_lido(program_id, accounts.lido)?;
 
     let (to_pubkey, stake_bump_seed) =
         Pubkey::find_program_address(&[&accounts.validator.key.to_bytes()[..32]], program_id);
@@ -367,7 +361,7 @@ pub fn process_deposit_active_stake_to_pool(
     let accounts = DepositActiveStakeToPoolAccountsInfo::try_from_slice(raw_accounts)?;
 
     let _rent = &Rent::from_account_info(accounts.sysvar_rent)?;
-    let lido = try_from_slice_unchecked::<Lido>(&accounts.lido.data.borrow())?;
+    let lido = deserialize_lido(program_id, accounts.lido)?;
 
     lido.check_stake_pool(accounts.stake_pool)?;
     lido.check_maintainer(accounts.maintainer)?;

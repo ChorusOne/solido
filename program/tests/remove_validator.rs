@@ -31,10 +31,7 @@ async fn test_successful_remove_validator() {
     let lido = get_account(&mut banks_client, &lido_accounts.lido.pubkey()).await;
     let lido = try_from_slice_unchecked::<Lido>(lido.data.as_slice()).unwrap();
     assert_eq!(
-        lido.fee_recipients
-            .validator_credit_accounts
-            .validator_accounts
-            .len(),
+        lido.fee_recipients.validator_credit_accounts.entries.len(),
         1
     );
 
@@ -53,10 +50,7 @@ async fn test_successful_remove_validator() {
     let lido = get_account(&mut banks_client, &lido_accounts.lido.pubkey()).await;
     let lido = try_from_slice_unchecked::<Lido>(lido.data.as_slice()).unwrap();
     assert_eq!(
-        lido.fee_recipients
-            .validator_credit_accounts
-            .validator_accounts
-            .len(),
+        lido.fee_recipients.validator_credit_accounts.entries.len(),
         0
     );
 }

@@ -1,11 +1,15 @@
 use solana_program::{
-    account_info::AccountInfo, msg, program::invoke_signed, program_error::ProgramError,
-    pubkey::Pubkey, rent::Rent,
+    account_info::AccountInfo, borsh::try_from_slice_unchecked, msg, program::invoke_signed,
+    program_error::ProgramError, pubkey::Pubkey, rent::Rent,
 };
 use spl_stake_pool::state::StakePool;
 use std::{convert::TryFrom, fmt::Display};
 
-use crate::{error::LidoError, state::StLamports, RESERVE_AUTHORITY};
+use crate::{
+    error::LidoError,
+    state::{Lido, StLamports},
+    RESERVE_AUTHORITY,
+};
 
 pub(crate) fn rent_exemption(
     rent: &Rent,
@@ -155,6 +159,19 @@ pub fn transfer_to<'a>(
         &[source, destination, authority, token_program],
         signers,
     )
+}
+
+pub fn deserialize_lido(program_id: &Pubkey, lido: &AccountInfo) -> Result<Lido, ProgramError> {
+    if lido.owner != program_id {
+        msg!(
+            "Lido state is owned by {}, but should be owned by the Lido program ({}).",
+            lido.owner,
+            program_id
+        );
+        return Err(LidoError::InvalidOwner.into());
+    }
+    let lido = try_from_slice_unchecked::<Lido>(&lido.data.borrow())?;
+    Ok(lido)
 }
 
 #[cfg(test)]
