@@ -415,10 +415,10 @@ pub struct AddValidatorOpts {
     /// Stake pool program id
     #[clap(long)]
     stake_pool_program_id: Pubkey,
-    /// Stake address to include to Lido.
+    /// Address of the validator vote account.
     #[clap(long)]
-    pub stake_address: Pubkey,
-    /// Validator token account.
+    pub validator_vote: Pubkey,
+    /// Validator stSol token account.
     #[clap(long)]
     pub validator_rewards_address: Pubkey,
 
@@ -427,7 +427,7 @@ pub struct AddValidatorOpts {
     #[clap(long, requires = "multisig-program-id")]
     pub multisig_address: Option<Pubkey>,
     /// When issuing commands Multisig program id
-    #[clap(long, requires = "multisig_address")]
+    #[clap(long, requires = "multisig-address")]
     pub multisig_program_id: Option<Pubkey>,
 }
 
@@ -452,8 +452,14 @@ pub fn command_add_validator(
             b"withdraw",
             &[stake_pool.withdraw_bump_seed],
         ],
-        &spl_stake_pool::id(), // TODO: Change in favour of a generic stake pool program id
+        &opts.stake_pool_program_id,
     )?;
+
+    let (stake_account, _) = find_stake_program_address(
+        &opts.stake_pool_program_id,
+        &opts.validator_vote,
+        &solido.stake_pool_account,
+    );
 
     let execution_method = get_execution_method(
         config.fee_payer.pubkey(),
@@ -470,7 +476,7 @@ pub fn command_add_validator(
             stake_pool: solido.stake_pool_account,
             stake_pool_withdraw_authority: stake_pool_withdraw_authority,
             stake_pool_validator_list: stake_pool.validator_list,
-            stake_account: opts.stake_address,
+            stake_account: stake_account,
             validator_token_account: opts.validator_rewards_address,
         },
     )?;
@@ -495,9 +501,9 @@ pub struct CreateValidatorStakeAccountOpts {
     /// Stake pool program id
     #[clap(long)]
     stake_pool_program_id: Pubkey,
-    /// Stake address to include to Lido.
+    /// Address of the validator vote account.
     #[clap(long)]
-    pub validator: Pubkey,
+    pub validator_vote: Pubkey,
 
     // TDOO(Ruud): Maybe move this to the previous (general) arguments passed to the program
     /// Issue commands through the passed multisig account
@@ -524,7 +530,7 @@ pub fn command_create_validator_stake_account(
 
     let (stake_account, _) = find_stake_program_address(
         &opts.stake_pool_program_id,
-        &opts.validator,
+        &opts.validator_vote,
         &solido.stake_pool_account,
     );
 
@@ -544,7 +550,7 @@ pub fn command_create_validator_stake_account(
             staker: stake_pool_authority,
             funder: funder,
             stake_account: stake_account,
-            validator: opts.validator,
+            validator: opts.validator_vote,
         },
     )?;
     execution_method.send_instruction(
@@ -603,18 +609,11 @@ fn get_execution_method(
 ) -> ExecutionMethod {
     match multisig_program_id {
         Some(multisig_program_id) => {
-            eprintln!(
-                "Executing function with multisig account {}",
-                &multisig_address.unwrap()
-            );
             let (program_derived_address, _nonce) =
                 get_multisig_program_address(&multisig_program_id, &multisig_address.unwrap());
             ExecutionMethod::Multisig(program_derived_address)
         }
-        None => {
-            eprintln!("Executing function with manager {}", &payer);
-            ExecutionMethod::Payer(payer)
-        }
+        None => ExecutionMethod::Payer(payer),
     }
 }
 

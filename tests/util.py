@@ -7,7 +7,7 @@ import os.path
 import subprocess
 import sys
 
-from typing import List, NamedTuple
+from typing import List, NamedTuple, Any, Optional
 
 
 def run(*args: str) -> str:
@@ -31,6 +31,30 @@ def run(*args: str) -> str:
         raise
 
     return result.stdout
+
+
+def solido(*args: str, keypair_path: Optional[str] = None) -> Any:
+    """
+    Run 'solido' against localhost, return its parsed json output.
+    """
+
+    output = run(
+        'target/debug/solido',
+        '--cluster', 'localnet',
+        '--output', 'json',
+        *([] if keypair_path is None else ['--keypair-path', keypair_path]),
+        *args,
+    )
+
+    if output == '':
+        return {}
+    else:
+        try:
+            return json.loads(output)
+        except json.JSONDecodeError:
+            print('Failed to decode output as json, output was:')
+            print(output)
+            raise
 
 
 def solana(*args: str) -> str:
@@ -97,7 +121,7 @@ def create_test_account(keypair_fname: str, fund=True) -> str:
     )
     pubkey = run('solana-keygen', 'pubkey', keypair_fname).strip()
     if fund:
-        solana('transfer', '--allow-unfunded-recipient', pubkey, '1.0')
+        solana('transfer', '--allow-unfunded-recipient', pubkey, '10.0')
     return pubkey
 
 
