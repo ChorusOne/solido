@@ -22,7 +22,7 @@ async fn setup() -> (BanksClient, Keypair, Hash, LidoAccounts) {
 }
 
 #[tokio::test]
-async fn test_successful_add_maintainer() {
+async fn test_successful_add_remove_maintainer() {
     let (mut banks_client, payer, last_blockhash, lido_accounts) = setup().await;
 
     let maintainer = Keypair::new();
@@ -41,27 +41,10 @@ async fn test_successful_add_maintainer() {
 
     let has_maintainer = lido
         .maintainers
-        .maintainers_accounts
+        .entries
         .iter()
-        .any(|m| m == &maintainer.pubkey());
+        .any(|(m, _)| m == &maintainer.pubkey());
     assert!(has_maintainer);
-}
-
-#[tokio::test]
-async fn test_successful_remove_maintainer() {
-    let (mut banks_client, payer, last_blockhash, lido_accounts) = setup().await;
-
-    let maintainer = Keypair::new();
-    simple_add_maintainer(
-        &mut banks_client,
-        &payer,
-        &last_blockhash,
-        &maintainer.pubkey(),
-        &lido_accounts,
-    )
-    .await
-    .unwrap();
-
     simple_remove_maintainer(
         &mut banks_client,
         &payer,
@@ -77,8 +60,8 @@ async fn test_successful_remove_maintainer() {
 
     let has_maintainer = lido
         .maintainers
-        .maintainers_accounts
+        .entries
         .iter()
-        .any(|m| m == &maintainer.pubkey());
+        .any(|(m, ())| m == &maintainer.pubkey());
     assert!(!has_maintainer);
 }
