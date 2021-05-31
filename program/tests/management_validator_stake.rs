@@ -45,7 +45,7 @@ async fn setup() -> (ProgramTestContext, LidoAccounts, ValidatorStakeAccount) {
 
     // Delegate the deposit
     let stake_account = lido_accounts
-        .delegate_deposit(
+        .stake_deposit(
             &mut context.banks_client,
             &context.payer,
             &context.last_blockhash,
@@ -55,7 +55,7 @@ async fn setup() -> (ProgramTestContext, LidoAccounts, ValidatorStakeAccount) {
         .await;
 
     lido_accounts
-        .delegate_stakepool_deposit(
+        .deposit_active_stake_to_pool(
             &mut context.banks_client,
             &context.payer,
             &context.last_blockhash,
