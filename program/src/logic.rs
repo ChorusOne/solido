@@ -4,12 +4,7 @@ use solana_program::{
 };
 use spl_stake_pool::state::StakePool;
 use std::{convert::TryFrom, fmt::Display};
-
-use crate::{
-    error::LidoError,
-    state::{Lido, StLamports},
-    RESERVE_AUTHORITY,
-};
+use crate::{error::LidoError, token::StLamports, RESERVE_AUTHORITY, state::Lido};
 
 pub(crate) fn rent_exemption(
     rent: &Rent,

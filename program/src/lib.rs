@@ -4,6 +4,7 @@ use solana_program::pubkey::Pubkey;
 pub mod entrypoint;
 pub mod error;
 pub mod instruction;
+pub mod token;
 pub(crate) mod logic;
 pub(crate) mod process_management;
 pub mod processor;

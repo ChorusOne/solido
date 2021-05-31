@@ -1,88 +1,16 @@
 //! State transition types
 
+use std::ops::Sub;
+
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use solana_program::{
     account_info::AccountInfo, entrypoint::ProgramResult, msg, program_error::ProgramError,
     program_pack::Pack, pubkey::Pubkey,
 };
-use std::{
-    convert::TryFrom,
-    fmt,
-    ops::{Add, Div, Mul, Sub},
-};
 
 use crate::error::LidoError;
+use crate::token::{Rational, StLamports, StakePoolTokenLamports};
 
-#[derive(
-    Default,
-    Copy,
-    Clone,
-    Eq,
-    Ord,
-    PartialEq,
-    PartialOrd,
-    BorshDeserialize,
-    BorshSerialize,
-    BorshSchema,
-)]
-pub struct StLamports(pub u64);
-pub struct StakePoolTokenLamports(pub u64);
-
-impl fmt::Debug for StLamports {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{}.{:0>9} stSOL",
-            self.0 / 1_000_000_000,
-            self.0 % 1_000_000_000,
-        )
-    }
-}
-
-#[derive(Copy, Clone)]
-pub struct Rational {
-    pub numerator: u64,
-    pub denominator: u64,
-}
-
-impl Mul<Rational> for StLamports {
-    type Output = Option<StLamports>;
-    fn mul(self, other: Rational) -> Option<StLamports> {
-        // This multiplication cannot overflow, because we expand the u64s
-        // into u128, and u64::MAX * u64::MAX < u128::MAX.
-        let result_u128 = ((self.0 as u128) * (other.numerator as u128))
-            .checked_div(other.denominator as u128)?;
-        Some(StLamports(u64::try_from(result_u128).ok()?))
-    }
-}
-
-impl Mul<u64> for StLamports {
-    type Output = Option<StLamports>;
-    fn mul(self, other: u64) -> Option<StLamports> {
-        Some(StLamports(self.0.checked_mul(other)?))
-    }
-}
-
-impl Div<u64> for StLamports {
-    type Output = Option<StLamports>;
-    fn div(self, other: u64) -> Option<StLamports> {
-        Some(StLamports(self.0.checked_div(other)?))
-    }
-}
-
-impl Sub<StLamports> for StLamports {
-    type Output = Option<StLamports>;
-    fn sub(self, other: StLamports) -> Option<StLamports> {
-        Some(StLamports(self.0.checked_sub(other.0)?))
-    }
-}
-
-impl Add<StLamports> for StLamports {
-    type Output = Option<StLamports>;
-    fn add(self, other: StLamports) -> Option<StLamports> {
-        Some(StLamports(self.0.checked_add(other.0)?))
-    }
-}
 
 /// Constant size of header size = 5 public keys, 1 u64, 4 u8
 pub const LIDO_CONSTANT_HEADER_SIZE: usize = 5 * 32 + 8 + 4;

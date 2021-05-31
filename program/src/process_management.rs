@@ -21,8 +21,9 @@ use crate::{
     },
     logic::{deserialize_lido, token_mint_to, transfer_to},
     state::{
-        distribute_fees, FeeDistribution, Lido, StLamports, StakePoolTokenLamports, ValidatorCredit,
+        distribute_fees, FeeDistribution, Lido, ValidatorCredit,
     },
+    token::{StLamports, StakePoolTokenLamports},
     FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY, STAKE_POOL_AUTHORITY,
 };
 
