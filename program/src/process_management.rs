@@ -395,11 +395,7 @@ pub fn process_increase_validator_stake(
     accounts_raw: &[AccountInfo],
 ) -> ProgramResult {
     let accounts = IncreaseValidatorStakeInfo::try_from_slice(accounts_raw)?;
-    if accounts.lido.owner != program_id {
-        msg!("Lido has an invalid owner");
-        return Err(LidoError::InvalidOwner.into());
-    }
-    let lido = try_from_slice_unchecked::<Lido>(&accounts.lido.data.borrow())?;
+    let lido = deserialize_lido(program_id, accounts.lido)?;
     lido.check_maintainer(accounts.maintainer)?;
     lido.check_stake_pool(accounts.stake_pool)?;
 
@@ -446,11 +442,7 @@ pub fn process_decrease_validator_stake(
     accounts_raw: &[AccountInfo],
 ) -> ProgramResult {
     let accounts = DecreaseValidatorStakeInfo::try_from_slice(accounts_raw)?;
-    if accounts.lido.owner != program_id {
-        msg!("Lido has an invalid owner");
-        return Err(LidoError::InvalidOwner.into());
-    }
-    let lido = try_from_slice_unchecked::<Lido>(&accounts.lido.data.borrow())?;
+    let lido = deserialize_lido(program_id, accounts.lido)?;
     lido.check_maintainer(accounts.maintainer)?;
     lido.check_stake_pool(accounts.stake_pool)?;
 

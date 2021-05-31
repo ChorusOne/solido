@@ -4,7 +4,6 @@ use solana_sdk::{
     instruction::Instruction,
     signature::{Keypair, Signer},
 };
-use spl_token;
 
 /// Push instructions to create and initialize and SPL token mint.
 ///
