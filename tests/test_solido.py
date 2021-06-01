@@ -57,6 +57,7 @@ result = solido(
     '--treasury-account-owner', treasury_account_owner,
     '--insurance-account-owner', insurance_account_owner,
     '--manager-fee-account-owner', manager_fee_account_owner,
+    keypair_path='test-key-1.json'
 )
 solido_address = result['solido_address']
 treasury_account = result['treasury_account']
@@ -106,6 +107,7 @@ solido('add-validator',
        '--stake-pool-program-id', stake_pool_program_id,
        '--validator-vote', validator_vote_account,
        '--validator-rewards-address', validator_token_account,
+       keypair_path='test-key-1.json'
        )
 
 # TODO: Implement a `solido show` to get the state of Solido and
