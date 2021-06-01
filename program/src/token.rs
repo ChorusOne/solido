@@ -14,8 +14,8 @@ use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use std::{
     convert::TryFrom,
     fmt,
-    ops::{Add, Div, Mul, Sub},
     iter::Sum,
+    ops::{Add, Div, Mul, Sub},
 };
 
 #[derive(Copy, Clone)]
