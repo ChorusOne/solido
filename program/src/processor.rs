@@ -11,14 +11,19 @@ use crate::{
         StakePoolDepositAccountsMeta,
     },
     logic::{
-        calc_total_lamports, check_reserve_authority, get_reserve_available_amount, rent_exemption,
-        token_mint_to, AccountType,
+        calc_total_lamports, check_reserve_authority, deserialize_lido,
+        get_reserve_available_amount, rent_exemption, token_mint_to, AccountType,
     },
     process_management::{
-        process_add_validator, process_change_fee_spec, process_claim_validator_fee,
-        process_create_validator_stake_account, process_distribute_fees, process_remove_validator,
+        process_add_maintainer, process_add_validator, process_change_fee_spec,
+        process_claim_validator_fee, process_create_validator_stake_account,
+        process_decrease_validator_stake, process_distribute_fees,
+        process_increase_validator_stake, process_remove_maintainer, process_remove_validator,
     },
-    state::{FeeDistribution, FeeRecipients, Lido, ValidatorCreditAccounts, LIDO_CONSTANT_SIZE},
+    state::{
+        FeeDistribution, FeeRecipients, Lido, Maintainers, ValidatorCreditAccounts,
+        LIDO_CONSTANT_SIZE,
+    },
     DEPOSIT_AUTHORITY, FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY, STAKE_POOL_AUTHORITY,
 };
 
@@ -54,6 +59,7 @@ pub fn process_initialize(
     program_id: &Pubkey,
     fee_distribution: FeeDistribution,
     max_validators: u32,
+    max_maintainers: u32,
     accounts_raw: &[AccountInfo],
 ) -> ProgramResult {
     let accounts = InitializeAccountsInfo::try_from_slice(accounts_raw)?;
@@ -62,7 +68,7 @@ pub fn process_initialize(
     rent_exemption(rent, accounts.lido, AccountType::Lido)?;
     rent_exemption(rent, accounts.reserve_account, AccountType::ReserveAccount)?;
 
-    let mut lido = try_from_slice_unchecked::<Lido>(&accounts.lido.data.borrow())?;
+    let mut lido = deserialize_lido(program_id, accounts.lido)?;
     lido.is_initialized()?;
 
     let stake_pool = StakePool::try_from_slice(&accounts.stake_pool.data.borrow())?;
@@ -70,24 +76,24 @@ pub fn process_initialize(
         msg!("Provided stake pool not initialized");
         return Err(LidoError::InvalidStakePool.into());
     }
-    let pool_to_token_account =
-        spl_token::state::Account::unpack_from_slice(&accounts.pool_token_to.data.borrow())?;
-
-    if stake_pool.pool_mint != pool_to_token_account.mint {
-        msg!(
-            "Pool token to has wrong minter, should be the same as stake pool minter {}",
-            stake_pool.pool_mint
-        );
-        return Err(LidoError::InvalidTokenMinter.into());
-    }
 
     // Check if fee structure is valid
     Lido::check_valid_minter_program(&accounts.mint_program.key, accounts.insurance_account)?;
     Lido::check_valid_minter_program(&accounts.mint_program.key, accounts.treasury_account)?;
     Lido::check_valid_minter_program(&accounts.mint_program.key, accounts.manager_fee_account)?;
 
-    let expected_max_validators =
-        ValidatorCreditAccounts::maximum_accounts(accounts.lido.data_len() - LIDO_CONSTANT_SIZE);
+    // Bytes required for maintainers
+    let bytes_for_maintainers = Maintainers::required_bytes(max_maintainers);
+    // Calculate the expected number of validators
+    let expected_max_validators = ValidatorCreditAccounts::maximum_accounts(
+        accounts
+            .lido
+            .data_len()
+            .checked_sub(LIDO_CONSTANT_SIZE)
+            .ok_or(LidoError::CalculationFailure)?
+            .checked_sub(bytes_for_maintainers)
+            .ok_or(LidoError::CalculationFailure)?,
+    );
     if expected_max_validators != max_validators as usize || max_validators == 0 {
         msg!(
             "Incorrect validator list size provided, expected {}, provided {}",
@@ -101,10 +107,7 @@ pub fn process_initialize(
         insurance_account: *accounts.insurance_account.key,
         treasury_account: *accounts.treasury_account.key,
         manager_account: *accounts.manager_fee_account.key,
-        validator_credit_accounts: ValidatorCreditAccounts {
-            max_validators,
-            validator_accounts: Vec::new(),
-        },
+        validator_credit_accounts: ValidatorCreditAccounts::new(max_validators),
     };
     let (_, reserve_bump_seed) = Pubkey::find_program_address(
         &[&accounts.lido.key.to_bytes()[..32], RESERVE_AUTHORITY],
@@ -125,6 +128,25 @@ pub fn process_initialize(
         &[&accounts.lido.key.to_bytes()[..32], STAKE_POOL_AUTHORITY],
         program_id,
     );
+
+    let pool_to_token_account =
+        spl_token::state::Account::unpack_from_slice(&accounts.pool_token_to.data.borrow())?;
+
+    if stake_pool.pool_mint != pool_to_token_account.mint {
+        msg!(
+            "Pool token to has wrong minter, should be the same as stake pool minter {}",
+            stake_pool.pool_mint
+        );
+        return Err(LidoError::InvalidTokenMinter.into());
+    }
+    if stake_pool_authority != pool_to_token_account.owner {
+        msg!(
+            "Wrong stake pool reserve authority: {}",
+            pool_to_token_account.owner
+        );
+        return Err(LidoError::InvalidOwner.into());
+    }
+
     if stake_pool.staker != stake_pool_authority {
         msg!(
             "Stake pool should be managed by the derived address {}",
@@ -144,6 +166,7 @@ pub fn process_initialize(
         return Err(LidoError::InvalidOwner.into());
     }
 
+    lido.maintainers = Maintainers::new(max_maintainers);
     lido.stake_pool_account = *accounts.stake_pool.key;
     lido.manager = *accounts.manager.key;
     lido.st_sol_mint_program = *accounts.mint_program.key;
@@ -172,7 +195,7 @@ pub fn process_deposit(
         return Err(ProgramError::InvalidArgument);
     }
 
-    let mut lido = try_from_slice_unchecked::<Lido>(&accounts.lido.data.borrow())?;
+    let mut lido = deserialize_lido(program_id, accounts.lido)?;
 
     lido.check_lido_for_deposit(
         accounts.manager.key,
@@ -182,26 +205,11 @@ pub fn process_deposit(
     lido.check_token_program_id(accounts.spl_token.key)?;
     check_reserve_authority(accounts.lido, program_id, accounts.reserve_account)?;
 
-    if &lido.stake_pool_account != accounts.stake_pool.key {
-        msg!("Invalid stake pool");
-        return Err(LidoError::InvalidStakePool.into());
-    }
+    lido.check_stake_pool(accounts.stake_pool)?;
+
     let stake_pool = StakePool::try_from_slice(&accounts.stake_pool.data.borrow())?;
-    if !stake_pool.is_valid() {
-        msg!("Invalid stake pool");
-        return Err(LidoError::InvalidStakePool.into());
-    }
-    if &stake_pool.token_program_id != accounts.spl_token.key {
-        msg!("Invalid stake pool token program");
-        return Err(LidoError::InvalidTokenProgram.into());
-    }
 
-    if &lido.stake_pool_token_holder != accounts.pool_token_to.key {
-        msg!("Invalid stake pool token");
-        return Err(LidoError::InvalidPoolToken.into());
-    }
     let rent = &Rent::from_account_info(accounts.sysvar_rent)?;
-
     let pool_to_token_account =
         spl_token::state::Account::unpack_from_slice(&accounts.pool_token_to.data.borrow())?;
 
@@ -251,7 +259,7 @@ pub fn process_stake_deposit(
     let accounts = StakeDepositAccountsInfo::try_from_slice(raw_accounts)?;
 
     let rent = &Rent::from_account_info(accounts.sysvar_rent)?;
-    let lido = try_from_slice_unchecked::<Lido>(&accounts.lido.data.borrow())?;
+    let lido = deserialize_lido(program_id, accounts.lido)?;
 
     let (to_pubkey, stake_bump_seed) =
         Pubkey::find_program_address(&[&accounts.validator.key.to_bytes()[..32]], program_id);
@@ -354,39 +362,21 @@ pub fn process_deposit_active_stake_to_pool(
     let accounts = DepositActiveStakeToPoolAccountsInfo::try_from_slice(raw_accounts)?;
 
     let _rent = &Rent::from_account_info(accounts.sysvar_rent)?;
-    let lido = try_from_slice_unchecked::<Lido>(&accounts.lido.data.borrow())?;
+    let lido = deserialize_lido(program_id, accounts.lido)?;
 
-    if &lido.stake_pool_account != accounts.stake_pool.key {
-        msg!("Invalid stake pool");
-        return Err(LidoError::InvalidStakePool.into());
-    }
+    lido.check_stake_pool(accounts.stake_pool)?;
+    lido.check_maintainer(accounts.maintainer)?;
 
     let (to_pubkey, _) =
         Pubkey::find_program_address(&[&accounts.validator.key.to_bytes()[..32]], program_id);
-
-    let (stake_pool_authority, _) = Pubkey::find_program_address(
-        &[&accounts.lido.key.to_bytes()[..32], STAKE_POOL_AUTHORITY],
-        program_id,
-    );
 
     if &to_pubkey != accounts.stake.key {
         return Err(LidoError::InvalidStaker.into());
     }
 
-    let pool_token_account =
-        spl_token::state::Account::unpack_from_slice(&accounts.pool_token_to.data.borrow())?;
-
     if &lido.stake_pool_token_holder != accounts.pool_token_to.key {
         msg!("Invalid stake pool token");
         return Err(LidoError::InvalidPoolToken.into());
-    }
-
-    if stake_pool_authority != pool_token_account.owner {
-        msg!(
-            "Wrong stake pool reserve authority: {}",
-            pool_token_account.owner
-        );
-        return Err(LidoError::InvalidOwner.into());
     }
 
     invoke_signed(
@@ -440,7 +430,14 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
         LidoInstruction::Initialize {
             fee_distribution,
             max_validators,
-        } => process_initialize(program_id, fee_distribution, max_validators, accounts),
+            max_maintainers,
+        } => process_initialize(
+            program_id,
+            fee_distribution,
+            max_validators,
+            max_maintainers,
+            accounts,
+        ),
         LidoInstruction::Deposit { amount } => process_deposit(program_id, amount, accounts),
         LidoInstruction::StakeDeposit { amount } => {
             process_stake_deposit(program_id, amount, accounts)
@@ -459,5 +456,13 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
         }
         LidoInstruction::AddValidator => process_add_validator(program_id, accounts),
         LidoInstruction::RemoveValidator => process_remove_validator(program_id, accounts),
+        LidoInstruction::AddMaintainer => process_add_maintainer(program_id, accounts),
+        LidoInstruction::RemoveMaintainer => process_remove_maintainer(program_id, accounts),
+        LidoInstruction::IncreaseValidatorStake { lamports } => {
+            process_increase_validator_stake(program_id, lamports, accounts)
+        }
+        LidoInstruction::DecreaseValidatorStake { lamports } => {
+            process_decrease_validator_stake(program_id, lamports, accounts)
+        }
     }
 }

@@ -2,8 +2,10 @@
 
 mod helpers;
 
-use helpers::{id, program_test, stakepool_account::get_account, LidoAccounts, MAX_VALIDATORS};
-use lido::state::{ValidatorCreditAccounts, LIDO_CONSTANT_SIZE};
+use helpers::{
+    id, program_test, stakepool_account::get_account, LidoAccounts, MAX_MAINTAINERS, MAX_VALIDATORS,
+};
+use lido::state::{Maintainers, ValidatorCreditAccounts, LIDO_CONSTANT_SIZE};
 use solana_program::borsh::get_instance_packed_len;
 use solana_program_test::tokio;
 use solana_sdk::signature::Signer;
@@ -21,7 +23,9 @@ async fn test_success_initialize() {
     assert_eq!(
         lido.data.len(),
         LIDO_CONSTANT_SIZE
-            + get_instance_packed_len(&ValidatorCreditAccounts::new(MAX_VALIDATORS)).unwrap()
+            + get_instance_packed_len(&ValidatorCreditAccounts::new_fill_default(MAX_VALIDATORS))
+                .unwrap()
+            + get_instance_packed_len(&Maintainers::new_fill_default(MAX_MAINTAINERS)).unwrap()
     );
     assert_eq!(lido.owner, id());
 }

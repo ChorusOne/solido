@@ -2,7 +2,8 @@
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use solana_program::{
-    account_info::AccountInfo, entrypoint::ProgramResult, msg, program_pack::Pack, pubkey::Pubkey,
+    account_info::AccountInfo, entrypoint::ProgramResult, msg, program_error::ProgramError,
+    program_pack::Pack, pubkey::Pubkey,
 };
 use std::{
     convert::TryFrom,
@@ -114,6 +115,7 @@ pub struct Lido {
     /// Fees
     pub fee_distribution: FeeDistribution,
     pub fee_recipients: FeeRecipients,
+    pub maintainers: Maintainers,
 }
 
 impl Lido {
@@ -171,64 +173,66 @@ impl Lido {
     pub fn check_valid_minter_program(
         minter_program: &Pubkey,
         token_account_info: &AccountInfo,
-    ) -> Result<(), LidoError> {
+    ) -> ProgramResult {
         if &spl_token::state::Account::unpack_from_slice(&token_account_info.data.borrow())
             .map_err(|_| LidoError::InvalidFeeRecipient)?
             .mint
             != minter_program
         {
-            return Err(LidoError::InvalidFeeRecipient);
+            return Err(LidoError::InvalidFeeRecipient.into());
+        }
+        Ok(())
+    }
+
+    /// Checks if the passed manager is the same as the one stored in the state
+    pub fn check_stake_pool(&self, stake_pool: &AccountInfo) -> ProgramResult {
+        if &self.stake_pool_account != stake_pool.key {
+            msg!("Invalid stake pool");
+            return Err(LidoError::InvalidStakePool.into());
+        }
+        Ok(())
+    }
+
+    /// Checks if the passed manager is the same as the one stored in the state
+    pub fn check_manager(&self, manager: &AccountInfo) -> ProgramResult {
+        if &self.manager != manager.key {
+            msg!("Invalid manager, not the same as the one stored in state");
+            return Err(LidoError::InvalidManager.into());
+        }
+        Ok(())
+    }
+
+    /// Checks if the passed maintainer belong to the list of maintainers
+    pub fn check_maintainer(&self, maintainer: &AccountInfo) -> ProgramResult {
+        if !&self.maintainers.entries.contains(&(*maintainer.key, ())) {
+            msg!(
+                "Invalid maintainer, account {} is not present in the maintainers list.",
+                maintainer.key
+            );
+
+            return Err(LidoError::InvalidManager.into());
         }
         Ok(())
     }
 }
 
-#[repr(C)]
-#[derive(Clone, Debug, Default, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema)]
-pub struct ValidatorCreditAccounts {
-    pub max_validators: u32,
-    pub validator_accounts: Vec<ValidatorCredit>,
-}
+pub type ValidatorCreditAccounts = AccountMap<ValidatorCredit>;
 
 #[repr(C)]
 #[derive(Clone, Debug, Default, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema)]
 pub struct ValidatorCredit {
-    pub stake_address: Pubkey,
     pub token_address: Pubkey,
     pub st_sol_amount: StLamports,
 }
 
 impl ValidatorCreditAccounts {
-    pub fn new(max_validators: u32) -> Self {
-        Self {
-            max_validators,
-            validator_accounts: vec![ValidatorCredit::default(); max_validators as usize],
-        }
+    pub fn required_bytes(max_validators: u32) -> usize {
+        (max_validators * (32 * 2 + 8) + 8) as usize
     }
     pub fn maximum_accounts(buffer_size: usize) -> usize {
         // 8 bytes: 4 bytes for `max_validators` + 4 bytes for number of validators in vec
         // 32*2+8 bytes for each validator = 2 public keys + amount in StLamports
         buffer_size.saturating_sub(8) / (32 * 2 + 8)
-    }
-    pub fn add(&mut self, stake_address: Pubkey, token_address: Pubkey) -> Result<(), LidoError> {
-        if self.validator_accounts.len() == self.max_validators as usize {
-            return Err(LidoError::MaximumValidatorsExceeded);
-        }
-        // Adds if vote account is different
-        if !self
-            .validator_accounts
-            .iter()
-            .any(|v| v.stake_address == stake_address)
-        {
-            self.validator_accounts.push(ValidatorCredit {
-                stake_address,
-                token_address,
-                st_sol_amount: StLamports(0),
-            });
-        } else {
-            return Err(LidoError::DuplicatedValidatorCreditStakeAccount);
-        }
-        Ok(())
     }
 }
 
@@ -322,6 +326,68 @@ pub fn distribute_fees(
     Some(result)
 }
 
+/// Maintainers are granted low security risk privileges, they can call
+/// `IncreaseValidatorStake` and `DecreaseValidatorStake`. Maintainers are set
+/// by the manager
+pub type Maintainers = AccountMap<()>;
+
+impl Maintainers {
+    pub fn required_bytes(max_maintainers: u32) -> usize {
+        (max_maintainers * 32 + 4 + 4) as usize
+    }
+    /// Given a buffer size, calculate the maximum number of maintainers that can be fit
+    pub fn maximum_accounts(buffer_size: usize) -> usize {
+        // 8 bytes: 4 bytes for `max_maintainers` + 4 bytes for number of maintainers in vec
+        // 32 bytes for each maintainer = maintainer address
+        buffer_size.saturating_sub(8) / 32
+    }
+}
+
+#[derive(Clone, Default, Debug, PartialEq, BorshSerialize, BorshDeserialize, BorshSchema)]
+pub struct AccountMap<T> {
+    pub entries: Vec<(Pubkey, T)>,
+    pub maximum_entries: u32,
+}
+impl<T: Default> AccountMap<T> {
+    /// Creates a new instance with the `maximum_entries` positions filled with the default value
+    pub fn new_fill_default(maximum_entries: u32) -> Self {
+        let mut v = Vec::with_capacity(maximum_entries as usize);
+        for _ in 0..maximum_entries {
+            v.push((Pubkey::default(), T::default()));
+        }
+        AccountMap {
+            entries: v,
+            maximum_entries,
+        }
+    }
+    /// Creates a new empty instance
+    pub fn new(maximum_entries: u32) -> Self {
+        AccountMap {
+            entries: Vec::new(),
+            maximum_entries,
+        }
+    }
+    pub fn add(&mut self, address: Pubkey, value: T) -> ProgramResult {
+        if self.entries.len() == self.maximum_entries as usize {
+            return Err(LidoError::MaximumNumberOfAccountsExceeded.into());
+        }
+        if !self.entries.iter().any(|&(v, _)| v == address) {
+            self.entries.push((address, value));
+        } else {
+            return Err(LidoError::DuplicatedEntry.into());
+        }
+        Ok(())
+    }
+    pub fn remove(&mut self, address: &Pubkey) -> Result<T, ProgramError> {
+        let idx = self
+            .entries
+            .iter()
+            .position(|&(v, _)| &v == address)
+            .ok_or(LidoError::InvalidAccountMember)?;
+        Ok(self.entries.swap_remove(idx).1)
+    }
+}
+
 #[cfg(test)]
 mod test_lido {
     use super::*;
@@ -331,13 +397,25 @@ mod test_lido {
 
     #[test]
     fn test_validator_credit_size() {
-        let one_val = get_instance_packed_len(&ValidatorCreditAccounts::new(1)).unwrap();
-        let two_val = get_instance_packed_len(&ValidatorCreditAccounts::new(2)).unwrap();
+        let one_val =
+            get_instance_packed_len(&ValidatorCreditAccounts::new_fill_default(1)).unwrap();
+        let two_val =
+            get_instance_packed_len(&ValidatorCreditAccounts::new_fill_default(2)).unwrap();
         assert_eq!(two_val - one_val, 72);
     }
     #[test]
     fn test_lido_serialization() {
-        let mut data = Vec::new();
+        let mut validators = ValidatorCreditAccounts::new(10_000);
+        validators
+            .add(
+                Pubkey::new_unique(),
+                ValidatorCredit {
+                    token_address: Pubkey::new_unique(),
+                    st_sol_amount: StLamports(10000),
+                },
+            )
+            .unwrap();
+        let maintainers = Maintainers::new(1);
         let lido = Lido {
             stake_pool_account: Pubkey::new_unique(),
             manager: Pubkey::new_unique(),
@@ -359,21 +437,19 @@ mod test_lido {
                 insurance_account: Pubkey::new_unique(),
                 treasury_account: Pubkey::new_unique(),
                 manager_account: Pubkey::new_unique(),
-                validator_credit_accounts: ValidatorCreditAccounts {
-                    max_validators: 10000,
-                    validator_accounts: vec![ValidatorCredit {
-                        stake_address: Pubkey::new_unique(),
-                        token_address: Pubkey::new_unique(),
-                        st_sol_amount: StLamports(10000),
-                    }],
-                },
+                validator_credit_accounts: validators,
             },
+            maintainers: maintainers,
         };
         let validator_accounts_len =
-            get_instance_packed_len(&ValidatorCreditAccounts::new(10000)).unwrap();
+            get_instance_packed_len(&ValidatorCreditAccounts::new_fill_default(10000)).unwrap();
         assert_eq!(validator_accounts_len, 10000 * (32 * 2 + 8) + 8);
+        let mut data = Vec::new();
         lido.serialize(&mut data).unwrap();
-        assert_eq!(data.len(), LIDO_CONSTANT_SIZE + (32 * 2 + 8) + 8);
+        // 32*2 +8 + 4 + 4 = key*2 + StSol + 4 max_validators + 4 size of vec
+        // +4 + 4  = for max_maintainers + 4 size of vec
+        const SIZE: usize = ((32 * 2 + 8) + 4 + 4) + (4 + 4);
+        assert_eq!(data.len(), LIDO_CONSTANT_SIZE + SIZE);
     }
 
     #[test]
@@ -530,8 +606,10 @@ mod test_lido {
     #[test]
     fn test_n_val() {
         let n_validators: u64 = 10000;
-        let size =
-            get_instance_packed_len(&ValidatorCreditAccounts::new(n_validators as u32)).unwrap();
+        let size = get_instance_packed_len(&ValidatorCreditAccounts::new_fill_default(
+            n_validators as u32,
+        ))
+        .unwrap();
 
         assert_eq!(
             ValidatorCreditAccounts::maximum_accounts(size) as u64,

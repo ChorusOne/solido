@@ -21,6 +21,8 @@ pub enum LidoInstruction {
         fee_distribution: FeeDistribution,
         #[allow(dead_code)] // but it's not
         max_validators: u32,
+        #[allow(dead_code)] // but it's not
+        max_maintainers: u32,
     },
     /// Deposit with amount
     Deposit {
@@ -52,6 +54,16 @@ pub enum LidoInstruction {
     CreateValidatorStakeAccount,
     AddValidator,
     RemoveValidator,
+    AddMaintainer,
+    RemoveMaintainer,
+    IncreaseValidatorStake {
+        #[allow(dead_code)] // but it's not
+        lamports: u64,
+    },
+    DecreaseValidatorStake {
+        #[allow(dead_code)] // but it's not
+        lamports: u64,
+    },
 }
 
 macro_rules! accounts_struct_meta {
@@ -272,11 +284,13 @@ pub fn initialize(
     program_id: &Pubkey,
     fee_distribution: FeeDistribution,
     max_validators: u32,
+    max_maintainers: u32,
     accounts: &InitializeAccountsMeta,
 ) -> Result<Instruction, ProgramError> {
     let init_data = LidoInstruction::Initialize {
         fee_distribution,
         max_validators,
+        max_maintainers,
     };
     let data = init_data.try_to_vec()?;
     Ok(Instruction {
@@ -390,6 +404,10 @@ accounts_struct! {
         pub lido {
             is_signer: false,
             is_writable: true,
+        },
+        pub maintainer {
+            is_signer: true,
+            is_writable: false,
         },
         pub validator {
             is_signer: false,
@@ -880,5 +898,181 @@ pub fn claim_validator_fees(
         program_id: *program_id,
         accounts: accounts.to_vec(),
         data: LidoInstruction::ClaimValidatorFees.try_to_vec()?,
+    })
+}
+
+accounts_struct! {
+    AddMaintainerMeta, AddMaintainerInfo {
+        pub lido {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub manager {
+            is_signer: true,
+            is_writable: false,
+        },
+        pub maintainer {
+            is_signer: false,
+            is_writable: false,
+        },
+    }
+}
+
+pub fn add_maintainer(
+    program_id: &Pubkey,
+    accounts: &AddMaintainerMeta,
+) -> Result<Instruction, ProgramError> {
+    Ok(Instruction {
+        program_id: *program_id,
+        accounts: accounts.to_vec(),
+        data: LidoInstruction::AddMaintainer.try_to_vec()?,
+    })
+}
+
+accounts_struct! {
+    RemoveMaintainerMeta, RemoveMaintainerInfo {
+        pub lido {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub manager {
+            is_signer: true,
+            is_writable: false,
+        },
+        pub maintainer {
+            is_signer: false,
+            is_writable: false,
+        },
+    }
+}
+
+pub fn remove_maintainer(
+    program_id: &Pubkey,
+    accounts: &RemoveMaintainerMeta,
+) -> Result<Instruction, ProgramError> {
+    Ok(Instruction {
+        program_id: *program_id,
+        accounts: accounts.to_vec(),
+        data: LidoInstruction::RemoveMaintainer.try_to_vec()?,
+    })
+}
+
+accounts_struct! {
+    IncreaseValidatorStakeMeta, IncreaseValidatorStakeInfo {
+        pub lido {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub maintainer {
+            is_signer: true,
+            is_writable: false,
+        },
+        pub stake_pool_program {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub stake_pool {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub stake_pool_manager_authority {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub stake_pool_withdraw_authority {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub stake_pool_validator_list {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub stake_pool_reserve_stake {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub transient_stake {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub validator_vote {
+            is_signer: false,
+            is_writable: false,
+        },
+        const sysvar_clock = sysvar::clock::id(),
+        const sysvar_rent = sysvar::rent::id(),
+        const stake_history = stake_history::id(),
+        const stake_program_config = stake_program::config_id(),
+        const system_program = system_program::id(),
+        const stake_program = stake_program::id(),
+    }
+}
+
+pub fn increase_validator_stake(
+    program_id: &Pubkey,
+    lamports: u64,
+    accounts: &IncreaseValidatorStakeMeta,
+) -> Result<Instruction, ProgramError> {
+    Ok(Instruction {
+        program_id: *program_id,
+        accounts: accounts.to_vec(),
+        data: LidoInstruction::IncreaseValidatorStake { lamports }.try_to_vec()?,
+    })
+}
+
+accounts_struct! {
+    DecreaseValidatorStakeMeta, DecreaseValidatorStakeInfo {
+        pub lido {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub maintainer {
+            is_signer: true,
+            is_writable: false,
+        },
+        pub stake_pool_program {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub stake_pool {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub stake_pool_manager_authority {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub stake_pool_withdraw_authority {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub stake_pool_validator_list {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub validator_stake {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub transient_stake {
+            is_signer: false,
+            is_writable: true,
+        },
+        const sysvar_clock = sysvar::clock::id(),
+        const sysvar_rent = sysvar::rent::id(),
+        const system_program = system_program::id(),
+        const stake_program = stake_program::id(),
+    }
+}
+
+pub fn decrease_validator_stake(
+    program_id: &Pubkey,
+    lamports: u64,
+    accounts: &DecreaseValidatorStakeMeta,
+) -> Result<Instruction, ProgramError> {
+    Ok(Instruction {
+        program_id: *program_id,
+        accounts: accounts.to_vec(),
+        data: LidoInstruction::DecreaseValidatorStake { lamports }.try_to_vec()?,
     })
 }

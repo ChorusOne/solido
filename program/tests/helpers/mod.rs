@@ -2,7 +2,7 @@
 use lido::{
     instruction::{self, initialize},
     processor,
-    state::{FeeDistribution, ValidatorCreditAccounts, LIDO_CONSTANT_SIZE},
+    state::{FeeDistribution, Maintainers, ValidatorCreditAccounts, LIDO_CONSTANT_SIZE},
     DEPOSIT_AUTHORITY, FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY, STAKE_POOL_AUTHORITY,
 };
 use solana_program::{hash::Hash, program_pack::Pack, pubkey::Pubkey, system_instruction};
@@ -16,6 +16,7 @@ use self::stakepool_account::{create_mint, transfer, ValidatorStakeAccount};
 
 pub mod stakepool_account;
 pub const MAX_VALIDATORS: u32 = 10_000;
+pub const MAX_MAINTAINERS: u32 = 100;
 
 // This id is only used throughout these tests.
 solana_program::declare_id!("3kEkdGe68DuTKg6FhVrLPZ3Wm8EcUPCPjhCeu8WrGDoc");
@@ -35,6 +36,7 @@ pub struct LidoAccounts {
     pub lido: Keypair,
     pub mint_program: Keypair,
     pub pool_token_to: Keypair,
+    pub maintainer: Keypair,
 
     // Fees
     pub insurance_account: Keypair,
@@ -55,6 +57,7 @@ impl LidoAccounts {
         let lido = Keypair::new();
         let mint_program = Keypair::new();
         let pool_token_to = Keypair::new();
+        let maintainer = Keypair::new();
 
         // Fees
         let insurance_account = Keypair::new();
@@ -94,6 +97,7 @@ impl LidoAccounts {
             lido,
             mint_program,
             pool_token_to,
+            maintainer,
             insurance_account,
             treasury_account,
             manager_fee_account,
@@ -176,8 +180,11 @@ impl LidoAccounts {
         .unwrap();
 
         let validator_accounts_len =
-            get_instance_packed_len(&ValidatorCreditAccounts::new(MAX_VALIDATORS)).unwrap();
-        let lido_size = LIDO_CONSTANT_SIZE + validator_accounts_len;
+            get_instance_packed_len(&ValidatorCreditAccounts::new_fill_default(MAX_VALIDATORS))
+                .unwrap();
+        let manager_accounts_len =
+            get_instance_packed_len(&Maintainers::new_fill_default(MAX_MAINTAINERS)).unwrap();
+        let lido_size = LIDO_CONSTANT_SIZE + validator_accounts_len + manager_accounts_len;
         let rent = banks_client.get_rent().await.unwrap();
         let rent_lido = rent.minimum_balance(lido_size);
         let rent_reserve = rent.minimum_balance(0);
@@ -199,6 +206,7 @@ impl LidoAccounts {
                     &id(),
                     self.fee_distribution.clone(),
                     MAX_VALIDATORS,
+                    MAX_MAINTAINERS,
                     &instruction::InitializeAccountsMeta {
                         lido: self.lido.pubkey(),
                         stake_pool: self.stake_pool_accounts.stake_pool.pubkey(),
@@ -219,6 +227,15 @@ impl LidoAccounts {
         transaction.sign(&[payer, &self.lido], *recent_blockhash);
         banks_client.process_transaction(transaction).await?;
 
+        // Add a maintainer
+        simple_add_maintainer(
+            banks_client,
+            payer,
+            recent_blockhash,
+            &self.maintainer.pubkey(),
+            self,
+        )
+        .await?;
         Ok(())
     }
 
@@ -319,6 +336,7 @@ impl LidoAccounts {
                 &id(),
                 &instruction::DepositActiveStakeToPoolAccountsMeta {
                     lido: self.lido.pubkey(),
+                    maintainer: self.maintainer.pubkey(),
                     validator: validator.vote.pubkey(),
                     stake: *stake_account,
                     deposit_authority: self.deposit_authority,
@@ -334,7 +352,7 @@ impl LidoAccounts {
             .unwrap()],
             Some(&payer.pubkey()),
         );
-        transaction.sign(&[payer], *recent_blockhash);
+        transaction.sign(&[payer, &self.maintainer], *recent_blockhash);
         banks_client.process_transaction(transaction).await.unwrap();
     }
 
@@ -488,6 +506,72 @@ impl LidoAccounts {
         );
         banks_client.process_transaction(transaction).await
     }
+    pub async fn increase_validator_stake(
+        &self,
+        banks_client: &mut BanksClient,
+        payer: &Keypair,
+        recent_blockhash: &Hash,
+        transient_stake: &Pubkey,
+        validator_vote: &Pubkey,
+        lamports: u64,
+    ) -> Result<(), TransportError> {
+        let transaction = Transaction::new_signed_with_payer(
+            &[instruction::increase_validator_stake(
+                &id(),
+                lamports,
+                &instruction::IncreaseValidatorStakeMeta {
+                    lido: self.lido.pubkey(),
+                    maintainer: self.maintainer.pubkey(),
+                    stake_pool_program: spl_stake_pool::id(),
+                    stake_pool: self.stake_pool_accounts.stake_pool.pubkey(),
+                    stake_pool_manager_authority: self.stake_pool_authority,
+                    stake_pool_withdraw_authority: self.stake_pool_accounts.withdraw_authority,
+                    stake_pool_validator_list: self.stake_pool_accounts.validator_list.pubkey(),
+                    stake_pool_reserve_stake: self.stake_pool_accounts.reserve_stake.pubkey(),
+                    transient_stake: *transient_stake,
+                    validator_vote: *validator_vote,
+                },
+            )
+            .unwrap()],
+            Some(&payer.pubkey()),
+            &[payer, &self.maintainer],
+            *recent_blockhash,
+        );
+        banks_client.process_transaction(transaction).await
+    }
+
+    pub async fn decrease_validator_stake(
+        &self,
+        banks_client: &mut BanksClient,
+        payer: &Keypair,
+        recent_blockhash: &Hash,
+        transient_stake: &Pubkey,
+        validator_stake: &Pubkey,
+        lamports: u64,
+    ) -> Result<(), TransportError> {
+        let transaction = Transaction::new_signed_with_payer(
+            &[instruction::decrease_validator_stake(
+                &id(),
+                lamports,
+                &instruction::DecreaseValidatorStakeMeta {
+                    lido: self.lido.pubkey(),
+                    maintainer: self.maintainer.pubkey(),
+                    stake_pool_program: spl_stake_pool::id(),
+                    stake_pool: self.stake_pool_accounts.stake_pool.pubkey(),
+                    stake_pool_manager_authority: self.stake_pool_authority,
+                    stake_pool_withdraw_authority: self.stake_pool_accounts.withdraw_authority,
+                    stake_pool_validator_list: self.stake_pool_accounts.validator_list.pubkey(),
+                    validator_stake: *validator_stake,
+                    transient_stake: *transient_stake,
+                },
+            )
+            .unwrap()],
+            Some(&payer.pubkey()),
+            &[payer, &self.maintainer],
+            *recent_blockhash,
+        );
+        banks_client.process_transaction(transaction).await
+    }
 }
 
 pub async fn create_token_account(
@@ -565,4 +649,54 @@ pub async fn simple_add_validator_to_pool(
     assert!(error.is_none());
 
     validator_stake
+}
+
+pub async fn simple_add_maintainer(
+    banks_client: &mut BanksClient,
+    payer: &Keypair,
+    recent_blockhash: &Hash,
+    maintainer: &Pubkey,
+    lido_accounts: &LidoAccounts,
+) -> Result<(), TransportError> {
+    let transaction = Transaction::new_signed_with_payer(
+        &[lido::instruction::add_maintainer(
+            &id(),
+            &lido::instruction::AddMaintainerMeta {
+                lido: lido_accounts.lido.pubkey(),
+                manager: lido_accounts.manager.pubkey(),
+                maintainer: *maintainer,
+            },
+        )
+        .unwrap()],
+        Some(&payer.pubkey()),
+        &[payer, &lido_accounts.manager],
+        *recent_blockhash,
+    );
+    banks_client.process_transaction(transaction).await?;
+    Ok(())
+}
+
+pub async fn simple_remove_maintainer(
+    banks_client: &mut BanksClient,
+    payer: &Keypair,
+    recent_blockhash: &Hash,
+    lido_accounts: &LidoAccounts,
+    maintainer: &Pubkey,
+) -> Result<(), TransportError> {
+    let transaction = Transaction::new_signed_with_payer(
+        &[lido::instruction::remove_maintainer(
+            &id(),
+            &lido::instruction::RemoveMaintainerMeta {
+                lido: lido_accounts.lido.pubkey(),
+                manager: lido_accounts.manager.pubkey(),
+                maintainer: *maintainer,
+            },
+        )
+        .unwrap()],
+        Some(&payer.pubkey()),
+        &[payer, &lido_accounts.manager],
+        *recent_blockhash,
+    );
+    banks_client.process_transaction(transaction).await?;
+    Ok(())
 }
