@@ -1,88 +1,15 @@
 //! State transition types
 
+use std::ops::Sub;
+
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use solana_program::{
     account_info::AccountInfo, entrypoint::ProgramResult, msg, program_error::ProgramError,
     program_pack::Pack, pubkey::Pubkey,
 };
-use std::{
-    convert::TryFrom,
-    fmt,
-    ops::{Add, Div, Mul, Sub},
-};
 
 use crate::error::LidoError;
-
-#[derive(
-    Default,
-    Copy,
-    Clone,
-    Eq,
-    Ord,
-    PartialEq,
-    PartialOrd,
-    BorshDeserialize,
-    BorshSerialize,
-    BorshSchema,
-)]
-pub struct StLamports(pub u64);
-pub struct StakePoolTokenLamports(pub u64);
-
-impl fmt::Debug for StLamports {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{}.{:0>9} stSOL",
-            self.0 / 1_000_000_000,
-            self.0 % 1_000_000_000,
-        )
-    }
-}
-
-#[derive(Copy, Clone)]
-pub struct Rational {
-    pub numerator: u64,
-    pub denominator: u64,
-}
-
-impl Mul<Rational> for StLamports {
-    type Output = Option<StLamports>;
-    fn mul(self, other: Rational) -> Option<StLamports> {
-        // This multiplication cannot overflow, because we expand the u64s
-        // into u128, and u64::MAX * u64::MAX < u128::MAX.
-        let result_u128 = ((self.0 as u128) * (other.numerator as u128))
-            .checked_div(other.denominator as u128)?;
-        Some(StLamports(u64::try_from(result_u128).ok()?))
-    }
-}
-
-impl Mul<u64> for StLamports {
-    type Output = Option<StLamports>;
-    fn mul(self, other: u64) -> Option<StLamports> {
-        Some(StLamports(self.0.checked_mul(other)?))
-    }
-}
-
-impl Div<u64> for StLamports {
-    type Output = Option<StLamports>;
-    fn div(self, other: u64) -> Option<StLamports> {
-        Some(StLamports(self.0.checked_div(other)?))
-    }
-}
-
-impl Sub<StLamports> for StLamports {
-    type Output = Option<StLamports>;
-    fn sub(self, other: StLamports) -> Option<StLamports> {
-        Some(StLamports(self.0.checked_sub(other.0)?))
-    }
-}
-
-impl Add<StLamports> for StLamports {
-    type Output = Option<StLamports>;
-    fn add(self, other: StLamports) -> Option<StLamports> {
-        Some(StLamports(self.0.checked_add(other.0)?))
-    }
-}
+use crate::token::{Lamports, Rational, StLamports, StakePoolTokenLamports};
 
 /// Constant size of header size = 5 public keys, 1 u64, 4 u8
 pub const LIDO_CONSTANT_HEADER_SIZE: usize = 5 * 32 + 8 + 4;
@@ -121,17 +48,17 @@ pub struct Lido {
 impl Lido {
     pub fn calc_pool_tokens_for_deposit(
         &self,
-        stake_lamports: u64,
-        total_lamports: u64,
+        stake_lamports: Lamports,
+        total_lamports: Lamports,
     ) -> Option<StLamports> {
-        if total_lamports == 0 {
-            return Some(StLamports(stake_lamports));
+        if total_lamports == Lamports(0) {
+            return Some(StLamports(stake_lamports.0));
         }
         let ratio = Rational {
             numerator: self.st_sol_total_shares.0,
-            denominator: total_lamports,
+            denominator: total_lamports.0,
         };
-        StLamports(stake_lamports) * ratio
+        StLamports(stake_lamports.0) * ratio
     }
 
     pub fn is_initialized(&self) -> ProgramResult {
@@ -463,7 +390,7 @@ mod test_lido {
     fn test_pool_tokens_when_total_lamports_is_zero() {
         let lido = Lido::default();
 
-        let pool_tokens_for_deposit = lido.calc_pool_tokens_for_deposit(123, 0);
+        let pool_tokens_for_deposit = lido.calc_pool_tokens_for_deposit(Lamports(123), Lamports(0));
 
         assert_eq!(pool_tokens_for_deposit, Some(StLamports(123)));
     }
@@ -472,7 +399,8 @@ mod test_lido {
     fn test_pool_tokens_when_st_sol_total_shares_is_default() {
         let lido = Lido::default();
 
-        let pool_tokens_for_deposit = lido.calc_pool_tokens_for_deposit(200, 100);
+        let pool_tokens_for_deposit =
+            lido.calc_pool_tokens_for_deposit(Lamports(200), Lamports(100));
 
         assert_eq!(pool_tokens_for_deposit, Some(StLamports(0)));
     }
@@ -482,7 +410,8 @@ mod test_lido {
         let mut lido = Lido::default();
         lido.st_sol_total_shares = StLamports(120);
 
-        let pool_tokens_for_deposit = lido.calc_pool_tokens_for_deposit(200, 40);
+        let pool_tokens_for_deposit =
+            lido.calc_pool_tokens_for_deposit(Lamports(200), Lamports(40));
 
         assert_eq!(pool_tokens_for_deposit, Some(StLamports(600)));
     }
@@ -492,7 +421,7 @@ mod test_lido {
         let mut lido = Lido::default();
         lido.st_sol_total_shares = StLamports(120);
 
-        let pool_tokens_for_deposit = lido.calc_pool_tokens_for_deposit(0, 40);
+        let pool_tokens_for_deposit = lido.calc_pool_tokens_for_deposit(Lamports(0), Lamports(40));
 
         assert_eq!(pool_tokens_for_deposit, Some(StLamports(0)));
     }

@@ -27,6 +27,8 @@ use {
     },
 };
 
+use lido::token::{Lamports, StakePoolTokenLamports};
+
 pub const TEST_STAKE_AMOUNT: u64 = 1_500_000_000;
 pub const MAX_TEST_VALIDATORS: u32 = 10_000;
 
@@ -78,13 +80,13 @@ pub async fn transfer(
     payer: &Keypair,
     recent_blockhash: &Hash,
     recipient: &Pubkey,
-    amount: u64,
+    amount: Lamports,
 ) {
     let transaction = Transaction::new_signed_with_payer(
         &[system_instruction::transfer(
             &payer.pubkey(),
             recipient,
-            amount,
+            amount.0,
         )],
         Some(&payer.pubkey()),
         &[payer],
@@ -272,11 +274,12 @@ pub async fn create_independent_stake_account(
     stake: &Keypair,
     authorized: &stake_program::Authorized,
     lockup: &stake_program::Lockup,
-    stake_amount: u64,
-) -> u64 {
+    stake_amount: Lamports,
+) -> Lamports {
     let rent = banks_client.get_rent().await.unwrap();
-    let lamports =
-        rent.minimum_balance(std::mem::size_of::<stake_program::StakeState>()) + stake_amount;
+    let min_rent_balance =
+        Lamports(rent.minimum_balance(std::mem::size_of::<stake_program::StakeState>()));
+    let lamports = (min_rent_balance + stake_amount).unwrap();
 
     let transaction = Transaction::new_signed_with_payer(
         &stake_program::create_account(
@@ -284,7 +287,7 @@ pub async fn create_independent_stake_account(
             &stake.pubkey(),
             authorized,
             lockup,
-            lamports,
+            lamports.0,
         ),
         Some(&payer.pubkey()),
         &[payer, stake],
@@ -487,7 +490,7 @@ impl StakePoolAccounts {
         payer: &Keypair,
         manager: &Keypair,
         recent_blockhash: &Hash,
-        reserve_lamports: u64,
+        reserve_lamports: Lamports,
         fee_manager: &Pubkey,
     ) -> Result<(), TransportError> {
         create_mint(
@@ -718,8 +721,8 @@ pub struct DepositStakeAccount {
     pub authority: Keypair,
     pub stake: Keypair,
     pub pool_account: Keypair,
-    pub stake_lamports: u64,
-    pub pool_tokens: u64,
+    pub stake_lamports: Lamports,
+    pub pool_tokens: StakePoolTokenLamports,
     pub vote_account: Pubkey,
     pub validator_stake_account: Pubkey,
 }
@@ -728,7 +731,7 @@ impl DepositStakeAccount {
     pub fn new_with_vote(
         vote_account: Pubkey,
         validator_stake_account: Pubkey,
-        stake_lamports: u64,
+        stake_lamports: Lamports,
     ) -> Self {
         let authority = Keypair::new();
         let stake = Keypair::new();
@@ -740,7 +743,7 @@ impl DepositStakeAccount {
             vote_account,
             validator_stake_account,
             stake_lamports,
-            pool_tokens: 0,
+            pool_tokens: StakePoolTokenLamports(0),
         }
     }
 
@@ -816,7 +819,7 @@ pub async fn simple_deposit(
     recent_blockhash: &Hash,
     stake_pool_accounts: &StakePoolAccounts,
     validator_stake_account: &ValidatorStakeAccount,
-    stake_lamports: u64,
+    stake_lamports: Lamports,
 ) -> Option<DepositStakeAccount> {
     let authority = Keypair::new();
     // make stake account
@@ -873,7 +876,8 @@ pub async fn simple_deposit(
         .await
         .ok()?;
 
-    let pool_tokens = get_token_balance(banks_client, &pool_account.pubkey()).await;
+    let pool_tokens =
+        StakePoolTokenLamports(get_token_balance(banks_client, &pool_account.pubkey()).await);
 
     Some(DepositStakeAccount {
         authority,

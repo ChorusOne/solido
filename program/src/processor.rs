@@ -24,6 +24,7 @@ use crate::{
         FeeDistribution, FeeRecipients, Lido, Maintainers, ValidatorCreditAccounts,
         LIDO_CONSTANT_SIZE,
     },
+    token::{Lamports, StLamports},
     DEPOSIT_AUTHORITY, FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY, STAKE_POOL_AUTHORITY,
 };
 
@@ -185,12 +186,12 @@ pub fn process_initialize(
 
 pub fn process_deposit(
     program_id: &Pubkey,
-    amount: u64,
+    amount: Lamports,
     accounts_raw: &[AccountInfo],
 ) -> ProgramResult {
     let accounts = DepositAccountsInfo::try_from_slice(accounts_raw)?;
 
-    if amount == 0 {
+    if amount == Lamports(0) {
         msg!("Amount must be greater than zero");
         return Err(ProgramError::InvalidArgument);
     }
@@ -220,7 +221,7 @@ pub fn process_deposit(
         rent,
     )?;
     invoke(
-        &system_instruction::transfer(accounts.user.key, accounts.reserve_account.key, amount),
+        &system_instruction::transfer(accounts.user.key, accounts.reserve_account.key, amount.0),
         &[
             accounts.user.clone(),
             accounts.reserve_account.clone(),
@@ -253,7 +254,7 @@ pub fn process_deposit(
 
 pub fn process_stake_deposit(
     program_id: &Pubkey,
-    amount: u64,
+    amount: Lamports,
     raw_accounts: &[AccountInfo],
 ) -> ProgramResult {
     let accounts = StakeDepositAccountsInfo::try_from_slice(raw_accounts)?;
@@ -275,7 +276,9 @@ pub fn process_stake_deposit(
         return Err(LidoError::InvalidReserveAuthority.into());
     }
 
-    if amount < rent.minimum_balance(std::mem::size_of::<stake_program::StakeState>()) {
+    let minium_stake_balance =
+        Lamports(rent.minimum_balance(std::mem::size_of::<stake_program::StakeState>()));
+    if amount < minium_stake_balance {
         return Err(LidoError::InvalidAmount.into());
     }
     let available_reserve_amount = get_reserve_available_amount(accounts.reserve, rent)?;
@@ -304,7 +307,7 @@ pub fn process_stake_deposit(
         &system_instruction::create_account(
             accounts.reserve.key,
             accounts.stake.key,
-            amount,
+            amount.0,
             std::mem::size_of::<stake_program::StakeState>() as u64,
             &stake_program::id(),
         ),
@@ -416,7 +419,7 @@ pub fn process_deposit_active_stake_to_pool(
 
 pub fn process_withdraw(
     _program_id: &Pubkey,
-    _pool_tokens: u64,
+    _pool_tokens: StLamports,
     _accounts: &[AccountInfo],
 ) -> ProgramResult {
     // TODO

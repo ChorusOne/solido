@@ -7,7 +7,10 @@ use helpers::{
     stakepool_account::{get_token_balance, transfer},
     LidoAccounts,
 };
-use lido::instruction;
+use lido::{
+    instruction,
+    token::{Lamports, StLamports},
+};
 use solana_program::hash::Hash;
 use solana_program_test::{tokio, BanksClient};
 use solana_sdk::{
@@ -27,7 +30,7 @@ async fn setup() -> (BanksClient, Keypair, Hash, LidoAccounts) {
 
     (banks_client, payer, recent_blockhash, lido_accounts)
 }
-pub const TEST_DEPOSIT_AMOUNT: u64 = 1000;
+pub const TEST_DEPOSIT_AMOUNT: Lamports = Lamports(1000);
 
 #[tokio::test]
 async fn test_successful_deposit() {
@@ -77,7 +80,7 @@ async fn test_successful_deposit() {
     transaction.sign(&[&payer, &user], recent_blockhash);
     banks_client.process_transaction(transaction).await.unwrap();
 
-    let balance = get_token_balance(&mut banks_client, &recipient.pubkey()).await;
+    let balance = StLamports(get_token_balance(&mut banks_client, &recipient.pubkey()).await);
 
     let reserve_account = banks_client
         .get_account(lido_accounts.reserve_authority)
@@ -87,8 +90,10 @@ async fn test_successful_deposit() {
 
     let rent = banks_client.get_rent().await.unwrap();
     assert_eq!(
-        reserve_account.lamports,
-        TEST_DEPOSIT_AMOUNT + rent.minimum_balance(0)
+        Some(Lamports(reserve_account.lamports)),
+        TEST_DEPOSIT_AMOUNT + Lamports(rent.minimum_balance(0))
     );
-    assert_eq!(balance, TEST_DEPOSIT_AMOUNT);
+    // In general, the received stSOL need not be equal to the deposited SOL,
+    // but in this particular case, the exchange rate is 1, so this holds.
+    assert_eq!(balance.0, TEST_DEPOSIT_AMOUNT.0);
 }
