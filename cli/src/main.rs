@@ -21,12 +21,14 @@ use crate::helpers::command_show_solido;
 use crate::helpers::{
     command_add_validator, command_create_solido, get_anchor_program, CreateSolidoOpts,
 };
+use crate::maintenance::PerformMaintenanceOpts;
 use crate::multisig::MultisigOpts;
 
 extern crate lazy_static;
 extern crate spl_stake_pool;
 
 mod helpers;
+mod maintenance;
 mod multisig;
 mod spl_token_utils;
 mod stake_pool_helpers;
@@ -119,6 +121,9 @@ FEES:
     /// Show an instance of solido in detail
     ShowSolido(ShowSolidoOpts),
 
+    /// Execute periodic maintenance logic.
+    PerformMaintenance(PerformMaintenanceOpts),
+
     /// Interact with a deployed Multisig program for governance tasks.
     Multisig(MultisigOpts),
 }
@@ -205,6 +210,14 @@ fn main() {
             {
                 print_output(opts.output_mode, &output);
             }
+        }
+        SubCommand::PerformMaintenance(cmd_opts) => {
+            // For now, this does one maintenance iteration. In the future we
+            // might add a daemon mode that runs continuously, and which logs
+            // to stdout and exposes Prometheus metrics (also to monitor Solido,
+            // not just the maintenance itself).
+            maintenance::perform_maintenance(&config, cmd_opts)
+                .expect("Failed to perform maintenance.");
         }
         SubCommand::AddValidator(cmd_opts) => {
             if let Some(output) = command_add_validator(config, opts.cluster, cmd_opts)

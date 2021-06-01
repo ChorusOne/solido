@@ -2,7 +2,6 @@ use crate::{
     error::LidoError,
     state::Lido,
     token::{Lamports, Rational, StLamports},
-    RESERVE_AUTHORITY,
 };
 use solana_program::{
     account_info::AccountInfo, borsh::try_from_slice_unchecked, msg, program::invoke_signed,
@@ -19,31 +18,6 @@ pub(crate) fn rent_exemption(
     if !rent.is_exempt(account_info.lamports(), account_info.data_len()) {
         msg!("{} not rent-exempt", account_type);
         return Err(ProgramError::AccountNotRentExempt);
-    }
-    Ok(())
-}
-
-pub fn check_reserve_authority(
-    program_id: &Pubkey,
-    lido_address: &Pubkey,
-    reserve_authority_bump_seed: u8,
-    reserve_authority_address: &Pubkey,
-) -> Result<(), ProgramError> {
-    let reserve_id = Pubkey::create_program_address(
-        &[
-            &lido_address.to_bytes(),
-            RESERVE_AUTHORITY,
-            &[reserve_authority_bump_seed],
-        ],
-        program_id,
-    )?;
-    if &reserve_id != reserve_authority_address {
-        msg!(
-            "Invalid reserve authority {}, should be {}.",
-            reserve_id,
-            reserve_authority_address
-        );
-        return Err(LidoError::InvalidReserveAuthority.into());
     }
     Ok(())
 }

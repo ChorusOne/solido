@@ -12,6 +12,7 @@ use solana_program::{
 
 use crate::error::LidoError;
 use crate::token::{Lamports, Rational, StLamports, StakePoolTokenLamports};
+use crate::RESERVE_AUTHORITY;
 
 /// Constant size of header size = 5 public keys, 1 u64, 4 u8
 pub const LIDO_CONSTANT_HEADER_SIZE: usize = 5 * 32 + 8 + 4;
@@ -173,6 +174,41 @@ impl Lido {
             return Err(LidoError::InvalidManager.into());
         }
         Ok(())
+    }
+
+    /// Return the address of the reserve account, the account where SOL gets
+    /// deposited into.
+    pub fn get_reserve_account(
+        &self,
+        program_id: &Pubkey,
+        solido_address: &Pubkey,
+    ) -> Result<Pubkey, ProgramError> {
+        Pubkey::create_program_address(
+            &[
+                &solido_address.to_bytes()[..],
+                RESERVE_AUTHORITY,
+                &[self.sol_reserve_authority_bump_seed],
+            ],
+            program_id,
+        )
+        .map_err(|_| LidoError::InvalidReserveAuthority.into())
+    }
+
+    /// Confirm that the reserve authority belongs to this Lido instance, return
+    /// the reserve address.
+    pub fn check_reserve_authority(
+        &self,
+        program_id: &Pubkey,
+        solido_address: &Pubkey,
+        reserve_authority_info: &AccountInfo,
+    ) -> Result<Pubkey, ProgramError> {
+        let reserve_id = self.get_reserve_account(program_id, solido_address)?;
+        // TODO(fynn): Do we also need to confirm the owner?
+        if reserve_id != *reserve_authority_info.key {
+            msg!("Invalid reserve authority");
+            return Err(LidoError::InvalidReserveAuthority.into());
+        }
+        Ok(reserve_id)
     }
 }
 
