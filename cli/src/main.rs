@@ -123,7 +123,7 @@ pub struct Config {
 
 impl Config {
     pub fn rpc(&self) -> RpcClient {
-        return self.program.rpc();
+        self.program.rpc()
     }
 }
 

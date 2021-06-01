@@ -440,7 +440,7 @@ pub fn command_add_validator(
     opts: AddValidatorOpts,
 ) -> Result<Option<ProposeInstructionOutput>, crate::Error> {
     let solido = get_solido(&config.rpc(), &opts.solido_address)?;
-    let stake_pool = get_stake_pool_validator_list(&config.rpc(), &solido.stake_pool_account)?;
+    let stake_pool = get_stake_pool(&config.rpc(), &solido.stake_pool_account)?;
 
     let (stake_pool_authority, _) = lido::find_authority_program_address(
         &opts.solido_program_id,
@@ -476,9 +476,9 @@ pub fn command_add_validator(
             stake_pool_manager_authority: stake_pool_authority,
             stake_pool_program: opts.stake_pool_program_id,
             stake_pool: solido.stake_pool_account,
-            stake_pool_withdraw_authority: stake_pool_withdraw_authority,
+            stake_pool_withdraw_authority,
             stake_pool_validator_list: stake_pool.validator_list,
-            stake_account: stake_account,
+            stake_account,
             validator_token_account: opts.validator_rewards_address,
         },
     )?;
@@ -550,8 +550,8 @@ pub fn command_create_validator_stake_account(
             stake_pool_program: opts.stake_pool_program_id,
             stake_pool: solido.stake_pool_account,
             staker: stake_pool_authority,
-            funder: funder,
-            stake_account: stake_account,
+            funder,
+            stake_account,
             validator: opts.validator_vote,
         },
     )?;
@@ -572,8 +572,8 @@ enum ExecutionMethod {
 impl ExecutionMethod {
     fn get_pubkey(&self) -> Pubkey {
         match self {
-            ExecutionMethod::Multisig(pk) => return *pk,
-            ExecutionMethod::Payer(pk) => return *pk,
+            ExecutionMethod::Multisig(pk) => *pk,
+            ExecutionMethod::Payer(pk) => *pk,
         }
     }
 
@@ -619,6 +619,8 @@ fn get_execution_method(
     }
 }
 
+// TODO: Make `get_solido` and `get_stake_pool` return the structures in a single call to
+// `rpc_client.get_multiple_accounts(..)`.
 /// Gets the Solido data structure
 fn get_solido(rpc_client: &RpcClient, solido_address: &Pubkey) -> Result<Lido, crate::Error> {
     let solido_data = rpc_client.get_account_data(solido_address)?;
@@ -628,10 +630,7 @@ fn get_solido(rpc_client: &RpcClient, solido_address: &Pubkey) -> Result<Lido, c
 
 /// Gets the Stake Pool and validator list data structures. The validator list
 /// is associated with the Stake Pool.
-fn get_stake_pool_validator_list(
-    rpc_client: &RpcClient,
-    stake_pool: &Pubkey,
-) -> Result<StakePool, crate::Error> {
+fn get_stake_pool(rpc_client: &RpcClient, stake_pool: &Pubkey) -> Result<StakePool, crate::Error> {
     let stake_pool_data = rpc_client.get_account_data(&stake_pool)?;
     let stake_pool = StakePool::try_from_slice(&stake_pool_data)?;
     Ok(stake_pool)

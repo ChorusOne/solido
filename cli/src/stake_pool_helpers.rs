@@ -69,7 +69,7 @@ impl fmt::Display for CreatePoolOutput {
         Ok(())
     }
 }
-
+#[allow(clippy::too_many_arguments)]
 pub fn command_create_pool(
     config: &Config,
     stake_pool_program_id: &Pubkey,
@@ -106,24 +106,24 @@ pub fn command_create_pool(
         &stake_pool_keypair.pubkey(),
     );
 
-    let mut instructions = Vec::new();
-
-    // Account for the stake pool reserve
-    instructions.push(system_instruction::create_account(
-        &config.fee_payer.pubkey(),
-        &reserve_stake.pubkey(),
-        reserve_stake_balance,
-        STAKE_STATE_LEN as u64,
-        &stake_program::id(),
-    ));
-    instructions.push(stake_program::initialize(
-        &reserve_stake.pubkey(),
-        &stake_program::Authorized {
-            staker: withdraw_authority,
-            withdrawer: withdraw_authority,
-        },
-        &stake_program::Lockup::default(),
-    ));
+    let mut instructions = vec![
+        // Account for the stake pool reserve
+        system_instruction::create_account(
+            &config.fee_payer.pubkey(),
+            &reserve_stake.pubkey(),
+            reserve_stake_balance,
+            STAKE_STATE_LEN as u64,
+            &stake_program::id(),
+        ),
+        stake_program::initialize(
+            &reserve_stake.pubkey(),
+            &stake_program::Authorized {
+                staker: withdraw_authority,
+                withdrawer: withdraw_authority,
+            },
+            &stake_program::Lockup::default(),
+        ),
+    ];
 
     let mint_keypair = push_create_spl_token_mint(config, &mut instructions, &withdraw_authority)?;
 

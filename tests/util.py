@@ -154,8 +154,9 @@ def create_vote_account(vote_key_fname: str, validator_key_fname: str):
 def create_spl_token(owner_keypair_fname: str, minter: str) -> str:
     """
     Creates an spl token for the given minter
-    Returns 'Creating account <address>
+    spl_token command returns 'Creating account <address>
              Signature: <tx-signature>'
+    This function returns <address>
     """
     return spl_token('create-account', minter, '--owner', owner_keypair_fname).split('\n')[0].split(' ')[2]
 
