@@ -832,6 +832,7 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
+        // Staker is the manager of the stakepool, a derived account managed by Lido's manager.
         pub staker {
             is_signer: false,
             is_writable: false,

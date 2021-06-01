@@ -7,7 +7,7 @@ import os.path
 import subprocess
 import sys
 
-from typing import List, NamedTuple
+from typing import List, NamedTuple, Any, Optional
 
 
 def run(*args: str) -> str:
@@ -15,7 +15,8 @@ def run(*args: str) -> str:
     Run a program, ensure it exits with code 0, return its stdout.
     """
     try:
-        result = subprocess.run(args, check=True, capture_output=True, encoding='utf-8')
+        result = subprocess.run(
+            args, check=True, capture_output=True, encoding='utf-8')
 
     except subprocess.CalledProcessError as err:
         # If a test fails, it is helpful to print stdout and stderr here, but
@@ -32,11 +33,42 @@ def run(*args: str) -> str:
     return result.stdout
 
 
+def solido(*args: str, keypair_path: Optional[str] = None) -> Any:
+    """
+    Run 'solido' against localhost, return its parsed json output.
+    """
+
+    output = run(
+        'target/debug/solido',
+        '--cluster', 'localnet',
+        '--output', 'json',
+        *([] if keypair_path is None else ['--keypair-path', keypair_path]),
+        *args,
+    )
+
+    if output == '':
+        return {}
+    else:
+        try:
+            return json.loads(output)
+        except json.JSONDecodeError:
+            print('Failed to decode output as json, output was:')
+            print(output)
+            raise
+
+
 def solana(*args: str) -> str:
     """
     Run 'solana' against localhost.
     """
     return run('solana', '--url', 'localhost', *args)
+
+
+def spl_token(*args: str) -> str:
+    """
+    Run 'spl_token' against localhost.
+    """
+    return run('spl-token', '--url', 'localhost', *args)
 
 
 def solana_program_deploy(fname: str) -> str:
@@ -74,7 +106,7 @@ def solana_program_show(program_id: str) -> SolanaProgramInfo:
     )
 
 
-def create_test_account(keypair_fname: str) -> str:
+def create_test_account(keypair_fname: str, *, fund: bool = True) -> str:
     """
     Generate a key pair, fund the account with 1 SOL, and return its public key.
     """
@@ -88,8 +120,45 @@ def create_test_account(keypair_fname: str) -> str:
         keypair_fname,
     )
     pubkey = run('solana-keygen', 'pubkey', keypair_fname).strip()
-    solana('transfer', '--allow-unfunded-recipient', pubkey, '1.0')
+    if fund:
+        solana('transfer', '--allow-unfunded-recipient', pubkey, '10.0')
     return pubkey
+
+
+def create_stake_account(keypair_fname: str) -> str:
+    """
+    Generate a stake account funded with 2 Sol, returns its public key.
+    """
+    pubkey = create_test_account(keypair_fname, fund=False)
+    solana(
+        'create-stake-account',
+        keypair_fname,
+        '2',
+    )
+    return pubkey
+
+
+def create_vote_account(vote_key_fname: str, validator_key_fname: str):
+    """
+    Generate a vote account for the validator
+    """
+    pubkey = create_test_account(vote_key_fname, fund=False)
+    solana(
+        'create-vote-account',
+        vote_key_fname,
+        validator_key_fname,
+    )
+    return pubkey
+
+
+def create_spl_token(owner_keypair_fname: str, minter: str) -> str:
+    """
+    Creates an spl token for the given minter
+    spl_token command returns 'Creating account <address>
+             Signature: <tx-signature>'
+    This function returns <address>
+    """
+    return spl_token('create-account', minter, '--owner', owner_keypair_fname).split('\n')[0].split(' ')[2]
 
 
 class TestAccount(NamedTuple):

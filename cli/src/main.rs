@@ -3,13 +3,19 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use anchor_client::Cluster;
+use anchor_client::Program;
 use clap::Clap;
+use helpers::AddValidatorOpts;
+use helpers::CreateValidatorStakeAccountOpts;
 use serde::Serialize;
 use solana_client::rpc_client::RpcClient;
-use solana_sdk::commitment_config::CommitmentConfig;
+use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::{read_keypair_file, Keypair};
 
-use crate::helpers::{command_create_solido, CreateSolidoOpts};
+use crate::helpers::command_create_validator_stake_account;
+use crate::helpers::{
+    command_add_validator, command_create_solido, get_anchor_program, CreateSolidoOpts,
+};
 use crate::multisig::MultisigOpts;
 
 extern crate lazy_static;
@@ -96,17 +102,29 @@ FEES:
     ")]
     CreateSolido(CreateSolidoOpts),
 
+    /// Add a new validator
+    AddValidator(AddValidatorOpts),
+
+    /// Create a Validator Stake Account
+    CreateValidatorStakeAccount(CreateValidatorStakeAccountOpts),
+
     /// Interact with a deployed Multisig program for governance tasks.
     Multisig(MultisigOpts),
 }
 
 /// Determines which network to connect to, and who pays the fees.
-pub struct Config<'a> {
-    rpc_client: RpcClient,
-    manager: &'a Keypair,
-    fee_payer: &'a Keypair,
+pub struct Config {
+    program: Program,
+    // rpc_client: RpcClient,
+    fee_payer: Keypair,
     dry_run: bool,
     output_mode: OutputMode,
+}
+
+impl Config {
+    pub fn rpc(&self) -> RpcClient {
+        self.program.rpc()
+    }
 }
 
 /// Resolve ~/.config/solana/id.json.
@@ -139,29 +157,50 @@ fn main() {
     let keypair = read_keypair_file(&payer_keypair_path)
         .unwrap_or_else(|_| panic!("Failed to read key pair from {:?}.", payer_keypair_path));
 
+    // TODO: This is a bit hacky :|
+    // We need to pass the keypair to Anchor's program by value and to our config by reference.
+    // Cluster has to be passed as value as well
+    let key_pair_copy =
+        Keypair::from_bytes(&keypair.to_bytes()).expect("Keypair returned an invalid secret");
     let config = Config {
-        rpc_client: RpcClient::new_with_commitment(
-            opts.cluster.url().to_string(),
-            CommitmentConfig::confirmed(),
+        // Set the multisig_program_id to an invalid program, we use the program
+        // just to get the rpc client, when we need to use the multisig program,
+        // we'll create another instance of it.
+        program: get_anchor_program(
+            Cluster::from_str(&opts.cluster.to_string()).unwrap(),
+            key_pair_copy,
+            &Pubkey::new_from_array([255u8; 32]),
         ),
         // For now, we'll assume that the provided key pair fulfils all of these
         // roles. We need a better way to configure keys in the future.
-        manager: &keypair,
-        fee_payer: &keypair,
+        fee_payer: keypair,
         // TODO: Do we want a dry-run option in the MVP at all?
         dry_run: false,
         output_mode: opts.output_mode,
     };
-
     match opts.subcommand {
         SubCommand::CreateSolido(cmd_opts) => {
-            let output = command_create_solido(&config, cmd_opts)
-                .expect("Failed to create Solido instance.");
+            let output =
+                command_create_solido(config, cmd_opts).expect("Failed to create Solido instance.");
             print_output(opts.output_mode, &output);
         }
         SubCommand::Multisig(cmd_opts) => {
-            let payer = keypair;
-            multisig::main(payer, opts.cluster, opts.output_mode, cmd_opts);
+            multisig::main(config, opts.cluster, opts.output_mode, cmd_opts);
+        }
+        SubCommand::CreateValidatorStakeAccount(cmd_opts) => {
+            if let Some(output) =
+                command_create_validator_stake_account(config, opts.cluster, cmd_opts)
+                    .expect("Failed to create a validator stake account")
+            {
+                print_output(opts.output_mode, &output);
+            }
+        }
+        SubCommand::AddValidator(cmd_opts) => {
+            if let Some(output) = command_add_validator(config, opts.cluster, cmd_opts)
+                .expect("Failed to add a validator")
+            {
+                print_output(opts.output_mode, &output);
+            }
         }
     }
 }

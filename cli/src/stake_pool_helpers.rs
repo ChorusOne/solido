@@ -69,13 +69,14 @@ impl fmt::Display for CreatePoolOutput {
         Ok(())
     }
 }
-
+#[allow(clippy::too_many_arguments)]
 pub fn command_create_pool(
     config: &Config,
     stake_pool_program_id: &Pubkey,
     stake_pool_authority: &Pubkey,
     deposit_authority: &Pubkey,
     fee_authority: &Pubkey,
+    manager: &Keypair,
     fee: Fee,
     max_validators: u32,
 ) -> Result<CreatePoolOutput, crate::Error> {
@@ -84,16 +85,19 @@ pub fn command_create_pool(
     let validator_list = Keypair::new();
 
     let reserve_stake_balance = config
-        .rpc_client
+        .program
+        .rpc()
         .get_minimum_balance_for_rent_exemption(STAKE_STATE_LEN)?
         + 1;
     let stake_pool_account_lamports = config
-        .rpc_client
+        .program
+        .rpc()
         .get_minimum_balance_for_rent_exemption(get_packed_len::<StakePool>())?;
     let empty_validator_list = ValidatorList::new(max_validators);
     let validator_list_size = get_instance_packed_len(&empty_validator_list)?;
     let validator_list_balance = config
-        .rpc_client
+        .program
+        .rpc()
         .get_minimum_balance_for_rent_exemption(validator_list_size)?;
 
     // Calculate withdraw authority used for minting pool tokens
@@ -102,24 +106,24 @@ pub fn command_create_pool(
         &stake_pool_keypair.pubkey(),
     );
 
-    let mut instructions = Vec::new();
-
-    // Account for the stake pool reserve
-    instructions.push(system_instruction::create_account(
-        &config.fee_payer.pubkey(),
-        &reserve_stake.pubkey(),
-        reserve_stake_balance,
-        STAKE_STATE_LEN as u64,
-        &stake_program::id(),
-    ));
-    instructions.push(stake_program::initialize(
-        &reserve_stake.pubkey(),
-        &stake_program::Authorized {
-            staker: withdraw_authority,
-            withdrawer: withdraw_authority,
-        },
-        &stake_program::Lockup::default(),
-    ));
+    let mut instructions = vec![
+        // Account for the stake pool reserve
+        system_instruction::create_account(
+            &config.fee_payer.pubkey(),
+            &reserve_stake.pubkey(),
+            reserve_stake_balance,
+            STAKE_STATE_LEN as u64,
+            &stake_program::id(),
+        ),
+        stake_program::initialize(
+            &reserve_stake.pubkey(),
+            &stake_program::Authorized {
+                staker: withdraw_authority,
+                withdrawer: withdraw_authority,
+            },
+            &stake_program::Lockup::default(),
+        ),
+    ];
 
     let mint_keypair = push_create_spl_token_mint(config, &mut instructions, &withdraw_authority)?;
 
@@ -134,7 +138,7 @@ pub fn command_create_pool(
         config,
         &instructions[..],
         &[
-            config.fee_payer,
+            &config.fee_payer,
             &reserve_stake,
             &mint_keypair,
             &pool_fee_account_keypair,
@@ -164,7 +168,7 @@ pub fn command_create_pool(
                 stake_pool_program_id,
                 &lido::instruction::InitializeStakePoolWithAuthorityAccountsMeta {
                     stake_pool: stake_pool_keypair.pubkey(),
-                    manager: config.manager.pubkey(),
+                    manager: manager.pubkey(),
                     staker: *stake_pool_authority,
                     validator_list: validator_list.pubkey(),
                     reserve_stake: reserve_stake.pubkey(),
@@ -182,13 +186,13 @@ pub fn command_create_pool(
         Some(&config.fee_payer.pubkey()),
     );
 
-    let (recent_blockhash, _fee_calculator) = config.rpc_client.get_recent_blockhash()?;
+    let (recent_blockhash, _fee_calculator) = config.rpc().get_recent_blockhash()?;
 
     let initialize_signers = vec![
-        config.fee_payer,
+        &config.fee_payer,
         &stake_pool_keypair,
         &validator_list,
-        config.manager,
+        &manager,
     ];
     initialize_transaction.sign(&initialize_signers, recent_blockhash);
     send_transaction(&config, initialize_transaction)?;

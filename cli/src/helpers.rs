@@ -1,39 +1,51 @@
 use std::fmt;
 
+use anchor_client::{Client, Cluster, Program};
+use anchor_lang::AnchorDeserialize;
 use clap::Clap;
 use lido::{
-    state::FeeDistribution, DEPOSIT_AUTHORITY, FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY,
-    STAKE_POOL_AUTHORITY,
+    state::{FeeDistribution, Lido},
+    DEPOSIT_AUTHORITY, FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY, STAKE_POOL_AUTHORITY,
 };
 use serde::Serialize;
+use solana_client::rpc_client::RpcClient;
 use solana_program::{pubkey::Pubkey, system_instruction};
 use solana_sdk::{
+    borsh::try_from_slice_unchecked,
+    commitment_config::CommitmentConfig,
     instruction::Instruction,
     signature::{Keypair, Signer},
     signer::signers::Signers,
     transaction::Transaction,
 };
-use spl_stake_pool::state::Fee;
+use spl_stake_pool::{
+    find_stake_program_address,
+    state::{Fee, StakePool},
+};
 
 use crate::{
+    multisig::{get_multisig_program_address, propose_instruction, ProposeInstructionOutput},
     spl_token_utils::{push_create_spl_token_account, push_create_spl_token_mint},
     stake_pool_helpers::{command_create_pool, CreatePoolOutput},
     util::PubkeyBase58,
     Config, OutputMode,
 };
 
+const STAKE_POOL_WITHDRAW_AUTHORITY_ID: &[u8] = b"withdraw";
+
 pub fn send_transaction(
     config: &Config,
     transaction: Transaction,
 ) -> solana_client::client_error::Result<()> {
     if config.dry_run {
-        config.rpc_client.simulate_transaction(&transaction)?;
+        config.rpc().simulate_transaction(&transaction)?;
     } else {
         let _signature = match config.output_mode {
             OutputMode::Text => {
                 // In text mode, we can display a spinner.
                 config
-                    .rpc_client
+                    .program
+                    .rpc()
                     .send_and_confirm_transaction_with_spinner(&transaction)?
             }
             OutputMode::Json => {
@@ -41,7 +53,8 @@ pub fn send_transaction(
                 // json that we also print to stdout, so opt for the silent
                 // version.
                 config
-                    .rpc_client
+                    .program
+                    .rpc()
                     .send_and_confirm_transaction(&transaction)?
             }
         };
@@ -56,11 +69,20 @@ pub fn sign_and_send_transaction<T: Signers>(
 ) -> Result<(), crate::Error> {
     let mut tx = Transaction::new_with_payer(instructions, Some(&config.fee_payer.pubkey()));
 
-    let (recent_blockhash, _fee_calculator) = config.rpc_client.get_recent_blockhash()?;
+    let (recent_blockhash, _fee_calculator) = config.rpc().get_recent_blockhash()?;
     tx.sign(signers, recent_blockhash);
     send_transaction(&config, tx)?;
 
     Ok(())
+}
+
+pub fn get_anchor_program(
+    cluster: Cluster,
+    payer: Keypair,
+    multisig_program_id: &Pubkey,
+) -> Program {
+    let client = Client::new_with_options(cluster, payer, CommitmentConfig::confirmed());
+    client.program(*multisig_program_id)
 }
 
 #[derive(Clap, Debug)]
@@ -86,7 +108,7 @@ pub struct CreateSolidoOpts {
     pub max_validators: u32,
 
     /// The maximum number of maintainers that this Solido instance will support.
-    #[clap(long)]
+    #[clap(long, value_name = "int")]
     pub max_maintainers: u32,
 
     // Fees are divided proportionally to the sum of all specified fees, for instance,
@@ -199,7 +221,7 @@ impl fmt::Display for CreateSolidoOutput {
 }
 
 pub fn command_create_solido(
-    config: &Config,
+    config: Config,
     opts: CreateSolidoOpts,
 ) -> Result<CreateSolidoOutput, crate::Error> {
     let lido_keypair = Keypair::new();
@@ -229,11 +251,12 @@ pub fn command_create_solido(
     );
 
     let stake_pool = command_create_pool(
-        config,
+        &config,
         &opts.stake_pool_program_id,
         &stake_pool_authority,
         &deposit_authority,
         &fee_authority,
+        &config.fee_payer,
         Fee {
             numerator: opts.fee_numerator,
             denominator: opts.fee_denominator,
@@ -245,7 +268,8 @@ pub fn command_create_solido(
     // so we need to compute the size in a different way.
     let lido_size = 999; //get_packed_len::<lido::state::Lido>();
     let lido_account_balance = config
-        .rpc_client
+        .program
+        .rpc()
         .get_minimum_balance_for_rent_exemption(lido_size)?;
 
     let mut instructions = Vec::new();
@@ -253,7 +277,8 @@ pub fn command_create_solido(
     // We need to fund Lido's reserve account so it is rent-exempt, otherwise it
     // might disappear.
     let min_balance_empty_data_account = config
-        .rpc_client
+        .program
+        .rpc()
         .get_minimum_balance_for_rent_exemption(0)?;
     instructions.push(system_instruction::transfer(
         &config.fee_payer.pubkey(),
@@ -263,60 +288,60 @@ pub fn command_create_solido(
 
     // Set up the Lido stSOL SPL token mint account.
     let st_sol_mint_keypair =
-        push_create_spl_token_mint(config, &mut instructions, &reserve_authority)?;
+        push_create_spl_token_mint(&config, &mut instructions, &reserve_authority)?;
 
     // Ideally we would set up the entire instance in a single transaction, but
     // Solana transaction size limits are so low that we need to break our
     // instructions down into multiple transactions. So set up the mint first,
     // then continue.
     sign_and_send_transaction(
-        config,
+        &config,
         &instructions[..],
-        &[config.fee_payer, &st_sol_mint_keypair],
+        &[&config.fee_payer, &st_sol_mint_keypair],
     )?;
     instructions.clear();
     eprintln!("Did send mint init.");
 
     // Set up the SPL token account that holds Lido's stake pool tokens.
     let pool_token_to_keypair = push_create_spl_token_account(
-        config,
+        &config,
         &mut instructions,
         &stake_pool.mint_address.0,
         &stake_pool_authority,
     )?;
 
     sign_and_send_transaction(
-        config,
+        &config,
         &instructions[..],
-        &vec![config.fee_payer, &pool_token_to_keypair],
+        &vec![&config.fee_payer, &pool_token_to_keypair],
     )?;
     instructions.clear();
     eprintln!("Did send SPL account inits part 1.");
 
     // Set up the SPL token account that receive the fees in stSOL.
     let insurance_keypair = push_create_spl_token_account(
-        config,
+        &config,
         &mut instructions,
         &st_sol_mint_keypair.pubkey(),
         &opts.insurance_account_owner,
     )?;
     let treasury_keypair = push_create_spl_token_account(
-        config,
+        &config,
         &mut instructions,
         &st_sol_mint_keypair.pubkey(),
         &opts.treasury_account_owner,
     )?;
     let manager_fee_keypair = push_create_spl_token_account(
-        config,
+        &config,
         &mut instructions,
         &st_sol_mint_keypair.pubkey(),
         &opts.manager_fee_account_owner,
     )?;
     sign_and_send_transaction(
-        config,
+        &config,
         &instructions[..],
         &vec![
-            config.fee_payer,
+            &config.fee_payer,
             &insurance_keypair,
             &treasury_keypair,
             &manager_fee_keypair,
@@ -359,9 +384,9 @@ pub fn command_create_solido(
     )?);
 
     sign_and_send_transaction(
-        config,
+        &config,
         &instructions[..],
-        &[config.fee_payer, &lido_keypair],
+        &[&config.fee_payer, &lido_keypair],
     )?;
     eprintln!("Did send Lido init.");
 
@@ -378,4 +403,235 @@ pub fn command_create_solido(
         stake_pool,
     };
     Ok(result)
+}
+
+#[derive(Clap, Debug)]
+pub struct AddValidatorOpts {
+    /// Address of the Solido program.
+    #[clap(long)]
+    pub solido_program_id: Pubkey,
+    /// Account that stores the data for this Solido instance.
+    #[clap(long)]
+    pub solido_address: Pubkey,
+
+    /// Stake pool program id
+    #[clap(long)]
+    stake_pool_program_id: Pubkey,
+    /// Address of the validator vote account.
+    #[clap(long)]
+    pub validator_vote: Pubkey,
+    /// Validator stSol token account.
+    #[clap(long)]
+    pub validator_rewards_address: Pubkey,
+
+    // TDOO(Ruud): Maybe move this to the previous (general) arguments passed to the program
+    /// Issue commands through the passed multisig account
+    #[clap(long, requires = "multisig-program-id")]
+    pub multisig_address: Option<Pubkey>,
+    /// When issuing commands Multisig program id
+    #[clap(long, requires = "multisig-address")]
+    pub multisig_program_id: Option<Pubkey>,
+}
+
+/// Command to add a validator to Solido.
+pub fn command_add_validator(
+    config: Config,
+    cluster: Cluster,
+    opts: AddValidatorOpts,
+) -> Result<Option<ProposeInstructionOutput>, crate::Error> {
+    let solido = get_solido(&config.rpc(), &opts.solido_address)?;
+    let stake_pool = get_stake_pool(&config.rpc(), &solido.stake_pool_account)?;
+
+    let (stake_pool_authority, _) = lido::find_authority_program_address(
+        &opts.solido_program_id,
+        &opts.solido_address,
+        STAKE_POOL_AUTHORITY,
+    );
+
+    let stake_pool_withdraw_authority = Pubkey::create_program_address(
+        &[
+            &solido.stake_pool_account.to_bytes()[..],
+            STAKE_POOL_WITHDRAW_AUTHORITY_ID,
+            &[stake_pool.withdraw_bump_seed],
+        ],
+        &opts.stake_pool_program_id,
+    )?;
+
+    let (stake_account, _) = find_stake_program_address(
+        &opts.stake_pool_program_id,
+        &opts.validator_vote,
+        &solido.stake_pool_account,
+    );
+
+    let execution_method = get_execution_method(
+        config.fee_payer.pubkey(),
+        opts.multisig_program_id,
+        opts.multisig_address,
+    );
+    let instruction = lido::instruction::add_validator(
+        &opts.solido_program_id,
+        &lido::instruction::AddValidatorMeta {
+            lido: opts.solido_address,
+            manager: execution_method.get_pubkey(),
+            stake_pool_manager_authority: stake_pool_authority,
+            stake_pool_program: opts.stake_pool_program_id,
+            stake_pool: solido.stake_pool_account,
+            stake_pool_withdraw_authority,
+            stake_pool_validator_list: stake_pool.validator_list,
+            stake_account,
+            validator_token_account: opts.validator_rewards_address,
+        },
+    )?;
+    execution_method.send_instruction(
+        cluster,
+        config,
+        opts.multisig_program_id,
+        opts.multisig_address,
+        instruction,
+    )
+}
+
+#[derive(Clap, Debug)]
+pub struct CreateValidatorStakeAccountOpts {
+    /// Address of the Solido program.
+    #[clap(long)]
+    pub solido_program_id: Pubkey,
+    /// Account that stores the data for this Solido instance.
+    #[clap(long)]
+    pub solido_address: Pubkey,
+
+    /// Stake pool program id
+    #[clap(long)]
+    stake_pool_program_id: Pubkey,
+    /// Address of the validator vote account.
+    #[clap(long)]
+    pub validator_vote: Pubkey,
+
+    // TDOO(Ruud): Maybe move this to the previous (general) arguments passed to the program
+    /// Issue commands through the passed multisig account
+    #[clap(long, requires = "multisig-program-id")]
+    pub multisig_address: Option<Pubkey>,
+    /// When issuing commands Multisig program id
+    #[clap(long, requires = "multisig-address")]
+    pub multisig_program_id: Option<Pubkey>,
+}
+
+/// Command to add a validator to Solido.
+pub fn command_create_validator_stake_account(
+    config: Config,
+    cluster: Cluster,
+    opts: CreateValidatorStakeAccountOpts,
+) -> Result<Option<ProposeInstructionOutput>, crate::Error> {
+    let solido = get_solido(&config.rpc(), &opts.solido_address)?;
+
+    let (stake_pool_authority, _) = lido::find_authority_program_address(
+        &opts.solido_program_id,
+        &opts.solido_address,
+        STAKE_POOL_AUTHORITY,
+    );
+
+    let (stake_account, _) = find_stake_program_address(
+        &opts.stake_pool_program_id,
+        &opts.validator_vote,
+        &solido.stake_pool_account,
+    );
+
+    let funder = config.fee_payer.pubkey();
+    let execution_method = get_execution_method(
+        config.fee_payer.pubkey(),
+        opts.multisig_program_id,
+        opts.multisig_address,
+    );
+    let instruction = lido::instruction::create_validator_stake_account(
+        &opts.solido_program_id,
+        &lido::instruction::CreateValidatorStakeAccountMeta {
+            lido: opts.solido_address,
+            manager: execution_method.get_pubkey(),
+            stake_pool_program: opts.stake_pool_program_id,
+            stake_pool: solido.stake_pool_account,
+            staker: stake_pool_authority,
+            funder,
+            stake_account,
+            validator: opts.validator_vote,
+        },
+    )?;
+    execution_method.send_instruction(
+        cluster,
+        config,
+        opts.multisig_program_id,
+        opts.multisig_address,
+        instruction,
+    )
+}
+
+enum ExecutionMethod {
+    Multisig(Pubkey),
+    Payer(Pubkey),
+}
+
+impl ExecutionMethod {
+    fn get_pubkey(&self) -> Pubkey {
+        match self {
+            ExecutionMethod::Multisig(pk) => *pk,
+            ExecutionMethod::Payer(pk) => *pk,
+        }
+    }
+
+    fn send_instruction(
+        &self,
+        cluster: Cluster,
+        config: Config,
+        multisig_program_id: Option<Pubkey>,
+        multisig_address: Option<Pubkey>,
+        instruction: Instruction,
+    ) -> Result<Option<ProposeInstructionOutput>, crate::Error> {
+        match self {
+            ExecutionMethod::Multisig(_) => {
+                let program =
+                    get_anchor_program(cluster, config.fee_payer, &multisig_program_id.unwrap());
+
+                Ok(Some(propose_instruction(
+                    program,
+                    multisig_address.unwrap(),
+                    instruction,
+                )))
+            }
+            ExecutionMethod::Payer(_) => {
+                sign_and_send_transaction(&config, &[instruction], &[&config.fee_payer])?;
+                Ok(None)
+            }
+        }
+    }
+}
+
+fn get_execution_method(
+    payer: Pubkey,
+    multisig_program_id: Option<Pubkey>,
+    multisig_address: Option<Pubkey>,
+) -> ExecutionMethod {
+    match multisig_program_id {
+        Some(multisig_program_id) => {
+            let (program_derived_address, _nonce) =
+                get_multisig_program_address(&multisig_program_id, &multisig_address.unwrap());
+            ExecutionMethod::Multisig(program_derived_address)
+        }
+        None => ExecutionMethod::Payer(payer),
+    }
+}
+
+// TODO: Make `get_solido` and `get_stake_pool` return the structures in a single call to
+// `rpc_client.get_multiple_accounts(..)`.
+/// Gets the Solido data structure
+fn get_solido(rpc_client: &RpcClient, solido_address: &Pubkey) -> Result<Lido, crate::Error> {
+    let solido_data = rpc_client.get_account_data(solido_address)?;
+    let solido = try_from_slice_unchecked::<Lido>(&solido_data)?;
+    Ok(solido)
+}
+
+/// Gets the Stake Pool and validator list data structures. The validator list
+/// is associated with the Stake Pool.
+fn get_stake_pool(rpc_client: &RpcClient, stake_pool: &Pubkey) -> Result<StakePool, crate::Error> {
+    let stake_pool_data = rpc_client.get_account_data(&stake_pool)?;
+    let stake_pool = StakePool::try_from_slice(&stake_pool_data)?;
+    Ok(stake_pool)
 }

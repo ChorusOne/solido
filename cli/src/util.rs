@@ -27,6 +27,6 @@ impl From<Pubkey> for PubkeyBase58 {
 
 impl From<&Pubkey> for PubkeyBase58 {
     fn from(pk: &Pubkey) -> PubkeyBase58 {
-        PubkeyBase58(pk.clone())
+        PubkeyBase58(*pk)
     }
 }

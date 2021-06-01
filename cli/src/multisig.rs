@@ -1,13 +1,12 @@
 use std::fmt;
 
 use anchor_client::solana_sdk::bpf_loader_upgradeable;
-use anchor_client::solana_sdk::commitment_config::CommitmentConfig;
 use anchor_client::solana_sdk::instruction::Instruction;
 use anchor_client::solana_sdk::pubkey::Pubkey;
 use anchor_client::solana_sdk::signature::{Keypair, Signer};
 use anchor_client::solana_sdk::system_instruction;
 use anchor_client::solana_sdk::sysvar;
-use anchor_client::{Client, Cluster, Program};
+use anchor_client::{Cluster, Program};
 use anchor_lang::prelude::{AccountMeta, ToAccountMetas};
 use anchor_lang::{Discriminator, InstructionData};
 use borsh::de::BorshDeserialize;
@@ -17,7 +16,9 @@ use multisig::accounts as multisig_accounts;
 use multisig::instruction as multisig_instruction;
 use serde::Serialize;
 
+use crate::helpers::get_anchor_program;
 use crate::util::PubkeyBase58;
+use crate::Config;
 use crate::{print_output, OutputMode};
 
 #[derive(Clap, Debug)]
@@ -165,14 +166,16 @@ struct ExecuteTransactionOpts {
 }
 
 pub fn main(
-    payer: Keypair,
+    config: Config,
     cluster: Cluster,
     output_mode: OutputMode,
     multisig_opts: MultisigOpts,
 ) {
-    let client = Client::new_with_options(cluster, payer, CommitmentConfig::confirmed());
-    let program = client.program(multisig_opts.multisig_program_id);
-
+    let program = get_anchor_program(
+        cluster,
+        config.fee_payer,
+        &multisig_opts.multisig_program_id,
+    );
     match multisig_opts.subcommand {
         SubCommand::CreateMultisig(cmd_opts) => {
             let output = create_multisig(program, cmd_opts);
@@ -199,9 +202,12 @@ pub fn main(
     }
 }
 
-fn get_multisig_program_address(program: &Program, multisig_pubkey: &Pubkey) -> (Pubkey, u8) {
+pub fn get_multisig_program_address(
+    program_address: &Pubkey,
+    multisig_pubkey: &Pubkey,
+) -> (Pubkey, u8) {
     let seeds = [multisig_pubkey.as_ref()];
-    Pubkey::find_program_address(&seeds, &program.id())
+    Pubkey::find_program_address(&seeds, program_address)
 }
 
 #[derive(Serialize)]
@@ -243,7 +249,7 @@ fn create_multisig(program: Program, opts: CreateMultisigOpts) -> CreateMultisig
     // field in the multisig account, and the Multisig program includes it when
     // deriving its program address.
     let (program_derived_address, nonce) =
-        get_multisig_program_address(&program, &multisig_account.pubkey());
+        get_multisig_program_address(&program.id(), &multisig_account.pubkey());
 
     program
         .request()
@@ -317,7 +323,7 @@ fn show_multisig(program: Program, opts: ShowMultisigOpts) -> ShowMultisigOutput
         .expect("Failed to read multisig state from account.");
 
     let (program_derived_address, _nonce) =
-        get_multisig_program_address(&program, &opts.multisig_address);
+        get_multisig_program_address(&program.id(), &opts.multisig_address);
 
     ShowMultisigOutput {
         multisig_program_derived_address: program_derived_address.into(),
@@ -554,7 +560,7 @@ fn show_transaction(program: Program, opts: ShowTransactionOpts) -> ShowTransact
 }
 
 #[derive(Serialize)]
-struct ProposeInstructionOutput {
+pub struct ProposeInstructionOutput {
     transaction_address: PubkeyBase58,
 }
 
@@ -565,7 +571,7 @@ impl fmt::Display for ProposeInstructionOutput {
 }
 
 /// Propose the given instruction to be approved and executed by the multisig.
-fn propose_instruction(
+pub fn propose_instruction(
     program: Program,
     multisig_address: Pubkey,
     instruction: Instruction,
@@ -659,7 +665,7 @@ fn propose_instruction(
 
 fn propose_upgrade(program: Program, opts: ProposeUpgradeOpts) -> ProposeInstructionOutput {
     let (program_derived_address, _nonce) =
-        get_multisig_program_address(&program, &opts.multisig_address);
+        get_multisig_program_address(&program.id(), &opts.multisig_address);
 
     let upgrade_instruction = bpf_loader_upgradeable::upgrade(
         &opts.program_address,
@@ -681,7 +687,7 @@ fn propose_change_multisig(
     CreateMultisigOpts::from(&opts).validate_or_exit();
 
     let (program_derived_address, _nonce) =
-        get_multisig_program_address(&program, &opts.multisig_address);
+        get_multisig_program_address(&program.id(), &opts.multisig_address);
 
     let change_data = multisig_instruction::SetOwnersAndChangeThreshold {
         owners: opts.owners,
@@ -760,7 +766,7 @@ impl anchor_lang::ToAccountMetas for TransactionAccounts {
 
 fn execute_transaction(program: Program, opts: ExecuteTransactionOpts) {
     let (program_derived_address, _nonce) =
-        get_multisig_program_address(&program, &opts.multisig_address);
+        get_multisig_program_address(&program.id(), &opts.multisig_address);
 
     // The wrapped instruction can reference additional accounts, that we need
     // to specify in this `multisig::execute_transaction` instruction as well,

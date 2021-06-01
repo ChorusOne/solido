@@ -9,11 +9,10 @@ default localhost port, and it expects a keypair at ~/.config/solana/id.json
 that corresponds to a sufficiently funded account.
 """
 
+import sys
 import json
 
-from typing import Any, Optional
-
-from util import run, solana, create_test_account, solana_program_deploy, solana_program_show
+from util import run, solana, create_test_account, solana_program_deploy, solana_program_show, create_stake_account, create_spl_token, create_vote_account, solido
 
 
 # We start by generating three accounts that we will need later.
@@ -42,28 +41,6 @@ solido_program_id = solana_program_deploy('target/deploy/lido.so')
 print(f'> Solido program id is {solido_program_id}.')
 
 
-def solido(*args: str, keypair_path: Optional[str] = None) -> Any:
-    """
-    Run 'solido' against localhost, return its parsed json output.
-    """
-    output = run(
-        'target/debug/solido',
-        '--cluster', 'localnet',
-        '--output', 'json',
-        *([] if keypair_path is None else ['--keypair-path', keypair_path]),
-        *args,
-    )
-    if output == '':
-        return {}
-    else:
-        try:
-            return json.loads(output)
-        except json.JSONDecodeError:
-            print('Failed to decode output as json, output was:')
-            print(output)
-            raise
-
-
 print('\nCreating Solido instance')
 result = solido(
     'create-solido',
@@ -80,9 +57,58 @@ result = solido(
     '--treasury-account-owner', treasury_account_owner,
     '--insurance-account-owner', insurance_account_owner,
     '--manager-fee-account-owner', manager_fee_account_owner,
+    keypair_path='test-key-1.json'
 )
 solido_address = result['solido_address']
 treasury_account = result['treasury_account']
 insurance_account = result['insurance_account']
 manager_fee_account = result['manager_fee_account']
+st_sol_mint_account = result['st_sol_mint_address']
+
 print(f'> Created instance at {solido_address}.')
+
+
+print('\nAdding a validator')
+
+validator_token_account_owner = create_test_account(
+    'validator-token-account-key.json')
+print(f'> Validator token account owner: {validator_token_account_owner}')
+
+validator_stake_account = create_stake_account(
+    'validator-stake-account-key.json')
+print(f'> Validator stake account: {validator_stake_account}')
+
+validator = create_test_account(
+    'validator-account-key.json')
+
+validator_vote_account = create_vote_account(
+    'validator-vote-account-key.json', 'validator-account-key.json')
+print(
+    f'> Creating validator vote account {validator_vote_account}')
+
+print(
+    f'> Creating validator token account with owner {validator_token_account_owner}')
+
+# Create SPL token
+validator_token_account = create_spl_token(
+    'validator-token-account-key.json', st_sol_mint_account)
+print(f'> Validator stSol token account: {validator_token_account}')
+
+solido('create-validator-stake-account',
+       '--solido-program-id', solido_program_id,
+       '--solido-address', solido_address,
+       '--stake-pool-program-id', stake_pool_program_id,
+       '--validator-vote', validator_vote_account,
+       keypair_path='test-key-1.json')
+
+solido('add-validator',
+       '--solido-program-id', solido_program_id,
+       '--solido-address', solido_address,
+       '--stake-pool-program-id', stake_pool_program_id,
+       '--validator-vote', validator_vote_account,
+       '--validator-rewards-address', validator_token_account,
+       keypair_path='test-key-1.json'
+       )
+
+# TODO: Implement a `solido show` to get the state of Solido and
+# confirm that the validator was added
