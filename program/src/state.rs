@@ -2,7 +2,8 @@
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use solana_program::{
-    account_info::AccountInfo, entrypoint::ProgramResult, msg, program_pack::Pack, pubkey::Pubkey,
+    account_info::AccountInfo, entrypoint::ProgramResult, msg, program_error::ProgramError,
+    program_pack::Pack, pubkey::Pubkey,
 };
 use std::{
     convert::TryFrom,
@@ -373,14 +374,15 @@ impl<T: Default + Clone> AccountMap<T> {
         }
         Ok(())
     }
-    pub fn remove(&mut self, address: Pubkey) -> ProgramResult {
-        let maintainer_idx = self
+    pub fn remove(&mut self, address: &Pubkey) -> Result<T, ProgramError> {
+        let idx = self
             .entries
             .iter()
-            .position(|&(v, _)| v == address)
+            .position(|&(v, _)| &v == address)
             .ok_or(LidoError::InvalidAccountMember)?;
-        self.entries.swap_remove(maintainer_idx);
-        Ok(())
+        let item = self.entries[idx].clone();
+        self.entries.swap_remove(idx);
+        Ok(item.1)
     }
 }
 

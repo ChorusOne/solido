@@ -89,9 +89,6 @@ pub struct CreateSolidoOpts {
     #[clap(long)]
     pub max_maintainers: u32,
 
-    /// Fees are divided proportionally to the sum of all specified fees, for instance,
-    /// if all the fees are the same value, they will be divided equally.
-
     // Fees are divided proportionally to the sum of all specified fees, for instance,
     // if all the fees are the same value, they will be divided equally.
     /// Insurance fee share
@@ -116,6 +113,11 @@ pub struct CreateSolidoOpts {
     /// Account who will own the stSOL SPL token account that receives the manager fees.
     #[clap(long, value_name = "address")]
     pub manager_fee_account_owner: Pubkey,
+
+    /// If manager is defined, creates an instance with the manager, otherwise
+    /// use the default fee payer.
+    #[clap(long, value_name = "address")]
+    pub manager: Option<Pubkey>,
 }
 
 #[derive(Serialize)]
@@ -348,7 +350,7 @@ pub fn command_create_solido(
             mint_program: st_sol_mint_keypair.pubkey(),
             pool_token_to: pool_token_to_keypair.pubkey(),
             fee_token: stake_pool.fee_address.0,
-            manager: config.fee_payer.pubkey(), // TODO: Give option to multisig
+            manager: opts.manager.unwrap_or(config.fee_payer.pubkey()),
             insurance_account: insurance_keypair.pubkey(),
             treasury_account: treasury_keypair.pubkey(),
             manager_fee_account: manager_fee_keypair.pubkey(),

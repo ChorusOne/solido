@@ -227,27 +227,16 @@ pub fn process_remove_validator(
     )?;
 
     // finds the validator index, this should never return an error
-    let validator_idx = lido
+    let validator_credit = lido
         .fee_recipients
         .validator_credit_accounts
-        .entries
-        .iter()
-        .position(|(v, _)| v == accounts.stake_account_to_remove.key)
-        .ok_or(LidoError::ValidatorCreditNotFound)?;
+        .remove(accounts.stake_account_to_remove.key)?;
 
-    if lido.fee_recipients.validator_credit_accounts.entries[validator_idx]
-        .1
-        .st_sol_amount
-        != StLamports(0)
-    {
+    if validator_credit.st_sol_amount != StLamports(0) {
         msg!("Validator still has tokens to claim. Reclaim tokens before removing the validator");
         return Err(LidoError::ValidatorHasUnclaimedCredit.into());
     }
 
-    lido.fee_recipients
-        .validator_credit_accounts
-        .entries
-        .swap_remove(validator_idx);
     lido.serialize(&mut *accounts.lido.data.borrow_mut())
         .map_err(|err| err.into())
 }
@@ -349,13 +338,14 @@ pub fn process_distribute_fees(program_id: &Pubkey, accounts_raw: &[AccountInfo]
     )?;
 
     // Update validator list that can be claimed at a later time
-    for vc in lido
+    for (_validator_address, validator_credit) in lido
         .fee_recipients
         .validator_credit_accounts
         .entries
         .iter_mut()
     {
-        vc.1.st_sol_amount = (vc.1.st_sol_amount + token_shares.reward_per_validator)
+        validator_credit.st_sol_amount = (validator_credit.st_sol_amount
+            + token_shares.reward_per_validator)
             .ok_or(LidoError::CalculationFailure)?;
     }
     lido.serialize(&mut *accounts.lido.data.borrow_mut())
@@ -373,7 +363,7 @@ pub fn process_add_maintainer(program_id: &Pubkey, accounts_raw: &[AccountInfo])
         .map_err(|err| err.into())
 }
 
-/// Removes a maintainer to the list of maintainers
+/// Removes a maintainer from the list of maintainers
 pub fn process_remove_maintainer(
     program_id: &Pubkey,
     accounts_raw: &[AccountInfo],
@@ -382,7 +372,7 @@ pub fn process_remove_maintainer(
     let mut lido = deserialize_lido(program_id, accounts.lido)?;
     lido.check_manager(accounts.manager)?;
 
-    lido.maintainers.remove(*accounts.maintainer.key)?;
+    lido.maintainers.remove(accounts.maintainer.key)?;
     lido.serialize(&mut *accounts.lido.data.borrow_mut())
         .map_err(|err| err.into())
 }
