@@ -227,7 +227,7 @@ pub struct ValidatorCredit {
 
 impl ValidatorCreditAccounts {
     pub fn required_bytes(max_validators: u32) -> usize {
-        return (max_validators * (32 * 2 + 8) + 8) as usize;
+        (max_validators * (32 * 2 + 8) + 8) as usize
     }
     pub fn maximum_accounts(buffer_size: usize) -> usize {
         // 8 bytes: 4 bytes for `max_validators` + 4 bytes for number of validators in vec
@@ -333,7 +333,7 @@ pub type Maintainers = AccountMap<()>;
 
 impl Maintainers {
     pub fn required_bytes(max_maintainers: u32) -> usize {
-        return (max_maintainers * 32 + 4 + 4) as usize;
+        (max_maintainers * 32 + 4 + 4) as usize
     }
     /// Given a buffer size, calculate the maximum number of maintainers that can be fit
     pub fn maximum_accounts(buffer_size: usize) -> usize {

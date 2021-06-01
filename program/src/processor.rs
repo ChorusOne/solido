@@ -17,7 +17,8 @@ use crate::{
     process_management::{
         process_add_maintainer, process_add_validator, process_change_fee_spec,
         process_claim_validator_fee, process_create_validator_stake_account,
-        process_distribute_fees, process_remove_maintainer, process_remove_validator,
+        process_decrease_validator_stake, process_distribute_fees,
+        process_increase_validator_stake, process_remove_maintainer, process_remove_validator,
     },
     state::{
         FeeDistribution, FeeRecipients, Lido, Maintainers, ValidatorCreditAccounts,
@@ -457,5 +458,11 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
         LidoInstruction::RemoveValidator => process_remove_validator(program_id, accounts),
         LidoInstruction::AddMaintainer => process_add_maintainer(program_id, accounts),
         LidoInstruction::RemoveMaintainer => process_remove_maintainer(program_id, accounts),
+        LidoInstruction::IncreaseValidatorStake { lamports } => {
+            process_increase_validator_stake(program_id, lamports, accounts)
+        }
+        LidoInstruction::DecreaseValidatorStake { lamports } => {
+            process_decrease_validator_stake(program_id, lamports, accounts)
+        }
     }
 }
