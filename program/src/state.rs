@@ -9,8 +9,7 @@ use solana_program::{
 };
 
 use crate::error::LidoError;
-use crate::token::{Rational, Lamports, StLamports, StakePoolTokenLamports};
-
+use crate::token::{Lamports, Rational, StLamports, StakePoolTokenLamports};
 
 /// Constant size of header size = 5 public keys, 1 u64, 4 u8
 pub const LIDO_CONSTANT_HEADER_SIZE: usize = 5 * 32 + 8 + 4;
@@ -400,7 +399,8 @@ mod test_lido {
     fn test_pool_tokens_when_st_sol_total_shares_is_default() {
         let lido = Lido::default();
 
-        let pool_tokens_for_deposit = lido.calc_pool_tokens_for_deposit(Lamports(200), Lamports(100));
+        let pool_tokens_for_deposit =
+            lido.calc_pool_tokens_for_deposit(Lamports(200), Lamports(100));
 
         assert_eq!(pool_tokens_for_deposit, Some(StLamports(0)));
     }
@@ -410,7 +410,8 @@ mod test_lido {
         let mut lido = Lido::default();
         lido.st_sol_total_shares = StLamports(120);
 
-        let pool_tokens_for_deposit = lido.calc_pool_tokens_for_deposit(Lamports(200), Lamports(40));
+        let pool_tokens_for_deposit =
+            lido.calc_pool_tokens_for_deposit(Lamports(200), Lamports(40));
 
         assert_eq!(pool_tokens_for_deposit, Some(StLamports(600)));
     }

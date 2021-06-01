@@ -20,10 +20,8 @@ use crate::{
         IncreaseValidatorStakeInfo, RemoveMaintainerInfo, RemoveValidatorInfo,
     },
     logic::{deserialize_lido, token_mint_to, transfer_to},
-    state::{
-        distribute_fees, FeeDistribution, Lido, ValidatorCredit,
-    },
-    token::{StLamports, StakePoolTokenLamports},
+    state::{distribute_fees, FeeDistribution, Lido, ValidatorCredit},
+    token::{Lamports, StLamports, StakePoolTokenLamports},
     FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY, STAKE_POOL_AUTHORITY,
 };
 
@@ -382,7 +380,7 @@ pub fn process_remove_maintainer(
 /// Increases a validator's stake. This function is called by maintainers
 pub fn process_increase_validator_stake(
     program_id: &Pubkey,
-    lamports: u64,
+    lamports: Lamports,
     accounts_raw: &[AccountInfo],
 ) -> ProgramResult {
     let accounts = IncreaseValidatorStakeInfo::try_from_slice(accounts_raw)?;
@@ -400,7 +398,7 @@ pub fn process_increase_validator_stake(
             accounts.stake_pool_reserve_stake.key,
             accounts.transient_stake.key,
             accounts.validator_vote.key,
-            lamports,
+            lamports.0,
         ),
         &[
             accounts.stake_pool_program.clone(),
@@ -429,7 +427,7 @@ pub fn process_increase_validator_stake(
 /// Removes a maintainer to the list of maintainers
 pub fn process_decrease_validator_stake(
     program_id: &Pubkey,
-    lamports: u64,
+    lamports: Lamports,
     accounts_raw: &[AccountInfo],
 ) -> ProgramResult {
     let accounts = DecreaseValidatorStakeInfo::try_from_slice(accounts_raw)?;
@@ -446,7 +444,7 @@ pub fn process_decrease_validator_stake(
             accounts.stake_pool_validator_list.key,
             accounts.validator_stake.key,
             accounts.transient_stake.key,
-            lamports,
+            lamports.0,
         ),
         &[
             accounts.stake_pool_program.clone(),

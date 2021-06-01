@@ -8,10 +8,10 @@ use helpers::{
     stakepool_account::{get_account, get_token_balance, ValidatorStakeAccount},
     LidoAccounts,
 };
+use lido::token::{Lamports, StakePoolTokenLamports};
 use solana_program::{borsh::try_from_slice_unchecked, hash::Hash};
 use solana_program_test::{tokio, BanksClient};
 use solana_sdk::signature::{Keypair, Signer};
-
 use spl_stake_pool::{
     minimum_stake_lamports, stake_program,
     state::{StakePool, ValidatorList},
@@ -43,8 +43,8 @@ async fn setup() -> (
         vec![validator],
     )
 }
-pub const TEST_DEPOSIT_AMOUNT: u64 = 100_000_000_000;
-pub const TEST_STAKE_DEPOSIT_AMOUNT: u64 = 10_000_000_000;
+pub const TEST_DEPOSIT_AMOUNT: Lamports = Lamports(100_000_000_000);
+pub const TEST_STAKE_DEPOSIT_AMOUNT: Lamports = Lamports(10_000_000_000);
 
 #[tokio::test]
 async fn test_successful_stake_deposit_stake_pool_deposit() {
@@ -107,18 +107,23 @@ async fn test_successful_stake_deposit_stake_pool_deposit() {
     .await;
     let stake_pool = StakePool::try_from_slice(&stake_pool.data.as_slice()).unwrap();
     assert_eq!(
-        stake_pool.total_stake_lamports,
-        stake_pool_before.total_stake_lamports + TEST_STAKE_DEPOSIT_AMOUNT
+        Some(Lamports(stake_pool.total_stake_lamports)),
+        Lamports(stake_pool_before.total_stake_lamports) + TEST_STAKE_DEPOSIT_AMOUNT
     );
+    // In general we can't add the deposit in SOL and the token supply in stake
+    // pool tokens, but in this case, the exchange rate is 1.
     assert_eq!(
-        stake_pool.pool_token_supply,
-        stake_pool_before.pool_token_supply + TEST_STAKE_DEPOSIT_AMOUNT
+        StakePoolTokenLamports(stake_pool.pool_token_supply),
+        StakePoolTokenLamports(stake_pool_before.pool_token_supply + TEST_STAKE_DEPOSIT_AMOUNT.0)
     );
 
     // Check minted tokens
-    let lido_token_balance =
-        get_token_balance(&mut banks_client, &lido_accounts.pool_token_to.pubkey()).await;
-    assert_eq!(lido_token_balance, TEST_STAKE_DEPOSIT_AMOUNT);
+    let lido_token_balance = StakePoolTokenLamports(
+        get_token_balance(&mut banks_client, &lido_accounts.pool_token_to.pubkey()).await,
+    );
+    // In general we can't compare stake pool tokens to SOL, but in this case,
+    // the exchange rate is 1.
+    assert_eq!(lido_token_balance.0, TEST_STAKE_DEPOSIT_AMOUNT.0);
 
     // Check balances in validator stake account list storage
     let validator_list = get_account(
@@ -132,8 +137,8 @@ async fn test_successful_stake_deposit_stake_pool_deposit() {
         .find(&validator_account.vote.pubkey())
         .unwrap();
     assert_eq!(
-        validator_stake_item.stake_lamports,
-        validator_stake_item_before.stake_lamports + TEST_STAKE_DEPOSIT_AMOUNT
+        Some(Lamports(validator_stake_item.stake_lamports)),
+        Lamports(validator_stake_item_before.stake_lamports) + TEST_STAKE_DEPOSIT_AMOUNT
     );
 
     // Check validator stake account actual SOL balance
@@ -143,8 +148,8 @@ async fn test_successful_stake_deposit_stake_pool_deposit() {
         bincode::deserialize::<stake_program::StakeState>(&validator_stake_account.data).unwrap();
     let meta = stake_state.meta().unwrap();
     assert_eq!(
-        validator_stake_account.lamports - minimum_stake_lamports(&meta),
-        validator_stake_item.stake_lamports
+        Lamports(validator_stake_account.lamports) - Lamports(minimum_stake_lamports(&meta)),
+        Some(Lamports(validator_stake_item.stake_lamports))
     );
 }
 #[tokio::test]

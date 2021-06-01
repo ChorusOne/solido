@@ -8,13 +8,14 @@ use helpers::{
     stakepool_account::{get_account, ValidatorStakeAccount},
     LidoAccounts,
 };
+use lido::token::Lamports;
 use solana_program::epoch_schedule::Epoch;
 use solana_program_test::{tokio, ProgramTestContext};
 use solana_sdk::signature::Signer;
 use spl_stake_pool::stake_program;
 
-const TEST_DEPOSIT_AMOUNT: u64 = 100_000_000_000;
-const TEST_DECREASE_AMOUNT: u64 = 100_000_000_000 / 2;
+const TEST_DEPOSIT_AMOUNT: Lamports = Lamports(100_000_000_000);
+const TEST_DECREASE_AMOUNT: Lamports = Lamports(100_000_000_000 / 2);
 async fn setup() -> (ProgramTestContext, LidoAccounts, ValidatorStakeAccount) {
     let mut context = program_test().start_with_context().await;
     let mut lido_accounts = LidoAccounts::new();
@@ -100,8 +101,8 @@ async fn test_successful_decrease_validator_stake() {
     let validator_stake_state =
         deserialize::<stake_program::StakeState>(&validator_stake_account.data).unwrap();
     assert_eq!(
-        pre_validator_stake_account.lamports - TEST_DECREASE_AMOUNT,
-        validator_stake_account.lamports
+        Lamports(pre_validator_stake_account.lamports) - TEST_DECREASE_AMOUNT,
+        Some(Lamports(validator_stake_account.lamports))
     );
     assert_eq!(
         validator_stake_state
@@ -119,7 +120,10 @@ async fn test_successful_decrease_validator_stake() {
     .await;
     let transient_stake_state =
         deserialize::<stake_program::StakeState>(&transient_stake_account.data).unwrap();
-    assert_eq!(transient_stake_account.lamports, TEST_DECREASE_AMOUNT);
+    assert_eq!(
+        Lamports(transient_stake_account.lamports),
+        TEST_DECREASE_AMOUNT
+    );
     assert_ne!(
         transient_stake_state
             .delegation()
@@ -175,8 +179,8 @@ async fn test_successful_increase_validator_stake() {
     .await;
 
     let rent = context.banks_client.get_rent().await.unwrap();
-    let lamports = rent.minimum_balance(std::mem::size_of::<stake_program::StakeState>());
-    let reserve_lamports = TEST_DECREASE_AMOUNT - lamports;
+    let lamports = Lamports(rent.minimum_balance(std::mem::size_of::<stake_program::StakeState>()));
+    let reserve_lamports = (TEST_DECREASE_AMOUNT - lamports).unwrap();
     let result = lido_accounts
         .increase_validator_stake(
             &mut context.banks_client,
@@ -198,8 +202,8 @@ async fn test_successful_increase_validator_stake() {
     let reserve_stake_state =
         deserialize::<stake_program::StakeState>(&reserve_stake_account.data).unwrap();
     assert_eq!(
-        pre_reserve_stake_account.lamports - reserve_lamports,
-        reserve_stake_account.lamports
+        Lamports(pre_reserve_stake_account.lamports) - reserve_lamports,
+        Some(Lamports(reserve_stake_account.lamports))
     );
     assert!(reserve_stake_state.delegation().is_none());
 
@@ -211,7 +215,7 @@ async fn test_successful_increase_validator_stake() {
     .await;
     let transient_stake_state =
         deserialize::<stake_program::StakeState>(&transient_stake_account.data).unwrap();
-    assert_eq!(transient_stake_account.lamports, reserve_lamports);
+    assert_eq!(Lamports(transient_stake_account.lamports), reserve_lamports);
     assert_ne!(
         transient_stake_state.delegation().unwrap().activation_epoch,
         Epoch::MAX

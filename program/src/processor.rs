@@ -276,7 +276,8 @@ pub fn process_stake_deposit(
         return Err(LidoError::InvalidReserveAuthority.into());
     }
 
-    let minium_stake_balance = Lamports(rent.minimum_balance(std::mem::size_of::<stake_program::StakeState>()));
+    let minium_stake_balance =
+        Lamports(rent.minimum_balance(std::mem::size_of::<stake_program::StakeState>()));
     if amount < minium_stake_balance {
         return Err(LidoError::InvalidAmount.into());
     }

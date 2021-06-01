@@ -4,11 +4,11 @@ use solana_program::pubkey::Pubkey;
 pub mod entrypoint;
 pub mod error;
 pub mod instruction;
-pub mod token;
 pub(crate) mod logic;
 pub(crate) mod process_management;
 pub mod processor;
 pub mod state;
+pub mod token;
 
 /// Seed for reserve authority in SOL
 pub const RESERVE_AUTHORITY: &[u8] = b"reserve_authority";

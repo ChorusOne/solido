@@ -28,7 +28,6 @@ pub struct Rational {
 /// only used for `Debug` and `Display` printing.
 macro_rules! impl_token {
     ($TokenLamports:ident, $symbol:expr) => {
-
         #[derive(
             Copy,
             Clone,
@@ -99,7 +98,7 @@ macro_rules! impl_token {
                 Some($TokenLamports(self.0.checked_add(other.0)?))
             }
         }
-    }
+    };
 }
 
 impl_token!(Lamports, "SOL");

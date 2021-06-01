@@ -3,6 +3,7 @@ use lido::{
     instruction::{self, initialize},
     processor,
     state::{FeeDistribution, Maintainers, ValidatorCreditAccounts, LIDO_CONSTANT_SIZE},
+    token::Lamports,
     DEPOSIT_AUTHORITY, FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY, STAKE_POOL_AUTHORITY,
 };
 use solana_program::{hash::Hash, program_pack::Pack, pubkey::Pubkey, system_instruction};
@@ -72,21 +73,21 @@ impl LidoAccounts {
         };
 
         let (reserve_authority, _) = Pubkey::find_program_address(
-            &[&lido.pubkey().to_bytes()[..32], RESERVE_AUTHORITY],
+            &[&lido.pubkey().to_bytes()[..], RESERVE_AUTHORITY],
             &id(),
         );
 
         let (deposit_authority, _) = Pubkey::find_program_address(
-            &[&lido.pubkey().to_bytes()[..32], DEPOSIT_AUTHORITY],
+            &[&lido.pubkey().to_bytes()[..], DEPOSIT_AUTHORITY],
             &id(),
         );
         let (stake_pool_authority, _) = Pubkey::find_program_address(
-            &[&lido.pubkey().to_bytes()[..32], STAKE_POOL_AUTHORITY],
+            &[&lido.pubkey().to_bytes()[..], STAKE_POOL_AUTHORITY],
             &id(),
         );
 
         let (fee_manager_authority, _) = Pubkey::find_program_address(
-            &[&lido.pubkey().to_bytes()[..32], FEE_MANAGER_AUTHORITY],
+            &[&lido.pubkey().to_bytes()[..], FEE_MANAGER_AUTHORITY],
             &id(),
         );
 
@@ -117,13 +118,14 @@ impl LidoAccounts {
         recent_blockhash: &Hash,
     ) -> Result<(), TransportError> {
         self.stake_pool_accounts.deposit_authority = self.deposit_authority;
+        let reserve_lamports = Lamports(1);
         self.stake_pool_accounts
             .initialize_stake_pool(
                 banks_client,
                 payer,
                 &self.manager,
                 recent_blockhash,
-                1,
+                reserve_lamports,
                 &self.fee_manager_authority,
             )
             .await?;
@@ -244,7 +246,7 @@ impl LidoAccounts {
         banks_client: &mut BanksClient,
         payer: &Keypair,
         recent_blockhash: &Hash,
-        deposit_amount: u64,
+        deposit_amount: Lamports,
     ) -> Keypair {
         let user = Keypair::new();
         let recipient = Keypair::new();
@@ -298,10 +300,10 @@ impl LidoAccounts {
         payer: &Keypair,
         recent_blockhash: &Hash,
         validator: &ValidatorStakeAccount,
-        delegate_amount: u64,
+        delegate_amount: Lamports,
     ) -> Pubkey {
         let (stake_account, _) =
-            Pubkey::find_program_address(&[&validator.vote.pubkey().to_bytes()[..32]], &id());
+            Pubkey::find_program_address(&[&validator.vote.pubkey().to_bytes()[..]], &id());
 
         let mut transaction = Transaction::new_with_payer(
             &[instruction::stake_deposit(
@@ -513,7 +515,7 @@ impl LidoAccounts {
         recent_blockhash: &Hash,
         transient_stake: &Pubkey,
         validator_vote: &Pubkey,
-        lamports: u64,
+        lamports: Lamports,
     ) -> Result<(), TransportError> {
         let transaction = Transaction::new_signed_with_payer(
             &[instruction::increase_validator_stake(
@@ -547,7 +549,7 @@ impl LidoAccounts {
         recent_blockhash: &Hash,
         transient_stake: &Pubkey,
         validator_stake: &Pubkey,
-        lamports: u64,
+        lamports: Lamports,
     ) -> Result<(), TransportError> {
         let transaction = Transaction::new_signed_with_payer(
             &[instruction::decrease_validator_stake(

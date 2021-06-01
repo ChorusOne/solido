@@ -8,10 +8,10 @@ use helpers::{
     stakepool_account::{get_account, get_token_balance, transfer, ValidatorStakeAccount},
     LidoAccounts,
 };
+use lido::token::{Lamports, Rational, StakePoolTokenLamports};
 use solana_program::pubkey::Pubkey;
 use solana_program_test::{tokio, ProgramTestContext};
 use solana_sdk::signature::Signer;
-
 use spl_stake_pool::state::StakePool;
 
 async fn setup() -> (ProgramTestContext, LidoAccounts, Vec<ValidatorStakeAccount>) {
@@ -41,9 +41,9 @@ async fn setup() -> (ProgramTestContext, LidoAccounts, Vec<ValidatorStakeAccount
     (context, lido_accounts, stake_accounts)
 }
 const STAKE_ACCOUNTS: u64 = 4;
-const TEST_A_DEPOSIT_AMOUNT: u64 = 200_000_000_000;
-const TEST_B_DEPOSIT_AMOUNT: u64 = 100_000_000_000;
-const EXTRA_STAKE_AMOUNT: u64 = 50_000_000_000;
+const TEST_A_DEPOSIT_AMOUNT: Lamports = Lamports(200_000_000_000);
+const TEST_B_DEPOSIT_AMOUNT: Lamports = Lamports(100_000_000_000);
+const EXTRA_STAKE_AMOUNT: Lamports = Lamports(50_000_000_000);
 
 #[tokio::test]
 async fn test_successful_update_balance() {
@@ -134,43 +134,67 @@ async fn test_successful_update_balance() {
     let stake_pool = StakePool::try_from_slice(&stake_pool.data.as_slice()).unwrap();
 
     // The total reward is the the sum of what each stake account received.
-    let reward = STAKE_ACCOUNTS * EXTRA_STAKE_AMOUNT;
+    let reward = (EXTRA_STAKE_AMOUNT * STAKE_ACCOUNTS).unwrap();
 
     // Of that reward, Lido claims a fraction as fee.
-    let fee_lamports_expected = reward * lido_accounts.stake_pool_accounts.fee.numerator
-        / lido_accounts.stake_pool_accounts.fee.denominator;
+    let fee_lamports_expected = (reward
+        * Rational {
+            numerator: lido_accounts.stake_pool_accounts.fee.numerator,
+            denominator: lido_accounts.stake_pool_accounts.fee.denominator,
+        })
+    .unwrap();
 
     // Confirm that the value of the tokens we received, is equal to the fee we
     // claimed.
-    let fee_pool_tokens_received = get_token_balance(
-        &mut context.banks_client,
-        &lido_accounts.stake_pool_accounts.pool_fee_account.pubkey(),
-    )
-    .await;
+    let fee_pool_tokens_received = StakePoolTokenLamports(
+        get_token_balance(
+            &mut context.banks_client,
+            &lido_accounts.stake_pool_accounts.pool_fee_account.pubkey(),
+        )
+        .await,
+    );
     // One Lamport is lost due to rounding down.
     assert_eq!(
-        stake_pool.calc_lamports_withdraw_amount(fee_pool_tokens_received),
-        Some(fee_lamports_expected - 1)
+        Some(Lamports(
+            stake_pool
+                .calc_lamports_withdraw_amount(fee_pool_tokens_received.0)
+                .unwrap()
+        )),
+        fee_lamports_expected - Lamports(1)
     );
 
     assert_eq!(
         reward + TEST_A_DEPOSIT_AMOUNT,
-        stake_pool.total_stake_lamports,
+        Some(Lamports(stake_pool.total_stake_lamports)),
     );
 
-    let lido_tokens_for_a = get_token_balance(
-        &mut context.banks_client,
-        &lido_accounts.pool_token_to.pubkey(),
-    )
-    .await;
-    assert_eq!(lido_tokens_for_a, TEST_A_DEPOSIT_AMOUNT);
+    let lido_tokens_for_a = StakePoolTokenLamports(
+        get_token_balance(
+            &mut context.banks_client,
+            &lido_accounts.pool_token_to.pubkey(),
+        )
+        .await,
+    );
+    // In general, the stake pool tokens we got cannot be compared to the
+    // deposit in SOL, but in this particular case, the exchange rate is 1,
+    // so we expect the values to be the same.
+    assert_eq!(lido_tokens_for_a.0, TEST_A_DEPOSIT_AMOUNT.0);
 
     // Check amount new user received
-    let received_tokens_b = get_token_balance(&mut context.banks_client, &recipient.pubkey()).await;
+    let received_tokens_b = StakePoolTokenLamports(
+        get_token_balance(&mut context.banks_client, &recipient.pubkey()).await,
+    );
 
+    // In this case the exchange rate is not 1, so we need to compensate for
+    // that.
     assert_eq!(
-        received_tokens_b,
-        ((TEST_B_DEPOSIT_AMOUNT as u128 * stake_pool.pool_token_supply as u128)
-            / stake_pool.total_stake_lamports as u128) as u64
+        received_tokens_b.0,
+        (TEST_B_DEPOSIT_AMOUNT
+            * Rational {
+                numerator: stake_pool.pool_token_supply,
+                denominator: stake_pool.total_stake_lamports,
+            })
+        .unwrap()
+        .0
     );
 }

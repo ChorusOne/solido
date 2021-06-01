@@ -12,7 +12,8 @@ use solana_program::{
 use spl_stake_pool::{instruction::StakePoolInstruction, stake_program, state::Fee};
 
 use crate::{
-    error::LidoError, state::FeeDistribution,
+    error::LidoError,
+    state::FeeDistribution,
     token::{Lamports, StLamports},
 };
 
@@ -61,11 +62,11 @@ pub enum LidoInstruction {
     RemoveMaintainer,
     IncreaseValidatorStake {
         #[allow(dead_code)] // but it's not
-        lamports: u64,
+        lamports: Lamports,
     },
     DecreaseValidatorStake {
         #[allow(dead_code)] // but it's not
-        lamports: u64,
+        lamports: Lamports,
     },
 }
 
@@ -1014,7 +1015,7 @@ accounts_struct! {
 
 pub fn increase_validator_stake(
     program_id: &Pubkey,
-    lamports: u64,
+    lamports: Lamports,
     accounts: &IncreaseValidatorStakeMeta,
 ) -> Result<Instruction, ProgramError> {
     Ok(Instruction {
@@ -1071,7 +1072,7 @@ accounts_struct! {
 
 pub fn decrease_validator_stake(
     program_id: &Pubkey,
-    lamports: u64,
+    lamports: Lamports,
     accounts: &DecreaseValidatorStakeMeta,
 ) -> Result<Instruction, ProgramError> {
     Ok(Instruction {

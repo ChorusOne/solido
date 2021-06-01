@@ -1,9 +1,14 @@
+use crate::{
+    error::LidoError,
+    state::Lido,
+    token::{Lamports, Rational, StLamports},
+    RESERVE_AUTHORITY,
+};
 use solana_program::{
     account_info::AccountInfo, borsh::try_from_slice_unchecked, msg, program::invoke_signed,
     program_error::ProgramError, pubkey::Pubkey, rent::Rent,
 };
 use spl_stake_pool::state::StakePool;
-use crate::{error::LidoError, token::{Lamports, Rational, StLamports}, RESERVE_AUTHORITY, state::Lido};
 use std::fmt::Display;
 
 pub(crate) fn rent_exemption(
@@ -58,10 +63,11 @@ pub fn calc_stakepool_lamports(
     if stake_pool.pool_token_supply == 0 {
         Some(Lamports(0))
     } else {
-        Lamports(stake_pool.total_stake_lamports) * Rational {
-            numerator: pool_to_token_account.amount,
-            denominator: stake_pool.pool_token_supply,
-        }
+        Lamports(stake_pool.total_stake_lamports)
+            * Rational {
+                numerator: pool_to_token_account.amount,
+                denominator: stake_pool.pool_token_supply,
+            }
     }
     .ok_or(LidoError::CalculationFailure)
 }
