@@ -132,6 +132,7 @@ mod test {
 
     #[test]
     fn get_target_balance_works_for_single_validator() {
+        // 100 Lamports delegated + 50 undelegated => 150 per validator target.
         let validators = [
             ValidatorStakeInfo {
                 status: StakeStatus::Active,
@@ -149,5 +150,91 @@ mod test {
         );
         assert!(result.is_ok());
         assert_eq!(targets[0], Lamports(150));
+    }
+
+    #[test]
+    fn get_target_balance_works_for_integer_multiple() {
+        // 200 Lamports delegated + 50 undelegated => 125 per validator target.
+        let validators = [
+            ValidatorStakeInfo {
+                status: StakeStatus::Active,
+                vote_account_address: Pubkey::new_unique(),
+                stake_lamports: 101,
+                last_update_epoch: 0,
+            },
+            ValidatorStakeInfo {
+                status: StakeStatus::Active,
+                vote_account_address: Pubkey::new_unique(),
+                stake_lamports: 99,
+                last_update_epoch: 0,
+            }
+        ];
+        let mut targets = [Lamports(0); 2];
+        let undelegated_stake = Lamports(50);
+        let result = get_target_balance(
+            undelegated_stake,
+            &validators[..],
+            &mut targets[..],
+        );
+        assert!(result.is_ok());
+        assert_eq!(targets, [Lamports(125), Lamports(125)]);
+    }
+
+    #[test]
+    fn get_target_balance_works_for_non_integer_multiple() {
+        // 200 Lamports delegated + 51 undelegated => 125 per validator target,
+        // and one validator gets 1 more.
+        let validators = [
+            ValidatorStakeInfo {
+                status: StakeStatus::Active,
+                vote_account_address: Pubkey::new_unique(),
+                stake_lamports: 101,
+                last_update_epoch: 0,
+            },
+            ValidatorStakeInfo {
+                status: StakeStatus::Active,
+                vote_account_address: Pubkey::new_unique(),
+                stake_lamports: 99,
+                last_update_epoch: 0,
+            }
+        ];
+        let mut targets = [Lamports(0); 2];
+        let undelegated_stake = Lamports(51);
+        let result = get_target_balance(
+            undelegated_stake,
+            &validators[..],
+            &mut targets[..],
+        );
+        assert!(result.is_ok());
+        assert_eq!(targets, [Lamports(126), Lamports(125)]);
+    }
+
+    #[test]
+    fn get_target_balance_avoids_deactivating_validators() {
+        // 200 Lamports delegated, but only one active validator,
+        // so all of the target should be with that one validator.
+        let validators = [
+            ValidatorStakeInfo {
+                status: StakeStatus::Active,
+                vote_account_address: Pubkey::new_unique(),
+                stake_lamports: 17,
+                last_update_epoch: 0,
+            },
+            ValidatorStakeInfo {
+                status: StakeStatus::DeactivatingTransient,
+                vote_account_address: Pubkey::new_unique(),
+                stake_lamports: 183,
+                last_update_epoch: 0,
+            }
+        ];
+        let mut targets = [Lamports(0); 2];
+        let undelegated_stake = Lamports(0);
+        let result = get_target_balance(
+            undelegated_stake,
+            &validators[..],
+            &mut targets[..],
+        );
+        assert!(result.is_ok());
+        assert_eq!(targets, [Lamports(200), Lamports(0)]);
     }
 }
