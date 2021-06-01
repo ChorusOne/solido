@@ -348,11 +348,15 @@ pub struct AccountMap<T> {
     pub entries: Vec<(Pubkey, T)>,
     pub maximum_entries: u32,
 }
-impl<T: Default + Clone> AccountMap<T> {
+impl<T: Default> AccountMap<T> {
     /// Creates a new instance with the `maximum_entries` positions filled with the default value
     pub fn new_fill_default(maximum_entries: u32) -> Self {
+        let mut v = Vec::with_capacity(maximum_entries as usize);
+        for _ in 0..maximum_entries {
+            v.push((Pubkey::default(), T::default()));
+        }
         AccountMap {
-            entries: vec![(Pubkey::default(), T::default()); maximum_entries as usize],
+            entries: v,
             maximum_entries,
         }
     }
@@ -380,9 +384,7 @@ impl<T: Default + Clone> AccountMap<T> {
             .iter()
             .position(|&(v, _)| &v == address)
             .ok_or(LidoError::InvalidAccountMember)?;
-        let item = self.entries[idx].clone();
-        self.entries.swap_remove(idx);
-        Ok(item.1)
+        Ok(self.entries.swap_remove(idx).1)
     }
 }
 
