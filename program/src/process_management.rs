@@ -337,13 +337,8 @@ pub fn process_distribute_fees(program_id: &Pubkey, accounts_raw: &[AccountInfo]
     )?;
 
     // Update validator list that can be claimed at a later time
-    for (_validator_address, validator) in lido
-        .validators
-        .entries
-        .iter_mut()
-    {
-        validator.fee_credit = (validator.fee_credit
-            + token_shares.reward_per_validator)
+    for (_validator_address, validator) in lido.validators.entries.iter_mut() {
+        validator.fee_credit = (validator.fee_credit + token_shares.reward_per_validator)
             .ok_or(LidoError::CalculationFailure)?;
     }
     lido.serialize(&mut *accounts.lido.data.borrow_mut())

@@ -20,10 +20,7 @@ use crate::{
         process_decrease_validator_stake, process_distribute_fees,
         process_increase_validator_stake, process_remove_maintainer, process_remove_validator,
     },
-    state::{
-        FeeDistribution, FeeRecipients, Lido, Maintainers, Validators,
-        LIDO_CONSTANT_SIZE,
-    },
+    state::{FeeDistribution, FeeRecipients, Lido, Maintainers, Validators, LIDO_CONSTANT_SIZE},
     token::{Lamports, StLamports},
     DEPOSIT_AUTHORITY, FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY, STAKE_POOL_AUTHORITY,
 };

@@ -328,10 +328,8 @@ mod test_lido {
 
     #[test]
     fn test_validators_size() {
-        let one_val =
-            get_instance_packed_len(&Validators::new_fill_default(1)).unwrap();
-        let two_val =
-            get_instance_packed_len(&Validators::new_fill_default(2)).unwrap();
+        let one_val = get_instance_packed_len(&Validators::new_fill_default(1)).unwrap();
+        let two_val = get_instance_packed_len(&Validators::new_fill_default(2)).unwrap();
         assert_eq!(two_val - one_val, 72);
     }
     #[test]
@@ -539,14 +537,9 @@ mod test_lido {
     #[test]
     fn test_n_val() {
         let n_validators: u64 = 10000;
-        let size = get_instance_packed_len(&Validators::new_fill_default(
-            n_validators as u32,
-        ))
-        .unwrap();
+        let size =
+            get_instance_packed_len(&Validators::new_fill_default(n_validators as u32)).unwrap();
 
-        assert_eq!(
-            Validators::maximum_accounts(size) as u64,
-            n_validators
-        );
+        assert_eq!(Validators::maximum_accounts(size) as u64, n_validators);
     }
 }

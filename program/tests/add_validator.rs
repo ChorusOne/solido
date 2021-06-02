@@ -48,10 +48,7 @@ async fn test_successful_add_validator() {
     // Validator token account is the same one as provided
     assert!(has_token_account);
 
-    assert_eq!(
-        lido.validators.entries.len(),
-        1,
-    );
+    assert_eq!(lido.validators.entries.len(), 1,);
 
     let stake_account = get_account(&mut banks_client, &validator_stake.stake_account).await;
     let stake_account =
