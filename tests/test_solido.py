@@ -112,7 +112,7 @@ solido('add-validator',
 
 maintainer = create_test_account('maintainer-account-key.json')
 
-print(f'> Adding a maintainer {maintainer}')
+print(f'> Adding maintainer {maintainer}')
 solido('add-maintainer',
        '--solido-program-id', solido_program_id,
        '--solido-address', solido_address,
@@ -120,7 +120,7 @@ solido('add-maintainer',
        keypair_path='test-key-1.json'
        )
 
-print(f'> Removing a maintainer {maintainer}')
+print(f'> Removing maintainer {maintainer}')
 solido('remove-maintainer',
        '--solido-program-id', solido_program_id,
        '--solido-address', solido_address,
