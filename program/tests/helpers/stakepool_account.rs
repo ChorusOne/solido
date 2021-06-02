@@ -444,11 +444,11 @@ impl StakePoolAccounts {
         let validator_list = Keypair::new();
         let stake_pool_address = &stake_pool.pubkey();
         let (withdraw_authority, _) = Pubkey::find_program_address(
-            &[&stake_pool_address.to_bytes()[..32], b"withdraw"],
+            &[&stake_pool_address.to_bytes(), b"withdraw"],
             &spl_stake_pool::id(),
         );
         let (deposit_authority, _) = Pubkey::find_program_address(
-            &[&stake_pool_address.to_bytes()[..32], b"deposit"],
+            &[&stake_pool_address.to_bytes(), b"deposit"],
             &spl_stake_pool::id(),
         );
         let reserve_stake = Keypair::new();

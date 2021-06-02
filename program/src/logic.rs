@@ -24,16 +24,25 @@ pub(crate) fn rent_exemption(
 }
 
 pub fn check_reserve_authority(
-    lido_info: &AccountInfo,
     program_id: &Pubkey,
-    reserve_authority_info: &AccountInfo,
+    lido_address: &Pubkey,
+    reserve_authority_bump_seed: u8,
+    reserve_authority_address: &Pubkey,
 ) -> Result<(), ProgramError> {
-    let (reserve_id, _) = Pubkey::find_program_address(
-        &[&lido_info.key.to_bytes()[..32], RESERVE_AUTHORITY],
+    let reserve_id = Pubkey::create_program_address(
+        &[
+            &lido_address.to_bytes(),
+            RESERVE_AUTHORITY,
+            &[reserve_authority_bump_seed],
+        ],
         program_id,
-    );
-    if reserve_id != *reserve_authority_info.key {
-        msg!("Invalid reserve authority");
+    )?;
+    if &reserve_id != reserve_authority_address {
+        msg!(
+            "Invalid reserve authority {}, should be {}.",
+            reserve_id,
+            reserve_authority_address
+        );
         return Err(LidoError::InvalidReserveAuthority.into());
     }
     Ok(())
@@ -113,7 +122,7 @@ pub fn token_mint_to<'a>(
     amount: StLamports,
 ) -> Result<(), ProgramError> {
     let me_bytes = lido.to_bytes();
-    let authority_signature_seeds = [&me_bytes[..32], authority_type, &[bump_seed]];
+    let authority_signature_seeds = [&me_bytes, authority_type, &[bump_seed]];
     let signers = &[&authority_signature_seeds[..]];
 
     let ix = spl_token::instruction::mint_to(
@@ -140,7 +149,7 @@ pub fn transfer_to<'a>(
     amount: u64,
 ) -> Result<(), ProgramError> {
     let me_bytes = lido.to_bytes();
-    let authority_signature_seeds = [&me_bytes[..32], authority_type, &[bump_seed]];
+    let authority_signature_seeds = [&me_bytes, authority_type, &[bump_seed]];
     let signers = &[&authority_signature_seeds[..]];
 
     let ix = spl_token::instruction::transfer(
