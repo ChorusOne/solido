@@ -81,9 +81,9 @@ pub fn process_initialize(
     Lido::check_valid_minter_program(&accounts.mint_program.key, accounts.manager_fee_account)?;
 
     // Bytes required for maintainers
-    let bytes_for_maintainers = Maintainers::required_bytes(max_maintainers);
+    let bytes_for_maintainers = Maintainers::required_bytes(max_maintainers as usize);
     // Calculate the expected number of validators
-    let expected_max_validators = Validators::maximum_accounts(
+    let expected_max_validators = Validators::maximum_entries(
         accounts
             .lido
             .data_len()
