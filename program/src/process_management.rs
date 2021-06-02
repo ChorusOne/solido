@@ -162,8 +162,8 @@ pub fn process_add_validator(program_id: &Pubkey, accounts_raw: &[AccountInfo]) 
     lido.validators.add(
         *accounts.stake_account.key,
         Validator {
-            token_address: *accounts.validator_token_account.key,
-            st_sol_amount: StLamports(0),
+            fee_address: *accounts.validator_token_account.key,
+            fee_credit: StLamports(0),
         },
     )?;
     lido.serialize(&mut *accounts.lido.data.borrow_mut())
@@ -231,7 +231,7 @@ pub fn process_remove_validator(
         .validators
         .remove(accounts.stake_account_to_remove.key)?;
 
-    if validator.st_sol_amount != StLamports(0) {
+    if validator.fee_credit != StLamports(0) {
         msg!("Validator still has tokens to claim. Reclaim tokens before removing the validator");
         return Err(LidoError::ValidatorHasUnclaimedCredit.into());
     }
@@ -247,12 +247,13 @@ pub fn process_claim_validator_fee(
     let accounts = ClaimValidatorFeeInfo::try_from_slice(accounts_raw)?;
     let mut lido = deserialize_lido(program_id, accounts.lido)?;
 
-    let validator_account = lido
+    let (_validator_address, validator) = lido
         .validators
         .entries
         .iter_mut()
-        .find(|(_, v)| &v.token_address == accounts.validator_token.key)
+        .find(|(_, v)| &v.fee_address == accounts.validator_token.key)
         .ok_or(LidoError::InvalidValidatorCreditAccount)?;
+
     token_mint_to(
         accounts.lido.key,
         accounts.spl_token.clone(),
@@ -261,9 +262,9 @@ pub fn process_claim_validator_fee(
         accounts.reserve_authority.clone(),
         RESERVE_AUTHORITY,
         lido.sol_reserve_authority_bump_seed,
-        validator_account.1.st_sol_amount,
+        validator.fee_credit,
     )?;
-    validator_account.1.st_sol_amount = StLamports(0);
+    validator.fee_credit = StLamports(0);
     lido.serialize(&mut *accounts.lido.data.borrow_mut())
         .map_err(|err| err.into())
 }
@@ -341,7 +342,7 @@ pub fn process_distribute_fees(program_id: &Pubkey, accounts_raw: &[AccountInfo]
         .entries
         .iter_mut()
     {
-        validator.st_sol_amount = (validator.st_sol_amount
+        validator.fee_credit = (validator.fee_credit
             + token_shares.reward_per_validator)
             .ok_or(LidoError::CalculationFailure)?;
     }

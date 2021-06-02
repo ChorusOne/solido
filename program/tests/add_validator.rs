@@ -44,7 +44,7 @@ async fn test_successful_add_validator() {
         .validators
         .entries
         .iter()
-        .any(|(_, v)| v.token_address == validator_stake.validator_token_account.pubkey());
+        .any(|(_, v)| v.fee_address == validator_stake.validator_token_account.pubkey());
     // Validator token account is the same one as provided
     assert!(has_token_account);
 

@@ -150,8 +150,11 @@ pub type Validators = AccountMap<Validator>;
 #[repr(C)]
 #[derive(Clone, Debug, Default, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema)]
 pub struct Validator {
-    pub token_address: Pubkey,
-    pub st_sol_amount: StLamports,
+    /// Fees in stSOL that the validator is entitled too, but hasn't claimed yet.
+    pub fee_credit: StLamports,
+
+    /// SPL token account denominated in stSOL to transfer fees to when claiming them.
+    pub fee_address: Pubkey,
 }
 
 impl Validators {
@@ -338,8 +341,8 @@ mod test_lido {
             .add(
                 Pubkey::new_unique(),
                 Validator {
-                    token_address: Pubkey::new_unique(),
-                    st_sol_amount: StLamports(10000),
+                    fee_address: Pubkey::new_unique(),
+                    fee_credit: StLamports(10000),
                 },
             )
             .unwrap();
