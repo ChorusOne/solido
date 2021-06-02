@@ -1,4 +1,3 @@
-use std::convert::TryInto;
 use std::fmt;
 
 use anchor_client::solana_sdk::bpf_loader_upgradeable;
@@ -13,14 +12,19 @@ use anchor_lang::{Discriminator, InstructionData};
 use borsh::de::BorshDeserialize;
 use borsh::ser::BorshSerialize;
 use clap::Clap;
+use lido::instruction::AddMaintainerMeta;
 use lido::instruction::AddValidatorMeta;
+use lido::instruction::ChangeFeeSpecMeta;
 use lido::instruction::CreateValidatorStakeAccountMeta;
 use lido::instruction::LidoInstruction;
+use lido::instruction::RemoveMaintainerMeta;
+use lido::state::Lido;
 use multisig::accounts as multisig_accounts;
 use multisig::instruction as multisig_instruction;
 use serde::Serialize;
 
 use crate::helpers::get_anchor_program;
+use crate::helpers::get_solido;
 use crate::util::PubkeyBase58;
 use crate::Config;
 use crate::{print_output, OutputMode};
@@ -45,6 +49,9 @@ enum SubCommand {
 
     /// Show the details of a transaction.
     ShowTransaction(ShowTransactionOpts),
+
+    /// Show an instance of solido in detail
+    ShowSolido(ShowSolidoOpts),
 
     /// Propose replacing a program with that in the given buffer account.
     ProposeUpgrade(ProposeUpgradeOpts),
@@ -146,6 +153,13 @@ struct ShowTransactionOpts {
 }
 
 #[derive(Clap, Debug)]
+struct ShowSolidoOpts {
+    /// The solido instance to show
+    #[clap(long)]
+    solido_instance: Pubkey,
+}
+
+#[derive(Clap, Debug)]
 struct ApproveOpts {
     /// The multisig account whose owners should vote for this proposal.
     // TODO: Can be omitted, we can obtain it from the transaction account.
@@ -203,6 +217,7 @@ pub fn main(
         }
         SubCommand::Approve(cmd_opts) => approve(program, cmd_opts),
         SubCommand::ExecuteTransaction(cmd_opts) => execute_transaction(program, cmd_opts),
+        SubCommand::ShowSolido(_) => todo!(),
     }
 }
 
@@ -381,18 +396,41 @@ enum SolidoInstruction {
         manager: Pubkey,
         stake_pool_program: Pubkey,
         stake_pool: Pubkey,
-        staker: Pubkey,
         funder: Pubkey,
         stake_account: Pubkey,
         validator_vote: Pubkey,
-        validator: Pubkey,
     },
     AddValidator {
+        solido_instance: Pubkey,
+        manager: Pubkey,
+        stake_pool_program: Pubkey,
+        stake_pool: Pubkey,
         stake_account: Pubkey,
+        validator_token_account: Pubkey,
     },
-    RemoveValidator,
-    AddMaintainer,
-    RemoveMaintainer,
+    AddMaintainer {
+        solido_instance: Pubkey,
+        manager: Pubkey,
+        maintainer: Pubkey,
+    },
+    RemoveMaintainer {
+        solido_instance: Pubkey,
+        manager: Pubkey,
+        maintainer: Pubkey,
+    },
+    ChangeFee {
+        current_solido: Box<Lido>,
+        insurance_fee: u32,
+        treasury_fee: u32,
+        validation_fee: u32,
+        manager_fee: u32,
+
+        solido_instance: Pubkey,
+        manager: Pubkey,
+        insurance_account: Pubkey,
+        treasury_account: Pubkey,
+        manager_fee_account: Pubkey,
+    },
 }
 
 #[derive(Serialize)]
@@ -490,20 +528,129 @@ impl fmt::Display for ShowTransactionOutput {
                 write!(f, "  This is a Solido instruction. ")?;
                 match solido_instruction {
                     SolidoInstruction::CreateValidatorStakeAccount {
+                        solido_instance,
+                        manager,
+                        stake_pool_program,
+                        stake_pool,
+                        funder,
                         stake_account,
                         validator_vote,
                     } => {
                         writeln!(f, "It creates a validator stake account.")?;
-                        writeln!(f, "    Stake account:  {}", stake_account)?;
-                        writeln!(f, "    Validator vote: {}", validator_vote)?;
+                        writeln!(f, "    Solido instance:     {}", solido_instance)?;
+                        writeln!(f, "    Manager:             {}", manager)?;
+                        writeln!(f, "    Stake pool program:  {}", stake_pool_program)?;
+                        writeln!(f, "    Stake pool instance: {}", stake_pool)?;
+                        writeln!(f, "    Funder:              {}", funder)?;
+                        writeln!(f, "    Stake account:       {}", stake_account)?;
+                        writeln!(f, "    Validator vote:      {}", validator_vote)?;
                     }
-                    SolidoInstruction::AddValidator { stake_account } => {
-                        writeln!(f, "It creates add a validator to Solido")?;
-                        writeln!(f, "    Stake account: {}", stake_account)?;
+                    SolidoInstruction::AddValidator {
+                        solido_instance,
+                        manager,
+                        stake_account,
+                        stake_pool,
+                        stake_pool_program,
+                        validator_token_account,
+                    } => {
+                        writeln!(f, "It adds a validator to Solido")?;
+                        writeln!(f, "    Solido instance:      {}", solido_instance)?;
+                        writeln!(f, "    Manager:              {}", manager)?;
+                        writeln!(f, "    Stake pool program:   {}", stake_pool_program)?;
+                        writeln!(f, "    Stake pool instance:  {}", stake_pool)?;
+                        writeln!(f, "    Stake account:        {}", stake_account)?;
+                        writeln!(f, "    Validator token:      {}", validator_token_account)?;
                     }
-                    SolidoInstruction::RemoveValidator => todo!(),
-                    SolidoInstruction::AddMaintainer => todo!(),
-                    SolidoInstruction::RemoveMaintainer => todo!(),
+                    SolidoInstruction::AddMaintainer {
+                        solido_instance,
+                        manager,
+                        maintainer,
+                    } => {
+                        writeln!(f, "It adds a maintainer")?;
+                        writeln!(f, "    Solido instance: {}", solido_instance)?;
+                        writeln!(f, "    Manager:         {}", manager)?;
+                        writeln!(f, "    Maintainer:      {}", maintainer)?;
+                    }
+                    SolidoInstruction::RemoveMaintainer {
+                        solido_instance,
+                        manager,
+                        maintainer,
+                    } => {
+                        writeln!(f, "It removes a maintainer")?;
+                        writeln!(f, "    Solido instance: {}", solido_instance)?;
+                        writeln!(f, "    Manager:         {}", manager)?;
+                        writeln!(f, "    Maintainer:      {}", maintainer)?;
+                    }
+                    SolidoInstruction::ChangeFee {
+                        current_solido,
+                        insurance_fee,
+                        treasury_fee,
+                        validation_fee,
+                        manager_fee,
+
+                        solido_instance,
+                        manager,
+                        insurance_account,
+                        treasury_account,
+                        manager_fee_account,
+                    } => {
+                        writeln!(f, "It changes the fee structure and distribution")?;
+                        writeln!(f, "    Solido instance:       {}", solido_instance)?;
+                        writeln!(f, "    Manager:               {}", manager)?;
+                        writeln!(f)?;
+                        let new_sum = insurance_fee + treasury_fee + validation_fee + manager_fee;
+                        let current_sum = current_solido.fee_distribution.sum() as u32;
+                        changed_fee(
+                            f,
+                            current_solido.fee_distribution.insurance_fee,
+                            insurance_fee,
+                            current_sum,
+                            new_sum,
+                            "insurance",
+                        )?;
+                        changed_fee(
+                            f,
+                            current_solido.fee_distribution.treasury_fee,
+                            treasury_fee,
+                            current_sum,
+                            new_sum,
+                            "treasury",
+                        )?;
+                        changed_fee(
+                            f,
+                            current_solido.fee_distribution.validation_fee,
+                            validation_fee,
+                            current_sum,
+                            new_sum,
+                            "validation",
+                        )?;
+                        changed_fee(
+                            f,
+                            current_solido.fee_distribution.manager_fee,
+                            manager_fee,
+                            current_sum,
+                            new_sum,
+                            "manager",
+                        )?;
+                        changed_addr(
+                            f,
+                            &current_solido.fee_recipients.insurance_account,
+                            insurance_account,
+                            "insurance",
+                        )?;
+                        changed_addr(
+                            f,
+                            &current_solido.fee_recipients.treasury_account,
+                            treasury_account,
+                            "treasury",
+                        )?;
+                        changed_addr(
+                            f,
+                            &current_solido.fee_recipients.manager_account,
+                            manager_fee_account,
+                            "manager",
+                        )?;
+                    }
                 }
             }
             ParsedInstruction::Unrecognized => {
@@ -513,6 +660,40 @@ impl fmt::Display for ShowTransactionOutput {
 
         Ok(())
     }
+}
+
+fn changed_fee(
+    f: &mut fmt::Formatter,
+    current_param: u32,
+    new_param: &u32,
+    current_sum: u32,
+    new_sum: u32,
+    param_name: &str,
+) -> fmt::Result {
+    if &current_param != new_param || current_sum != new_sum {
+        writeln!(
+            f,
+            "    New {} fee: {}/{}, before was {}/{}",
+            param_name, new_param, new_sum, current_param, current_sum
+        )?;
+    }
+    Ok(())
+}
+
+fn changed_addr(
+    f: &mut fmt::Formatter,
+    current_addr: &Pubkey,
+    new_addr: &Pubkey,
+    param_name: &str,
+) -> fmt::Result {
+    if current_addr != new_addr {
+        writeln!(
+            f,
+            "    New {} account: {}, before was {}",
+            param_name, new_addr, current_addr,
+        )?;
+    }
+    Ok(())
 }
 
 fn show_transaction(program: Program, opts: ShowTransactionOpts) -> ShowTransactionOutput {
@@ -601,7 +782,29 @@ fn show_transaction(program: Program, opts: ShowTransactionOpts) -> ShowTransact
                 LidoInstruction::DistributeFees => todo!(),
                 LidoInstruction::ChangeFeeSpec {
                     new_fee_distribution,
-                } => todo!(),
+                } => {
+                    if let Ok(accounts) = ChangeFeeSpecMeta::try_from_slice(&instr.accounts) {
+                        if let Ok(current_solido) = get_solido(&program.rpc(), &accounts.lido) {
+                            ParsedInstruction::SolidoInstruction(SolidoInstruction::ChangeFee {
+                                current_solido: Box::new(current_solido),
+                                insurance_fee: new_fee_distribution.insurance_fee,
+                                treasury_fee: new_fee_distribution.treasury_fee,
+                                validation_fee: new_fee_distribution.validation_fee,
+                                manager_fee: new_fee_distribution.manager_fee,
+
+                                solido_instance: accounts.lido,
+                                manager: accounts.manager,
+                                insurance_account: accounts.insurance_account,
+                                treasury_account: accounts.treasury_account,
+                                manager_fee_account: accounts.manager_fee_account,
+                            })
+                        } else {
+                            ParsedInstruction::Unrecognized
+                        }
+                    } else {
+                        ParsedInstruction::Unrecognized
+                    }
+                }
                 LidoInstruction::CreateValidatorStakeAccount => {
                     if let Ok(accounts) =
                         CreateValidatorStakeAccountMeta::try_from_slice(&instr.accounts)
@@ -610,6 +813,11 @@ fn show_transaction(program: Program, opts: ShowTransactionOpts) -> ShowTransact
                             SolidoInstruction::CreateValidatorStakeAccount {
                                 stake_account: accounts.stake_account,
                                 validator_vote: accounts.validator,
+                                solido_instance: accounts.lido,
+                                manager: accounts.manager,
+                                stake_pool_program: accounts.stake_pool_program,
+                                stake_pool: accounts.stake_pool,
+                                funder: accounts.funder,
                             },
                         )
                     } else {
@@ -617,18 +825,41 @@ fn show_transaction(program: Program, opts: ShowTransactionOpts) -> ShowTransact
                     }
                 }
                 LidoInstruction::AddValidator => {
-                    // SolidoInstruction::AddValidator{validator: }
                     if let Ok(accounts) = AddValidatorMeta::try_from_slice(&instr.accounts) {
                         ParsedInstruction::SolidoInstruction(SolidoInstruction::AddValidator {
                             stake_account: accounts.stake_account,
+                            solido_instance: accounts.lido,
+                            manager: accounts.manager,
+                            stake_pool_program: accounts.stake_pool_program,
+                            stake_pool: accounts.stake_pool,
+                            validator_token_account: accounts.validator_token_account,
                         })
                     } else {
                         ParsedInstruction::Unrecognized
                     }
                 }
-                LidoInstruction::RemoveValidator => todo!(),
-                LidoInstruction::AddMaintainer => todo!(),
-                LidoInstruction::RemoveMaintainer => todo!(),
+                LidoInstruction::AddMaintainer => {
+                    if let Ok(accounts) = AddMaintainerMeta::try_from_slice(&instr.accounts) {
+                        ParsedInstruction::SolidoInstruction(SolidoInstruction::AddMaintainer {
+                            solido_instance: accounts.lido,
+                            manager: accounts.manager,
+                            maintainer: accounts.maintainer,
+                        })
+                    } else {
+                        ParsedInstruction::Unrecognized
+                    }
+                }
+                LidoInstruction::RemoveMaintainer => {
+                    if let Ok(accounts) = RemoveMaintainerMeta::try_from_slice(&instr.accounts) {
+                        ParsedInstruction::SolidoInstruction(SolidoInstruction::RemoveMaintainer {
+                            solido_instance: accounts.lido,
+                            manager: accounts.manager,
+                            maintainer: accounts.maintainer,
+                        })
+                    } else {
+                        ParsedInstruction::Unrecognized
+                    }
+                }
                 _ => ParsedInstruction::Unrecognized,
             },
             Err(_) => ParsedInstruction::Unrecognized,

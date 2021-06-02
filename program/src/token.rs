@@ -11,6 +11,7 @@
 //!   getting the formulas right, rather than the checked arithmetic bookkeeping.
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use serde::Serialize;
 use std::{
     convert::TryFrom,
     fmt,
@@ -39,6 +40,7 @@ macro_rules! impl_token {
             BorshDeserialize,
             BorshSerialize,
             BorshSchema,
+            Serialize,
         )]
         pub struct $TokenLamports(pub u64);
 
