@@ -53,9 +53,9 @@ pub enum LidoError {
     /// Number of maximum validators reached
     #[error("InvalidFeeAmount")]
     MaximumNumberOfAccountsExceeded,
-    /// An invalid validator credit account size was supplied
-    #[error("UnexpectedValidatorCreditAccountSize")]
-    UnexpectedValidatorCreditAccountSize,
+    /// The size of the account for the Solido state does not match `max_validators`.
+    #[error("UnexpectedMaxValidators")]
+    UnexpectedMaxValidators,
     // 15
     /// Wrong manager trying  to alter the state
     #[error("InvalidManager")]

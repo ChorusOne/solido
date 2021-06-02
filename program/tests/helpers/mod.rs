@@ -2,7 +2,7 @@
 use lido::{
     instruction::{self, initialize},
     processor,
-    state::{FeeDistribution, Maintainers, ValidatorCreditAccounts, LIDO_CONSTANT_SIZE},
+    state::{FeeDistribution, Maintainers, Validators, LIDO_CONSTANT_SIZE},
     token::Lamports,
     DEPOSIT_AUTHORITY, FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY, STAKE_POOL_AUTHORITY,
 };
@@ -182,8 +182,7 @@ impl LidoAccounts {
         .unwrap();
 
         let validator_accounts_len =
-            get_instance_packed_len(&ValidatorCreditAccounts::new_fill_default(MAX_VALIDATORS))
-                .unwrap();
+            get_instance_packed_len(&Validators::new_fill_default(MAX_VALIDATORS)).unwrap();
         let manager_accounts_len =
             get_instance_packed_len(&Maintainers::new_fill_default(MAX_MAINTAINERS)).unwrap();
         let lido_size = LIDO_CONSTANT_SIZE + validator_accounts_len + manager_accounts_len;
