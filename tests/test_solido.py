@@ -110,5 +110,31 @@ solido('add-validator',
        keypair_path='test-key-1.json'
        )
 
+maintainer = create_test_account('maintainer-account-key.json')
+
+print(f'> Adding a maintainer {maintainer}')
+solido('add-maintainer',
+       '--solido-program-id', solido_program_id,
+       '--solido-address', solido_address,
+       '--maintainer-address', maintainer,
+       keypair_path='test-key-1.json'
+       )
+
+print(f'> Removing a maintainer {maintainer}')
+solido('remove-maintainer',
+       '--solido-program-id', solido_program_id,
+       '--solido-address', solido_address,
+       '--maintainer-address', maintainer,
+       keypair_path='test-key-1.json'
+       )
+
+solido('add-maintainer',
+       '--solido-program-id', solido_program_id,
+       '--solido-address', solido_address,
+       '--maintainer-address', maintainer,
+       keypair_path='test-key-1.json'
+       )
+
+
 # TODO: Implement a `solido show` to get the state of Solido and
 # confirm that the validator was added
