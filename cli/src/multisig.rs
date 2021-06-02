@@ -1,3 +1,4 @@
+use std::convert::TryInto;
 use std::fmt;
 
 use anchor_client::solana_sdk::bpf_loader_upgradeable;
@@ -12,6 +13,9 @@ use anchor_lang::{Discriminator, InstructionData};
 use borsh::de::BorshDeserialize;
 use borsh::ser::BorshSerialize;
 use clap::Clap;
+use lido::instruction::AddValidatorMeta;
+use lido::instruction::CreateValidatorStakeAccountMeta;
+use lido::instruction::LidoInstruction;
 use multisig::accounts as multisig_accounts;
 use multisig::instruction as multisig_instruction;
 use serde::Serialize;
@@ -366,7 +370,29 @@ enum ParsedInstruction {
         threshold: u64,
         owners: Vec<PubkeyBase58>,
     },
+    SolidoInstruction(SolidoInstruction),
     Unrecognized,
+}
+
+#[derive(Serialize)]
+enum SolidoInstruction {
+    CreateValidatorStakeAccount {
+        solido_instance: Pubkey,
+        manager: Pubkey,
+        stake_pool_program: Pubkey,
+        stake_pool: Pubkey,
+        staker: Pubkey,
+        funder: Pubkey,
+        stake_account: Pubkey,
+        validator_vote: Pubkey,
+        validator: Pubkey,
+    },
+    AddValidator {
+        stake_account: Pubkey,
+    },
+    RemoveValidator,
+    AddMaintainer,
+    RemoveMaintainer,
 }
 
 #[derive(Serialize)]
@@ -460,6 +486,26 @@ impl fmt::Display for ShowTransactionOutput {
                     writeln!(f, "      {}", owner_pubkey)?;
                 }
             }
+            ParsedInstruction::SolidoInstruction(solido_instruction) => {
+                write!(f, "  This is a Solido instruction. ")?;
+                match solido_instruction {
+                    SolidoInstruction::CreateValidatorStakeAccount {
+                        stake_account,
+                        validator_vote,
+                    } => {
+                        writeln!(f, "It creates a validator stake account.")?;
+                        writeln!(f, "    Stake account:  {}", stake_account)?;
+                        writeln!(f, "    Validator vote: {}", validator_vote)?;
+                    }
+                    SolidoInstruction::AddValidator { stake_account } => {
+                        writeln!(f, "It creates add a validator to Solido")?;
+                        writeln!(f, "    Stake account: {}", stake_account)?;
+                    }
+                    SolidoInstruction::RemoveValidator => todo!(),
+                    SolidoInstruction::AddMaintainer => todo!(),
+                    SolidoInstruction::RemoveMaintainer => todo!(),
+                }
+            }
             ParsedInstruction::Unrecognized => {
                 writeln!(f, "  Unrecognized instruction.")?;
             }
@@ -547,7 +593,46 @@ fn show_transaction(program: Program, opts: ShowTransactionOpts) -> ShowTransact
             ParsedInstruction::Unrecognized
         }
     } else {
-        ParsedInstruction::Unrecognized
+        // Probably a Solido instruction
+        let instruction: Result<LidoInstruction, _> =
+            BorshDeserialize::deserialize(&mut instr.data.as_slice());
+        match instruction {
+            Ok(lido_instruction) => match lido_instruction {
+                LidoInstruction::DistributeFees => todo!(),
+                LidoInstruction::ChangeFeeSpec {
+                    new_fee_distribution,
+                } => todo!(),
+                LidoInstruction::CreateValidatorStakeAccount => {
+                    if let Ok(accounts) =
+                        CreateValidatorStakeAccountMeta::try_from_slice(&instr.accounts)
+                    {
+                        ParsedInstruction::SolidoInstruction(
+                            SolidoInstruction::CreateValidatorStakeAccount {
+                                stake_account: accounts.stake_account,
+                                validator_vote: accounts.validator,
+                            },
+                        )
+                    } else {
+                        ParsedInstruction::Unrecognized
+                    }
+                }
+                LidoInstruction::AddValidator => {
+                    // SolidoInstruction::AddValidator{validator: }
+                    if let Ok(accounts) = AddValidatorMeta::try_from_slice(&instr.accounts) {
+                        ParsedInstruction::SolidoInstruction(SolidoInstruction::AddValidator {
+                            stake_account: accounts.stake_account,
+                        })
+                    } else {
+                        ParsedInstruction::Unrecognized
+                    }
+                }
+                LidoInstruction::RemoveValidator => todo!(),
+                LidoInstruction::AddMaintainer => todo!(),
+                LidoInstruction::RemoveMaintainer => todo!(),
+                _ => ParsedInstruction::Unrecognized,
+            },
+            Err(_) => ParsedInstruction::Unrecognized,
+        }
     };
 
     ShowTransactionOutput {
