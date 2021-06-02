@@ -66,7 +66,7 @@ pub fn get_target_balance(
     let mut remainder = (total_lamports - total_lamports_distributed)
         .expect("Does not underflow because we distribute at most total_lamports.");
 
-    assert!(remainder.0 < current_balance.len() as u64);
+    assert!(remainder.0 < num_active_validators);
 
     // Distribute the remainder among the first few validators, give them one
     // Lamport each.
