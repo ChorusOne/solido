@@ -189,6 +189,47 @@ macro_rules! accounts_struct {
                     )?
                 ]
             }
+
+            pub fn try_from_slice(accounts: &[AccountMeta]) -> Result<$NameAccountMeta, ProgramError> {
+                let mut accounts_iter = accounts.iter();
+
+                // Unpack the accounts from the iterator in the same order that
+                // they were provided to the macro. Also verify that is_signer
+                // and is_writable match their definitions, and return an error
+                // if not.
+                $(
+                    let account = accounts_iter.next().ok_or(ProgramError::NotEnoughAccountKeys)?;
+                    if (($is_signer && !account.is_signer)
+                        || ($is_writable && !account.is_writable)) {
+                        return Err(LidoError::InvalidAccountInfo.into());
+                    }
+                    let $var_account = account.pubkey;
+                )*
+
+                // The const accounts we only skip over, they are not part of
+                // the *Meta struct, only of the *Info struct used in the
+                // on-chain program.
+                $(
+                    $(
+                        // We need to reference $const_account for macro
+                        // expansion to work, but if we do we get an unused
+                        // variable warning, so also assign to _ afterwards.
+                        let $const_account = accounts_iter.next().ok_or(ProgramError::NotEnoughAccountKeys)?;
+                        let _ = $const_account;
+                    )*
+                )?
+
+                // Check that there are no excess accounts provided.
+                if accounts_iter.next().is_some() {
+                    return Err(LidoError::TooManyAccountKeys.into());
+                }
+
+                let result = $NameAccountMeta {
+                    $( $var_account ),*
+                };
+
+                Ok(result)
+            }
         }
 
         impl<'a, 'b> $NameAccountInfo<'a, 'b> {
