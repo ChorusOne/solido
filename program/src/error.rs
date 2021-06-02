@@ -115,6 +115,11 @@ pub enum LidoError {
     /// There are no validators with an active stake account to delegate to.
     #[error("NoActiveValidators")]
     NoActiveValidators,
+    /// When staking part of the reserve to a new stake account, the next
+    /// program-derived address for the stake account associated with the given
+    /// validator, does not match the provided stake account.
+    #[error("InvalidStakeAccount")]
+    InvalidStakeAccount,
 }
 impl From<LidoError> for ProgramError {
     fn from(e: LidoError) -> Self {

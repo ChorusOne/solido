@@ -13,6 +13,7 @@ use solana_program::{
 use crate::error::LidoError;
 use crate::token::{Lamports, Rational, StLamports, StakePoolTokenLamports};
 use crate::RESERVE_AUTHORITY;
+use crate::VALIDATOR_STAKE_ACCOUNT;
 
 /// Constant size of header size = 5 public keys, 1 u64, 4 u8
 pub const LIDO_CONSTANT_HEADER_SIZE: usize = 5 * 32 + 8 + 4;
@@ -253,6 +254,21 @@ impl Validator {
             stake_accounts_balance: Lamports(0),
         }
     }
+
+    pub fn find_stake_account_address(
+        program_id: &Pubkey,
+        solido_account: &Pubkey,
+        validator_vote_account: &Pubkey,
+        seed: u64,
+    ) -> (Pubkey, u8) {
+        let seeds = [
+            &solido_account.to_bytes(),
+            &validator_vote_account.to_bytes(),
+            &VALIDATOR_STAKE_ACCOUNT[..],
+            &seed.to_le_bytes()[..],
+        ];
+        Pubkey::find_program_address(&seeds, program_id)
+    }
 }
 
 /// Determines how fees are split up among these parties, represented as the
@@ -413,6 +429,22 @@ impl<T: Default> AccountMap<T> {
             .position(|pe| &pe.pubkey == address)
             .ok_or(LidoError::InvalidAccountMember)?;
         Ok(self.entries.swap_remove(idx).entry)
+    }
+
+    pub fn get(&self, address: &Pubkey) -> Result<&PubkeyAndEntry<T>, ProgramError> {
+        self.entries
+            .iter()
+            .filter(|pe| &pe.pubkey == address)
+            .next()
+            .ok_or(LidoError::InvalidAccountMember.into())
+    }
+
+    pub fn get_mut(&mut self, address: &Pubkey) -> Result<&mut PubkeyAndEntry<T>, ProgramError> {
+        self.entries
+            .iter_mut()
+            .filter(|pe| &pe.pubkey == address)
+            .next()
+            .ok_or(LidoError::InvalidAccountMember.into())
     }
 
     /// Return how many bytes are needed to serialize an instance holding `max_entries`.

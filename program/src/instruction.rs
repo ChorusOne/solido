@@ -446,15 +446,17 @@ accounts_struct! {
             is_signer: false,
             is_writable: true,
         },
-        pub validator {
-            is_signer: false,
-            is_writable: true,
-        },
         pub reserve {
             is_signer: false,
             is_writable: true,
         },
-        pub stake {
+        pub validator {
+            is_signer: false,
+            is_writable: true,
+        },
+        // Must be set to the program-derived stake account for the given
+        // validator, with seed `stake_accounts_seed_end`.
+        pub stake_account_end {
             is_signer: false,
             is_writable: true,
         },
