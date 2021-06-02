@@ -381,7 +381,7 @@ mod test_lido {
             get_instance_packed_len(&Validators::new_fill_default(10000)).unwrap();
         assert_eq!(validator_accounts_len, 10000 * (32 * 2 + 8) + 8);
         let mut data = Vec::new();
-        lido.serialize(&mut data).unwrap();
+        BorshSerialize::serialize(&lido, &mut data).unwrap();
         // 32*2 +8 + 4 + 4 = key*2 + StSol + 4 max_validators + 4 size of vec
         // +4 + 4  = for max_maintainers + 4 size of vec
         const SIZE: usize = ((32 * 2 + 8) + 4 + 4) + (4 + 4);
