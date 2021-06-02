@@ -408,28 +408,28 @@ pub fn command_create_solido(
 #[derive(Clap, Debug)]
 pub struct AddValidatorOpts {
     /// Address of the Solido program.
-    #[clap(long)]
+    #[clap(long, value_name = "address")]
     pub solido_program_id: Pubkey,
     /// Account that stores the data for this Solido instance.
-    #[clap(long)]
+    #[clap(long, value_name = "address")]
     pub solido_address: Pubkey,
 
-    /// Stake pool program id
-    #[clap(long)]
+    /// Stake pool program id.
+    #[clap(long, value_name = "address")]
     stake_pool_program_id: Pubkey,
     /// Address of the validator vote account.
-    #[clap(long)]
+    #[clap(long, value_name = "address")]
     pub validator_vote: Pubkey,
     /// Validator stSol token account.
-    #[clap(long)]
+    #[clap(long, value_name = "address")]
     pub validator_rewards_address: Pubkey,
 
-    // TDOO(Ruud): Maybe move this to the previous (general) arguments passed to the program
-    /// Issue commands through the passed multisig account
-    #[clap(long, requires = "multisig-program-id")]
+    // TDOO(Ruud): Maybe move this to the previous (general) arguments passed to the program.
+    /// Issue commands through the passed multisig account.
+    #[clap(long, requires = "multisig-program-id", value_name = "address")]
     pub multisig_address: Option<Pubkey>,
-    /// When issuing commands Multisig program id
-    #[clap(long, requires = "multisig-address")]
+    /// When issuing commands Multisig program id.
+    #[clap(long, requires = "multisig-address", value_name = "address")]
     pub multisig_program_id: Option<Pubkey>,
 }
 
@@ -490,29 +490,105 @@ pub fn command_add_validator(
         instruction,
     )
 }
+#[derive(Clap, Debug)]
+pub struct AddRemoveMaintainerOpts {
+    /// Address of the Solido program.
+    #[clap(long, value_name = "address")]
+    pub solido_program_id: Pubkey,
+    /// Account that stores the data for this Solido instance.
+    #[clap(long, value_name = "address")]
+    pub solido_address: Pubkey,
+
+    // Maintainer to add or remove.
+    #[clap(long, value_name = "address")]
+    pub maintainer_address: Pubkey,
+
+    /// Issue commands through the passed multisig account.
+    #[clap(long, requires = "multisig-program-id", value_name = "address")]
+    pub multisig_address: Option<Pubkey>,
+    /// When issuing commands Multisig program id.
+    #[clap(long, requires = "multisig-address", value_name = "address")]
+    pub multisig_program_id: Option<Pubkey>,
+}
+
+/// Command to add a validator to Solido.
+pub fn command_add_maintainer(
+    config: Config,
+    cluster: Cluster,
+    opts: AddRemoveMaintainerOpts,
+) -> Result<Option<ProposeInstructionOutput>, crate::Error> {
+    let execution_method = get_execution_method(
+        config.fee_payer.pubkey(),
+        opts.multisig_program_id,
+        opts.multisig_address,
+    );
+    let instruction = lido::instruction::add_maintainer(
+        &opts.solido_program_id,
+        &lido::instruction::AddMaintainerMeta {
+            lido: opts.solido_address,
+            manager: execution_method.get_pubkey(),
+            maintainer: opts.maintainer_address,
+        },
+    )?;
+    execution_method.send_instruction(
+        cluster,
+        config,
+        opts.multisig_program_id,
+        opts.multisig_address,
+        instruction,
+    )
+}
+
+/// Command to add a validator to Solido.
+pub fn command_remove_maintainer(
+    config: Config,
+    cluster: Cluster,
+    opts: AddRemoveMaintainerOpts,
+) -> Result<Option<ProposeInstructionOutput>, crate::Error> {
+    let execution_method = get_execution_method(
+        config.fee_payer.pubkey(),
+        opts.multisig_program_id,
+        opts.multisig_address,
+    );
+    let instruction = lido::instruction::remove_maintainer(
+        &opts.solido_program_id,
+        &lido::instruction::RemoveMaintainerMeta {
+            lido: opts.solido_address,
+            manager: execution_method.get_pubkey(),
+            maintainer: opts.maintainer_address,
+        },
+    )?;
+    execution_method.send_instruction(
+        cluster,
+        config,
+        opts.multisig_program_id,
+        opts.multisig_address,
+        instruction,
+    )
+}
 
 #[derive(Clap, Debug)]
 pub struct CreateValidatorStakeAccountOpts {
     /// Address of the Solido program.
-    #[clap(long)]
+    #[clap(long, value_name = "address")]
     pub solido_program_id: Pubkey,
     /// Account that stores the data for this Solido instance.
-    #[clap(long)]
+    #[clap(long, value_name = "address")]
     pub solido_address: Pubkey,
 
     /// Stake pool program id
-    #[clap(long)]
+    #[clap(long, value_name = "address")]
     stake_pool_program_id: Pubkey,
     /// Address of the validator vote account.
-    #[clap(long)]
+    #[clap(long, value_name = "address")]
     pub validator_vote: Pubkey,
 
     // TDOO(Ruud): Maybe move this to the previous (general) arguments passed to the program
     /// Issue commands through the passed multisig account
-    #[clap(long, requires = "multisig-program-id")]
+    #[clap(long, requires = "multisig-program-id", value_name = "address")]
     pub multisig_address: Option<Pubkey>,
     /// When issuing commands Multisig program id
-    #[clap(long, requires = "multisig-address")]
+    #[clap(long, requires = "multisig-address", value_name = "address")]
     pub multisig_program_id: Option<Pubkey>,
 }
 

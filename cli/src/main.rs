@@ -5,6 +5,7 @@ use std::str::FromStr;
 use anchor_client::Cluster;
 use anchor_client::Program;
 use clap::Clap;
+use helpers::AddRemoveMaintainerOpts;
 use helpers::AddValidatorOpts;
 use helpers::CreateValidatorStakeAccountOpts;
 use serde::Serialize;
@@ -12,7 +13,9 @@ use solana_client::rpc_client::RpcClient;
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::{read_keypair_file, Keypair};
 
+use crate::helpers::command_add_maintainer;
 use crate::helpers::command_create_validator_stake_account;
+use crate::helpers::command_remove_maintainer;
 use crate::helpers::{
     command_add_validator, command_create_solido, get_anchor_program, CreateSolidoOpts,
 };
@@ -102,8 +105,12 @@ FEES:
     ")]
     CreateSolido(CreateSolidoOpts),
 
-    /// Add a new validator
+    /// Adds a new validator
     AddValidator(AddValidatorOpts),
+    /// Adds a maintainer to the Solido instance
+    AddMaintainer(AddRemoveMaintainerOpts),
+    /// Adds a maintainer to the Solido instance
+    RemoveMaintainer(AddRemoveMaintainerOpts),
 
     /// Create a Validator Stake Account
     CreateValidatorStakeAccount(CreateValidatorStakeAccountOpts),
@@ -190,14 +197,28 @@ fn main() {
         SubCommand::CreateValidatorStakeAccount(cmd_opts) => {
             if let Some(output) =
                 command_create_validator_stake_account(config, opts.cluster, cmd_opts)
-                    .expect("Failed to create a validator stake account")
+                    .expect("Failed to create validator stake account")
             {
                 print_output(opts.output_mode, &output);
             }
         }
         SubCommand::AddValidator(cmd_opts) => {
             if let Some(output) = command_add_validator(config, opts.cluster, cmd_opts)
-                .expect("Failed to add a validator")
+                .expect("Failed to add validator")
+            {
+                print_output(opts.output_mode, &output);
+            }
+        }
+        SubCommand::AddMaintainer(cmd_opts) => {
+            if let Some(output) = command_add_maintainer(config, opts.cluster, cmd_opts)
+                .expect("Failed to add maintainer")
+            {
+                print_output(opts.output_mode, &output);
+            }
+        }
+        SubCommand::RemoveMaintainer(cmd_opts) => {
+            if let Some(output) = command_remove_maintainer(config, opts.cluster, cmd_opts)
+                .expect("Failed to remove maintainer")
             {
                 print_output(opts.output_mode, &output);
             }
