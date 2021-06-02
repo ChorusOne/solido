@@ -499,7 +499,7 @@ pub struct AddRemoveMaintainerOpts {
     #[clap(long, value_name = "address")]
     pub solido_address: Pubkey,
 
-    // Maintainer to add.
+    // Maintainer to add or remove.
     #[clap(long, value_name = "address")]
     pub maintainer_address: Pubkey,
 
