@@ -109,7 +109,7 @@ pub fn get_least_balanced_validator(
     assert_eq!(
         current_balance.len(),
         target_balance.len(),
-        "Must have as many target balance outputs as current balance inputs."
+        "Must have as many target balances as current balances."
     );
     let mut index = 0;
     let mut amount = Lamports(0);
