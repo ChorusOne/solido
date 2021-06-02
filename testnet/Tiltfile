@@ -1,0 +1,12 @@
+load('ext://namespace', 'namespace_yaml')
+
+docker_build("chorusone/solido","..")
+
+k8s_yaml(namespace_yaml('solido'), allow_duplicates=False)
+k8s_yaml("manifests/solido.yml")
+
+k8s_resource("solido", port_forwards=[
+    port_forward(8899, name="Solana RPC [:8899]"),
+    port_forward(8900, name="Solana WS [:8900]"),
+])
+
