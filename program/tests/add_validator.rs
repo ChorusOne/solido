@@ -33,8 +33,7 @@ async fn test_successful_add_validator() {
     let lido = try_from_slice_unchecked::<Lido>(lido_account.data.as_slice()).unwrap();
 
     let has_stake_account = lido
-        .fee_recipients
-        .validator_credit_accounts
+        .validators
         .entries
         .iter()
         .any(|(v, _)| v == &validator_stake.stake_account);
@@ -42,16 +41,15 @@ async fn test_successful_add_validator() {
     assert!(has_stake_account);
 
     let has_token_account = lido
-        .fee_recipients
-        .validator_credit_accounts
+        .validators
         .entries
         .iter()
-        .any(|(_, vc)| vc.token_address == validator_stake.validator_token_account.pubkey());
+        .any(|(_, v)| v.token_address == validator_stake.validator_token_account.pubkey());
     // Validator token account is the same one as provided
     assert!(has_token_account);
 
     assert_eq!(
-        lido.fee_recipients.validator_credit_accounts.entries.len(),
+        lido.validators.entries.len(),
         1,
     );
 

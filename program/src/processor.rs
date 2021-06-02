@@ -21,7 +21,7 @@ use crate::{
         process_increase_validator_stake, process_remove_maintainer, process_remove_validator,
     },
     state::{
-        FeeDistribution, FeeRecipients, Lido, Maintainers, ValidatorCreditAccounts,
+        FeeDistribution, FeeRecipients, Lido, Maintainers, Validators,
         LIDO_CONSTANT_SIZE,
     },
     token::{Lamports, StLamports},
@@ -86,7 +86,7 @@ pub fn process_initialize(
     // Bytes required for maintainers
     let bytes_for_maintainers = Maintainers::required_bytes(max_maintainers);
     // Calculate the expected number of validators
-    let expected_max_validators = ValidatorCreditAccounts::maximum_accounts(
+    let expected_max_validators = Validators::maximum_accounts(
         accounts
             .lido
             .data_len()
@@ -101,15 +101,16 @@ pub fn process_initialize(
             expected_max_validators,
             max_validators
         );
-        return Err(LidoError::UnexpectedValidatorCreditAccountSize.into());
+        return Err(LidoError::UnexpectedMaxValidators.into());
     }
     // Initialize fee structure
     lido.fee_recipients = FeeRecipients {
         insurance_account: *accounts.insurance_account.key,
         treasury_account: *accounts.treasury_account.key,
         manager_account: *accounts.manager_fee_account.key,
-        validator_credit_accounts: ValidatorCreditAccounts::new(max_validators),
     };
+    lido.validators = Validators::new(max_validators);
+
     let (_, reserve_bump_seed) = Pubkey::find_program_address(
         &[&accounts.lido.key.to_bytes()[..32], RESERVE_AUTHORITY],
         program_id,

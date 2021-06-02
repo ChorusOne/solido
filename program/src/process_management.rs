@@ -20,7 +20,7 @@ use crate::{
         IncreaseValidatorStakeInfo, RemoveMaintainerInfo, RemoveValidatorInfo,
     },
     logic::{deserialize_lido, token_mint_to, transfer_to},
-    state::{distribute_fees, FeeDistribution, Lido, ValidatorCredit},
+    state::{distribute_fees, FeeDistribution, Lido, Validator},
     token::{Lamports, StLamports, StakePoolTokenLamports},
     FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY, STAKE_POOL_AUTHORITY,
 };
@@ -159,9 +159,9 @@ pub fn process_add_validator(program_id: &Pubkey, accounts_raw: &[AccountInfo]) 
         ]],
     )?;
 
-    lido.fee_recipients.validator_credit_accounts.add(
+    lido.validators.add(
         *accounts.stake_account.key,
-        ValidatorCredit {
+        Validator {
             token_address: *accounts.validator_token_account.key,
             st_sol_amount: StLamports(0),
         },
@@ -227,12 +227,11 @@ pub fn process_remove_validator(
     )?;
 
     // finds the validator index, this should never return an error
-    let validator_credit = lido
-        .fee_recipients
-        .validator_credit_accounts
+    let validator = lido
+        .validators
         .remove(accounts.stake_account_to_remove.key)?;
 
-    if validator_credit.st_sol_amount != StLamports(0) {
+    if validator.st_sol_amount != StLamports(0) {
         msg!("Validator still has tokens to claim. Reclaim tokens before removing the validator");
         return Err(LidoError::ValidatorHasUnclaimedCredit.into());
     }
@@ -249,11 +248,10 @@ pub fn process_claim_validator_fee(
     let mut lido = deserialize_lido(program_id, accounts.lido)?;
 
     let validator_account = lido
-        .fee_recipients
-        .validator_credit_accounts
+        .validators
         .entries
         .iter_mut()
-        .find(|(_, vc)| &vc.token_address == accounts.validator_token.key)
+        .find(|(_, v)| &v.token_address == accounts.validator_token.key)
         .ok_or(LidoError::InvalidValidatorCreditAccount)?;
     token_mint_to(
         accounts.lido.key,
@@ -286,7 +284,7 @@ pub fn process_distribute_fees(program_id: &Pubkey, accounts_raw: &[AccountInfo]
 
     let token_shares = distribute_fees(
         &lido.fee_distribution,
-        lido.fee_recipients.validator_credit_accounts.entries.len() as u64,
+        lido.validators.entries.len() as u64,
         StakePoolTokenLamports(stake_pool_fee_account.amount),
     )
     .ok_or(LidoError::CalculationFailure)?;
@@ -338,13 +336,12 @@ pub fn process_distribute_fees(program_id: &Pubkey, accounts_raw: &[AccountInfo]
     )?;
 
     // Update validator list that can be claimed at a later time
-    for (_validator_address, validator_credit) in lido
-        .fee_recipients
-        .validator_credit_accounts
+    for (_validator_address, validator) in lido
+        .validators
         .entries
         .iter_mut()
     {
-        validator_credit.st_sol_amount = (validator_credit.st_sol_amount
+        validator.st_sol_amount = (validator.st_sol_amount
             + token_shares.reward_per_validator)
             .ok_or(LidoError::CalculationFailure)?;
     }

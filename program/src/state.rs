@@ -42,6 +42,8 @@ pub struct Lido {
     /// Fees
     pub fee_distribution: FeeDistribution,
     pub fee_recipients: FeeRecipients,
+
+    pub validators: Validators,
     pub maintainers: Maintainers,
 }
 
@@ -143,16 +145,16 @@ impl Lido {
     }
 }
 
-pub type ValidatorCreditAccounts = AccountMap<ValidatorCredit>;
+pub type Validators = AccountMap<Validator>;
 
 #[repr(C)]
 #[derive(Clone, Debug, Default, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema)]
-pub struct ValidatorCredit {
+pub struct Validator {
     pub token_address: Pubkey,
     pub st_sol_amount: StLamports,
 }
 
-impl ValidatorCreditAccounts {
+impl Validators {
     pub fn required_bytes(max_validators: u32) -> usize {
         (max_validators * (32 * 2 + 8) + 8) as usize
     }
@@ -180,7 +182,6 @@ pub struct FeeRecipients {
     pub insurance_account: Pubkey,
     pub treasury_account: Pubkey,
     pub manager_account: Pubkey,
-    pub validator_credit_accounts: ValidatorCreditAccounts,
 }
 
 impl FeeDistribution {
@@ -323,20 +324,20 @@ mod test_lido {
     use spl_stake_pool::borsh::get_instance_packed_len;
 
     #[test]
-    fn test_validator_credit_size() {
+    fn test_validators_size() {
         let one_val =
-            get_instance_packed_len(&ValidatorCreditAccounts::new_fill_default(1)).unwrap();
+            get_instance_packed_len(&Validators::new_fill_default(1)).unwrap();
         let two_val =
-            get_instance_packed_len(&ValidatorCreditAccounts::new_fill_default(2)).unwrap();
+            get_instance_packed_len(&Validators::new_fill_default(2)).unwrap();
         assert_eq!(two_val - one_val, 72);
     }
     #[test]
     fn test_lido_serialization() {
-        let mut validators = ValidatorCreditAccounts::new(10_000);
+        let mut validators = Validators::new(10_000);
         validators
             .add(
                 Pubkey::new_unique(),
-                ValidatorCredit {
+                Validator {
                     token_address: Pubkey::new_unique(),
                     st_sol_amount: StLamports(10000),
                 },
@@ -364,12 +365,12 @@ mod test_lido {
                 insurance_account: Pubkey::new_unique(),
                 treasury_account: Pubkey::new_unique(),
                 manager_account: Pubkey::new_unique(),
-                validator_credit_accounts: validators,
             },
+            validators: validators,
             maintainers: maintainers,
         };
         let validator_accounts_len =
-            get_instance_packed_len(&ValidatorCreditAccounts::new_fill_default(10000)).unwrap();
+            get_instance_packed_len(&Validators::new_fill_default(10000)).unwrap();
         assert_eq!(validator_accounts_len, 10000 * (32 * 2 + 8) + 8);
         let mut data = Vec::new();
         lido.serialize(&mut data).unwrap();
@@ -535,13 +536,13 @@ mod test_lido {
     #[test]
     fn test_n_val() {
         let n_validators: u64 = 10000;
-        let size = get_instance_packed_len(&ValidatorCreditAccounts::new_fill_default(
+        let size = get_instance_packed_len(&Validators::new_fill_default(
             n_validators as u32,
         ))
         .unwrap();
 
         assert_eq!(
-            ValidatorCreditAccounts::maximum_accounts(size) as u64,
+            Validators::maximum_accounts(size) as u64,
             n_validators
         );
     }
