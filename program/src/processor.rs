@@ -81,9 +81,9 @@ pub fn process_initialize(
     Lido::check_valid_minter_program(&accounts.mint_program.key, accounts.manager_fee_account)?;
 
     // Bytes required for maintainers
-    let bytes_for_maintainers = Maintainers::required_bytes(max_maintainers);
+    let bytes_for_maintainers = Maintainers::required_bytes(max_maintainers as usize);
     // Bytes required for validators
-    let bytes_for_validators = Validators::required_bytes(max_validators);
+    let bytes_for_validators = Validators::required_bytes(max_validators as usize);
     // Calculate the expected lido's size
     let bytes_sum = LIDO_CONSTANT_SIZE + bytes_for_validators + bytes_for_maintainers;
     if bytes_sum != accounts.lido.data_len() {

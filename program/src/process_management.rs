@@ -165,10 +165,7 @@ pub fn process_add_validator(program_id: &Pubkey, accounts_raw: &[AccountInfo]) 
 
     lido.validators.add(
         *accounts.stake_account.key,
-        Validator {
-            fee_address: *accounts.validator_token_account.key,
-            fee_credit: StLamports(0),
-        },
+        Validator::new(*accounts.validator_token_account.key),
     )?;
     lido.serialize(&mut *accounts.lido.data.borrow_mut())
         .map_err(|err| err.into())
