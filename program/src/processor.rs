@@ -422,6 +422,11 @@ pub fn process_deposit_active_stake_to_pool(
 
     let validator = lido.validators.get_mut(&accounts.validator.key)?;
 
+    if validator.stake_accounts_seed_begin >= validator.stake_accounts_seed_end {
+        // TODO: add a proper error for this.
+        panic!("Validator {} has no pending stake accounts.", validator_key);
+    }
+
     // A deposit to the stake pool always deposits from the begin of the range
     // of stake accounts. The `begin` index holds the oldest stake account.
     let (stake_addr, stake_addr_bump_seed) = Validator::find_stake_account_address(
