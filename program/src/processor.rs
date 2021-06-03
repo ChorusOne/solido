@@ -425,6 +425,11 @@ pub fn process_deposit_active_stake_to_pool(
     // Before we put the stake account in the pool, record how much SOL it held,
     // because that SOL is now no longer activating, so we need to update the
     // `Validator` instance.
+    // TODO: If rewards have been paid out before we deposited this account to
+    // the stake pool, then the `stake_accounts_balance` will now become too
+    // low. (Or rather, it started being wrong at the start of the epoch, when
+    // rewards were paid, but now we may get an underflow.)
+    // See also: https://github.com/ChorusOne/solido/issues/128#issuecomment-853842891
     let amount_staked = Lamports(accounts.stake_account_begin.lamports());
     validator.entry.stake_accounts_balance =
         (validator.entry.stake_accounts_balance - amount_staked).ok_or(LidoError::CalculationFailure)?;
