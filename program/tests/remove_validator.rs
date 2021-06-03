@@ -2,9 +2,7 @@
 
 mod helpers;
 
-use helpers::{
-    program_test, simple_add_validator_to_pool, stakepool_account::get_account, LidoAccounts,
-};
+use helpers::{get_account, program_test, simple_add_validator_to_pool, LidoAccounts};
 use lido::state::Lido;
 use solana_program::{borsh::try_from_slice_unchecked, hash::Hash, pubkey::Pubkey};
 use solana_program_test::{tokio, BanksClient};

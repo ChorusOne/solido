@@ -2,9 +2,7 @@
 
 mod helpers;
 
-use helpers::{
-    id, program_test, stakepool_account::get_account, LidoAccounts, MAX_MAINTAINERS, MAX_VALIDATORS,
-};
+use helpers::{get_account, id, program_test, LidoAccounts, MAX_MAINTAINERS, MAX_VALIDATORS};
 use lido::state::{Maintainers, Validators, LIDO_CONSTANT_SIZE};
 use solana_program::borsh::get_instance_packed_len;
 use solana_program_test::tokio;

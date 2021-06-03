@@ -4,8 +4,8 @@ mod helpers;
 
 use borsh::BorshDeserialize;
 use helpers::{
-    program_test, simple_add_validator_to_pool,
-    stakepool_account::{get_account, get_token_balance, transfer, ValidatorStakeAccount},
+    get_account, program_test, simple_add_validator_to_pool,
+    stakepool_account::{get_token_balance, transfer, ValidatorStakeAccount},
     LidoAccounts,
 };
 use solana_program::pubkey::Pubkey;

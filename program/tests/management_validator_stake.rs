@@ -4,9 +4,8 @@ mod helpers;
 
 use bincode::deserialize;
 use helpers::{
-    program_test, simple_add_validator_to_pool,
-    stakepool_account::{get_account, ValidatorStakeAccount},
-    LidoAccounts,
+    get_account, program_test, simple_add_validator_to_pool,
+    stakepool_account::ValidatorStakeAccount, LidoAccounts,
 };
 use lido::token::Lamports;
 use solana_program::epoch_schedule::Epoch;

@@ -2,13 +2,15 @@
 use lido::{
     instruction::{self, initialize},
     processor,
-    state::{FeeDistribution, Lido},
+    state::{FeeDistribution, Lido, Maintainers, Validator, Validators, LIDO_CONSTANT_SIZE},
     token::Lamports,
     DEPOSIT_AUTHORITY, FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY, STAKE_POOL_AUTHORITY,
 };
 use solana_program::{hash::Hash, program_pack::Pack, pubkey::Pubkey, system_instruction};
 use solana_program_test::*;
 use solana_sdk::{
+    account::Account,
+    borsh::{get_instance_packed_len, try_from_slice_unchecked},
     signature::{Keypair, Signer},
     transaction::Transaction,
     transport::TransportError,
@@ -23,6 +25,14 @@ pub const MAX_MAINTAINERS: u32 = 100;
 
 // This id is only used throughout these tests.
 solana_program::declare_id!("3kEkdGe68DuTKg6FhVrLPZ3Wm8EcUPCPjhCeu8WrGDoc");
+
+pub async fn get_account(banks_client: &mut BanksClient, pubkey: &Pubkey) -> Account {
+    banks_client
+        .get_account(*pubkey)
+        .await
+        .expect("account not found")
+        .expect("account empty")
+}
 
 pub fn program_test() -> ProgramTest {
     let mut program = ProgramTest::new("lido", id(), processor!(processor::process));
@@ -299,8 +309,20 @@ impl LidoAccounts {
         validator: &ValidatorStakeAccount,
         delegate_amount: Lamports,
     ) -> Pubkey {
-        let (stake_account, _) =
-            Pubkey::find_program_address(&[&validator.vote.pubkey().to_bytes()[..]], &id());
+        let lido_account = get_account(banks_client, &self.lido.pubkey()).await;
+        let lido = try_from_slice_unchecked::<Lido>(lido_account.data.as_slice()).unwrap();
+
+        let (_key, validator_state) = lido
+            .validators
+            .get(&validator.vote.pubkey())
+            .expect("Trying to stake with a non-mebmer validator.");
+
+        let (stake_account, _) = Validator::find_stake_account_address(
+            &id(),
+            &self.lido.pubkey(),
+            &validator.vote.pubkey(),
+            validator_state.stake_accounts_seed_end,
+        );
 
         let mut transaction = Transaction::new_with_payer(
             &[instruction::stake_deposit(
@@ -309,7 +331,7 @@ impl LidoAccounts {
                     lido: self.lido.pubkey(),
                     validator: validator.vote.pubkey(),
                     reserve: self.reserve_authority,
-                    stake: stake_account,
+                    stake_account_end: stake_account,
                     deposit_authority: self.deposit_authority,
                 },
                 delegate_amount,
@@ -337,7 +359,7 @@ impl LidoAccounts {
                     lido: self.lido.pubkey(),
                     maintainer: self.maintainer.pubkey(),
                     validator: validator.vote.pubkey(),
-                    stake: *stake_account,
+                    stake_account_begin: *stake_account,
                     deposit_authority: self.deposit_authority,
                     pool_token_to: self.pool_token_to.pubkey(),
                     stake_pool_program: spl_stake_pool::id(),
