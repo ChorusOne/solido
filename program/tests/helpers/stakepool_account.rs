@@ -11,7 +11,6 @@ use {
     },
     solana_program_test::*,
     solana_sdk::{
-        account::Account,
         signature::{Keypair, Signer},
         transaction::Transaction,
         transport::TransportError,
@@ -31,14 +30,6 @@ use lido::token::{Lamports, StakePoolTokenLamports};
 
 pub const TEST_STAKE_AMOUNT: u64 = 1_500_000_000;
 pub const MAX_TEST_VALIDATORS: u32 = 10_000;
-
-pub async fn get_account(banks_client: &mut BanksClient, pubkey: &Pubkey) -> Account {
-    banks_client
-        .get_account(*pubkey)
-        .await
-        .expect("account not found")
-        .expect("account empty")
-}
 
 pub async fn create_mint(
     banks_client: &mut BanksClient,

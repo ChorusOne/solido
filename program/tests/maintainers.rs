@@ -3,8 +3,7 @@
 mod helpers;
 
 use helpers::{
-    program_test, simple_add_maintainer, simple_remove_maintainer, stakepool_account::get_account,
-    LidoAccounts,
+    get_account, program_test, simple_add_maintainer, simple_remove_maintainer, LidoAccounts,
 };
 use lido::state::Lido;
 use solana_program::{borsh::try_from_slice_unchecked, hash::Hash};
