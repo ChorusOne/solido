@@ -71,16 +71,27 @@ pub fn get_reserve_available_amount(
 /// Calculates the sum of lamports available in the reserve and the stake pool
 /// Discounts the rent payed
 pub fn calc_total_lamports(
+    lido: &Lido,
     stake_pool: &StakePool,
     program_share_of_stake_pool: &spl_token::state::Account,
     reserve_account: &AccountInfo,
     sysvar_rent: &Rent,
 ) -> Result<Lamports, LidoError> {
-    let reserve_lamports = get_reserve_available_amount(reserve_account, sysvar_rent)?;
-    // Get the total available lamports in the stake pool
-    let stake_pool_lamports = calc_stakepool_lamports(stake_pool, program_share_of_stake_pool)?;
+    // There are three places where we store SOL: the reserve account, the stake
+    // pool, and stake accounts with activating stake.
+    let reserve_balance = get_reserve_available_amount(reserve_account, sysvar_rent)?;
+    let stake_pool_balance = calc_stakepool_lamports(stake_pool, program_share_of_stake_pool)?;
+    let activating_balance: Option<Lamports> = lido
+        .validators
+        .entries
+        .iter()
+        .map(|(_addr, v)| v.stake_accounts_balance)
+        .sum();
 
-    (reserve_lamports + stake_pool_lamports).ok_or(LidoError::CalculationFailure)
+    activating_balance
+        .and_then(|s| s + reserve_balance)
+        .and_then(|s| s + stake_pool_balance)
+        .ok_or(LidoError::CalculationFailure)
 }
 
 /// Issue a spl_token `MintTo` instruction.
@@ -160,10 +171,12 @@ mod test {
     use std::{cell::RefCell, rc::Rc};
 
     use super::*;
+    use crate::state::{Lido, Validator};
 
     #[test]
     fn test_calc_total_lamports() {
         let rent = &Rent::default();
+        let mut lido = Lido::default();
         let mut stake_pool = StakePool::default();
         stake_pool.pool_token_supply = 1;
         let mut token_account = spl_token::state::Account::default();
@@ -174,21 +187,34 @@ mod test {
             AccountInfo::new(&key, true, true, &mut amount, &mut [], &key, false, 0);
 
         assert_eq!(
-            calc_total_lamports(&stake_pool, &token_account, &reserve_account, rent).unwrap(),
+            calc_total_lamports(&lido, &stake_pool, &token_account, &reserve_account, rent)
+                .unwrap(),
             Lamports(0)
         );
         let mut new_amount = rent.minimum_balance(0) + 10;
         reserve_account.lamports = Rc::new(RefCell::new(&mut new_amount));
         stake_pool.total_stake_lamports = 34;
         assert_eq!(
-            calc_total_lamports(&stake_pool, &token_account, &reserve_account, rent).unwrap(),
+            calc_total_lamports(&lido, &stake_pool, &token_account, &reserve_account, rent)
+                .unwrap(),
             Lamports(44)
+        );
+
+        lido.validators.maximum_entries = 1;
+        lido.validators
+            .add(Pubkey::new_unique(), Validator::new(Pubkey::new_unique()))
+            .unwrap();
+        lido.validators.entries[0].1.stake_accounts_balance = Lamports(37);
+        assert_eq!(
+            calc_total_lamports(&lido, &stake_pool, &token_account, &reserve_account, rent)
+                .unwrap(),
+            Lamports(44 + 37)
         );
 
         stake_pool.total_stake_lamports = u64::MAX;
 
         assert_eq!(
-            calc_total_lamports(&stake_pool, &token_account, &reserve_account, rent),
+            calc_total_lamports(&lido, &stake_pool, &token_account, &reserve_account, rent),
             Err(LidoError::CalculationFailure)
         );
         let mut new_amount = u64::MAX;
@@ -196,7 +222,7 @@ mod test {
         stake_pool.total_stake_lamports = rent.minimum_balance(0) + 1;
 
         assert_eq!(
-            calc_total_lamports(&stake_pool, &token_account, &reserve_account, rent),
+            calc_total_lamports(&lido, &stake_pool, &token_account, &reserve_account, rent),
             Err(LidoError::CalculationFailure)
         );
     }

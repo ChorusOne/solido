@@ -195,6 +195,7 @@ pub fn process_deposit(
         spl_token::state::Account::unpack_from_slice(&accounts.pool_token_to.data.borrow())?;
 
     let total_lamports = calc_total_lamports(
+        &lido,
         &stake_pool,
         &pool_to_token_account,
         accounts.reserve_account,
