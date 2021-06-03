@@ -450,9 +450,13 @@ accounts_struct! {
             is_signer: false,
             is_writable: true,
         },
-        pub validator {
+        pub validator_stake_pool_stake_account {
             is_signer: false,
             is_writable: true,
+        },
+        pub validator_vote_account {
+            is_signer: false,
+            is_writable: false,
         },
         // Must be set to the program-derived stake account for the given
         // validator, with seed `stake_accounts_seed_end`.

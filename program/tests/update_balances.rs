@@ -89,7 +89,7 @@ async fn test_successful_update_balance() {
             &mut context.banks_client,
             &context.payer,
             &context.last_blockhash,
-            &stake_account.stake_account,
+            &stake_account.stake_pool_stake_account,
             EXTRA_STAKE_AMOUNT,
         )
         .await;
