@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0">
+    <channel>
+        <title>Lido for Solana Blog</title>
+        <link>https://solido.chorusone.github.io/blog</link>
+        <description>Lido for Solana Blog</description>
+        <lastBuildDate>Thu, 20 May 2021 00:00:00 GMT</lastBuildDate>
+        <docs>https://validator.w3.org/feed/docs/rss2.html</docs>
+        <generator>https://github.com/jpmonette/feed</generator>
+        <item>
+            <title><![CDATA[test blog post]]></title>
+            <link>https://solido.chorusone.github.io/blog/test</link>
+            <guid>test</guid>
+            <pubDate>Thu, 20 May 2021 00:00:00 GMT</pubDate>
+            <description><![CDATA[Blog features are powered by the blog plugin. Simply add files to the blog directory. It supports tags as well!]]></description>
+        </item>
+    </channel>
+</rss>

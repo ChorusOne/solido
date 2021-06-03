@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+    <id>https://solido.chorusone.github.io/blog</id>
+    <title>Lido for Solana Blog</title>
+    <updated>2021-05-20T00:00:00.000Z</updated>
+    <generator>https://github.com/jpmonette/feed</generator>
+    <link rel="alternate" href="https://solido.chorusone.github.io/blog"/>
+    <subtitle>Lido for Solana Blog</subtitle>
+    <icon>https://solido.chorusone.github.io/img/favicon.ico</icon>
+    <entry>
+        <title type="html"><![CDATA[test blog post]]></title>
+        <id>test</id>
+        <link href="https://solido.chorusone.github.io/blog/test"/>
+        <updated>2021-05-20T00:00:00.000Z</updated>
+        <summary type="html"><![CDATA[Blog features are powered by the blog plugin. Simply add files to the blog directory. It supports tags as well!]]></summary>
+    </entry>
+</feed>
