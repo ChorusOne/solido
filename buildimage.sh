@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 
+
 # 1. Clean build dir
 cargo clean
 
