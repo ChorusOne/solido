@@ -74,7 +74,7 @@ async fn test_successful_decrease_validator_stake() {
 
     // Save validator stake
     let pre_validator_stake_account =
-        get_account(&mut context.banks_client, &stake_accounts.stake_account).await;
+        get_account(&mut context.banks_client, &stake_accounts.stake_pool_stake_account).await;
     // Check no transient stake
     let transient_account = context
         .banks_client
@@ -89,14 +89,14 @@ async fn test_successful_decrease_validator_stake() {
             &context.payer,
             &context.last_blockhash,
             &stake_accounts.transient_stake_account,
-            &stake_accounts.stake_account,
+            &stake_accounts.stake_pool_stake_account,
             TEST_DECREASE_AMOUNT,
         )
         .await;
     assert!(result.is_ok());
 
     let validator_stake_account =
-        get_account(&mut context.banks_client, &stake_accounts.stake_account).await;
+        get_account(&mut context.banks_client, &stake_accounts.stake_pool_stake_account).await;
     let validator_stake_state =
         deserialize::<stake_program::StakeState>(&validator_stake_account.data).unwrap();
     assert_eq!(
@@ -150,7 +150,7 @@ async fn test_successful_increase_validator_stake() {
             &context.payer,
             &context.last_blockhash,
             &stake_accounts.transient_stake_account,
-            &stake_accounts.stake_account,
+            &stake_accounts.stake_pool_stake_account,
             TEST_DECREASE_AMOUNT,
         )
         .await;
