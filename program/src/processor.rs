@@ -397,22 +397,54 @@ pub fn process_deposit_active_stake_to_pool(
     let accounts = DepositActiveStakeToPoolAccountsInfo::try_from_slice(raw_accounts)?;
 
     let _rent = &Rent::from_account_info(accounts.sysvar_rent)?;
-    let lido = deserialize_lido(program_id, accounts.lido)?;
+    let mut lido = deserialize_lido(program_id, accounts.lido)?;
 
     lido.check_stake_pool(accounts.stake_pool)?;
     lido.check_maintainer(accounts.maintainer)?;
 
-    let (to_pubkey, _) =
-        Pubkey::find_program_address(&[&accounts.validator.key.to_bytes()], program_id);
+    let validator = lido.validators.get_mut(&accounts.validator.key)?;
 
-    if &to_pubkey != accounts.stake.key {
-        return Err(LidoError::InvalidStaker.into());
+    // A deposit to the stake pool always deposits from the begin of the range
+    // of stake accounts. The `begin` index holds the oldest stake account.
+    let (stake_addr, stake_addr_bump_seed) = Validator::find_stake_account_address(
+        program_id,
+        accounts.lido.key,
+        &validator.pubkey,
+        validator.entry.stake_accounts_seed_begin,
+    );
+    if &stake_addr != accounts.stake_account_begin.key {
+        return Err(LidoError::InvalidStakeAccount.into());
     }
 
     if &lido.stake_pool_token_holder != accounts.pool_token_to.key {
         msg!("Invalid stake pool token");
         return Err(LidoError::InvalidPoolToken.into());
     }
+
+    // Before we put the stake account in the pool, record how much SOL it held,
+    // because that SOL is now no longer activating, so we need to update the
+    // `Validator` instance.
+    let amount_staked = Lamports(accounts.stake_account_begin.lamports());
+    validator.entry.stake_accounts_balance =
+        (validator.entry.stake_accounts_balance - amount_staked).ok_or(LidoError::CalculationFailure)?;
+
+    // We now consumed this stake account, bump the index.
+    validator.entry.stake_accounts_seed_begin += 1;
+
+    lido.serialize(&mut *accounts.lido.data.borrow_mut())?;
+
+    let stake_account_bump_seed = [stake_addr_bump_seed];
+    let solido_address_bytes = accounts.lido.key.to_bytes();
+    let validator_address_bytes = accounts.validator.key.to_bytes();
+    let stake_account_seeds = &[
+        &solido_address_bytes,
+        &validator_address_bytes,
+        &VALIDATOR_STAKE_ACCOUNT[..],
+        &stake_account_bump_seed[..],
+    ][..];
+
+    // The stake pool should check that the account we deposit is actually a
+    // fully active stake account, and not still activating.
 
     invoke_signed(
         &stake_pool_deposit(
@@ -422,7 +454,7 @@ pub fn process_deposit_active_stake_to_pool(
                 validator_list_storage: *accounts.stake_pool_validator_list.key,
                 deposit_authority: *accounts.deposit_authority.key,
                 stake_pool_withdraw_authority: *accounts.stake_pool_withdraw_authority.key,
-                deposit_stake_address: *accounts.stake.key,
+                deposit_stake_address: *accounts.stake_account_begin.key,
                 validator_stake_account: *accounts.stake_pool_validator_stake_account.key,
                 pool_tokens_to: *accounts.pool_token_to.key,
                 pool_mint: *accounts.stake_pool_mint.key,
@@ -434,18 +466,15 @@ pub fn process_deposit_active_stake_to_pool(
             accounts.stake_pool_validator_list.clone(),
             accounts.deposit_authority.clone(),
             accounts.stake_pool_withdraw_authority.clone(),
-            accounts.stake.clone(),
+            accounts.stake_account_begin.clone(),
             accounts.stake_pool_validator_stake_account.clone(),
             accounts.pool_token_to.clone(),
             accounts.stake_pool_mint.clone(),
             accounts.spl_token.clone(),
         ],
-        &[&[
-            &accounts.lido.key.to_bytes(),
-            DEPOSIT_AUTHORITY,
-            &[lido.deposit_authority_bump_seed],
-        ]],
+        &[stake_account_seeds],
     )?;
+
     Ok(())
 }
 
