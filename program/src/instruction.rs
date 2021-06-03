@@ -501,7 +501,9 @@ accounts_struct! {
             is_signer: false,
             is_writable: true,
         },
-        pub stake {
+        // Must be set to the program-derived stake account for the given
+        // validator, with seed `stake_accounts_seed_begin`.
+        pub stake_account_begin {
             is_signer: false,
             is_writable: true,
         },
