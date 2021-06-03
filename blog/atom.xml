@@ -10,7 +10,7 @@
     <entry>
         <title type="html"><![CDATA[test blog post]]></title>
         <id>test</id>
-        <link href="https://solido.chorusone.github.io/blog/test"/>
+        <link href="https://solido.chorusone.github.io/solido/blog/test"/>
         <updated>2021-05-20T00:00:00.000Z</updated>
         <summary type="html"><![CDATA[Blog features are powered by the blog plugin. Simply add files to the blog directory. It supports tags as well!]]></summary>
     </entry>

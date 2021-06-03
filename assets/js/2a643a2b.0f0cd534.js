@@ -1,0 +1,1 @@
+(self.webpackChunkdocs=self.webpackChunkdocs||[]).push([[441],{6353:function(s){"use strict";s.exports=JSON.parse('{"title":"Recent posts","items":[{"title":"test blog post","permalink":"/solido/blog/test"}]}')}}]);
