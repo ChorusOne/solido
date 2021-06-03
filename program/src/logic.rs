@@ -85,7 +85,7 @@ pub fn calc_total_lamports(
         .validators
         .entries
         .iter()
-        .map(|(_addr, v)| v.stake_accounts_balance)
+        .map(|pe| pe.entry.stake_accounts_balance)
         .sum();
 
     activating_balance
@@ -204,7 +204,7 @@ mod test {
         lido.validators
             .add(Pubkey::new_unique(), Validator::new(Pubkey::new_unique()))
             .unwrap();
-        lido.validators.entries[0].1.stake_accounts_balance = Lamports(37);
+        lido.validators.entries[0].entry.stake_accounts_balance = Lamports(37);
         assert_eq!(
             calc_total_lamports(&lido, &stake_pool, &token_account, &reserve_account, rent)
                 .unwrap(),

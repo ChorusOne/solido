@@ -143,7 +143,7 @@ async fn test_successful_stake_deposit_stake_pool_deposit() {
 
     // Check validator stake account actual SOL balance
     let validator_stake_account =
-        get_account(&mut banks_client, &validator_account.stake_account).await;
+        get_account(&mut banks_client, &validator_account.stake_pool_stake_account).await;
     let stake_state =
         bincode::deserialize::<stake_program::StakeState>(&validator_stake_account.data).unwrap();
     let meta = stake_state.meta().unwrap();

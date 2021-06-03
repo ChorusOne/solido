@@ -314,13 +314,13 @@ impl LidoAccounts {
 
         let (_key, validator_state) = lido
             .validators
-            .get(&validator.vote.pubkey())
+            .get(&validator.stake_pool_stake_account)
             .expect("Trying to stake with a non-mebmer validator.");
 
         let (stake_account, _) = Validator::find_stake_account_address(
             &id(),
             &self.lido.pubkey(),
-            &validator.vote.pubkey(),
+            &validator.stake_pool_stake_account,
             validator_state.stake_accounts_seed_end,
         );
 
@@ -329,7 +329,8 @@ impl LidoAccounts {
                 &id(),
                 &instruction::StakeDepositAccountsMeta {
                     lido: self.lido.pubkey(),
-                    validator: validator.vote.pubkey(),
+                    validator_stake_pool_stake_account: validator.stake_pool_stake_account,
+                    validator_vote_account: validator.vote.pubkey(),
                     reserve: self.reserve_authority,
                     stake_account_end: stake_account,
                     deposit_authority: self.deposit_authority,
@@ -341,6 +342,7 @@ impl LidoAccounts {
         );
         transaction.sign(&[payer], *recent_blockhash);
         banks_client.process_transaction(transaction).await.unwrap();
+
         stake_account
     }
 
@@ -366,7 +368,7 @@ impl LidoAccounts {
                     stake_pool: self.stake_pool_accounts.stake_pool.pubkey(),
                     stake_pool_validator_list: self.stake_pool_accounts.validator_list.pubkey(),
                     stake_pool_withdraw_authority: self.stake_pool_accounts.withdraw_authority,
-                    stake_pool_validator_stake_account: validator.stake_account,
+                    stake_pool_validator_stake_account: validator.stake_pool_stake_account,
                     stake_pool_mint: self.stake_pool_accounts.pool_mint.pubkey(),
                 },
             )
@@ -663,7 +665,7 @@ pub async fn simple_add_validator_to_pool(
             banks_client,
             &payer,
             &recent_blockhash,
-            &validator_stake.stake_account,
+            &validator_stake.stake_pool_stake_account,
             &validator_stake.validator_token_account.pubkey(),
         )
         .await;

@@ -32,9 +32,8 @@ async fn test_successful_add_validator() {
 
     let has_stake_account = lido
         .validators
-        .entries
-        .iter()
-        .any(|pe| pe.pubkey == validator_stake.stake_account);
+        .get(&validator_stake.stake_pool_stake_account)
+        .is_ok();
     // Validator is inside the credit structure
     assert!(has_stake_account);
 
@@ -48,7 +47,7 @@ async fn test_successful_add_validator() {
 
     assert_eq!(lido.validators.entries.len(), 1,);
 
-    let stake_account = get_account(&mut banks_client, &validator_stake.stake_account).await;
+    let stake_account = get_account(&mut banks_client, &validator_stake.stake_pool_stake_account).await;
     let stake_account =
         try_from_slice_unchecked::<stake_program::StakeState>(&stake_account.data).unwrap();
     let (meta, _) = match stake_account {
@@ -56,7 +55,7 @@ async fn test_successful_add_validator() {
         _ => panic!(),
     };
     let balance = banks_client
-        .get_balance(validator_stake.stake_account)
+        .get_balance(validator_stake.stake_pool_stake_account)
         .await
         .unwrap();
     let rent = banks_client.get_rent().await.unwrap();

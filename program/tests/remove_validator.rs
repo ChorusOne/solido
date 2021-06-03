@@ -37,7 +37,7 @@ async fn test_successful_remove_validator() {
             &payer,
             &recent_blockhash,
             &new_authority,
-            &validator_stake.stake_account,
+            &validator_stake.stake_pool_stake_account,
             &validator_stake.transient_stake_account,
         )
         .await;

@@ -235,6 +235,12 @@ pub struct Validator {
     /// seeds. When we need a new stake account, we bump `end`. When the account
     /// with seed `begin` is 100% active, we deposit that stake account into the
     /// pool and bump `begin`. Accounts are not reused.
+    ///
+    /// The program enforces that creating new stake accounts is only allowed at
+    /// the `_end` seed, and depositing active stake is only allowed from the
+    /// `_begin` seed. This ensures that maintainers don’t race and accidentally
+    /// stake more to this validator than intended. If the seed has changed
+    /// since the instruction was created, the transaction fails.
     pub stake_accounts_seed_begin: u64,
 
     /// End (exclusive) of the seed range for currently active stake accounts.
