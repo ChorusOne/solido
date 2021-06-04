@@ -2,7 +2,7 @@
 use lido::{
     instruction::{self, initialize},
     processor,
-    state::{FeeDistribution, Lido, Maintainers, Validator, Validators, LIDO_CONSTANT_SIZE},
+    state::{FeeDistribution, Lido, Validator},
     token::Lamports,
     DEPOSIT_AUTHORITY, FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY, STAKE_POOL_AUTHORITY,
 };
@@ -10,7 +10,7 @@ use solana_program::{hash::Hash, program_pack::Pack, pubkey::Pubkey, system_inst
 use solana_program_test::*;
 use solana_sdk::{
     account::Account,
-    borsh::{get_instance_packed_len, try_from_slice_unchecked},
+    borsh::try_from_slice_unchecked,
     signature::{Keypair, Signer},
     transaction::Transaction,
     transport::TransportError,
