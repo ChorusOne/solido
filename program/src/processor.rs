@@ -82,23 +82,13 @@ pub fn process_initialize(
 
     // Bytes required for maintainers
     let bytes_for_maintainers = Maintainers::required_bytes(max_maintainers);
-    // Calculate the expected number of validators
-    let expected_max_validators = Validators::maximum_accounts(
-        accounts
-            .lido
-            .data_len()
-            .checked_sub(LIDO_CONSTANT_SIZE)
-            .ok_or(LidoError::CalculationFailure)?
-            .checked_sub(bytes_for_maintainers)
-            .ok_or(LidoError::CalculationFailure)?,
-    );
-    if expected_max_validators != max_validators as usize || max_validators == 0 {
-        msg!(
-            "Incorrect validator list size provided, expected {}, provided {}",
-            expected_max_validators,
-            max_validators
-        );
-        return Err(LidoError::UnexpectedMaxValidators.into());
+    // Bytes required for validators
+    let bytes_for_validators = Validators::required_bytes(max_validators);
+    // Calculate the expected lido's size
+    let bytes_sum = LIDO_CONSTANT_SIZE + bytes_for_validators + bytes_for_maintainers;
+    if bytes_sum != accounts.lido.data_len() {
+        msg!("Incorrect allocated bytes for the provided constrains: max_validator bytes: {}, max_maintainers bytes: {}, constant_size: {}, sum is {}, should be {}", bytes_for_validators, bytes_for_maintainers, LIDO_CONSTANT_SIZE, bytes_sum, accounts.lido.data_len());
+        return Err(LidoError::InvalidLidoSize.into());
     }
     // Initialize fee structure
     lido.fee_recipients = FeeRecipients {
