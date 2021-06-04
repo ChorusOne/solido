@@ -107,6 +107,11 @@ pub enum LidoError {
     /// in the structure
     #[error("InvalidAccountMember")]
     InvalidAccountMember,
+    // 30
+    /// Lido has an invalid size, calculated with the Lido's constant size plus
+    /// required to hold variable structures
+    #[error("InvalidAccountMember")]
+    InvalidLidoSize,
 }
 impl From<LidoError> for ProgramError {
     fn from(e: LidoError) -> Self {

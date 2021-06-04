@@ -54,11 +54,10 @@ impl Lido {
     /// respectively. It creates default structures for both and sum its sizes
     /// with Lido's constant size.
     pub fn calculate_size(max_validators: u32, max_maintainers: u32) -> usize {
-        let validator_accounts_len =
-            get_instance_packed_len(&Validators::new_fill_default(max_validators)).unwrap();
-        let manager_accounts_len =
-            get_instance_packed_len(&Maintainers::new_fill_default(max_maintainers)).unwrap();
-        return LIDO_CONSTANT_SIZE + validator_accounts_len + manager_accounts_len;
+        let mut lido_instance = Lido::default();
+        lido_instance.validators = Validators::new_fill_default(max_validators);
+        lido_instance.maintainers = Maintainers::new_fill_default(max_maintainers);
+        return get_instance_packed_len(&lido_instance).unwrap();
     }
     pub fn calc_pool_tokens_for_deposit(
         &self,
