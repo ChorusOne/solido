@@ -33,8 +33,8 @@ RUN cd $SOLIDOBUILDPATH \
 # Copy artefacts and remove build dirs
 RUN cd $SOLIDOBUILDPATH \
     && cp -rf $SOLIDOBUILDPATH/target/deploy $SOLIDORELEASEPATH \
-    && cp -rf $SOLIDOBUILDPATH/target/release/* $SOLIDORELEASEPATH/cli
-
+    && cp -rf $SOLIDOBUILDPATH/target/release/* $SOLIDORELEASEPATH/cli \
+    && rm -rf $SOLIDOBUILDPATH
 
 # Hash on-chain programs
 RUN cd $SOLIDORELEASEPATH/deploy \
