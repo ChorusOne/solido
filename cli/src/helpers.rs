@@ -640,6 +640,13 @@ pub fn command_create_validator_stake_account(
     )
 }
 
+#[derive(Clap, Debug)]
+pub struct ShowSolidoOpts {
+    /// The solido instance to show
+    #[clap(long)]
+    solido_instance: Pubkey,
+}
+
 enum ExecutionMethod {
     Multisig(Pubkey),
     Payer(Pubkey),

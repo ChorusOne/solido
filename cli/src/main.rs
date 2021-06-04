@@ -8,6 +8,7 @@ use clap::Clap;
 use helpers::AddRemoveMaintainerOpts;
 use helpers::AddValidatorOpts;
 use helpers::CreateValidatorStakeAccountOpts;
+use helpers::ShowSolidoOpts;
 use serde::Serialize;
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::pubkey::Pubkey;
@@ -111,9 +112,11 @@ FEES:
     AddMaintainer(AddRemoveMaintainerOpts),
     /// Adds a maintainer to the Solido instance
     RemoveMaintainer(AddRemoveMaintainerOpts),
-
     /// Create a Validator Stake Account
     CreateValidatorStakeAccount(CreateValidatorStakeAccountOpts),
+
+    /// Show an instance of solido in detail
+    ShowSolido(ShowSolidoOpts),
 
     /// Interact with a deployed Multisig program for governance tasks.
     Multisig(MultisigOpts),
@@ -223,5 +226,6 @@ fn main() {
                 print_output(opts.output_mode, &output);
             }
         }
+        SubCommand::ShowSolido(_) => todo!(),
     }
 }
