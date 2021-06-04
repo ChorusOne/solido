@@ -47,7 +47,8 @@ async fn test_successful_add_validator() {
 
     assert_eq!(lido.validators.entries.len(), 1,);
 
-    let stake_account = get_account(&mut banks_client, &validator_stake.stake_pool_stake_account).await;
+    let stake_account =
+        get_account(&mut banks_client, &validator_stake.stake_pool_stake_account).await;
     let stake_account =
         try_from_slice_unchecked::<stake_program::StakeState>(&stake_account.data).unwrap();
     let (meta, _) = match stake_account {

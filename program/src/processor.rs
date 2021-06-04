@@ -269,7 +269,9 @@ pub fn process_stake_deposit(
         return Err(LidoError::AmountExceedsReserve.into());
     }
 
-    let (validator_key, validator) = lido.validators.get_mut(&accounts.validator_stake_pool_stake_account.key)?;
+    let (validator_key, validator) = lido
+        .validators
+        .get_mut(&accounts.validator_stake_pool_stake_account.key)?;
 
     // We will create a new fresh stake account for this validator.
     // TODO: Merge into the preceding stake account, if possible, such that we
@@ -434,7 +436,9 @@ pub fn process_deposit_active_stake_to_pool(
     lido.check_maintainer(accounts.maintainer)?;
 
     msg!("TODO: Before get validator.");
-    let (validator_key, validator) = lido.validators.get_mut(&accounts.validator_stake_pool_stake_account.key)?;
+    let (validator_key, validator) = lido
+        .validators
+        .get_mut(&accounts.validator_stake_pool_stake_account.key)?;
 
     if validator.stake_accounts_seed_begin >= validator.stake_accounts_seed_end {
         // TODO: add a proper error for this.
@@ -521,9 +525,7 @@ pub fn process_deposit_active_stake_to_pool(
             accounts.stake_program.clone(),
             accounts.stake_pool_program.clone(),
         ],
-        &[
-            deposit_authority_seeds,
-        ],
+        &[deposit_authority_seeds],
     )?;
 
     Ok(())
