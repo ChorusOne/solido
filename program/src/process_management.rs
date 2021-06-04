@@ -42,10 +42,14 @@ pub fn process_create_validator_stake_account(
     let lido = deserialize_lido(program_id, accounts.lido)?;
     lido.check_manager(accounts.manager)?;
     lido.check_stake_pool(accounts.stake_pool)?;
-    let (stake_pool_authority, stake_pool_authority_bump_seed) = Pubkey::find_program_address(
-        &[&accounts.lido.key.to_bytes()[..], STAKE_POOL_AUTHORITY],
+    let stake_pool_authority = Pubkey::create_program_address(
+        &[
+            &accounts.lido.key.to_bytes(),
+            STAKE_POOL_AUTHORITY,
+            &[lido.stake_pool_authority_bump_seed],
+        ],
         program_id,
-    );
+    )?;
     if &stake_pool_authority != accounts.staker.key {
         msg!("Wrong stake pool staker");
         return Err(LidoError::InvalidStaker.into());
@@ -74,9 +78,9 @@ pub fn process_create_validator_stake_account(
             accounts.stake_program.clone(),
         ],
         &[&[
-            &accounts.lido.key.to_bytes()[..32],
+            &accounts.lido.key.to_bytes(),
             STAKE_POOL_AUTHORITY,
-            &[stake_pool_authority_bump_seed],
+            &[lido.stake_pool_authority_bump_seed],
         ]],
     )
 }
@@ -153,7 +157,7 @@ pub fn process_add_validator(program_id: &Pubkey, accounts_raw: &[AccountInfo]) 
             accounts.sysvar_stake_program.clone(),
         ],
         &[&[
-            &accounts.lido.key.to_bytes()[..32],
+            &accounts.lido.key.to_bytes(),
             STAKE_POOL_AUTHORITY,
             &[lido.stake_pool_authority_bump_seed],
         ]],

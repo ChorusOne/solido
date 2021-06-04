@@ -99,22 +99,22 @@ pub fn process_initialize(
     lido.validators = Validators::new(max_validators);
 
     let (_, reserve_bump_seed) = Pubkey::find_program_address(
-        &[&accounts.lido.key.to_bytes()[..32], RESERVE_AUTHORITY],
+        &[&accounts.lido.key.to_bytes(), RESERVE_AUTHORITY],
         program_id,
     );
 
     let (_, deposit_bump_seed) = Pubkey::find_program_address(
-        &[&accounts.lido.key.to_bytes()[..32], DEPOSIT_AUTHORITY],
+        &[&accounts.lido.key.to_bytes(), DEPOSIT_AUTHORITY],
         program_id,
     );
 
     let (fee_manager_account, fee_manager_bump_seed) = Pubkey::find_program_address(
-        &[&accounts.lido.key.to_bytes()[..32], FEE_MANAGER_AUTHORITY],
+        &[&accounts.lido.key.to_bytes(), FEE_MANAGER_AUTHORITY],
         program_id,
     );
 
     let (stake_pool_authority, stake_pool_authority_bump_seed) = Pubkey::find_program_address(
-        &[&accounts.lido.key.to_bytes()[..32], STAKE_POOL_AUTHORITY],
+        &[&accounts.lido.key.to_bytes(), STAKE_POOL_AUTHORITY],
         program_id,
     );
 
@@ -192,7 +192,12 @@ pub fn process_deposit(
         accounts.mint_program.key,
     )?;
     lido.check_token_program_id(accounts.spl_token.key)?;
-    check_reserve_authority(accounts.lido, program_id, accounts.reserve_account)?;
+    check_reserve_authority(
+        program_id,
+        accounts.lido.key,
+        lido.sol_reserve_authority_bump_seed,
+        accounts.reserve_account.key,
+    )?;
 
     lido.check_stake_pool(accounts.stake_pool)?;
 
@@ -251,14 +256,19 @@ pub fn process_stake_deposit(
     let lido = deserialize_lido(program_id, accounts.lido)?;
 
     let (to_pubkey, stake_bump_seed) =
-        Pubkey::find_program_address(&[&accounts.validator.key.to_bytes()[..32]], program_id);
+        Pubkey::find_program_address(&[&accounts.validator.key.to_bytes()], program_id);
     if &to_pubkey != accounts.stake.key {
         return Err(LidoError::InvalidStaker.into());
     }
 
-    let me_bytes = accounts.lido.key.to_bytes();
-    let reserve_authority_seed: &[&[_]] = &[&me_bytes, RESERVE_AUTHORITY][..];
-    let (reserve_authority, _) = Pubkey::find_program_address(reserve_authority_seed, program_id);
+    let reserve_authority = Pubkey::create_program_address(
+        &[
+            &accounts.lido.key.to_bytes(),
+            RESERVE_AUTHORITY,
+            &[lido.sol_reserve_authority_bump_seed],
+        ],
+        program_id,
+    )?;
 
     if accounts.reserve.key != &reserve_authority {
         return Err(LidoError::InvalidReserveAuthority.into());
@@ -278,13 +288,12 @@ pub fn process_stake_deposit(
     // TODO: Reference more validators
 
     let authority_signature_seeds: &[&[_]] = &[
-        &me_bytes,
+        &accounts.lido.key.to_bytes(),
         &RESERVE_AUTHORITY,
         &[lido.sol_reserve_authority_bump_seed],
     ];
 
-    let validator_stake_seeds: &[&[_]] =
-        &[&accounts.validator.key.to_bytes()[..32], &[stake_bump_seed]];
+    let validator_stake_seeds: &[&[_]] = &[&accounts.validator.key.to_bytes(), &[stake_bump_seed]];
 
     // Check if the stake_info exists
     if get_stake_state(accounts.stake).is_ok() {
@@ -339,7 +348,7 @@ pub fn process_stake_deposit(
             accounts.deposit_authority.clone(),
         ],
         &[&[
-            &accounts.lido.key.to_bytes()[..32],
+            &accounts.lido.key.to_bytes(),
             DEPOSIT_AUTHORITY,
             &[lido.deposit_authority_bump_seed],
         ]],
@@ -359,7 +368,7 @@ pub fn process_deposit_active_stake_to_pool(
     lido.check_maintainer(accounts.maintainer)?;
 
     let (to_pubkey, _) =
-        Pubkey::find_program_address(&[&accounts.validator.key.to_bytes()[..32]], program_id);
+        Pubkey::find_program_address(&[&accounts.validator.key.to_bytes()], program_id);
 
     if &to_pubkey != accounts.stake.key {
         return Err(LidoError::InvalidStaker.into());
@@ -397,7 +406,7 @@ pub fn process_deposit_active_stake_to_pool(
             accounts.spl_token.clone(),
         ],
         &[&[
-            &accounts.lido.key.to_bytes()[..32],
+            &accounts.lido.key.to_bytes(),
             DEPOSIT_AUTHORITY,
             &[lido.deposit_authority_bump_seed],
         ]],
