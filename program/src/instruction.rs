@@ -931,11 +931,11 @@ accounts_struct! {
             is_signer: true,
             is_writable: true,
         },
-        pub stake_account {
+        pub stake_pool_stake_account {
             is_signer: false,
             is_writable: true,
         },
-        pub validator {
+        pub validator_vote_account {
             is_signer: false,
             is_writable: false,
         },
