@@ -1,6 +1,7 @@
 #![allow(clippy::too_many_arguments)]
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+
 use solana_program::{
     account_info::AccountInfo,
     instruction::{AccountMeta, Instruction},

@@ -638,6 +638,13 @@ pub fn command_create_validator_stake_account(
     )
 }
 
+#[derive(Clap, Debug)]
+pub struct ShowSolidoOpts {
+    /// The solido instance to show
+    #[clap(long)]
+    solido_instance: Pubkey,
+}
+
 enum ExecutionMethod {
     Multisig(Pubkey),
     Payer(Pubkey),
@@ -696,7 +703,7 @@ fn get_execution_method(
 // TODO: Make `get_solido` and `get_stake_pool` return the structures in a single call to
 // `rpc_client.get_multiple_accounts(..)`.
 /// Gets the Solido data structure
-fn get_solido(rpc_client: &RpcClient, solido_address: &Pubkey) -> Result<Lido, crate::Error> {
+pub fn get_solido(rpc_client: &RpcClient, solido_address: &Pubkey) -> Result<Lido, crate::Error> {
     let solido_data = rpc_client.get_account_data(solido_address)?;
     let solido = try_from_slice_unchecked::<Lido>(&solido_data)?;
     Ok(solido)

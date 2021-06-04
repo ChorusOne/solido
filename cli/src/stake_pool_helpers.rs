@@ -28,7 +28,7 @@ pub struct CreatePoolOutput {
     /// Account that holds the stake pool data structure.
     pub stake_pool_address: PubkeyBase58,
 
-    /// TODO(fynn): What's the reserve stake?
+    /// Reserve account holds Lamports used when increasing or decreasing the validator's stake.
     pub reserve_stake_address: PubkeyBase58,
 
     /// SPL token mint account for stake pool tokens.
