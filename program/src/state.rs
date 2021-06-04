@@ -3,6 +3,7 @@
 use std::ops::Sub;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use solana_program::borsh::get_instance_packed_len;
 use solana_program::{
     account_info::AccountInfo, entrypoint::ProgramResult, msg, program_error::ProgramError,
     program_pack::Pack, pubkey::Pubkey,
@@ -48,6 +49,17 @@ pub struct Lido {
 }
 
 impl Lido {
+    /// Calculates the total size of Lido given two variables: `max_validators`
+    /// and `max_maintainers`, the maximum number of maintainers and validators,
+    /// respectively. It creates default structures for both and sum its sizes
+    /// with Lido's constant size.
+    pub fn calculate_size(max_validators: u32, max_maintainers: u32) -> usize {
+        let validator_accounts_len =
+            get_instance_packed_len(&Validators::new_fill_default(max_validators)).unwrap();
+        let manager_accounts_len =
+            get_instance_packed_len(&Maintainers::new_fill_default(max_maintainers)).unwrap();
+        return LIDO_CONSTANT_SIZE + validator_accounts_len + manager_accounts_len;
+    }
     pub fn calc_pool_tokens_for_deposit(
         &self,
         stake_lamports: Lamports,
