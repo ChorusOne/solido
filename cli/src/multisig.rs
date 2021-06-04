@@ -401,7 +401,7 @@ enum SolidoInstruction {
         #[serde(serialize_with = "serialize_b58")]
         funder: Pubkey,
         #[serde(serialize_with = "serialize_b58")]
-        stake_account: Pubkey,
+        stake_pool_stake_account: Pubkey,
         #[serde(serialize_with = "serialize_b58")]
         validator_vote: Pubkey,
     },
@@ -547,7 +547,7 @@ impl fmt::Display for ShowTransactionOutput {
                         stake_pool_program,
                         stake_pool,
                         funder,
-                        stake_account,
+                        stake_pool_stake_account,
                         validator_vote,
                     } => {
                         writeln!(f, "It creates a validator stake account.")?;
@@ -556,7 +556,7 @@ impl fmt::Display for ShowTransactionOutput {
                         writeln!(f, "    Stake pool program:  {}", stake_pool_program)?;
                         writeln!(f, "    Stake pool instance: {}", stake_pool)?;
                         writeln!(f, "    Funder:              {}", funder)?;
-                        writeln!(f, "    Stake account:       {}", stake_account)?;
+                        writeln!(f, "    Stake account:       {}", stake_pool_stake_account)?;
                         writeln!(f, "    Validator vote:      {}", validator_vote)?;
                     }
                     SolidoInstruction::AddValidator {
@@ -853,8 +853,8 @@ fn try_parse_solido_instruction(
         LidoInstruction::CreateValidatorStakeAccount => {
             let accounts = CreateValidatorStakeAccountMeta::try_from_slice(&instr.accounts)?;
             ParsedInstruction::SolidoInstruction(SolidoInstruction::CreateValidatorStakeAccount {
-                stake_account: accounts.stake_account,
-                validator_vote: accounts.validator,
+                stake_pool_stake_account: accounts.stake_pool_stake_account,
+                validator_vote: accounts.validator_vote_account,
                 solido_instance: accounts.lido,
                 manager: accounts.manager,
                 stake_pool_program: accounts.stake_pool_program,

@@ -604,7 +604,7 @@ pub fn command_create_validator_stake_account(
         STAKE_POOL_AUTHORITY,
     );
 
-    let (stake_account, _) = find_stake_program_address(
+    let (stake_pool_stake_account, _) = find_stake_program_address(
         &opts.stake_pool_program_id,
         &opts.validator_vote,
         &solido.stake_pool_account,
@@ -624,8 +624,8 @@ pub fn command_create_validator_stake_account(
             stake_pool: solido.stake_pool_account,
             staker: stake_pool_authority,
             funder: execution_method.get_pubkey(),
-            stake_account,
-            validator: opts.validator_vote,
+            stake_pool_stake_account,
+            validator_vote_account: opts.validator_vote,
         },
     )?;
     execution_method.send_instruction(
