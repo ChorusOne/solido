@@ -360,7 +360,6 @@ impl LidoAccounts {
                 &instruction::DepositActiveStakeToPoolAccountsMeta {
                     lido: self.lido.pubkey(),
                     maintainer: self.maintainer.pubkey(),
-                    validator: validator.vote.pubkey(),
                     stake_account_begin: *stake_account,
                     deposit_authority: self.deposit_authority,
                     pool_token_to: self.pool_token_to.pubkey(),
@@ -368,7 +367,7 @@ impl LidoAccounts {
                     stake_pool: self.stake_pool_accounts.stake_pool.pubkey(),
                     stake_pool_validator_list: self.stake_pool_accounts.validator_list.pubkey(),
                     stake_pool_withdraw_authority: self.stake_pool_accounts.withdraw_authority,
-                    stake_pool_validator_stake_account: validator.stake_pool_stake_account,
+                    validator_stake_pool_stake_account: validator.stake_pool_stake_account,
                     stake_pool_mint: self.stake_pool_accounts.pool_mint.pubkey(),
                 },
             )

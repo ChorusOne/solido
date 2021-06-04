@@ -501,7 +501,7 @@ accounts_struct! {
             is_signer: true,
             is_writable: false,
         },
-        pub validator {
+        pub validator_stake_pool_stake_account {
             is_signer: false,
             is_writable: true,
         },
@@ -534,10 +534,6 @@ accounts_struct! {
         pub stake_pool_withdraw_authority {
             is_signer: false,
             is_writable: false,
-        },
-        pub stake_pool_validator_stake_account {
-            is_signer: false,
-            is_writable: true,
         },
         pub stake_pool_mint {
             is_signer: false,

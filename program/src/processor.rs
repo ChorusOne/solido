@@ -414,28 +414,38 @@ pub fn process_deposit_active_stake_to_pool(
 ) -> ProgramResult {
     let accounts = DepositActiveStakeToPoolAccountsInfo::try_from_slice(raw_accounts)?;
 
+    msg!("TODO: Before start.");
     let _rent = &Rent::from_account_info(accounts.sysvar_rent)?;
     let mut lido = deserialize_lido(program_id, accounts.lido)?;
 
+    msg!("TODO: Check stake pool.");
     lido.check_stake_pool(accounts.stake_pool)?;
+    msg!("TODO: Before check maintainer.");
     lido.check_maintainer(accounts.maintainer)?;
 
-    let validator = lido.validators.get_mut(&accounts.validator.key)?;
+    let validator = lido.validators.get_mut(&accounts.validator_stake_pool_stake_account.key)?;
 
-    if validator.stake_accounts_seed_begin >= validator.stake_accounts_seed_end {
+    if validator.entry.stake_accounts_seed_begin >= validator.entry.stake_accounts_seed_end {
         // TODO: add a proper error for this.
-        panic!("Validator {} has no pending stake accounts.", validator_key);
+        panic!("Validator {} has no pending stake accounts.", validator.pubkey);
     }
 
     // A deposit to the stake pool always deposits from the begin of the range
     // of stake accounts. The `begin` index holds the oldest stake account.
-    let (stake_addr, stake_addr_bump_seed) = Validator::find_stake_account_address(
+    let (stake_addr, _stake_addr_bump_seed) = Validator::find_stake_account_address(
         program_id,
         accounts.lido.key,
         &validator.pubkey,
         validator.entry.stake_accounts_seed_begin,
     );
     if &stake_addr != accounts.stake_account_begin.key {
+        msg!(
+            "The derived stake address for seed {} is {}, but the instruction received {} instead.",
+            validator.entry.stake_accounts_seed_begin,
+            stake_addr,
+            accounts.stake_account_begin.key,
+        );
+        msg!("This can happen when two DepositActiveStakeToPool instructions race.");
         return Err(LidoError::InvalidStakeAccount.into());
     }
 
@@ -444,17 +454,13 @@ pub fn process_deposit_active_stake_to_pool(
         return Err(LidoError::InvalidPoolToken.into());
     }
 
-    let stake_account_seed = validator.entry.stake_accounts_seed_begin.to_le_bytes();
-    let stake_account_bump_seed = [stake_addr_bump_seed];
     let solido_address_bytes = accounts.lido.key.to_bytes();
-    let validator_address_bytes = accounts.validator.key.to_bytes();
-    let stake_account_seeds = &[
+    let deposit_authority_bump_seed = [lido.deposit_authority_bump_seed];
+    let deposit_authority_seeds = &[
         &solido_address_bytes,
-        &validator_address_bytes,
-        &VALIDATOR_STAKE_ACCOUNT[..],
-        &stake_account_seed[..],
-        &stake_account_bump_seed[..],
-    ][..];
+        &DEPOSIT_AUTHORITY[..],
+        &deposit_authority_bump_seed,
+    ];
 
     // Before we put the stake account in the pool, record how much SOL it held,
     // because that SOL is now no longer activating, so we need to update the
@@ -476,6 +482,7 @@ pub fn process_deposit_active_stake_to_pool(
     // The stake pool should check that the account we deposit is actually a
     // fully active stake account, and not still activating.
 
+    msg!("TODO: Before stake_pool_deposit.");
     invoke_signed(
         &stake_pool_deposit(
             &accounts.stake_pool_program.key,
@@ -485,24 +492,27 @@ pub fn process_deposit_active_stake_to_pool(
                 deposit_authority: *accounts.deposit_authority.key,
                 stake_pool_withdraw_authority: *accounts.stake_pool_withdraw_authority.key,
                 deposit_stake_address: *accounts.stake_account_begin.key,
-                validator_stake_account: *accounts.stake_pool_validator_stake_account.key,
+                validator_stake_account: *accounts.validator_stake_pool_stake_account.key,
                 pool_tokens_to: *accounts.pool_token_to.key,
                 pool_mint: *accounts.stake_pool_mint.key,
             },
         )?,
         &[
-            accounts.stake_pool_program.clone(),
             accounts.stake_pool.clone(),
             accounts.stake_pool_validator_list.clone(),
             accounts.deposit_authority.clone(),
             accounts.stake_pool_withdraw_authority.clone(),
             accounts.stake_account_begin.clone(),
-            accounts.stake_pool_validator_stake_account.clone(),
+            accounts.validator_stake_pool_stake_account.clone(),
             accounts.pool_token_to.clone(),
             accounts.stake_pool_mint.clone(),
             accounts.spl_token.clone(),
+            accounts.stake_program.clone(),
+            accounts.stake_pool_program.clone(),
         ],
-        &[stake_account_seeds],
+        &[
+            deposit_authority_seeds,
+        ],
     )?;
 
     Ok(())
