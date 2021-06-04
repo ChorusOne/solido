@@ -264,9 +264,7 @@ pub fn command_create_solido(
         opts.max_validators,
     )?;
 
-    // TODO(fynn): get_packed_len panics on https://docs.rs/solana-program/1.6.9/src/solana_program/borsh.rs.html#40,
-    // so we need to compute the size in a different way.
-    let lido_size = 999; //get_packed_len::<lido::state::Lido>();
+    let lido_size = Lido::calculate_size(opts.max_validators, opts.max_maintainers);
     let lido_account_balance = config
         .program
         .rpc()
