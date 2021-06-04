@@ -235,6 +235,7 @@ macro_rules! accounts_struct {
 
         impl<'a, 'b> $NameAccountInfo<'a, 'b> {
             pub fn try_from_slice(accounts: &'a [AccountInfo<'b>]) -> Result<$NameAccountInfo<'a, 'b>, ProgramError> {
+                use solana_program::msg;
                 let mut accounts_iter = accounts.iter();
 
                 // Unpack the accounts from the iterator in the same order that
@@ -242,26 +243,65 @@ macro_rules! accounts_struct {
                 // and is_writable match their definitions, and return an error
                 // if not.
                 $(
-                    let $var_account = accounts_iter.next().ok_or(ProgramError::NotEnoughAccountKeys)?;
-                    if (($is_signer && !$var_account.is_signer)
-                        || ($is_writable && !$var_account.is_writable)) {
+                    let $var_account = match accounts_iter.next() {
+                        Some(account) => account,
+                        None => {
+                            msg!(
+                                "Not enough accounts provided. Expected {}.",
+                                stringify!($var_account),
+                            );
+                            return Err(ProgramError::NotEnoughAccountKeys)?;
+                        }
+                    };
+                    if $is_signer && !$var_account.is_signer {
+                        msg!(
+                            "Expected {} ({}) to be a signer, but it is not.",
+                            stringify!($var_account),
+                            $var_account.key,
+                        );
+                        return Err(LidoError::InvalidAccountInfo.into());
+                    }
+                    if $is_writable && !$var_account.is_writable {
+                        msg!(
+                            "Expected {} ({}) to be writable, but it is not.",
+                            stringify!($var_account),
+                            $var_account.key,
+                        );
                         return Err(LidoError::InvalidAccountInfo.into());
                     }
                 )*
 
                 $(
                     $(
-                        let $const_account = accounts_iter.next().ok_or(ProgramError::NotEnoughAccountKeys)?;
+                        let $const_account = match accounts_iter.next() {
+                            Some(account) => account,
+                            None => {
+                                msg!(
+                                    "Not enough accounts provided. Expected {}.",
+                                    stringify!($const_account),
+                                );
+                                return Err(ProgramError::NotEnoughAccountKeys)?;
+                            }
+                        };
                         // Constant accounts (like the system program or rent
                         // sysvar) are never signers or writable.
                         if $const_account.is_signer || $const_account.is_writable {
+                            msg!(
+                                "Account {} ({}) is unexpectedly writable or signer.",
+                                stringify!($const_account),
+                                $const_account.key,
+                            );
                             return Err(LidoError::InvalidAccountInfo.into());
                         }
                     )*
                 )?
 
                 // Check that there are no excess accounts provided.
-                if accounts_iter.next().is_some() {
+                if let Some(account) = accounts_iter.next() {
+                    msg!(
+                        "Instruction was passed more accounts than needed, did not expect {}.",
+                        account.key,
+                    );
                     return Err(LidoError::TooManyAccountKeys.into());
                 }
 
