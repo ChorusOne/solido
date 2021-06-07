@@ -11,8 +11,13 @@ use helpers::CreateValidatorStakeAccountOpts;
 use helpers::ShowSolidoOpts;
 use serde::Serialize;
 use solana_client::rpc_client::RpcClient;
+use solana_remote_wallet::locator::Locator;
+use solana_remote_wallet::remote_keypair::generate_remote_keypair;
+use solana_remote_wallet::remote_wallet::maybe_wallet_manager;
+use solana_sdk::derivation_path::DerivationPath;
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::{read_keypair_file, Keypair};
+use solana_sdk::signer::Signer;
 
 use crate::helpers::command_add_maintainer;
 use crate::helpers::command_create_validator_stake_account;
@@ -171,6 +176,34 @@ fn main() {
         Some(path) => path,
         None => get_default_keypair_path(),
     };
+    // Using ledger wallet
+    let signer: Box<dyn Signer>;
+    if payer_keypair_path.starts_with("usb://") {
+        let hw_wallet = maybe_wallet_manager().unwrap().unwrap();
+        signer = Box::new(
+            generate_remote_keypair(
+                Locator::new_from_path(
+                    payer_keypair_path
+                        .clone()
+                        .into_os_string()
+                        .into_string()
+                        .unwrap(),
+                )
+                .unwrap(),
+                DerivationPath::default(),
+                &hw_wallet,
+                true,
+                "",
+            )
+            .unwrap(),
+        );
+    } else {
+        signer =
+            Box::new(read_keypair_file(&payer_keypair_path).unwrap_or_else(|_| {
+                panic!("Failed to read key pair from {:?}.", payer_keypair_path)
+            }));
+    }
+
     let keypair = read_keypair_file(&payer_keypair_path)
         .unwrap_or_else(|_| panic!("Failed to read key pair from {:?}.", payer_keypair_path));
 

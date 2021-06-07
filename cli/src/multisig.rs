@@ -25,9 +25,11 @@ use multisig::accounts as multisig_accounts;
 use multisig::instruction as multisig_instruction;
 use serde::Serialize;
 use solana_client::rpc_client::RpcClient;
+use solana_sdk::signers::Signers;
 
 use crate::helpers::get_anchor_program;
 use crate::helpers::get_solido;
+use crate::helpers::sign_and_send_transaction;
 use crate::util::PubkeyBase58;
 use crate::Config;
 use crate::{print_output, OutputMode};
@@ -1041,6 +1043,27 @@ fn approve(program: Program, opts: ApproveOpts) {
         .args(multisig_instruction::Approve)
         .send()
         .expect("Failed to send transaction.");
+}
+
+fn approve_2<T: Signer>(
+    config: &Config,
+    signer: &T,
+    opts: ApproveOpts,
+) -> Result<(), crate::Error> {
+    let a = multisig_accounts::Approve {
+        multisig: opts.multisig_address,
+        transaction: opts.transaction_address,
+        // The owner that signs the multisig proposed transaction, should be
+        // the public key that signs the entire approval transaction (which
+        // is also the payer).
+        owner: signer.pubkey(),
+    };
+    let approve_instruction = Instruction {
+        program_id: config.mul,
+        data: multisig_instruction::Approve.data(),
+        accounts: self.accounts,
+    };
+    sign_and_send_transaction(config, &[approve_instruction], &[signer])
 }
 
 /// Wrapper type needed to implement `ToAccountMetas`.
