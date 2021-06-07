@@ -56,7 +56,7 @@ multisig_instance = multisig_data['multisig_address']
 multisig_pda = multisig_data['multisig_program_derived_address']
 print(f'> Created instance at {multisig_instance}.')
 
-print('\nCreating Solido instance')
+print('\nCreating Solido instance ...')
 result = solido(
     'create-solido',
     '--stake-pool-program-id', stake_pool_program_id,
@@ -96,7 +96,7 @@ assert solido_instance['solido']['fee_distribution'] == {
     'manager_fee': 2
 }
 
-print('\nAdding a validator')
+print('\nAdding a validator ...')
 validator_token_account_owner = create_test_account(
     'validator-token-account-key.json')
 print(f'> Validator token account owner: {validator_token_account_owner}')
@@ -192,7 +192,9 @@ assert solido_instance['solido']['validators']['entries'][0] == {
 
 maintainer = create_test_account('maintainer-account-key.json')
 
-print(f'\nAdding maintainer {maintainer}')
+print(f'\nAdd and remove maintainer ...')
+print(f'> Adding maintainer {maintainer}')
+
 transaction_result = solido('add-maintainer',
                             '--solido-program-id', solido_program_id,
                             '--solido-address', solido_address,
