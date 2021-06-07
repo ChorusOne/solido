@@ -12,7 +12,7 @@ that corresponds to a sufficiently funded account.
 import sys
 import json
 
-from util import create_test_account, create_test_accounts, solana_program_deploy, create_stake_account, create_spl_token, create_vote_account, solido, multisig, solana, approve_and_execute
+from util import create_test_account, create_test_accounts, solana_program_deploy, create_stake_account, create_spl_token, create_vote_account, solido, get_multisig, solana, approve_and_execute
 
 
 # We start by generating three accounts that we will need later.
@@ -43,10 +43,10 @@ print(f'> Solido program id is {solido_program_id}.')
 print('\nUploading Multisig program ...')
 multisig_program_id = solana_program_deploy('target/deploy/multisig.so')
 print(f'> Multisig program id is {multisig_program_id}.')
+multisig = get_multisig(multisig_program_id)
 
 print('\nCreating new multisig ...')
 multisig_data = multisig(
-    multisig_program_id,
     'create-multisig',
     '--threshold', '2',
     '--owner', addrs[0].pubkey,
@@ -121,15 +121,13 @@ transaction_address = transaction_result['transaction_address']
 # Fund the PDA so we transfer from it in the create-validator-stake-account instruction
 solana('transfer', '--allow-unfunded-recipient', multisig_pda, '10.0')
 print(f'> Approving transaction: {transaction_address}')
-multisig(multisig_program_id,
-         'approve',
+multisig('approve',
          '--multisig-address', multisig_instance,
          '--transaction-address', transaction_address,
          keypair_path='test-key-2.json'
          )
 print(f'> Executing transaction: {transaction_address}')
-multisig(multisig_program_id,
-         'execute-transaction',
+multisig('execute-transaction',
          '--multisig-address', multisig_instance,
          '--transaction-address', transaction_address,
          keypair_path='test-key-1.json'
@@ -147,7 +145,7 @@ transaction_result = solido('add-validator',
                             keypair_path='test-key-1.json'
                             )
 transaction_address = transaction_result['transaction_address']
-approve_and_execute(multisig_program_id,
+approve_and_execute(multisig,
                     multisig_instance, transaction_address, 'test-key-2.json')
 
 maintainer = create_test_account('maintainer-account-key.json')
@@ -162,7 +160,7 @@ transaction_result = solido('add-maintainer',
                             keypair_path='test-key-1.json'
                             )
 transaction_address = transaction_result['transaction_address']
-approve_and_execute(multisig_program_id,
+approve_and_execute(multisig,
                     multisig_instance, transaction_address, 'test-key-2.json')
 
 print(f'> Removing maintainer {maintainer}')
@@ -175,7 +173,7 @@ transaction_result = solido('remove-maintainer',
                             keypair_path='test-key-1.json'
                             )
 transaction_address = transaction_result['transaction_address']
-approve_and_execute(multisig_program_id,
+approve_and_execute(multisig,
                     multisig_instance, transaction_address, 'test-key-2.json')
 transaction_result = solido('add-maintainer',
                             '--solido-program-id', solido_program_id,
@@ -186,7 +184,7 @@ transaction_result = solido('add-maintainer',
                             keypair_path='test-key-1.json'
                             )
 transaction_address = transaction_result['transaction_address']
-approve_and_execute(multisig_program_id,
+approve_and_execute(multisig,
                     multisig_instance, transaction_address, 'test-key-2.json')
 
 # TODO: Implement a `solido show` to get the state of Solido and

@@ -21,7 +21,7 @@ import tempfile
 
 from typing import Any, Dict, Optional, NamedTuple
 
-from util import solana, create_test_account, solana_program_deploy, solana_program_show, multisig
+from util import solana, create_test_account, solana_program_deploy, solana_program_show, get_multisig
 
 
 # We start by generating three accounts that we will need later.
@@ -37,11 +37,10 @@ print(f'> {addr3}')
 print('\nUploading Multisig program ...')
 multisig_program_id = solana_program_deploy('target/deploy/multisig.so')
 print(f'> Multisig program id is {multisig_program_id}.')
-
+multisig = get_multisig(multisig_program_id)
 
 print('\nCreating new multisig ...')
 result = multisig(
-    multisig_program_id,
     'create-multisig',
     '--threshold', '2',
     '--owner', addr1,
