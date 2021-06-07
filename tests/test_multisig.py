@@ -21,7 +21,7 @@ import tempfile
 
 from typing import Any, Dict, Optional, NamedTuple
 
-from util import run, solana, create_test_account, solana_program_deploy, solana_program_show
+from util import solana, create_test_account, solana_program_deploy, solana_program_show, get_multisig
 
 
 # We start by generating three accounts that we will need later.
@@ -37,31 +37,7 @@ print(f'> {addr3}')
 print('\nUploading Multisig program ...')
 multisig_program_id = solana_program_deploy('target/deploy/multisig.so')
 print(f'> Multisig program id is {multisig_program_id}.')
-
-
-def multisig(*args: str, keypair_path: Optional[str] = None) -> Any:
-    """
-    Run 'solido multisig' against localhost, return its parsed json output.
-    """
-    output = run(
-        'target/debug/solido',
-        '--cluster', 'localnet',
-        '--output', 'json',
-        *([] if keypair_path is None else ['--keypair-path', keypair_path]),
-        'multisig',
-        '--multisig-program-id', multisig_program_id,
-        *args,
-    )
-    if output == '':
-        return {}
-    else:
-        try:
-            return json.loads(output)
-        except json.JSONDecodeError:
-            print('Failed to decode output as json, output was:')
-            print(output)
-            raise
-
+multisig = get_multisig(multisig_program_id)
 
 print('\nCreating new multisig ...')
 result = multisig(
