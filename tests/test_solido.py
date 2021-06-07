@@ -145,8 +145,22 @@ transaction_result = solido('add-validator',
                             keypair_path='test-key-1.json'
                             )
 transaction_address = transaction_result['transaction_address']
+transaction_status = multisig(
+    'show-transaction',
+    '--transaction-address', transaction_address,
+)
+assert transaction_status['did_execute'] == False
+assert transaction_status['signers']['Current']['signers'].count(
+    {'owner': addrs[0].pubkey, 'did_sign': True}) == 1
 approve_and_execute(multisig,
                     multisig_instance, transaction_address, 'test-key-2.json')
+transaction_status = multisig(
+    'show-transaction',
+    '--transaction-address', transaction_address,
+)
+assert transaction_status['did_execute'] == True
+assert transaction_status['signers']['Current']['signers'].count(
+    {'owner': addrs[1].pubkey, 'did_sign': True}) == 1
 
 maintainer = create_test_account('maintainer-account-key.json')
 

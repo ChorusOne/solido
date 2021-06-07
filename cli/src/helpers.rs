@@ -640,8 +640,167 @@ pub fn command_create_validator_stake_account(
 #[derive(Clap, Debug)]
 pub struct ShowSolidoOpts {
     /// The solido instance to show
-    #[clap(long)]
-    solido_instance: Pubkey,
+    #[clap(long, value_name = "address")]
+    pub solido_address: Pubkey,
+    #[clap(long, value_name = "address")]
+    pub solido_program_id: Pubkey,
+}
+
+#[derive(Serialize)]
+pub struct ShowSolidoOutput {
+    pub solido_program_id: PubkeyBase58,
+    pub solido_address: PubkeyBase58,
+    pub solido: Lido,
+    pub reserve_authority: PubkeyBase58,
+    pub deposit_authority: PubkeyBase58,
+    pub stake_pool_authority: PubkeyBase58,
+    pub fee_manager_authority: PubkeyBase58,
+}
+
+impl fmt::Display for ShowSolidoOutput {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        writeln!(
+            f,
+            "Stake Pool:                  {}",
+            self.solido.stake_pool_account
+        )?;
+        writeln!(f, "Manager:                     {}", self.solido.manager)?;
+        writeln!(
+            f,
+            "Minter:                      {}",
+            self.solido.st_sol_mint_program
+        )?;
+        writeln!(
+            f,
+            "Total number of stSOL:       {}",
+            self.solido.st_sol_total_shares
+        )?;
+        writeln!(
+            f,
+            "Holder of stake pool tokens: {}",
+            self.solido.stake_pool_token_holder
+        )?;
+        writeln!(f, "Authorities (public key, bump seed):")?;
+        writeln!(
+            f,
+            "  {}, {}",
+            self.reserve_authority, self.solido.sol_reserve_authority_bump_seed
+        )?;
+        writeln!(
+            f,
+            "  {}, {}",
+            self.deposit_authority, self.solido.deposit_authority_bump_seed
+        )?;
+        writeln!(
+            f,
+            "  {}, {}",
+            self.stake_pool_authority, self.solido.stake_pool_authority_bump_seed
+        )?;
+        writeln!(
+            f,
+            "  {}, {}",
+            self.fee_manager_authority, self.solido.fee_manager_bump_seed
+        )?;
+        writeln!(f, "\nFee distribution:")?;
+        writeln!(
+            f,
+            "Insurance:     {}/{}",
+            self.solido.fee_distribution.insurance_fee,
+            self.solido.fee_distribution.sum()
+        )?;
+        writeln!(
+            f,
+            "Treasury:      {}/{}",
+            self.solido.fee_distribution.treasury_fee,
+            self.solido.fee_distribution.sum()
+        )?;
+        writeln!(
+            f,
+            "Validation:    {}/{}",
+            self.solido.fee_distribution.validation_fee,
+            self.solido.fee_distribution.sum()
+        )?;
+        writeln!(
+            f,
+            "Manager:       {}/{}",
+            self.solido.fee_distribution.manager_fee,
+            self.solido.fee_distribution.sum()
+        )?;
+        writeln!(
+            f,
+            "Validators: ({}/{} max)",
+            self.solido.validators.entries.len(),
+            self.solido.validators.maximum_entries
+        )?;
+        for (pubkey, val) in self.solido.validators.entries.iter() {
+            writeln!(
+                f,
+                "  - stake account: {}, rewards address: {}, credit: {}",
+                pubkey, val.fee_address, val.fee_credit
+            )?;
+        }
+        writeln!(
+            f,
+            "Maintainers: ({}/{} max)",
+            self.solido.maintainers.entries.len(),
+            self.solido.maintainers.maximum_entries
+        )?;
+        for (pubkey, _) in self.solido.maintainers.entries.iter() {
+            writeln!(f, "  - {}", pubkey)?;
+        }
+        Ok(())
+    }
+}
+
+pub fn command_show_solido(
+    config: Config,
+    opts: ShowSolidoOpts,
+) -> Result<ShowSolidoOutput, crate::Error> {
+    let lido = get_solido(&config.program.rpc(), &opts.solido_address)?;
+    let reserve_authority = Pubkey::create_program_address(
+        &[
+            &opts.solido_address.to_bytes(),
+            RESERVE_AUTHORITY,
+            &[lido.sol_reserve_authority_bump_seed],
+        ],
+        &opts.solido_program_id,
+    )?;
+
+    let deposit_authority = Pubkey::create_program_address(
+        &[
+            &opts.solido_address.to_bytes(),
+            DEPOSIT_AUTHORITY,
+            &[lido.deposit_authority_bump_seed],
+        ],
+        &opts.solido_program_id,
+    )?;
+
+    let stake_pool_authority = Pubkey::create_program_address(
+        &[
+            &opts.solido_address.to_bytes(),
+            STAKE_POOL_AUTHORITY,
+            &[lido.stake_pool_authority_bump_seed],
+        ],
+        &opts.solido_program_id,
+    )?;
+
+    let fee_manager_authority = Pubkey::create_program_address(
+        &[
+            &opts.solido_address.to_bytes(),
+            FEE_MANAGER_AUTHORITY,
+            &[lido.fee_manager_bump_seed],
+        ],
+        &opts.solido_program_id,
+    )?;
+    Ok(ShowSolidoOutput {
+        solido_program_id: opts.solido_program_id.into(),
+        solido_address: opts.solido_address.into(),
+        solido: lido,
+        reserve_authority: reserve_authority.into(),
+        deposit_authority: deposit_authority.into(),
+        stake_pool_authority: stake_pool_authority.into(),
+        fee_manager_authority: fee_manager_authority.into(),
+    })
 }
 
 enum ExecutionMethod {
