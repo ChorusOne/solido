@@ -21,7 +21,7 @@ import tempfile
 
 from typing import Any, Dict, Optional, NamedTuple
 
-from util import run, solana, create_test_account, solana_program_deploy, solana_program_show
+from util import solana, create_test_account, solana_program_deploy, solana_program_show, multisig
 
 
 # We start by generating three accounts that we will need later.
@@ -39,32 +39,9 @@ multisig_program_id = solana_program_deploy('target/deploy/multisig.so')
 print(f'> Multisig program id is {multisig_program_id}.')
 
 
-def multisig(*args: str, keypair_path: Optional[str] = None) -> Any:
-    """
-    Run 'solido multisig' against localhost, return its parsed json output.
-    """
-    output = run(
-        'target/debug/solido',
-        '--cluster', 'localnet',
-        '--output', 'json',
-        *([] if keypair_path is None else ['--keypair-path', keypair_path]),
-        'multisig',
-        '--multisig-program-id', multisig_program_id,
-        *args,
-    )
-    if output == '':
-        return {}
-    else:
-        try:
-            return json.loads(output)
-        except json.JSONDecodeError:
-            print('Failed to decode output as json, output was:')
-            print(output)
-            raise
-
-
 print('\nCreating new multisig ...')
 result = multisig(
+    multisig_program_id,
     'create-multisig',
     '--threshold', '2',
     '--owner', addr1,
@@ -266,7 +243,8 @@ else:
 
 # Next we are going to test changing the multisig. Before we go and do that,
 # confirm that it currently looks like we expect it to look.
-multisig_before = multisig('show-multisig', '--multisig-address', multisig_address)
+multisig_before = multisig(
+    'show-multisig', '--multisig-address', multisig_address)
 assert multisig_before == {
     'multisig_program_derived_address': multisig_program_derived_address,
     'threshold': 2,
@@ -320,7 +298,8 @@ result = multisig(
 assert result['did_execute'] == True
 print('> Transaction is marked as executed.')
 
-multisig_after = multisig('show-multisig', '--multisig-address', multisig_address)
+multisig_after = multisig(
+    'show-multisig', '--multisig-address', multisig_address)
 assert multisig_after == {
     'multisig_program_derived_address': multisig_program_derived_address,
     'threshold': 2,

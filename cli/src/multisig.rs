@@ -591,7 +591,7 @@ impl fmt::Display for ShowTransactionOutput {
                 }
             }
             ParsedInstruction::Unrecognized => {
-                writeln!(f, "  Unrecognized instruction. Provide --solido-program-id <address>parameter to parse a Solido instruction")?;
+                writeln!(f, "  Unrecognized instruction. Provide --solido-program-id <address> parameter to parse a Solido instruction")?;
             }
             ParsedInstruction::InvalidSolidoInstruction => {
                 writeln!(

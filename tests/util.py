@@ -165,13 +165,59 @@ class TestAccount(NamedTuple):
     pubkey: str
     keypair_path: str
 
+    def __repr__(self):
+        return self.pubkey
+
 
 def create_test_accounts(*, num_accounts: int) -> List[TestAccount]:
     result = []
 
     for i in range(num_accounts):
         fname = f'test-key-{i + 1}.json'
-        pubkey = addr1 = create_test_account(fname)
+        pubkey = create_test_account(fname)
         result.append(TestAccount(pubkey, fname))
 
     return result
+
+
+# Multisig utils
+def multisig(multisig_program_id: str, *args: str, keypair_path: Optional[str] = None) -> Any:
+    """
+    Run 'solido multisig' against localhost, return its parsed json output.
+    """
+    output = run(
+        'target/debug/solido',
+        '--cluster', 'localnet',
+        '--output', 'json',
+        *([] if keypair_path is None else ['--keypair-path', keypair_path]),
+        'multisig',
+        '--multisig-program-id', multisig_program_id,
+        *args,
+    )
+    if output == '':
+        return {}
+    else:
+        try:
+            return json.loads(output)
+        except json.JSONDecodeError:
+            print('Failed to decode output as json, output was:')
+            print(output)
+            raise
+
+
+def approve_and_execute(multisig_program_id: str, multisig_instance: str, transaction_address: str, keypair_path: str):
+    """
+    Helper to approve and execute a transaction with a single key
+    """
+    multisig(multisig_program_id,
+             'approve',
+             '--multisig-address', multisig_instance,
+             '--transaction-address', transaction_address,
+             keypair_path=keypair_path
+             )
+    multisig(multisig_program_id,
+             'execute-transaction',
+             '--multisig-address', multisig_instance,
+             '--transaction-address', transaction_address,
+             keypair_path=keypair_path
+             )

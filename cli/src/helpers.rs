@@ -610,7 +610,6 @@ pub fn command_create_validator_stake_account(
         &solido.stake_pool_account,
     );
 
-    let funder = config.fee_payer.pubkey();
     let execution_method = get_execution_method(
         config.fee_payer.pubkey(),
         opts.multisig_program_id,
@@ -624,7 +623,7 @@ pub fn command_create_validator_stake_account(
             stake_pool_program: opts.stake_pool_program_id,
             stake_pool: solido.stake_pool_account,
             staker: stake_pool_authority,
-            funder,
+            funder: execution_method.get_pubkey(),
             stake_account,
             validator: opts.validator_vote,
         },
