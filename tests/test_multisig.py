@@ -242,8 +242,7 @@ else:
 
 # Next we are going to test changing the multisig. Before we go and do that,
 # confirm that it currently looks like we expect it to look.
-multisig_before = multisig(
-    'show-multisig', '--multisig-address', multisig_address)
+multisig_before = multisig('show-multisig', '--multisig-address', multisig_address)
 assert multisig_before == {
     'multisig_program_derived_address': multisig_program_derived_address,
     'threshold': 2,
@@ -297,8 +296,7 @@ result = multisig(
 assert result['did_execute'] == True
 print('> Transaction is marked as executed.')
 
-multisig_after = multisig(
-    'show-multisig', '--multisig-address', multisig_address)
+multisig_after = multisig('show-multisig', '--multisig-address', multisig_address)
 assert multisig_after == {
     'multisig_program_derived_address': multisig_program_derived_address,
     'threshold': 2,
