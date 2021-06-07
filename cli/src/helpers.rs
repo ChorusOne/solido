@@ -732,11 +732,11 @@ impl fmt::Display for ShowSolidoOutput {
             self.solido.validators.entries.len(),
             self.solido.validators.maximum_entries
         )?;
-        for (pubkey, val) in self.solido.validators.entries.iter() {
+        for pe in self.solido.validators.entries.iter() {
             writeln!(
                 f,
                 "  - stake account: {}, rewards address: {}, credit: {}",
-                pubkey, val.fee_address, val.fee_credit
+                pe.pubkey, pe.entry.fee_address, pe.entry.fee_credit
             )?;
         }
         writeln!(
@@ -745,8 +745,8 @@ impl fmt::Display for ShowSolidoOutput {
             self.solido.maintainers.entries.len(),
             self.solido.maintainers.maximum_entries
         )?;
-        for (pubkey, _) in self.solido.maintainers.entries.iter() {
-            writeln!(f, "  - {}", pubkey)?;
+        for pe in self.solido.maintainers.entries.iter() {
+            writeln!(f, "  - {}", pe.pubkey)?;
         }
         Ok(())
     }

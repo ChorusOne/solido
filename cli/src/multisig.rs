@@ -31,6 +31,7 @@ use crate::helpers::get_solido;
 use crate::util::PubkeyBase58;
 use crate::Config;
 use crate::{print_output, OutputMode};
+use lido::state::serialize_b58;
 
 #[derive(Clap, Debug)]
 pub struct MultisigOpts {
@@ -389,37 +390,58 @@ enum ParsedInstruction {
 #[derive(Serialize)]
 enum SolidoInstruction {
     CreateValidatorStakeAccount {
+        #[serde(serialize_with = "serialize_b58")]
         solido_instance: Pubkey,
+        #[serde(serialize_with = "serialize_b58")]
         manager: Pubkey,
+        #[serde(serialize_with = "serialize_b58")]
         stake_pool_program: Pubkey,
+        #[serde(serialize_with = "serialize_b58")]
         stake_pool: Pubkey,
+        #[serde(serialize_with = "serialize_b58")]
         funder: Pubkey,
+        #[serde(serialize_with = "serialize_b58")]
         stake_account: Pubkey,
+        #[serde(serialize_with = "serialize_b58")]
         validator_vote: Pubkey,
     },
     AddValidator {
+        #[serde(serialize_with = "serialize_b58")]
         solido_instance: Pubkey,
+        #[serde(serialize_with = "serialize_b58")]
         manager: Pubkey,
+        #[serde(serialize_with = "serialize_b58")]
         stake_pool_program: Pubkey,
+        #[serde(serialize_with = "serialize_b58")]
         stake_pool: Pubkey,
+        #[serde(serialize_with = "serialize_b58")]
         stake_account: Pubkey,
+        #[serde(serialize_with = "serialize_b58")]
         validator_token_account: Pubkey,
     },
     AddMaintainer {
+        #[serde(serialize_with = "serialize_b58")]
         solido_instance: Pubkey,
+        #[serde(serialize_with = "serialize_b58")]
         manager: Pubkey,
+        #[serde(serialize_with = "serialize_b58")]
         maintainer: Pubkey,
     },
     RemoveMaintainer {
+        #[serde(serialize_with = "serialize_b58")]
         solido_instance: Pubkey,
+        #[serde(serialize_with = "serialize_b58")]
         manager: Pubkey,
+        #[serde(serialize_with = "serialize_b58")]
         maintainer: Pubkey,
     },
     ChangeFee {
         current_solido: Box<Lido>,
         fee_distribution: FeeDistribution,
 
+        #[serde(serialize_with = "serialize_b58")]
         solido_instance: Pubkey,
+        #[serde(serialize_with = "serialize_b58")]
         manager: Pubkey,
         fee_recipients: FeeRecipients,
     },

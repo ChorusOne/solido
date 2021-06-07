@@ -19,6 +19,15 @@ pub const LIDO_CONSTANT_HEADER_SIZE: usize = 5 * 32 + 8 + 4;
 pub const LIDO_CONSTANT_FEE_SIZE: usize = 3 * 32 + 4 * 4;
 /// Constant size of Lido
 pub const LIDO_CONSTANT_SIZE: usize = LIDO_CONSTANT_HEADER_SIZE + LIDO_CONSTANT_FEE_SIZE;
+
+/// Function to use when serializing a public key, to print it using base58
+pub fn serialize_b58<S>(x: &Pubkey, s: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    s.serialize_str(&x.to_string())
+}
+
 #[repr(C)]
 #[derive(Clone, Debug, Default, BorshDeserialize, BorshSerialize, BorshSchema, Serialize)]
 pub struct Lido {
@@ -52,13 +61,6 @@ pub struct Lido {
 
     pub validators: Validators,
     pub maintainers: Maintainers,
-}
-
-fn serialize_b58<S>(x: &Pubkey, s: S) -> Result<S::Ok, S::Error>
-where
-    S: Serializer,
-{
-    s.serialize_str(&x.to_string())
 }
 
 impl Lido {
@@ -159,7 +161,10 @@ impl Lido {
 
     /// Checks if the passed maintainer belong to the list of maintainers
     pub fn check_maintainer(&self, maintainer: &AccountInfo) -> ProgramResult {
-        if !&self.maintainers.entries.contains(&(*maintainer.key, ())) {
+        if !&self.maintainers.entries.contains(&PubkeyAndEntry {
+            pubkey: *maintainer.key,
+            entry: (),
+        }) {
             msg!(
                 "Invalid maintainer, account {} is not present in the maintainers list.",
                 maintainer.key
@@ -311,8 +316,17 @@ impl Maintainers {
 #[derive(
     Clone, Default, Debug, PartialEq, BorshSerialize, BorshDeserialize, BorshSchema, Serialize,
 )]
+pub struct PubkeyAndEntry<T> {
+    #[serde(serialize_with = "serialize_b58")]
+    pub pubkey: Pubkey,
+    pub entry: T,
+}
+
+#[derive(
+    Clone, Default, Debug, PartialEq, BorshSerialize, BorshDeserialize, BorshSchema, Serialize,
+)]
 pub struct AccountMap<T> {
-    pub entries: Vec<(Pubkey, T)>,
+    pub entries: Vec<PubkeyAndEntry<T>>,
     pub maximum_entries: u32,
 }
 
@@ -321,7 +335,10 @@ impl<T: Default> AccountMap<T> {
     pub fn new_fill_default(maximum_entries: u32) -> Self {
         let mut v = Vec::with_capacity(maximum_entries as usize);
         for _ in 0..maximum_entries {
-            v.push((Pubkey::default(), T::default()));
+            v.push(PubkeyAndEntry {
+                pubkey: Pubkey::default(),
+                entry: T::default(),
+            });
         }
         AccountMap {
             entries: v,
@@ -339,8 +356,11 @@ impl<T: Default> AccountMap<T> {
         if self.entries.len() == self.maximum_entries as usize {
             return Err(LidoError::MaximumNumberOfAccountsExceeded.into());
         }
-        if !self.entries.iter().any(|&(v, _)| v == address) {
-            self.entries.push((address, value));
+        if !self.entries.iter().any(|pe| pe.pubkey == address) {
+            self.entries.push(PubkeyAndEntry {
+                pubkey: address,
+                entry: value,
+            });
         } else {
             return Err(LidoError::DuplicatedEntry.into());
         }
@@ -350,9 +370,9 @@ impl<T: Default> AccountMap<T> {
         let idx = self
             .entries
             .iter()
-            .position(|&(v, _)| &v == address)
+            .position(|pe| &pe.pubkey == address)
             .ok_or(LidoError::InvalidAccountMember)?;
-        Ok(self.entries.swap_remove(idx).1)
+        Ok(self.entries.swap_remove(idx).entry)
     }
 }
 

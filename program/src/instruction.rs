@@ -250,7 +250,7 @@ macro_rules! accounts_struct {
                                 "Not enough accounts provided. Expected {}.",
                                 stringify!($var_account),
                             );
-                            return Err(ProgramError::NotEnoughAccountKeys)?;
+                            return Err(ProgramError::NotEnoughAccountKeys);
                         }
                     };
                     if $is_signer && !$var_account.is_signer {
@@ -280,7 +280,7 @@ macro_rules! accounts_struct {
                                     "Not enough accounts provided. Expected {}.",
                                     stringify!($const_account),
                                 );
-                                return Err(ProgramError::NotEnoughAccountKeys)?;
+                                return Err(ProgramError::NotEnoughAccountKeys);
                             }
                         };
                         // Constant accounts (like the system program or rent
