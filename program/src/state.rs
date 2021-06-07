@@ -1,6 +1,6 @@
 //! State transition types
 
-use serde::Serialize;
+use serde::{Serialize, Serializer};
 use std::ops::Sub;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
@@ -23,16 +23,21 @@ pub const LIDO_CONSTANT_SIZE: usize = LIDO_CONSTANT_HEADER_SIZE + LIDO_CONSTANT_
 #[derive(Clone, Debug, Default, BorshDeserialize, BorshSerialize, BorshSchema, Serialize)]
 pub struct Lido {
     /// Stake pool account associated with Lido
+    #[serde(serialize_with = "serialize_b58")]
     pub stake_pool_account: Pubkey,
     /// Manager of the Lido program, able to execute administrative functions
+    #[serde(serialize_with = "serialize_b58")]
     pub manager: Pubkey,
     /// Program in charge of minting Lido tokens
+    #[serde(serialize_with = "serialize_b58")]
     pub st_sol_mint_program: Pubkey,
     /// Total Lido tokens in circulation
     pub st_sol_total_shares: StLamports,
     /// Holder of tokens in Lido's underlying stake pool
+    #[serde(serialize_with = "serialize_b58")]
     pub stake_pool_token_holder: Pubkey,
     /// Token program id associated with Lido's token
+    #[serde(serialize_with = "serialize_b58")]
     pub token_program_id: Pubkey,
 
     /// Bump seeds for signing messages on behalf of the authority
@@ -47,6 +52,13 @@ pub struct Lido {
 
     pub validators: Validators,
     pub maintainers: Maintainers,
+}
+
+fn serialize_b58<S>(x: &Pubkey, s: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    s.serialize_str(&x.to_string())
 }
 
 impl Lido {
@@ -170,6 +182,7 @@ pub struct Validator {
     pub fee_credit: StLamports,
 
     /// SPL token account denominated in stSOL to transfer fees to when claiming them.
+    #[serde(serialize_with = "serialize_b58")]
     pub fee_address: Pubkey,
 }
 
@@ -200,8 +213,11 @@ pub struct FeeDistribution {
 /// Specifies the fee recipients, accounts that should be created by Lido's minter
 #[derive(Clone, Default, Debug, BorshSerialize, BorshDeserialize, BorshSchema, Serialize)]
 pub struct FeeRecipients {
+    #[serde(serialize_with = "serialize_b58")]
     pub insurance_account: Pubkey,
+    #[serde(serialize_with = "serialize_b58")]
     pub treasury_account: Pubkey,
+    #[serde(serialize_with = "serialize_b58")]
     pub manager_account: Pubkey,
 }
 
@@ -299,6 +315,7 @@ pub struct AccountMap<T> {
     pub entries: Vec<(Pubkey, T)>,
     pub maximum_entries: u32,
 }
+
 impl<T: Default> AccountMap<T> {
     /// Creates a new instance with the `maximum_entries` positions filled with the default value
     pub fn new_fill_default(maximum_entries: u32) -> Self {

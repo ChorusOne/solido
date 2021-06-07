@@ -83,6 +83,18 @@ st_sol_mint_account = result['st_sol_mint_address']
 
 print(f'> Created instance at {solido_address}.')
 
+solido_instance = solido('show-solido',
+                         '--solido-program-id', solido_program_id,
+                         '--solido-address', solido_address,
+                         )
+assert solido_instance['solido']['manager'] == multisig_pda
+assert solido_instance['solido']['st_sol_total_shares'] == 0
+assert solido_instance['solido']['fee_distribution'] == {
+    "insurance_fee": 7,
+    "treasury_fee": 5,
+    "validation_fee": 3,
+    "manager_fee": 2
+}
 
 print('\nAdding a validator')
 validator_token_account_owner = create_test_account(
