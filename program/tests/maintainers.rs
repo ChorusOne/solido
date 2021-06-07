@@ -43,7 +43,7 @@ async fn test_successful_add_remove_maintainer() {
         .maintainers
         .entries
         .iter()
-        .any(|(m, _)| m == &maintainer.pubkey());
+        .any(|pe| pe.pubkey == maintainer.pubkey());
     assert!(has_maintainer);
     simple_remove_maintainer(
         &mut banks_client,
@@ -62,6 +62,6 @@ async fn test_successful_add_remove_maintainer() {
         .maintainers
         .entries
         .iter()
-        .any(|(m, ())| m == &maintainer.pubkey());
+        .any(|pe| pe.pubkey == maintainer.pubkey());
     assert!(!has_maintainer);
 }
