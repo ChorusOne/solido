@@ -309,9 +309,6 @@ pub fn process_stake_deposit(
         &stake_account_bump_seed[..],
     ][..];
 
-    let a2 = Pubkey::create_program_address(&stake_account_seeds, program_id)?;
-    assert_eq!(*accounts.stake_account_end.key, a2);
-
     // Confirm that the stake account is uninitialized, before we touch it.
     if accounts.stake_account_end.data.borrow().len() > 0 {
         return Err(LidoError::WrongStakeState.into());
@@ -417,16 +414,12 @@ pub fn process_deposit_active_stake_to_pool(
 ) -> ProgramResult {
     let accounts = DepositActiveStakeToPoolAccountsInfo::try_from_slice(raw_accounts)?;
 
-    msg!("TODO: Before start.");
     let _rent = &Rent::from_account_info(accounts.sysvar_rent)?;
     let mut lido = deserialize_lido(program_id, accounts.lido)?;
 
-    msg!("TODO: Check stake pool.");
     lido.check_stake_pool(accounts.stake_pool)?;
-    msg!("TODO: Before check maintainer.");
     lido.check_maintainer(accounts.maintainer)?;
 
-    msg!("TODO: Before get validator.");
     let validator = lido
         .validators
         .get_mut(&accounts.validator_stake_pool_stake_account.key)?;
@@ -492,7 +485,6 @@ pub fn process_deposit_active_stake_to_pool(
     // The stake pool should check that the account we deposit is actually a
     // fully active stake account, and not still activating.
 
-    msg!("TODO: Before stake_pool_deposit.");
     invoke_signed(
         &stake_pool_deposit(
             &accounts.stake_pool_program.key,
