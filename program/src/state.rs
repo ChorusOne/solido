@@ -31,7 +31,9 @@ where
 }
 
 #[repr(C)]
-#[derive(Clone, Debug, Default, BorshDeserialize, BorshSerialize, BorshSchema, Eq, PartialEq, Serialize)]
+#[derive(
+    Clone, Debug, Default, BorshDeserialize, BorshSerialize, BorshSchema, Eq, PartialEq, Serialize,
+)]
 pub struct Lido {
     /// Stake pool account associated with Lido
     #[serde(serialize_with = "serialize_b58")]
@@ -215,7 +217,9 @@ impl Lido {
 pub type Validators = AccountMap<Validator>;
 
 #[repr(C)]
-#[derive(Clone, Debug, Default, Eq, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema, Serialize)]
+#[derive(
+    Clone, Debug, Default, Eq, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema, Serialize,
+)]
 pub struct Validator {
     /// Fees in stSOL that the validator is entitled too, but hasn't claimed yet.
     pub fee_credit: StLamports,
@@ -280,7 +284,9 @@ impl Validator {
 /// Determines how fees are split up among these parties, represented as the
 /// number of parts of the total. For example, if each party has 1 part, then
 /// they all get an equal share of the fee.
-#[derive(Clone, Default, Debug, Eq, PartialEq, BorshSerialize, BorshDeserialize, BorshSchema, Serialize)]
+#[derive(
+    Clone, Default, Debug, Eq, PartialEq, BorshSerialize, BorshDeserialize, BorshSchema, Serialize,
+)]
 pub struct FeeDistribution {
     pub insurance_fee: u32,
     pub treasury_fee: u32,
@@ -289,7 +295,9 @@ pub struct FeeDistribution {
 }
 
 /// Specifies the fee recipients, accounts that should be created by Lido's minter
-#[derive(Clone, Default, Debug, Eq, PartialEq, BorshSerialize, BorshDeserialize, BorshSchema, Serialize)]
+#[derive(
+    Clone, Default, Debug, Eq, PartialEq, BorshSerialize, BorshDeserialize, BorshSchema, Serialize,
+)]
 pub struct FeeRecipients {
     #[serde(serialize_with = "serialize_b58")]
     pub insurance_account: Pubkey,
@@ -383,7 +391,9 @@ pub struct PubkeyAndEntry<T> {
     pub entry: T,
 }
 
-#[derive(Clone, Default, Debug, Eq, PartialEq, BorshSerialize, BorshDeserialize, BorshSchema, Serialize)]
+#[derive(
+    Clone, Default, Debug, Eq, PartialEq, BorshSerialize, BorshDeserialize, BorshSchema, Serialize,
+)]
 pub struct AccountMap<T> {
     pub entries: Vec<PubkeyAndEntry<T>>,
     pub maximum_entries: u32,
