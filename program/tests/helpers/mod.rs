@@ -312,7 +312,7 @@ impl LidoAccounts {
         let lido_account = get_account(banks_client, &self.lido.pubkey()).await;
         let lido = try_from_slice_unchecked::<Lido>(lido_account.data.as_slice()).unwrap();
 
-        let (_key, validator_state) = lido
+        let validator_entry = lido
             .validators
             .get(&validator.stake_pool_stake_account)
             .expect("Trying to stake with a non-mebmer validator.");
@@ -321,7 +321,7 @@ impl LidoAccounts {
             &id(),
             &self.lido.pubkey(),
             &validator.stake_pool_stake_account,
-            validator_state.stake_accounts_seed_end,
+            validator_entry.entry.stake_accounts_seed_end,
         );
 
         let mut transaction = Transaction::new_with_payer(
@@ -397,8 +397,8 @@ impl LidoAccounts {
                     stake_pool: self.stake_pool_accounts.stake_pool.pubkey(),
                     staker: *staker,
                     funder: payer.pubkey(),
-                    stake_account: *stake_account,
-                    validator: *validator,
+                    stake_pool_stake_account: *stake_account,
+                    validator_vote_account: *validator,
                 },
             )
             .unwrap()],
