@@ -127,7 +127,7 @@ pub fn get_validator_furthest_below_target(
 
 #[cfg(test)]
 mod test {
-    use super::{get_validator_furthest_below_target, get_target_balance};
+    use super::{get_target_balance, get_validator_furthest_below_target};
     use crate::token::Lamports;
     use solana_program::pubkey::Pubkey;
     use spl_stake_pool::state::{StakeStatus, ValidatorStakeInfo};
