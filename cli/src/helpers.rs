@@ -136,10 +136,13 @@ pub struct CreateSolidoOpts {
     #[clap(long, value_name = "address")]
     pub manager_fee_account_owner: Pubkey,
 
-    /// If manager is defined, creates an instance with the manager, otherwise
-    /// use the default fee payer.
+    /// Used to compute Solido's manager.
+    /// Multisig instance.
     #[clap(long, value_name = "address")]
-    pub manager: Pubkey,
+    pub multisig_address: Pubkey,
+    /// Multisig program id.
+    #[clap(long, value_name = "address")]
+    pub multisig_program_id: Pubkey,
 }
 
 #[derive(Serialize)]
@@ -357,6 +360,9 @@ pub fn command_create_solido(
         &opts.solido_program_id,
     ));
 
+    // Manager is the PDA from the multisig instance
+    let (manager, _nonce) =
+        get_multisig_program_address(&opts.multisig_program_id, &opts.multisig_address);
     instructions.push(lido::instruction::initialize(
         &opts.solido_program_id,
         FeeDistribution {
@@ -373,7 +379,7 @@ pub fn command_create_solido(
             mint_program: st_sol_mint_keypair.pubkey(),
             pool_token_to: pool_token_to_keypair.pubkey(),
             fee_token: stake_pool.fee_address.0,
-            manager: opts.manager.unwrap_or(config.fee_payer.pubkey()),
+            manager: manager,
             insurance_account: insurance_keypair.pubkey(),
             treasury_account: treasury_keypair.pubkey(),
             manager_fee_account: manager_fee_keypair.pubkey(),
@@ -422,8 +428,10 @@ pub struct AddValidatorOpts {
     #[clap(long, value_name = "address")]
     pub validator_rewards_address: Pubkey,
 
+    /// Multisig instance.
     #[clap(long, value_name = "address")]
     pub multisig_address: Pubkey,
+    /// Multisig program id.
     #[clap(long, value_name = "address")]
     pub multisig_program_id: Pubkey,
 }
@@ -496,10 +504,10 @@ pub struct AddRemoveMaintainerOpts {
     #[clap(long, value_name = "address")]
     pub maintainer_address: Pubkey,
 
-    /// Issue commands through the passed multisig account.
+    /// Multisig instance.
     #[clap(long, value_name = "address")]
     pub multisig_address: Pubkey,
-    /// When issuing commands Multisig program id.
+    /// Multisig program id.
     #[clap(long, value_name = "address")]
     pub multisig_program_id: Pubkey,
 }
@@ -570,9 +578,10 @@ pub struct CreateValidatorStakeAccountOpts {
     #[clap(long, value_name = "address")]
     pub validator_vote: Pubkey,
 
+    /// Multisig instance.
     #[clap(long, value_name = "address")]
     pub multisig_address: Pubkey,
-    /// When issuing commands Multisig program id
+    /// Multisig program id.
     #[clap(long, value_name = "address")]
     pub multisig_program_id: Pubkey,
 }
