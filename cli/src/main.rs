@@ -17,6 +17,7 @@ use solana_sdk::signature::{read_keypair_file, Keypair};
 use crate::helpers::command_add_maintainer;
 use crate::helpers::command_create_validator_stake_account;
 use crate::helpers::command_remove_maintainer;
+use crate::helpers::command_show_solido;
 use crate::helpers::{
     command_add_validator, command_create_solido, get_anchor_program, CreateSolidoOpts,
 };
@@ -226,6 +227,9 @@ fn main() {
                 print_output(opts.output_mode, &output);
             }
         }
-        SubCommand::ShowSolido(_) => todo!(),
+        SubCommand::ShowSolido(cmd_opts) => {
+            let output = command_show_solido(config, cmd_opts).expect("Failed to show Solido data");
+            print_output(opts.output_mode, &output);
+        }
     }
 }

@@ -56,7 +56,7 @@ multisig_instance = multisig_data['multisig_address']
 multisig_pda = multisig_data['multisig_program_derived_address']
 print(f'> Created instance at {multisig_instance}.')
 
-print('\nCreating Solido instance')
+print('\nCreating Solido instance ...')
 result = solido(
     'create-solido',
     '--stake-pool-program-id', stake_pool_program_id,
@@ -83,8 +83,20 @@ st_sol_mint_account = result['st_sol_mint_address']
 
 print(f'> Created instance at {solido_address}.')
 
+solido_instance = solido('show-solido',
+                         '--solido-program-id', solido_program_id,
+                         '--solido-address', solido_address,
+                         )
+assert solido_instance['solido']['manager'] == multisig_pda
+assert solido_instance['solido']['st_sol_total_shares'] == 0
+assert solido_instance['solido']['fee_distribution'] == {
+    'insurance_fee': 7,
+    'treasury_fee': 5,
+    'validation_fee': 3,
+    'manager_fee': 2
+}
 
-print('\nAdding a validator')
+print('\nAdding a validator ...')
 validator_token_account_owner = create_test_account(
     'validator-token-account-key.json')
 print(f'> Validator token account owner: {validator_token_account_owner}')
@@ -108,7 +120,7 @@ print(
 validator_token_account = create_spl_token(
     'validator-token-account-key.json', st_sol_mint_account)
 print(f'> Validator stSol token account: {validator_token_account}')
-print('\nCreating validator stake account')
+print('Creating validator stake account')
 transaction_result = solido('create-validator-stake-account',
                             '--solido-program-id', solido_program_id,
                             '--solido-address', solido_address,
@@ -132,8 +144,11 @@ multisig('execute-transaction',
          '--transaction-address', transaction_address,
          keypair_path='test-key-1.json'
          )
+stake_account_pda = multisig('show-transaction',
+                             '--solido-program-id', solido_program_id,
+                             '--transaction-address', transaction_address)
 
-
+print('> Call function to add validator')
 transaction_result = solido('add-validator',
                             '--solido-program-id', solido_program_id,
                             '--solido-address', solido_address,
@@ -145,12 +160,41 @@ transaction_result = solido('add-validator',
                             keypair_path='test-key-1.json'
                             )
 transaction_address = transaction_result['transaction_address']
+transaction_status = multisig(
+    'show-transaction',
+    '--transaction-address', transaction_address,
+)
+assert transaction_status['did_execute'] == False
+assert transaction_status['signers']['Current']['signers'].count(
+    {'owner': addrs[0].pubkey, 'did_sign': True}) == 1
 approve_and_execute(multisig,
                     multisig_instance, transaction_address, 'test-key-2.json')
+transaction_status = multisig(
+    'show-transaction',
+    '--transaction-address', transaction_address,
+)
+assert transaction_status['did_execute'] == True
+assert transaction_status['signers']['Current']['signers'].count(
+    {'owner': addrs[1].pubkey, 'did_sign': True}) == 1
+
+
+solido_instance = solido('show-solido',
+                         '--solido-program-id', solido_program_id,
+                         '--solido-address', solido_address)
+
+assert solido_instance['solido']['validators']['entries'][0] == {
+    'pubkey': stake_account_pda['parsed_instruction']['SolidoInstruction']['CreateValidatorStakeAccount']['stake_account'],
+    'entry': {
+        'fee_credit': 0,
+        'fee_address': validator_token_account
+    }
+}
 
 maintainer = create_test_account('maintainer-account-key.json')
 
+print(f'\nAdd and remove maintainer ...')
 print(f'> Adding maintainer {maintainer}')
+
 transaction_result = solido('add-maintainer',
                             '--solido-program-id', solido_program_id,
                             '--solido-address', solido_address,
@@ -162,6 +206,14 @@ transaction_result = solido('add-maintainer',
 transaction_address = transaction_result['transaction_address']
 approve_and_execute(multisig,
                     multisig_instance, transaction_address, 'test-key-2.json')
+
+solido_instance = solido('show-solido',
+                         '--solido-program-id', solido_program_id,
+                         '--solido-address', solido_address)
+assert solido_instance['solido']['maintainers']['entries'][0] == {
+    'pubkey': maintainer,
+    'entry': None
+}
 
 print(f'> Removing maintainer {maintainer}')
 transaction_result = solido('remove-maintainer',
@@ -175,6 +227,13 @@ transaction_result = solido('remove-maintainer',
 transaction_address = transaction_result['transaction_address']
 approve_and_execute(multisig,
                     multisig_instance, transaction_address, 'test-key-2.json')
+solido_instance = solido('show-solido',
+                         '--solido-program-id', solido_program_id,
+                         '--solido-address', solido_address)
+
+assert len(solido_instance['solido']['maintainers']['entries']) == 0
+
+print(f'> Adding maintainer {maintainer} again')
 transaction_result = solido('add-maintainer',
                             '--solido-program-id', solido_program_id,
                             '--solido-address', solido_address,
@@ -186,6 +245,3 @@ transaction_result = solido('add-maintainer',
 transaction_address = transaction_result['transaction_address']
 approve_and_execute(multisig,
                     multisig_instance, transaction_address, 'test-key-2.json')
-
-# TODO: Implement a `solido show` to get the state of Solido and
-# confirm that the validator was added

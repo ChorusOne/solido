@@ -251,11 +251,11 @@ pub fn process_claim_validator_fee(
     let accounts = ClaimValidatorFeeInfo::try_from_slice(accounts_raw)?;
     let mut lido = deserialize_lido(program_id, accounts.lido)?;
 
-    let (_validator_address, validator) = lido
+    let pubkey_entry = lido
         .validators
         .entries
         .iter_mut()
-        .find(|(_, v)| &v.fee_address == accounts.validator_token.key)
+        .find(|pe| &pe.entry.fee_address == accounts.validator_token.key)
         .ok_or(LidoError::InvalidValidatorCreditAccount)?;
 
     token_mint_to(
@@ -266,9 +266,9 @@ pub fn process_claim_validator_fee(
         accounts.reserve_authority.clone(),
         RESERVE_AUTHORITY,
         lido.sol_reserve_authority_bump_seed,
-        validator.fee_credit,
+        pubkey_entry.entry.fee_credit,
     )?;
-    validator.fee_credit = StLamports(0);
+    pubkey_entry.entry.fee_credit = StLamports(0);
     lido.serialize(&mut *accounts.lido.data.borrow_mut())
         .map_err(|err| err.into())
 }
@@ -341,8 +341,8 @@ pub fn process_distribute_fees(program_id: &Pubkey, accounts_raw: &[AccountInfo]
     )?;
 
     // Update validator list that can be claimed at a later time
-    for (_validator_address, validator) in lido.validators.entries.iter_mut() {
-        validator.fee_credit = (validator.fee_credit + token_shares.reward_per_validator)
+    for pe in lido.validators.entries.iter_mut() {
+        pe.entry.fee_credit = (pe.entry.fee_credit + token_shares.reward_per_validator)
             .ok_or(LidoError::CalculationFailure)?;
     }
     lido.serialize(&mut *accounts.lido.data.borrow_mut())

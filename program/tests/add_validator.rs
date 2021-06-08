@@ -36,7 +36,7 @@ async fn test_successful_add_validator() {
         .validators
         .entries
         .iter()
-        .any(|(v, _)| v == &validator_stake.stake_account);
+        .any(|pe| pe.pubkey == validator_stake.stake_account);
     // Validator is inside the credit structure
     assert!(has_stake_account);
 
@@ -44,7 +44,7 @@ async fn test_successful_add_validator() {
         .validators
         .entries
         .iter()
-        .any(|(_, v)| v.fee_address == validator_stake.validator_token_account.pubkey());
+        .any(|pe| pe.entry.fee_address == validator_stake.validator_token_account.pubkey());
     // Validator token account is the same one as provided
     assert!(has_token_account);
 
