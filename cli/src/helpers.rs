@@ -867,9 +867,11 @@ pub fn get_solido(rpc_client: &RpcClient, solido_address: &Pubkey) -> Result<Lid
     Ok(solido)
 }
 
-/// Gets the Stake Pool and validator list data structures. The validator list
-/// is associated with the Stake Pool.
-fn get_stake_pool(rpc_client: &RpcClient, stake_pool: &Pubkey) -> Result<StakePool, crate::Error> {
+/// Gets the Stake Pool data structure.
+pub fn get_stake_pool(
+    rpc_client: &RpcClient,
+    stake_pool: &Pubkey,
+) -> Result<StakePool, crate::Error> {
     let stake_pool_data = rpc_client.get_account_data(&stake_pool)?;
     let stake_pool = StakePool::try_from_slice(&stake_pool_data)?;
     Ok(stake_pool)

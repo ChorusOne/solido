@@ -11,8 +11,8 @@ use crate::{
         StakePoolDepositAccountsMeta,
     },
     logic::{
-        calc_total_lamports, check_reserve_authority, deserialize_lido,
-        get_reserve_available_amount, rent_exemption, token_mint_to, AccountType,
+        calc_total_lamports, deserialize_lido, get_reserve_available_amount, rent_exemption,
+        token_mint_to, AccountType,
     },
     process_management::{
         process_add_maintainer, process_add_validator, process_change_fee_spec,
@@ -192,12 +192,7 @@ pub fn process_deposit(
         accounts.mint_program.key,
     )?;
     lido.check_token_program_id(accounts.spl_token.key)?;
-    check_reserve_authority(
-        program_id,
-        accounts.lido.key,
-        lido.sol_reserve_authority_bump_seed,
-        accounts.reserve_account.key,
-    )?;
+    lido.check_reserve_authority(program_id, accounts.lido.key, accounts.reserve_account)?;
 
     lido.check_stake_pool(accounts.stake_pool)?;
 
@@ -261,18 +256,7 @@ pub fn process_stake_deposit(
         return Err(LidoError::InvalidStaker.into());
     }
 
-    let reserve_authority = Pubkey::create_program_address(
-        &[
-            &accounts.lido.key.to_bytes(),
-            RESERVE_AUTHORITY,
-            &[lido.sol_reserve_authority_bump_seed],
-        ],
-        program_id,
-    )?;
-
-    if accounts.reserve.key != &reserve_authority {
-        return Err(LidoError::InvalidReserveAuthority.into());
-    }
+    lido.check_reserve_authority(program_id, accounts.lido.key, accounts.reserve)?;
 
     let minium_stake_balance =
         Lamports(rent.minimum_balance(std::mem::size_of::<stake_program::StakeState>()));
