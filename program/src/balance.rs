@@ -102,7 +102,7 @@ pub fn get_target_balance(
 /// Note: if all validators are already balanced, this may return a validator
 /// that is not in the [`StakeStatus::Active`] status, but it will have its
 /// difference set to zero.
-pub fn get_least_balanced_validator(
+pub fn get_validator_furthest_below_target(
     current_balance: &[ValidatorStakeInfo],
     target_balance: &[Lamports],
 ) -> (usize, Lamports) {
@@ -127,7 +127,7 @@ pub fn get_least_balanced_validator(
 
 #[cfg(test)]
 mod test {
-    use super::{get_least_balanced_validator, get_target_balance};
+    use super::{get_validator_furthest_below_target, get_target_balance};
     use crate::token::Lamports;
     use solana_program::pubkey::Pubkey;
     use spl_stake_pool::state::{StakeStatus, ValidatorStakeInfo};
@@ -150,7 +150,7 @@ mod test {
         // With only one validator, that one is the least balanced. It is
         // missing the 50 undelegated Lamports.
         assert_eq!(
-            get_least_balanced_validator(&validators[..], &targets[..]),
+            get_validator_furthest_below_target(&validators[..], &targets[..]),
             (0, Lamports(50))
         );
     }
@@ -180,7 +180,7 @@ mod test {
 
         // The second validator is further away from its target.
         assert_eq!(
-            get_least_balanced_validator(&validators[..], &targets[..]),
+            get_validator_furthest_below_target(&validators[..], &targets[..]),
             (1, Lamports(26))
         );
     }
@@ -211,7 +211,7 @@ mod test {
 
         // The second validator is further from its target, by one Lamport.
         assert_eq!(
-            get_least_balanced_validator(&validators[..], &targets[..]),
+            get_validator_furthest_below_target(&validators[..], &targets[..]),
             (1, Lamports(26))
         );
     }
@@ -243,7 +243,7 @@ mod test {
         // The first validator is furthest from its target, as the second one
         // has a target of zero.
         assert_eq!(
-            get_least_balanced_validator(&validators[..], &targets[..]),
+            get_validator_furthest_below_target(&validators[..], &targets[..]),
             (0, Lamports(183))
         );
     }
@@ -273,7 +273,7 @@ mod test {
         assert_eq!(targets, [Lamports(50), Lamports(50)]);
 
         assert_eq!(
-            get_least_balanced_validator(&validators[..], &targets[..]),
+            get_validator_furthest_below_target(&validators[..], &targets[..]),
             (0, Lamports(0))
         );
     }
