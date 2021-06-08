@@ -184,10 +184,13 @@ solido_instance = solido('show-solido',
                          '--solido-address', solido_address)
 
 assert solido_instance['solido']['validators']['entries'][0] == {
-    'pubkey': stake_account_pda['parsed_instruction']['SolidoInstruction']['CreateValidatorStakeAccount']['stake_account'],
+    'pubkey': stake_account_pda['parsed_instruction']['SolidoInstruction']['CreateValidatorStakeAccount']['stake_pool_stake_account'],
     'entry': {
         'fee_credit': 0,
-        'fee_address': validator_token_account
+        'fee_address': validator_token_account,
+        'stake_accounts_seed_begin': 0,
+        'stake_accounts_seed_end': 0,
+        'stake_accounts_balance': 0,
     }
 }
 
