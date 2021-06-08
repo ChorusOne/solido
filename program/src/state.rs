@@ -203,7 +203,6 @@ impl Lido {
         reserve_authority_info: &AccountInfo,
     ) -> Result<Pubkey, ProgramError> {
         let reserve_id = self.get_reserve_account(program_id, solido_address)?;
-        // TODO(fynn): Do we also need to confirm the owner?
         if reserve_id != *reserve_authority_info.key {
             msg!("Invalid reserve authority");
             return Err(LidoError::InvalidReserveAuthority.into());

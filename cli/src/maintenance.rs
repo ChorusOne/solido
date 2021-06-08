@@ -1,5 +1,6 @@
 //! Entry point for maintenance operations, such as updating the pool balance.
 
+use crate::helpers::{get_solido, get_stake_pool};
 use crate::{Config, Error};
 use clap::Clap;
 use lido::{state::Lido, token::Lamports};
@@ -35,12 +36,8 @@ struct SolidoState {
     // TODO: The dead_code below will no longer be dead once we implement the
     // maintenance tasks.
     #[allow(dead_code)]
-    solido_account: Account,
-    #[allow(dead_code)]
     solido: Lido,
 
-    #[allow(dead_code)]
-    stake_pool_account: Account,
     #[allow(dead_code)]
     stake_pool: StakePool,
 
@@ -64,11 +61,8 @@ impl SolidoState {
 
         // TODO(ruuda): Transactions can execute in between those reads, leading to
         // a torn state. Make a function that re-reads everything with get_multiple_accounts.
-        let solido_account = rpc.get_account(solido_address)?;
-        let solido = try_from_slice_unchecked::<Lido>(&solido_account.data)?;
-
-        let stake_pool_account = rpc.get_account(&solido.stake_pool_account)?;
-        let stake_pool = try_from_slice_unchecked::<StakePool>(&stake_pool_account.data)?;
+        let solido = get_solido(rpc, solido_address)?;
+        let stake_pool = get_stake_pool(rpc, &solido.stake_pool_account)?;
 
         let validator_list_account = rpc.get_account(&stake_pool.validator_list)?;
         let validator_list =
@@ -81,9 +75,7 @@ impl SolidoState {
         let rent: Rent = bincode::deserialize(&rent_account.data)?;
 
         Ok(SolidoState {
-            solido_account,
             solido,
-            stake_pool_account,
             stake_pool,
             validator_list_account,
             validator_list,
