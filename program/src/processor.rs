@@ -399,8 +399,9 @@ pub fn process_stake_deposit(
     let amount_staked = Lamports(accounts.stake_account_end.lamports());
 
     // Update the total SOL that is activating for this validator.
-    validator.entry.stake_accounts_balance =
-        (validator.entry.stake_accounts_balance + amount_staked).ok_or(LidoError::CalculationFailure)?;
+    validator.entry.stake_accounts_balance = (validator.entry.stake_accounts_balance
+        + amount_staked)
+        .ok_or(LidoError::CalculationFailure)?;
 
     // We now consumed this stake account, bump the index.
     validator.entry.stake_accounts_seed_end += 1;
@@ -432,7 +433,10 @@ pub fn process_deposit_active_stake_to_pool(
 
     if validator.entry.stake_accounts_seed_begin >= validator.entry.stake_accounts_seed_end {
         // TODO: add a proper error for this.
-        panic!("Validator {} has no pending stake accounts.", validator.pubkey);
+        panic!(
+            "Validator {} has no pending stake accounts.",
+            validator.pubkey
+        );
     }
 
     // A deposit to the stake pool always deposits from the begin of the range
@@ -476,8 +480,9 @@ pub fn process_deposit_active_stake_to_pool(
     // rewards were paid, but now we may get an underflow.)
     // See also: https://github.com/ChorusOne/solido/issues/128#issuecomment-853842891
     let amount_staked = Lamports(accounts.stake_account_begin.lamports());
-    validator.entry.stake_accounts_balance =
-        (validator.entry.stake_accounts_balance - amount_staked).ok_or(LidoError::CalculationFailure)?;
+    validator.entry.stake_accounts_balance = (validator.entry.stake_accounts_balance
+        - amount_staked)
+        .ok_or(LidoError::CalculationFailure)?;
 
     // We now consumed this stake account, bump the index.
     validator.entry.stake_accounts_seed_begin += 1;
