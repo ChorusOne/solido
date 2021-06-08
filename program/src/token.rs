@@ -15,6 +15,7 @@ use serde::Serialize;
 use std::{
     convert::TryFrom,
     fmt,
+    iter::Sum,
     ops::{Add, Div, Mul, Sub},
 };
 
@@ -98,6 +99,16 @@ macro_rules! impl_token {
             type Output = Option<$TokenLamports>;
             fn add(self, other: $TokenLamports) -> Option<$TokenLamports> {
                 Some($TokenLamports(self.0.checked_add(other.0)?))
+            }
+        }
+
+        impl Sum<$TokenLamports> for Option<$TokenLamports> {
+            fn sum<I: Iterator<Item = $TokenLamports>>(iter: I) -> Self {
+                let mut sum = $TokenLamports(0);
+                for item in iter {
+                    sum = (sum + item)?;
+                }
+                Some(sum)
             }
         }
     };

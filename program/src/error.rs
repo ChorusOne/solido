@@ -112,6 +112,9 @@ pub enum LidoError {
     /// required to hold variable structures
     #[error("InvalidAccountMember")]
     InvalidLidoSize,
+    /// There are no validators with an active stake account to delegate to.
+    #[error("NoActiveValidators")]
+    NoActiveValidators,
 }
 impl From<LidoError> for ProgramError {
     fn from(e: LidoError) -> Self {
