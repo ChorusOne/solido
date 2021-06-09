@@ -26,6 +26,7 @@ use multisig::instruction as multisig_instruction;
 use serde::Serialize;
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::commitment_config::CommitmentConfig;
+use solana_sdk::transaction::TransactionError;
 
 use crate::helpers::get_solido;
 use crate::helpers::sign_and_send_transaction;
@@ -182,37 +183,28 @@ struct ExecuteTransactionOpts {
     transaction_address: Pubkey,
 }
 
-pub fn main(
-    config: Config,
-    output_mode: OutputMode,
-    multisig_opts: MultisigOpts,
-) -> Result<(), crate::Error> {
+pub fn main(config: Config, output_mode: OutputMode, multisig_opts: MultisigOpts) {
     match multisig_opts.subcommand {
         SubCommand::CreateMultisig(cmd_opts) => {
-            let output = create_multisig(&config, multisig_opts.multisig_program_id, cmd_opts)?;
+            let output = create_multisig(&config, multisig_opts.multisig_program_id, cmd_opts);
             print_output(output_mode, &output);
-            Ok(())
         }
         SubCommand::ShowMultisig(cmd_opts) => {
             let output = show_multisig(&config, multisig_opts.multisig_program_id, cmd_opts);
             print_output(output_mode, &output);
-            Ok(())
         }
         SubCommand::ShowTransaction(cmd_opts) => {
             let output = show_transaction(&config, multisig_opts.multisig_program_id, cmd_opts);
             print_output(output_mode, &output);
-            Ok(())
         }
         SubCommand::ProposeUpgrade(cmd_opts) => {
             let output = propose_upgrade(&config, multisig_opts.multisig_program_id, cmd_opts);
             print_output(output_mode, &output);
-            Ok(())
         }
         SubCommand::ProposeChangeMultisig(cmd_opts) => {
             let output =
                 propose_change_multisig(&config, multisig_opts.multisig_program_id, cmd_opts);
             print_output(output_mode, &output);
-            Ok(())
         }
         SubCommand::Approve(cmd_opts) => {
             approve(&config, multisig_opts.multisig_program_id, cmd_opts)
@@ -254,7 +246,7 @@ fn create_multisig(
     config: &Config,
     multisig_program_id: Pubkey,
     opts: CreateMultisigOpts,
-) -> Result<CreateMultisigOutput, crate::Error> {
+) -> CreateMultisigOutput {
     // Enforce a few basic sanity checks.
     opts.validate_or_exit();
 
@@ -310,12 +302,12 @@ fn create_multisig(
         config,
         &[create_instruction, multisig_instruction],
         &[&multisig_account, config.signer],
-    )?;
+    );
 
-    Ok(CreateMultisigOutput {
+    CreateMultisigOutput {
         multisig_address: multisig_account.pubkey().into(),
         multisig_program_derived_address: program_derived_address.into(),
-    })
+    }
 }
 
 #[derive(Serialize)]
@@ -914,8 +906,7 @@ fn get_account<T: AccountDeserialize>(
     let account = rpc_client
         .get_account_with_commitment(address, CommitmentConfig::processed())?
         .value
-        .ok_or(Err::new())
-        // .unwrap();
+        .ok_or(TransactionError::AccountNotFound)?;
     let mut data: &[u8] = &account.data;
     T::try_deserialize(&mut data).map_err(Into::into)
 }
@@ -1021,9 +1012,7 @@ pub fn propose_instruction(
         &config,
         &[create_instruction, multisig_instruction],
         &[config.signer, &transaction_account],
-    )
-    .unwrap();
-
+    );
     ProposeInstructionOutput {
         transaction_address: transaction_account.pubkey().into(),
     }
@@ -1089,11 +1078,7 @@ fn propose_change_multisig(
     )
 }
 
-fn approve(
-    config: &Config,
-    multisig_program_id: Pubkey,
-    opts: ApproveOpts,
-) -> Result<(), crate::Error> {
+fn approve(config: &Config, multisig_program_id: Pubkey, opts: ApproveOpts) {
     let approve_accounts = multisig_accounts::Approve {
         multisig: opts.multisig_address,
         transaction: opts.transaction_address,
@@ -1107,7 +1092,7 @@ fn approve(
         data: multisig_instruction::Approve.data(),
         accounts: approve_accounts.to_account_metas(None),
     };
-    sign_and_send_transaction(&config, &[approve_instruction], &[config.signer])
+    sign_and_send_transaction(&config, &[approve_instruction], &[config.signer]);
 }
 
 /// Wrapper type needed to implement `ToAccountMetas`.
@@ -1150,15 +1135,12 @@ impl anchor_lang::ToAccountMetas for TransactionAccounts {
     }
 }
 
-fn execute_transaction(
-    config: &Config,
-    multisig_program_id: Pubkey,
-    opts: ExecuteTransactionOpts,
-) -> Result<(), crate::Error> {
+fn execute_transaction(config: &Config, multisig_program_id: Pubkey, opts: ExecuteTransactionOpts) {
     let (program_derived_address, _nonce) =
         get_multisig_program_address(&multisig_program_id, &opts.multisig_address);
 
-    let transaction: multisig::Transaction = get_account(&config.rpc(), &opts.transaction_address)?;
+    let transaction: multisig::Transaction = get_account(&config.rpc(), &opts.transaction_address)
+        .unwrap_or_else(|_| panic!("Failed to get transaction {}", opts.transaction_address));
 
     let tx_inner_accounts = TransactionAccounts {
         accounts: transaction.accounts,
@@ -1178,5 +1160,5 @@ fn execute_transaction(
         data: multisig_instruction::ExecuteTransaction.data(),
         accounts,
     };
-    sign_and_send_transaction(config, &[multisig_instruction], &[config.signer])
+    sign_and_send_transaction(config, &[multisig_instruction], &[config.signer]);
 }

@@ -62,16 +62,17 @@ pub fn sign_and_send_transaction<T: Signers>(
     config: &Config,
     instructions: &[Instruction],
     signers: &T,
-) -> Result<(), crate::Error> {
+) {
     let mut tx = Transaction::new_with_payer(instructions, Some(&config.signer.pubkey()));
 
-    let (recent_blockhash, _fee_calculator) = config.rpc().get_recent_blockhash()?;
+    let (recent_blockhash, _fee_calculator) = config
+        .rpc()
+        .get_recent_blockhash()
+        .expect("Failed to get recent blockhash.");
 
     // Add multisig signer
     tx.sign(signers, recent_blockhash);
-    send_transaction(&config, tx)?;
-
-    Ok(())
+    send_transaction(&config, tx).expect("Failed to sign transaction.");
 }
 
 pub fn get_anchor_program(
@@ -283,7 +284,7 @@ pub fn command_create_solido(
     // instructions down into multiple transactions. So set up the mint first,
     // then continue.
     let signers = &[&st_sol_mint_keypair, config.signer];
-    sign_and_send_transaction(&config, &instructions[..], signers)?;
+    sign_and_send_transaction(&config, &instructions[..], signers);
     instructions.clear();
     eprintln!("Did send mint init.");
     // Set up the SPL token account that holds Lido's stake pool tokens.
@@ -294,7 +295,7 @@ pub fn command_create_solido(
         &stake_pool_authority,
     )?;
     let signers = &[config.signer, &stake_pool_token_holder_keypair];
-    sign_and_send_transaction(&config, &instructions[..], signers)?;
+    sign_and_send_transaction(&config, &instructions[..], signers);
     instructions.clear();
     eprintln!("Did send SPL account inits part 1.");
 
@@ -314,8 +315,8 @@ pub fn command_create_solido(
     sign_and_send_transaction(
         &config,
         &instructions[..],
-        &vec![&*config.signer, &treasury_keypair, &developer_keypair],
-    )?;
+        &vec![config.signer, &treasury_keypair, &developer_keypair],
+    );
     instructions.clear();
     eprintln!("Did send SPL account inits.");
 
@@ -350,7 +351,7 @@ pub fn command_create_solido(
         },
     )?);
 
-    sign_and_send_transaction(&config, &instructions[..], &[config.signer, &lido_keypair])?;
+    sign_and_send_transaction(&config, &instructions[..], &[config.signer, &lido_keypair]);
     eprintln!("Did send Lido init.");
 
     let result = CreateSolidoOutput {

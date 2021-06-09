@@ -179,17 +179,24 @@ fn main() {
     };
     // Get a boxed signer that lives enough for we to use it in the Config.
     let boxed_signer: Box<dyn Signer> = if payer_keypair_path.starts_with("usb://") {
-        let hw_wallet = maybe_wallet_manager().unwrap().unwrap();
+        let hw_wallet = maybe_wallet_manager()
+            .unwrap_or_else(|err| panic!("Remote wallet found, but failed to establish protocol. Maybe the Solana app is not open: {}", err))
+            .unwrap_or_else(|| panic!("Failed to find a remote wallet, maybe Ledger is not connected or locked."));
         Box::new(
             generate_remote_keypair(
-                Locator::new_from_path(payer_keypair_path.into_os_string().into_string().unwrap())
-                    .unwrap(),
+                Locator::new_from_path(
+                    payer_keypair_path
+                        .into_os_string()
+                        .into_string()
+                        .expect("Should have failed before"),
+                )
+                .unwrap_or_else(|err| panic!("Failed reading URL: {}", err)),
                 DerivationPath::default(),
                 &hw_wallet,
                 false,
                 "",
             )
-            .unwrap(),
+            .unwrap_or_else(|err| panic!("Failed to contact remote wallet {}", err)),
         )
     } else {
         Box::new(
@@ -207,7 +214,8 @@ fn main() {
         // we'll create another instance of it.
         // TODO: Remove the need for the anchor program
         program: get_anchor_program(
-            Cluster::from_str(&opts.cluster.to_string()).unwrap(),
+            Cluster::from_str(&opts.cluster.to_string())
+                .unwrap_or_else(|err| panic!("Failed to create Solana client: {}", err)),
             Keypair::new(),
             &Pubkey::new_from_array([255u8; 32]),
         ),
@@ -225,10 +233,7 @@ fn main() {
                 command_create_solido(config, cmd_opts).expect("Failed to create Solido instance.");
             print_output(opts.output_mode, &output);
         }
-        SubCommand::Multisig(cmd_opts) => {
-            multisig::main(config, opts.output_mode, cmd_opts)
-                .expect("Failed to execute multisig transaction.");
-        }
+        SubCommand::Multisig(cmd_opts) => multisig::main(config, opts.output_mode, cmd_opts),
         SubCommand::CreateValidatorStakeAccount(cmd_opts) => {
             let output = command_create_validator_stake_account(config, cmd_opts)
                 .expect("Failed to create validator stake account");

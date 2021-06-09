@@ -140,7 +140,7 @@ pub fn command_create_pool(
             &mint_keypair,
             &pool_fee_account_keypair,
         ],
-    )?;
+    );
 
     let mut initialize_transaction = Transaction::new_with_payer(
         &[

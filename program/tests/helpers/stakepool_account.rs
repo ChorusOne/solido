@@ -163,7 +163,7 @@ pub async fn create_stake_pool(
     reserve_stake: &Pubkey,
     pool_mint: &Pubkey,
     pool_token_account: &Pubkey,
-    manager: &Keypair,
+    manager: &Pubkey,
     staker: &Pubkey,
     deposit_authority: &Pubkey,
     fee: &state::Fee,
@@ -195,7 +195,7 @@ pub async fn create_stake_pool(
                 &spl_stake_pool::id(),
                 &lido::instruction::InitializeStakePoolWithAuthorityAccountsMeta {
                     stake_pool: stake_pool.pubkey(),
-                    manager: manager.pubkey(),
+                    manager: *manager,
                     staker: *staker,
                     validator_list: validator_list.pubkey(),
                     reserve_stake: *reserve_stake,
@@ -213,10 +213,7 @@ pub async fn create_stake_pool(
         ],
         Some(&payer.pubkey()),
     );
-    transaction.sign(
-        &vec![payer, stake_pool, validator_list, manager],
-        *recent_blockhash,
-    );
+    transaction.sign(&vec![payer, stake_pool, validator_list], *recent_blockhash);
     banks_client.process_transaction(transaction).await?;
     Ok(())
 }
@@ -479,7 +476,7 @@ impl StakePoolAccounts {
         &self,
         mut banks_client: &mut BanksClient,
         payer: &Keypair,
-        manager: &Keypair,
+        manager: &Pubkey,
         recent_blockhash: &Hash,
         reserve_lamports: Lamports,
         fee_manager: &Pubkey,

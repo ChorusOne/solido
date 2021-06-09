@@ -131,7 +131,7 @@ impl LidoAccounts {
             .initialize_stake_pool(
                 banks_client,
                 payer,
-                &self.manager,
+                &self.manager.pubkey(),
                 recent_blockhash,
                 reserve_lamports,
                 &self.fee_manager_authority,
