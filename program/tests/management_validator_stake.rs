@@ -4,9 +4,8 @@ mod helpers;
 
 use bincode::deserialize;
 use helpers::{
-    program_test, simple_add_validator_to_pool,
-    stakepool_account::{get_account, ValidatorStakeAccount},
-    LidoAccounts,
+    get_account, program_test, simple_add_validator_to_pool,
+    stakepool_account::ValidatorStakeAccount, LidoAccounts,
 };
 use lido::token::Lamports;
 use solana_program::epoch_schedule::Epoch;
@@ -74,8 +73,11 @@ async fn test_successful_decrease_validator_stake() {
     let (mut context, lido_accounts, stake_accounts) = setup().await;
 
     // Save validator stake
-    let pre_validator_stake_account =
-        get_account(&mut context.banks_client, &stake_accounts.stake_account).await;
+    let pre_validator_stake_account = get_account(
+        &mut context.banks_client,
+        &stake_accounts.stake_pool_stake_account,
+    )
+    .await;
     // Check no transient stake
     let transient_account = context
         .banks_client
@@ -90,14 +92,17 @@ async fn test_successful_decrease_validator_stake() {
             &context.payer,
             &context.last_blockhash,
             &stake_accounts.transient_stake_account,
-            &stake_accounts.stake_account,
+            &stake_accounts.stake_pool_stake_account,
             TEST_DECREASE_AMOUNT,
         )
         .await;
     assert!(result.is_ok());
 
-    let validator_stake_account =
-        get_account(&mut context.banks_client, &stake_accounts.stake_account).await;
+    let validator_stake_account = get_account(
+        &mut context.banks_client,
+        &stake_accounts.stake_pool_stake_account,
+    )
+    .await;
     let validator_stake_state =
         deserialize::<stake_program::StakeState>(&validator_stake_account.data).unwrap();
     assert_eq!(
@@ -151,7 +156,7 @@ async fn test_successful_increase_validator_stake() {
             &context.payer,
             &context.last_blockhash,
             &stake_accounts.transient_stake_account,
-            &stake_accounts.stake_account,
+            &stake_accounts.stake_pool_stake_account,
             TEST_DECREASE_AMOUNT,
         )
         .await;

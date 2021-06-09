@@ -3,11 +3,7 @@
 mod helpers;
 
 use crate::helpers::create_token_account;
-use helpers::{
-    id, program_test,
-    stakepool_account::{create_mint, get_account},
-    LidoAccounts,
-};
+use helpers::{get_account, id, program_test, stakepool_account::create_mint, LidoAccounts};
 use lido::{
     error::LidoError,
     instruction,

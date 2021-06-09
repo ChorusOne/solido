@@ -11,7 +11,6 @@ use {
     },
     solana_program_test::*,
     solana_sdk::{
-        account::Account,
         signature::{Keypair, Signer},
         transaction::Transaction,
         transport::TransportError,
@@ -31,14 +30,6 @@ use lido::token::{Lamports, StakePoolTokenLamports};
 
 pub const TEST_STAKE_AMOUNT: u64 = 1_500_000_000;
 pub const MAX_TEST_VALIDATORS: u32 = 10_000;
-
-pub async fn get_account(banks_client: &mut BanksClient, pubkey: &Pubkey) -> Account {
-    banks_client
-        .get_account(*pubkey)
-        .await
-        .expect("account not found")
-        .expect("account empty")
-}
 
 pub async fn create_mint(
     banks_client: &mut BanksClient,
@@ -367,7 +358,7 @@ pub async fn authorize_stake_account(
 }
 
 pub struct ValidatorStakeAccount {
-    pub stake_account: Pubkey,
+    pub stake_pool_stake_account: Pubkey,
     pub transient_stake_account: Pubkey,
     pub vote: Keypair,
     pub validator: Keypair,
@@ -380,12 +371,12 @@ impl ValidatorStakeAccount {
         let validator = Keypair::new();
         let vote = Keypair::new();
         let validator_token_account = Keypair::new();
-        let (stake_account, _) =
+        let (stake_pool_stake_account, _) =
             find_stake_program_address(&spl_stake_pool::id(), &vote.pubkey(), stake_pool);
         let (transient_stake_account, _) =
             find_transient_stake_program_address(&spl_stake_pool::id(), &vote.pubkey(), stake_pool);
         ValidatorStakeAccount {
-            stake_account,
+            stake_pool_stake_account,
             transient_stake_account,
             vote,
             validator,
@@ -417,7 +408,7 @@ impl ValidatorStakeAccount {
                 payer,
                 recent_blockhash,
                 staker,
-                &self.stake_account,
+                &self.stake_pool_stake_account,
                 &self.vote.pubkey(),
             )
             .await;
@@ -724,13 +715,13 @@ pub struct DepositStakeAccount {
     pub stake_lamports: Lamports,
     pub pool_tokens: StakePoolTokenLamports,
     pub vote_account: Pubkey,
-    pub validator_stake_account: Pubkey,
+    pub validator_stake_pool_stake_account: Pubkey,
 }
 
 impl DepositStakeAccount {
     pub fn new_with_vote(
         vote_account: Pubkey,
-        validator_stake_account: Pubkey,
+        validator_stake_pool_stake_account: Pubkey,
         stake_lamports: Lamports,
     ) -> Self {
         let authority = Keypair::new();
@@ -741,7 +732,7 @@ impl DepositStakeAccount {
             stake,
             pool_account,
             vote_account,
-            validator_stake_account,
+            validator_stake_pool_stake_account,
             stake_lamports,
             pool_tokens: StakePoolTokenLamports(0),
         }
@@ -805,7 +796,7 @@ impl DepositStakeAccount {
                 recent_blockhash,
                 &self.stake.pubkey(),
                 &self.pool_account.pubkey(),
-                &self.validator_stake_account,
+                &self.validator_stake_pool_stake_account,
                 &self.authority,
             )
             .await
@@ -862,7 +853,7 @@ pub async fn simple_deposit(
     .await
     .unwrap();
 
-    let validator_stake_account = validator_stake_account.stake_account;
+    let validator_stake_pool_stake_account = validator_stake_account.stake_pool_stake_account;
     stake_pool_accounts
         .deposit_stake(
             banks_client,
@@ -870,7 +861,7 @@ pub async fn simple_deposit(
             recent_blockhash,
             &stake.pubkey(),
             &pool_account.pubkey(),
-            &validator_stake_account,
+            &validator_stake_pool_stake_account,
             &authority,
         )
         .await
@@ -886,7 +877,7 @@ pub async fn simple_deposit(
         stake_lamports,
         pool_tokens,
         vote_account,
-        validator_stake_account,
+        validator_stake_pool_stake_account,
     })
 }
 

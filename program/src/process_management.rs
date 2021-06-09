@@ -61,21 +61,21 @@ pub fn process_create_validator_stake_account(
             accounts.stake_pool.key,
             accounts.staker.key,
             accounts.funder.key,
-            accounts.stake_account.key,
-            accounts.validator.key,
+            accounts.stake_pool_stake_account.key,
+            accounts.validator_vote_account.key,
         ),
         &[
-            accounts.stake_pool_program.clone(),
+            accounts.stake_pool.clone(),
             accounts.staker.clone(),
             accounts.funder.clone(),
-            accounts.stake_account.clone(),
-            accounts.validator.clone(),
+            accounts.stake_pool_stake_account.clone(),
+            accounts.validator_vote_account.clone(),
             accounts.sysvar_rent.clone(),
-            accounts.sysvar_clock.clone(),
             accounts.sysvar_stake_history.clone(),
             accounts.stake_program_config.clone(),
             accounts.system_program.clone(),
             accounts.stake_program.clone(),
+            accounts.stake_pool_program.clone(),
         ],
         &[&[
             &accounts.lido.key.to_bytes(),
@@ -165,10 +165,7 @@ pub fn process_add_validator(program_id: &Pubkey, accounts_raw: &[AccountInfo]) 
 
     lido.validators.add(
         *accounts.stake_account.key,
-        Validator {
-            fee_address: *accounts.validator_token_account.key,
-            fee_credit: StLamports(0),
-        },
+        Validator::new(*accounts.validator_token_account.key),
     )?;
     lido.serialize(&mut *accounts.lido.data.borrow_mut())
         .map_err(|err| err.into())

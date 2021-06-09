@@ -13,6 +13,7 @@ use solana_program::{
 use crate::error::LidoError;
 use crate::token::{Lamports, Rational, StLamports, StakePoolTokenLamports};
 use crate::RESERVE_AUTHORITY;
+use crate::VALIDATOR_STAKE_ACCOUNT;
 
 /// Constant size of header size = 5 public keys, 1 u64, 4 u8
 pub const LIDO_CONSTANT_HEADER_SIZE: usize = 5 * 32 + 8 + 4;
@@ -30,7 +31,9 @@ where
 }
 
 #[repr(C)]
-#[derive(Clone, Debug, Default, BorshDeserialize, BorshSerialize, BorshSchema, Serialize)]
+#[derive(
+    Clone, Debug, Default, BorshDeserialize, BorshSerialize, BorshSchema, Eq, PartialEq, Serialize,
+)]
 pub struct Lido {
     /// Stake pool account associated with Lido
     #[serde(serialize_with = "serialize_b58")]
@@ -215,7 +218,7 @@ pub type Validators = AccountMap<Validator>;
 
 #[repr(C)]
 #[derive(
-    Clone, Debug, Default, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema, Serialize,
+    Clone, Debug, Default, Eq, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema, Serialize,
 )]
 pub struct Validator {
     /// Fees in stSOL that the validator is entitled too, but hasn't claimed yet.
@@ -224,16 +227,57 @@ pub struct Validator {
     /// SPL token account denominated in stSOL to transfer fees to when claiming them.
     #[serde(serialize_with = "serialize_b58")]
     pub fee_address: Pubkey,
+
+    /// Start (inclusive) of the seed range for currently active stake accounts.
+    ///
+    /// When we stake deposited SOL, we take it out of the reserve account, and
+    /// transfer it to a stake account. The stake account address is a derived
+    /// address derived from a.o. the validator address, and a seed. After
+    /// creation, it takes one or more epochs for the stake to become fully
+    /// activated. While stake is activating, we may want to activate additional
+    /// stake, so we need a new stake account. Therefore we have a range of
+    /// seeds. When we need a new stake account, we bump `end`. When the account
+    /// with seed `begin` is 100% active, we deposit that stake account into the
+    /// pool and bump `begin`. Accounts are not reused.
+    ///
+    /// The program enforces that creating new stake accounts is only allowed at
+    /// the `_end` seed, and depositing active stake is only allowed from the
+    /// `_begin` seed. This ensures that maintainers don’t race and accidentally
+    /// stake more to this validator than intended. If the seed has changed
+    /// since the instruction was created, the transaction fails.
+    pub stake_accounts_seed_begin: u64,
+
+    /// End (exclusive) of the seed range for currently active stake accounts.
+    pub stake_accounts_seed_end: u64,
+
+    /// Sum of the balances of the stake accounts.
+    pub stake_accounts_balance: Lamports,
 }
 
-impl Validators {
-    pub fn required_bytes(max_validators: u32) -> usize {
-        (max_validators * (32 * 2 + 8) + 8) as usize
+impl Validator {
+    pub fn new(fee_address: Pubkey) -> Validator {
+        Validator {
+            fee_address,
+            fee_credit: StLamports(0),
+            stake_accounts_seed_begin: 0,
+            stake_accounts_seed_end: 0,
+            stake_accounts_balance: Lamports(0),
+        }
     }
-    pub fn maximum_accounts(buffer_size: usize) -> usize {
-        // 8 bytes: 4 bytes for `max_validators` + 4 bytes for number of validators in vec
-        // 32*2+8 bytes for each validator = 2 public keys + amount in StLamports
-        buffer_size.saturating_sub(8) / (32 * 2 + 8)
+
+    pub fn find_stake_account_address(
+        program_id: &Pubkey,
+        solido_account: &Pubkey,
+        validator_vote_account: &Pubkey,
+        seed: u64,
+    ) -> (Pubkey, u8) {
+        let seeds = [
+            &solido_account.to_bytes(),
+            &validator_vote_account.to_bytes(),
+            &VALIDATOR_STAKE_ACCOUNT[..],
+            &seed.to_le_bytes()[..],
+        ];
+        Pubkey::find_program_address(&seeds, program_id)
     }
 }
 
@@ -241,7 +285,7 @@ impl Validators {
 /// number of parts of the total. For example, if each party has 1 part, then
 /// they all get an equal share of the fee.
 #[derive(
-    Clone, Default, PartialEq, Debug, BorshSerialize, BorshDeserialize, BorshSchema, Serialize,
+    Clone, Default, Debug, Eq, PartialEq, BorshSerialize, BorshDeserialize, BorshSchema, Serialize,
 )]
 pub struct FeeDistribution {
     pub insurance_fee: u32,
@@ -251,7 +295,9 @@ pub struct FeeDistribution {
 }
 
 /// Specifies the fee recipients, accounts that should be created by Lido's minter
-#[derive(Clone, Default, Debug, BorshSerialize, BorshDeserialize, BorshSchema, Serialize)]
+#[derive(
+    Clone, Default, Debug, Eq, PartialEq, BorshSerialize, BorshDeserialize, BorshSchema, Serialize,
+)]
 pub struct FeeRecipients {
     #[serde(serialize_with = "serialize_b58")]
     pub insurance_account: Pubkey,
@@ -289,7 +335,7 @@ impl FeeDistribution {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Fees {
     pub insurance_amount: StLamports,
     pub treasury_amount: StLamports,
@@ -336,20 +382,8 @@ pub fn distribute_fees(
 /// by the manager
 pub type Maintainers = AccountMap<()>;
 
-impl Maintainers {
-    pub fn required_bytes(max_maintainers: u32) -> usize {
-        (max_maintainers * 32 + 4 + 4) as usize
-    }
-    /// Given a buffer size, calculate the maximum number of maintainers that can be fit
-    pub fn maximum_accounts(buffer_size: usize) -> usize {
-        // 8 bytes: 4 bytes for `max_maintainers` + 4 bytes for number of maintainers in vec
-        // 32 bytes for each maintainer = maintainer address
-        buffer_size.saturating_sub(8) / 32
-    }
-}
-
 #[derive(
-    Clone, Default, Debug, PartialEq, BorshSerialize, BorshDeserialize, BorshSchema, Serialize,
+    Clone, Default, Debug, Eq, PartialEq, BorshSerialize, BorshDeserialize, BorshSchema, Serialize,
 )]
 pub struct PubkeyAndEntry<T> {
     #[serde(serialize_with = "serialize_b58")]
@@ -358,7 +392,7 @@ pub struct PubkeyAndEntry<T> {
 }
 
 #[derive(
-    Clone, Default, Debug, PartialEq, BorshSerialize, BorshDeserialize, BorshSchema, Serialize,
+    Clone, Default, Debug, Eq, PartialEq, BorshSerialize, BorshDeserialize, BorshSchema, Serialize,
 )]
 pub struct AccountMap<T> {
     pub entries: Vec<PubkeyAndEntry<T>>,
@@ -380,6 +414,7 @@ impl<T: Default> AccountMap<T> {
             maximum_entries,
         }
     }
+
     /// Creates a new empty instance
     pub fn new(maximum_entries: u32) -> Self {
         AccountMap {
@@ -387,6 +422,7 @@ impl<T: Default> AccountMap<T> {
             maximum_entries,
         }
     }
+
     pub fn add(&mut self, address: Pubkey, value: T) -> ProgramResult {
         if self.entries.len() == self.maximum_entries as usize {
             return Err(LidoError::MaximumNumberOfAccountsExceeded.into());
@@ -401,6 +437,7 @@ impl<T: Default> AccountMap<T> {
         }
         Ok(())
     }
+
     pub fn remove(&mut self, address: &Pubkey) -> Result<T, ProgramError> {
         let idx = self
             .entries
@@ -408,6 +445,44 @@ impl<T: Default> AccountMap<T> {
             .position(|pe| &pe.pubkey == address)
             .ok_or(LidoError::InvalidAccountMember)?;
         Ok(self.entries.swap_remove(idx).entry)
+    }
+
+    pub fn get(&self, address: &Pubkey) -> Result<&PubkeyAndEntry<T>, ProgramError> {
+        self.entries
+            .iter()
+            .filter(|pe| &pe.pubkey == address)
+            .next()
+            .ok_or(LidoError::InvalidAccountMember.into())
+    }
+
+    pub fn get_mut(&mut self, address: &Pubkey) -> Result<&mut PubkeyAndEntry<T>, ProgramError> {
+        self.entries
+            .iter_mut()
+            .filter(|pe| &pe.pubkey == address)
+            .next()
+            .ok_or(LidoError::InvalidAccountMember.into())
+    }
+
+    /// Return how many bytes are needed to serialize an instance holding `max_entries`.
+    ///
+    /// Assumes that the serialized size of `T` is the same as its in-memory
+    /// size.
+    pub fn required_bytes(max_entries: usize) -> usize {
+        let key_size = std::mem::size_of::<Pubkey>();
+        let value_size = std::mem::size_of::<T>();
+        let entry_size = key_size + value_size;
+
+        // 8 bytes for the length and u32 field, then the entries themselves.
+        8 + entry_size * max_entries as usize
+    }
+
+    /// Return how many entries could fit in a buffer of the given size.
+    pub fn maximum_entries(buffer_size: usize) -> usize {
+        let key_size = std::mem::size_of::<Pubkey>();
+        let value_size = std::mem::size_of::<T>();
+        let entry_size = key_size + value_size;
+
+        buffer_size.saturating_sub(8) / entry_size
     }
 }
 
@@ -419,22 +494,49 @@ mod test_lido {
     use spl_stake_pool::borsh::get_instance_packed_len;
 
     #[test]
-    fn test_validators_size() {
-        let one_val = get_instance_packed_len(&Validators::new_fill_default(1)).unwrap();
-        let two_val = get_instance_packed_len(&Validators::new_fill_default(2)).unwrap();
-        assert_eq!(two_val - one_val, 72);
+    fn test_account_map_required_bytes_relates_to_maximum_entries() {
+        for buffer_size in 0..8_000 {
+            let max_entries = Validators::maximum_entries(buffer_size);
+            let needed_size = Validators::required_bytes(max_entries);
+            assert!(
+                needed_size <= buffer_size || max_entries == 0,
+                "Buffer of len {} can fit {} validators which need {} bytes.",
+                buffer_size,
+                max_entries,
+                needed_size,
+            );
+
+            let max_entries = Maintainers::maximum_entries(buffer_size);
+            let needed_size = Maintainers::required_bytes(max_entries);
+            assert!(
+                needed_size <= buffer_size || max_entries == 0,
+                "Buffer of len {} can fit {} maintainers which need {} bytes.",
+                buffer_size,
+                max_entries,
+                needed_size,
+            );
+        }
     }
+
     #[test]
-    fn test_lido_serialization() {
+    fn test_validators_size() {
+        let one_len = get_instance_packed_len(&Validators::new_fill_default(1)).unwrap();
+        let two_len = get_instance_packed_len(&Validators::new_fill_default(2)).unwrap();
+        assert_eq!(one_len, Validators::required_bytes(1));
+        assert_eq!(two_len, Validators::required_bytes(2));
+        assert_eq!(
+            two_len - one_len,
+            std::mem::size_of::<(Pubkey, Validator)>()
+        );
+    }
+
+    #[test]
+    fn test_lido_serialization_roundtrips() {
+        use solana_sdk::borsh::try_from_slice_unchecked;
+
         let mut validators = Validators::new(10_000);
         validators
-            .add(
-                Pubkey::new_unique(),
-                Validator {
-                    fee_address: Pubkey::new_unique(),
-                    fee_credit: StLamports(10000),
-                },
-            )
+            .add(Pubkey::new_unique(), Validator::new(Pubkey::new_unique()))
             .unwrap();
         let maintainers = Maintainers::new(1);
         let lido = Lido {
@@ -462,15 +564,11 @@ mod test_lido {
             validators: validators,
             maintainers: maintainers,
         };
-        let validator_accounts_len =
-            get_instance_packed_len(&Validators::new_fill_default(10000)).unwrap();
-        assert_eq!(validator_accounts_len, 10000 * (32 * 2 + 8) + 8);
         let mut data = Vec::new();
         BorshSerialize::serialize(&lido, &mut data).unwrap();
-        // 32*2 +8 + 4 + 4 = key*2 + StSol + 4 max_validators + 4 size of vec
-        // +4 + 4  = for max_maintainers + 4 size of vec
-        const SIZE: usize = ((32 * 2 + 8) + 4 + 4) + (4 + 4);
-        assert_eq!(data.len(), LIDO_CONSTANT_SIZE + SIZE);
+
+        let lido_restored = try_from_slice_unchecked(&data[..]).unwrap();
+        assert_eq!(lido, lido_restored);
     }
 
     #[test]
@@ -628,10 +726,10 @@ mod test_lido {
     }
     #[test]
     fn test_n_val() {
-        let n_validators: u64 = 10000;
+        let n_validators: u64 = 10_000;
         let size =
             get_instance_packed_len(&Validators::new_fill_default(n_validators as u32)).unwrap();
 
-        assert_eq!(Validators::maximum_accounts(size) as u64, n_validators);
+        assert_eq!(Validators::maximum_entries(size) as u64, n_validators);
     }
 }

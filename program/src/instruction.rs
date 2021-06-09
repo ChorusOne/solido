@@ -446,15 +446,21 @@ accounts_struct! {
             is_signer: false,
             is_writable: true,
         },
-        pub validator {
-            is_signer: false,
-            is_writable: true,
-        },
         pub reserve {
             is_signer: false,
             is_writable: true,
         },
-        pub stake {
+        pub validator_stake_pool_stake_account {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub validator_vote_account {
+            is_signer: false,
+            is_writable: false,
+        },
+        // Must be set to the program-derived stake account for the given
+        // validator, with seed `stake_accounts_seed_end`.
+        pub stake_account_end {
             is_signer: false,
             is_writable: true,
         },
@@ -495,11 +501,13 @@ accounts_struct! {
             is_signer: true,
             is_writable: false,
         },
-        pub validator {
+        pub validator_stake_pool_stake_account {
             is_signer: false,
             is_writable: true,
         },
-        pub stake {
+        // Must be set to the program-derived stake account for the given
+        // validator, with seed `stake_accounts_seed_begin`.
+        pub stake_account_begin {
             is_signer: false,
             is_writable: true,
         },
@@ -526,10 +534,6 @@ accounts_struct! {
         pub stake_pool_withdraw_authority {
             is_signer: false,
             is_writable: false,
-        },
-        pub stake_pool_validator_stake_account {
-            is_signer: false,
-            is_writable: true,
         },
         pub stake_pool_mint {
             is_signer: false,
@@ -927,11 +931,11 @@ accounts_struct! {
             is_signer: true,
             is_writable: true,
         },
-        pub stake_account {
+        pub stake_pool_stake_account {
             is_signer: false,
             is_writable: true,
         },
-        pub validator {
+        pub validator_vote_account {
             is_signer: false,
             is_writable: false,
         },

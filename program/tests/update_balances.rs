@@ -4,8 +4,8 @@ mod helpers;
 
 use borsh::BorshDeserialize;
 use helpers::{
-    program_test, simple_add_validator_to_pool,
-    stakepool_account::{get_account, get_token_balance, transfer, ValidatorStakeAccount},
+    get_account, program_test, simple_add_validator_to_pool,
+    stakepool_account::{get_token_balance, transfer, ValidatorStakeAccount},
     LidoAccounts,
 };
 use lido::token::{Lamports, Rational, StakePoolTokenLamports};
@@ -89,7 +89,7 @@ async fn test_successful_update_balance() {
             &mut context.banks_client,
             &context.payer,
             &context.last_blockhash,
-            &stake_account.stake_account,
+            &stake_account.stake_pool_stake_account,
             EXTRA_STAKE_AMOUNT,
         )
         .await;
