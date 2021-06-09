@@ -72,7 +72,8 @@ result = solido(
     '--treasury-account-owner', treasury_account_owner,
     '--insurance-account-owner', insurance_account_owner,
     '--manager-fee-account-owner', manager_fee_account_owner,
-    '--manager', multisig_pda,
+    '--multisig-program-id', multisig_program_id,
+    '--multisig-address', multisig_instance,
     keypair_path='test-key-1.json'
 )
 solido_address = result['solido_address']
