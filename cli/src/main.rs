@@ -199,33 +199,24 @@ fn main() {
             multisig::main(config, opts.cluster, opts.output_mode, cmd_opts);
         }
         SubCommand::CreateValidatorStakeAccount(cmd_opts) => {
-            if let Some(output) =
-                command_create_validator_stake_account(config, opts.cluster, cmd_opts)
-                    .expect("Failed to create validator stake account")
-            {
-                print_output(opts.output_mode, &output);
-            }
+            let output = command_create_validator_stake_account(config, opts.cluster, cmd_opts)
+                .expect("Failed to create validator stake account");
+            print_output(opts.output_mode, &output);
         }
         SubCommand::AddValidator(cmd_opts) => {
-            if let Some(output) = command_add_validator(config, opts.cluster, cmd_opts)
-                .expect("Failed to add validator")
-            {
-                print_output(opts.output_mode, &output);
-            }
+            let output = command_add_validator(config, opts.cluster, cmd_opts)
+                .expect("Failed to add validator");
+            print_output(opts.output_mode, &output);
         }
         SubCommand::AddMaintainer(cmd_opts) => {
-            if let Some(output) = command_add_maintainer(config, opts.cluster, cmd_opts)
-                .expect("Failed to add maintainer")
-            {
-                print_output(opts.output_mode, &output);
-            }
+            let output = command_add_maintainer(config, opts.cluster, cmd_opts)
+                .expect("Failed to add maintainer");
+            print_output(opts.output_mode, &output);
         }
         SubCommand::RemoveMaintainer(cmd_opts) => {
-            if let Some(output) = command_remove_maintainer(config, opts.cluster, cmd_opts)
-                .expect("Failed to remove maintainer")
-            {
-                print_output(opts.output_mode, &output);
-            }
+            let output = command_remove_maintainer(config, opts.cluster, cmd_opts)
+                .expect("Failed to remove maintainer");
+            print_output(opts.output_mode, &output);
         }
         SubCommand::ShowSolido(cmd_opts) => {
             let output = command_show_solido(config, cmd_opts).expect("Failed to show Solido data");

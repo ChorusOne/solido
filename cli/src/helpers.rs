@@ -379,7 +379,7 @@ pub fn command_create_solido(
             mint_program: st_sol_mint_keypair.pubkey(),
             pool_token_to: pool_token_to_keypair.pubkey(),
             fee_token: stake_pool.fee_address.0,
-            manager: manager,
+            manager,
             insurance_account: insurance_keypair.pubkey(),
             treasury_account: treasury_keypair.pubkey(),
             manager_fee_account: manager_fee_keypair.pubkey(),
@@ -441,7 +441,7 @@ pub fn command_add_validator(
     config: Config,
     cluster: Cluster,
     opts: AddValidatorOpts,
-) -> Result<Option<ProposeInstructionOutput>, crate::Error> {
+) -> Result<ProposeInstructionOutput, crate::Error> {
     let solido = get_solido(&config.rpc(), &opts.solido_address)?;
     let stake_pool = get_stake_pool(&config.rpc(), &solido.stake_pool_account)?;
 
@@ -517,7 +517,7 @@ pub fn command_add_maintainer(
     config: Config,
     cluster: Cluster,
     opts: AddRemoveMaintainerOpts,
-) -> Result<Option<ProposeInstructionOutput>, crate::Error> {
+) -> Result<ProposeInstructionOutput, crate::Error> {
     let (multisig_address, _) =
         get_multisig_program_address(&opts.multisig_program_id, &opts.multisig_address);
     let instruction = lido::instruction::add_maintainer(
@@ -542,7 +542,7 @@ pub fn command_remove_maintainer(
     config: Config,
     cluster: Cluster,
     opts: AddRemoveMaintainerOpts,
-) -> Result<Option<ProposeInstructionOutput>, crate::Error> {
+) -> Result<ProposeInstructionOutput, crate::Error> {
     let (multisig_address, _) =
         get_multisig_program_address(&opts.multisig_program_id, &opts.multisig_address);
     let instruction = lido::instruction::remove_maintainer(
@@ -591,7 +591,7 @@ pub fn command_create_validator_stake_account(
     config: Config,
     cluster: Cluster,
     opts: CreateValidatorStakeAccountOpts,
-) -> Result<Option<ProposeInstructionOutput>, crate::Error> {
+) -> Result<ProposeInstructionOutput, crate::Error> {
     let solido = get_solido(&config.rpc(), &opts.solido_address)?;
 
     let (stake_pool_authority, _) = lido::find_authority_program_address(
@@ -802,13 +802,9 @@ fn propose_multisig_transaction(
     multisig_program_id: Pubkey,
     multisig_address: Pubkey,
     instruction: Instruction,
-) -> Result<Option<ProposeInstructionOutput>, crate::Error> {
+) -> Result<ProposeInstructionOutput, crate::Error> {
     let program = get_anchor_program(cluster, config.fee_payer, &multisig_program_id);
-    Ok(Some(propose_instruction(
-        program,
-        multisig_address,
-        instruction,
-    )))
+    Ok(propose_instruction(program, multisig_address, instruction))
 }
 // TODO: Make `get_solido` and `get_stake_pool` return the structures in a single call to
 // `rpc_client.get_multiple_accounts(..)`.
