@@ -268,13 +268,13 @@ impl Validator {
     pub fn find_stake_account_address(
         program_id: &Pubkey,
         solido_account: &Pubkey,
-        validator_vote_account: &Pubkey,
+        validator_stake_pool_stake_account: &Pubkey,
         seed: u64,
     ) -> (Pubkey, u8) {
         let seeds = [
             &solido_account.to_bytes(),
-            &validator_vote_account.to_bytes(),
-            VALIDATOR_STAKE_ACCOUNT,
+            &validator_stake_pool_stake_account.to_bytes(),
+            &VALIDATOR_STAKE_ACCOUNT[..],
             &seed.to_le_bytes()[..],
         ];
         Pubkey::find_program_address(&seeds, program_id)

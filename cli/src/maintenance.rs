@@ -3,11 +3,13 @@
 use crate::helpers::{get_solido, get_stake_pool};
 use crate::{Config, Error};
 use clap::Clap;
-use lido::{state::Lido, token::Lamports};
+use lido::{state::{Lido, Validator}, token::Lamports};
 use solana_program::{pubkey::Pubkey, rent::Rent, sysvar};
 use solana_sdk::{account::Account, borsh::try_from_slice_unchecked, instruction::Instruction};
 use solana_stake_program::stake_state::StakeState;
+use solana_client::rpc_client::RpcClient;
 use spl_stake_pool::state::{StakePool, ValidatorList};
+use lido::state::PubkeyAndEntry;
 
 type Result<T> = std::result::Result<T, Error>;
 
@@ -46,8 +48,27 @@ struct SolidoState {
     #[allow(dead_code)]
     validator_list: ValidatorList,
 
+    /// For each validator, in the same order as in `solido.validators`, holds
+    /// the derived stake accounts from the begin seed until end seed.
+    validator_stake_accounts: Vec<Vec<(Pubkey, Account)>>,
+
     reserve_account: Account,
     rent: Rent,
+}
+
+fn get_validator_stake_accounts(
+    rpc_client: &RpcClient,
+    solido_program_id: &Pubkey,
+    solido_address: &Pubkey,
+    validator: &PubkeyAndEntry<Validator>,
+) -> Result<Vec<(Pubkey, Account)>> {
+    let mut result = Vec::new();
+    for seed in validator.entry.stake_accounts_seed_begin..validator.entry.stake_accounts_seed_end {
+        let (addr, _bump_seed) = Validator::find_stake_account_address(solido_program_id, solido_address, &validator.pubkey, seed);
+        let account = rpc_client.get_account(&addr)?;
+        result.push((addr, account));
+    }
+    Ok(result)
 }
 
 impl SolidoState {
@@ -74,11 +95,17 @@ impl SolidoState {
         let rent_account = rpc.get_account(&sysvar::rent::ID)?;
         let rent: Rent = bincode::deserialize(&rent_account.data)?;
 
+        let mut validator_stake_accounts = Vec::new();
+        for validator in solido.validators.entries.iter() {
+            validator_stake_accounts.push(get_validator_stake_accounts(rpc, solido_program_id, solido_address, validator)?);
+        }
+
         Ok(SolidoState {
             solido,
             stake_pool,
             validator_list_account,
             validator_list,
+            validator_stake_accounts,
             reserve_account,
             rent,
         })
