@@ -133,26 +133,6 @@ FEES:
     Multisig(MultisigOpts),
 }
 
-// enum SigningMethod<'a> {
-//     Hardware(&'a dyn Signer),
-//     Local(Keypair),
-// }
-
-// impl<'a> SigningMethod<'a> {
-//     pub fn pubkey(&self) -> Pubkey {
-//         match self {
-//             SigningMethod::Hardware(hw) => hw.pubkey(),
-//             SigningMethod::Local(local) => local.pubkey(),
-//         }
-//     }
-//     pub fn get_signer(self) -> &'a dyn Signer {
-//         match self {
-//             SigningMethod::Hardware(signer) => signer,
-//             SigningMethod::Local(keypair) => Box::new(keypair),
-//         }
-//     }
-// }
-
 /// Determines which network to connect to, and who pays the fees.
 pub struct Config<'a> {
     program: Program,

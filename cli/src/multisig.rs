@@ -310,38 +310,6 @@ fn create_multisig(
         &[&multisig_account, config.signer],
     );
 
-    // program
-    //     .request()
-    //     // Create the program-owned account that will hold the multisig data,
-    //     // and fund it from the payer account to make it rent-exempt.
-    //     .instruction(system_instruction::create_account(
-    //         &program.payer(),
-    //         &multisig_account.pubkey(),
-    //         // 352 bytes should be sufficient to hold a multisig state with 10
-    //         // owners. Get the minimum rent-exempt balance for that, and
-    //         // initialize the account with it, funded by the payer.
-    //         // TODO: Ask for confirmation from the user first.
-    //         program
-    //             .rpc()
-    //             .get_minimum_balance_for_rent_exemption(352)
-    //             .expect("Failed to obtain minimum rent-exempt balance."),
-    //         352,
-    //         &program.id(),
-    //     ))
-    //     // Creating the account must be signed by the account itself.
-    //     .signer(&multisig_account)
-    //     .accounts(multisig_accounts::CreateMultisig {
-    //         multisig: multisig_account.pubkey(),
-    //         rent: sysvar::rent::ID,
-    //     })
-    //     .args(multisig_instruction::CreateMultisig {
-    //         owners: opts.owners,
-    //         threshold: opts.threshold,
-    //         nonce,
-    //     })
-    //     .send()
-    //     .expect("Failed to send transaction.");
-
     CreateMultisigOutput {
         multisig_address: multisig_account.pubkey().into(),
         multisig_program_derived_address: program_derived_address.into(),
