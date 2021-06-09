@@ -3,20 +3,29 @@
 use crate::helpers::{get_solido, get_stake_pool};
 use crate::{Config, Error};
 use clap::Clap;
-use lido::{state::{Lido, Validator}, token::Lamports};
+use lido::{state::{Lido, Validator}, token::Lamports, DEPOSIT_AUTHORITY, STAKE_POOL_AUTHORITY};
 use solana_program::{pubkey::Pubkey, rent::Rent, clock::Clock, stake_history::StakeHistory, sysvar};
-use solana_sdk::{account::Account, borsh::try_from_slice_unchecked, instruction::Instruction};
+use solana_sdk::{account::Account, borsh::try_from_slice_unchecked, instruction::Instruction, signature::Signer};
 use solana_client::rpc_client::RpcClient;
 use spl_stake_pool::state::{StakePool, ValidatorList};
 use spl_stake_pool::stake_program::StakeState;
 use lido::state::PubkeyAndEntry;
 use borsh::BorshDeserialize;
+use std::ops::Add;
 
 type Result<T> = std::result::Result<T, Error>;
 
-pub enum MaintenanceResult {
-    DidExecute,
-    NothingToDo,
+/// A brief description of the maintenance performed. Not relevant functionally,
+/// but helpful for automated testing.
+pub enum MaintenanceTask {
+    StakeDeposit {
+        validator_vote_account: Pubkey,
+        amount: Lamports,
+    },
+    DepositActiveStateToPool {
+        validator_vote_account: Pubkey,
+        amount: Lamports,
+    }
 }
 
 #[derive(Clap, Debug)]
@@ -31,17 +40,16 @@ pub struct PerformMaintenanceOpts {
 
     /// Stake pool program id
     #[clap(long)]
-    stake_pool_program_id: Pubkey,
+    pub stake_pool_program_id: Pubkey,
 }
 
 /// A snapshot of on-chain accounts relevant to Solido.
 struct SolidoState {
-    // TODO: The dead_code below will no longer be dead once we implement the
-    // maintenance tasks.
-    #[allow(dead_code)]
+    solido_program_id: Pubkey,
+    solido_address: Pubkey,
     solido: Lido,
 
-    #[allow(dead_code)]
+    stake_pool_program_id: Pubkey,
     stake_pool: StakePool,
 
     #[allow(dead_code)]
@@ -56,6 +64,10 @@ struct SolidoState {
 
     reserve_account: Account,
     rent: Rent,
+
+    /// Public key of the maintainer executing the maintenance.
+    /// Must be a member of `solido.maintainers`.
+    maintainer_address: Pubkey,
 }
 
 /// The balance of a stake account, split into the four states that stake can be in.
@@ -69,6 +81,16 @@ struct StakeBalance {
 }
 
 impl StakeBalance {
+    pub fn total(&self) -> Lamports {
+        self.active
+            .add(self.inactive)
+            .expect("Should not overflow: stake parts should be less than the total.")
+            .add(self.activating)
+            .expect("Should not overflow: stake parts should be less than the total.")
+            .add(self.deactivating)
+            .expect("Should not overflow: stake parts should be less than the total.")
+    }
+
     pub fn is_fully_active(&self) -> bool {
         true
         && self.inactive == Lamports(0)
@@ -138,6 +160,7 @@ impl SolidoState {
         config: &Config,
         solido_program_id: &Pubkey,
         solido_address: &Pubkey,
+        stake_pool_program_id: &Pubkey,
     ) -> Result<SolidoState> {
         let rpc = &config.rpc;
 
@@ -168,13 +191,20 @@ impl SolidoState {
         }
 
         Ok(SolidoState {
+            solido_program_id: solido_program_id.clone(),
+            solido_address: solido_address.clone(),
             solido,
+            stake_pool_program_id: stake_pool_program_id.clone(),
             stake_pool,
             validator_list_account,
             validator_list,
             validator_stake_accounts,
             reserve_account,
             rent,
+            // The entity executing the maintenance transactions, is the maintainer.
+            // We don't verify here if it is part of the maintainer set, the on-chain
+            // program does that anyway.
+            maintainer_address: config.fee_payer.pubkey(),
         })
     }
 
@@ -189,7 +219,7 @@ impl SolidoState {
     }
 
     /// If there is a deposit that can be staked, return the instruction to do so.
-    pub fn try_stake_deposit(&self) -> Result<Option<Instruction>> {
+    pub fn try_stake_deposit(&self) -> Result<Option<(Instruction, MaintenanceTask)>> {
         let reserve_balance = self.get_effective_reserve();
         let minimum_stake_account_balance =
             Lamports(
@@ -209,12 +239,47 @@ impl SolidoState {
 
     /// If there is active stake that can be deposited to the stake pool,
     /// return the instruction to do so.
-    pub fn try_deposit_active_stake_to_pool(&self) -> Result<Option<Instruction>> {
-        for (_validator, stake_accounts) in
+    pub fn try_deposit_active_stake_to_pool(&self) -> Result<Option<(Instruction, MaintenanceTask)>> {
+        let (deposit_authority, _bump_seed) = lido::find_authority_program_address(
+            &self.solido_program_id,
+            &self.solido_address,
+            DEPOSIT_AUTHORITY,
+        );
+
+        // TODO(fynn): Should the withdraw authority be set to the stake pool authority?
+        let (withdraw_authority, _bump_seed) = lido::find_authority_program_address(
+            &self.solido_program_id,
+            &self.solido_address,
+            STAKE_POOL_AUTHORITY,
+        );
+
+        for (validator, stake_accounts) in
             self.solido.validators.entries.iter().zip(self.validator_stake_accounts.iter()) {
-            for (_stake_account_addr, stake_balance) in stake_accounts.iter() {
+            // We only check if the first stake account can be deposited, because stake accounts
+            // can only be deposited into the pool after the accounts preceding them.
+            for (stake_account_addr, stake_balance) in stake_accounts.iter().take(1) {
                 if stake_balance.is_fully_active() {
-                    // TODO: Generate DepositActiveStake instruction.
+                    let instr = lido::instruction::deposit_active_stake_to_pool(
+                        &self.solido_program_id,
+                        &lido::instruction::DepositActiveStakeToPoolAccountsMeta {
+                            lido: self.solido_address,
+                            maintainer: self.maintainer_address,
+                            validator_stake_pool_stake_account: validator.pubkey,
+                            stake_account_begin: stake_account_addr.clone(),
+                            deposit_authority: deposit_authority,
+                            stake_pool_token_holder: self.solido.stake_pool_token_holder,
+                            stake_pool_program: self.stake_pool_program_id,
+                            stake_pool: self.solido.stake_pool_account,
+                            stake_pool_validator_list: self.stake_pool.validator_list,
+                            stake_pool_withdraw_authority: withdraw_authority,
+                            stake_pool_mint: self.stake_pool.pool_mint,
+                        }
+                    )?;
+                    return Ok(Some((instr, MaintenanceTask::DepositActiveStateToPool {
+                        // TODO: This is not actually the vote account.
+                        validator_vote_account: validator.pubkey,
+                        amount: stake_balance.total(),
+                    })))
                 }
             }
         }
@@ -223,7 +288,7 @@ impl SolidoState {
 }
 
 /// Inspect the on-chain Solido state, and if there is maintenance that can be
-/// performed, do so.
+/// performed, do so. Returns a description of the task performed, if any.
 ///
 /// This takes only one step, there might be more work left to do after this
 /// function returns. Call it in a loop until it returns
@@ -232,21 +297,21 @@ impl SolidoState {
 pub fn perform_maintenance(
     config: &Config,
     opts: PerformMaintenanceOpts,
-) -> Result<MaintenanceResult> {
-    let state = SolidoState::new(config, &opts.solido_program_id, &opts.solido_address)?;
+) -> Result<Option<MaintenanceTask>> {
+    let state = SolidoState::new(config, &opts.solido_program_id, &opts.solido_address, &opts.stake_pool_program_id)?;
 
     // Try all of these operations one by one, and select the first one that
     // produces an instruction.
-    let instruction: Option<Result<Instruction>> = None
+    let instruction: Option<Result<(Instruction, MaintenanceTask)>> = None
         .or_else(|| state.try_stake_deposit().transpose())
         .or_else(|| state.try_deposit_active_stake_to_pool().transpose());
 
     match instruction {
-        Some(Ok(_instr)) => {
+        Some(Ok((_instr, task))) => {
             // TODO: Execute.
-            Ok(MaintenanceResult::DidExecute)
+            Ok(Some(task))
         }
         Some(Err(err)) => Err(err),
-        None => Ok(MaintenanceResult::NothingToDo),
+        None => Ok(None),
     }
 }
