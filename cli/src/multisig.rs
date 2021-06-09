@@ -6,7 +6,6 @@ use anchor_client::solana_sdk::pubkey::Pubkey;
 use anchor_client::solana_sdk::signature::{Keypair, Signer};
 use anchor_client::solana_sdk::system_instruction;
 use anchor_client::solana_sdk::sysvar;
-use anchor_client::{Cluster, Program};
 use anchor_lang::prelude::{AccountMeta, ToAccountMetas};
 use anchor_lang::AccountDeserialize;
 use anchor_lang::{Discriminator, InstructionData};
@@ -27,13 +26,11 @@ use multisig::instruction as multisig_instruction;
 use serde::Serialize;
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::commitment_config::CommitmentConfig;
-use solana_sdk::signers::Signers;
 
 use crate::helpers::get_solido;
 use crate::helpers::sign_and_send_transaction;
 use crate::util::PubkeyBase58;
 use crate::Config;
-use crate::Error;
 use crate::{print_output, OutputMode};
 use lido::state::serialize_b58;
 
@@ -192,25 +189,30 @@ pub fn main(
 ) -> Result<(), crate::Error> {
     match multisig_opts.subcommand {
         SubCommand::CreateMultisig(cmd_opts) => {
-            let output = create_multisig(&config, multisig_opts.multisig_program_id, cmd_opts);
-            Ok(print_output(output_mode, &output))
+            let output = create_multisig(&config, multisig_opts.multisig_program_id, cmd_opts)?;
+            print_output(output_mode, &output);
+            Ok(())
         }
         SubCommand::ShowMultisig(cmd_opts) => {
             let output = show_multisig(&config, multisig_opts.multisig_program_id, cmd_opts);
-            Ok(print_output(output_mode, &output))
+            print_output(output_mode, &output);
+            Ok(())
         }
         SubCommand::ShowTransaction(cmd_opts) => {
             let output = show_transaction(&config, multisig_opts.multisig_program_id, cmd_opts);
-            Ok(print_output(output_mode, &output))
+            print_output(output_mode, &output);
+            Ok(())
         }
         SubCommand::ProposeUpgrade(cmd_opts) => {
             let output = propose_upgrade(&config, multisig_opts.multisig_program_id, cmd_opts);
-            Ok(print_output(output_mode, &output))
+            print_output(output_mode, &output);
+            Ok(())
         }
         SubCommand::ProposeChangeMultisig(cmd_opts) => {
             let output =
                 propose_change_multisig(&config, multisig_opts.multisig_program_id, cmd_opts);
-            Ok(print_output(output_mode, &output))
+            print_output(output_mode, &output);
+            Ok(())
         }
         SubCommand::Approve(cmd_opts) => {
             approve(&config, multisig_opts.multisig_program_id, cmd_opts)
@@ -252,7 +254,7 @@ fn create_multisig(
     config: &Config,
     multisig_program_id: Pubkey,
     opts: CreateMultisigOpts,
-) -> CreateMultisigOutput {
+) -> Result<CreateMultisigOutput, crate::Error> {
     // Enforce a few basic sanity checks.
     opts.validate_or_exit();
 
@@ -308,12 +310,12 @@ fn create_multisig(
         config,
         &[create_instruction, multisig_instruction],
         &[&multisig_account, config.signer],
-    );
+    )?;
 
-    CreateMultisigOutput {
+    Ok(CreateMultisigOutput {
         multisig_address: multisig_account.pubkey().into(),
         multisig_program_derived_address: program_derived_address.into(),
-    }
+    })
 }
 
 #[derive(Serialize)]
@@ -912,8 +914,8 @@ fn get_account<T: AccountDeserialize>(
     let account = rpc_client
         .get_account_with_commitment(address, CommitmentConfig::processed())?
         .value
-        .unwrap();
-    // .unwrap(); // TODO: Return error
+        .ok_or(Err::new())
+        // .unwrap();
     let mut data: &[u8] = &account.data;
     T::try_deserialize(&mut data).map_err(Into::into)
 }
@@ -952,7 +954,7 @@ pub fn propose_instruction(
     let dummy_tx = multisig::Transaction {
         multisig: multisig_address,
         program_id: instruction.program_id,
-        accounts: accounts.clone(),
+        accounts,
         data: instruction.data.clone(),
         signers: multisig
             .owners
@@ -1174,7 +1176,7 @@ fn execute_transaction(
     let multisig_instruction = Instruction {
         program_id: multisig_program_id,
         data: multisig_instruction::ExecuteTransaction.data(),
-        accounts: accounts,
+        accounts,
     };
     sign_and_send_transaction(config, &[multisig_instruction], &[config.signer])
 }

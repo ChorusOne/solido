@@ -178,31 +178,26 @@ fn main() {
         None => get_default_keypair_path(),
     };
     // Get a boxed signer that lives enough for we to use it in the Config.
-    let boxed_signer: Box<dyn Signer> =
-        if payer_keypair_path.starts_with("usb://") {
-            let hw_wallet = maybe_wallet_manager().unwrap().unwrap();
-            Box::new(
-                generate_remote_keypair(
-                    Locator::new_from_path(
-                        payer_keypair_path
-                            .clone()
-                            .into_os_string()
-                            .into_string()
-                            .unwrap(),
-                    )
+    let boxed_signer: Box<dyn Signer> = if payer_keypair_path.starts_with("usb://") {
+        let hw_wallet = maybe_wallet_manager().unwrap().unwrap();
+        Box::new(
+            generate_remote_keypair(
+                Locator::new_from_path(payer_keypair_path.into_os_string().into_string().unwrap())
                     .unwrap(),
-                    DerivationPath::default(),
-                    &hw_wallet,
-                    false,
-                    "",
-                )
-                .unwrap(),
+                DerivationPath::default(),
+                &hw_wallet,
+                false,
+                "",
             )
-        } else {
-            Box::new(read_keypair_file(&payer_keypair_path).unwrap_or_else(|_| {
+            .unwrap(),
+        )
+    } else {
+        Box::new(
+            read_keypair_file(&payer_keypair_path).unwrap_or_else(|_| {
                 panic!("Failed to read key pair from {:?}.", payer_keypair_path)
-            }))
-        };
+            }),
+        )
+    };
     // Get reference from signer
     let signer = &*boxed_signer;
 
@@ -219,7 +214,7 @@ fn main() {
         // For now, we'll assume that the provided key pair fulfils all of these
         // roles. We need a better way to configure keys in the future.
         // fee_payer: keypair,
-        signer: signer,
+        signer,
         // TODO: Do we want a dry-run option in the MVP at all?
         dry_run: false,
         output_mode: opts.output_mode,
