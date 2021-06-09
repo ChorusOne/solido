@@ -37,7 +37,6 @@ def solido(*args: str, keypair_path: Optional[str] = None) -> Any:
     """
     Run 'solido' against localhost, return its parsed json output.
     """
-
     output = run(
         'target/debug/solido',
         '--cluster', 'localnet',
@@ -45,7 +44,8 @@ def solido(*args: str, keypair_path: Optional[str] = None) -> Any:
         *([] if keypair_path is None else ['--keypair-path', keypair_path]),
         *args,
     )
-
+    if keypair_path != None and keypair_path[:12] == 'usb://ledger':
+        output = '\n'.join(output.split('\n')[2:])
     if output == '':
         return {}
     else:
@@ -122,33 +122,33 @@ def create_test_account(keypair_fname: str, *, fund: bool = True) -> str:
     pubkey = run('solana-keygen', 'pubkey', keypair_fname).strip()
     if fund:
         solana('transfer', '--allow-unfunded-recipient', pubkey, '10.0')
-    return pubkey
+    return TestAccount(pubkey, keypair_fname)
 
 
 def create_stake_account(keypair_fname: str) -> str:
     """
     Generate a stake account funded with 2 Sol, returns its public key.
     """
-    pubkey = create_test_account(keypair_fname, fund=False)
+    test_account = create_test_account(keypair_fname, fund=False)
     solana(
         'create-stake-account',
         keypair_fname,
         '2',
     )
-    return pubkey
+    return test_account
 
 
 def create_vote_account(vote_key_fname: str, validator_key_fname: str):
     """
     Generate a vote account for the validator
     """
-    pubkey = create_test_account(vote_key_fname, fund=False)
+    test_account = create_test_account(vote_key_fname, fund=False)
     solana(
         'create-vote-account',
         vote_key_fname,
         validator_key_fname,
     )
-    return pubkey
+    return test_account
 
 
 def create_spl_token(owner_keypair_fname: str, minter: str) -> str:
@@ -198,6 +198,11 @@ def get_multisig(multisig_program_id: str) -> Any:
             '--multisig-program-id', multisig_program_id,
             *args,
         )
+        # Ledger prints two lines with "Waiting for your approval on Ledger...
+        # ✅ Approved
+        # These lines should be ignored
+        if keypair_path != None and keypair_path[:12] == 'usb://ledger':
+            output = '\n'.join(output.split('\n')[2:])
         if output == '':
             return {}
         else:

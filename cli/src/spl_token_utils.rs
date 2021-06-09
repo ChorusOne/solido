@@ -14,14 +14,13 @@ pub fn push_create_spl_token_mint(
     mint_authority: &Pubkey,
 ) -> Result<Keypair, crate::Error> {
     let mint_account_min_sol_balance = config
-        .program
         .rpc()
         .get_minimum_balance_for_rent_exemption(spl_token::state::Mint::LEN)?;
 
     let keypair = Keypair::new();
 
     instructions.push(system_instruction::create_account(
-        &config.fee_payer.pubkey(),
+        &config.signer.pubkey(),
         &keypair.pubkey(),
         // Deposit enough SOL to make it rent-exempt.
         mint_account_min_sol_balance,
@@ -56,14 +55,13 @@ pub fn push_create_spl_token_account(
     owner: &Pubkey,
 ) -> Result<Keypair, crate::Error> {
     let spl_token_min_sol_balance = config
-        .program
         .rpc()
         .get_minimum_balance_for_rent_exemption(spl_token::state::Account::LEN)?;
 
     let keypair = Keypair::new();
 
     instructions.push(system_instruction::create_account(
-        &config.fee_payer.pubkey(),
+        &config.signer.pubkey(),
         &keypair.pubkey(),
         // Deposit enough SOL to make it rent-exempt.
         spl_token_min_sol_balance,

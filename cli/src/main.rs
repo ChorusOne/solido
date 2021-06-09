@@ -23,9 +23,8 @@ use crate::helpers::command_add_maintainer;
 use crate::helpers::command_create_validator_stake_account;
 use crate::helpers::command_remove_maintainer;
 use crate::helpers::command_show_solido;
-use crate::helpers::{
-    command_add_validator, command_create_solido, get_anchor_program, CreateSolidoOpts,
-};
+use crate::helpers::get_anchor_program;
+use crate::helpers::{command_add_validator, command_create_solido, CreateSolidoOpts};
 use crate::maintenance::PerformMaintenanceOpts;
 use crate::multisig::MultisigOpts;
 
@@ -134,34 +133,38 @@ FEES:
     Multisig(MultisigOpts),
 }
 
-enum SigningMethod {
-    Hardware(Box<dyn Signer>),
-    Local(Keypair),
-}
+// enum SigningMethod<'a> {
+//     Hardware(&'a dyn Signer),
+//     Local(Keypair),
+// }
 
-impl SigningMethod {
-    pub fn pubkey(&self) -> Pubkey {
-        return self.pubkey();
-    }
-    pub fn signer(self) -> Box<dyn Signer> {
-        match self {
-            SigningMethod::Hardware(signer) => signer,
-            SigningMethod::Local(keypair) => Box::new(keypair),
-        }
-    }
-}
+// impl<'a> SigningMethod<'a> {
+//     pub fn pubkey(&self) -> Pubkey {
+//         match self {
+//             SigningMethod::Hardware(hw) => hw.pubkey(),
+//             SigningMethod::Local(local) => local.pubkey(),
+//         }
+//     }
+//     pub fn get_signer(self) -> &'a dyn Signer {
+//         match self {
+//             SigningMethod::Hardware(signer) => signer,
+//             SigningMethod::Local(keypair) => Box::new(keypair),
+//         }
+//     }
+// }
 
 /// Determines which network to connect to, and who pays the fees.
-pub struct Config {
+pub struct Config<'a> {
     program: Program,
     // rpc_client: RpcClient,
     // fee_payer: Keypair,
-    signer: SigningMethod,
+    // signer: SigningMethod<'static>,
+    signer: &'a dyn Signer,
     dry_run: bool,
     output_mode: OutputMode,
 }
 
-impl Config {
+impl<'a> Config<'a> {
     pub fn rpc(&self) -> RpcClient {
         self.program.rpc()
     }
@@ -194,49 +197,43 @@ fn main() {
         Some(path) => path,
         None => get_default_keypair_path(),
     };
-    // Using ledger wallet
-    let signer: SigningMethod;
-    if payer_keypair_path.starts_with("usb://") {
-        let hw_wallet = maybe_wallet_manager().unwrap().unwrap();
-        signer = SigningMethod::Hardware(Box::new(
-            generate_remote_keypair(
-                Locator::new_from_path(
-                    payer_keypair_path
-                        .clone()
-                        .into_os_string()
-                        .into_string()
-                        .unwrap(),
+    // Get a boxed signer that lives enough for we to use it in the Config.
+    let boxed_signer: Box<dyn Signer> =
+        if payer_keypair_path.starts_with("usb://") {
+            let hw_wallet = maybe_wallet_manager().unwrap().unwrap();
+            Box::new(
+                generate_remote_keypair(
+                    Locator::new_from_path(
+                        payer_keypair_path
+                            .clone()
+                            .into_os_string()
+                            .into_string()
+                            .unwrap(),
+                    )
+                    .unwrap(),
+                    DerivationPath::default(),
+                    &hw_wallet,
+                    false,
+                    "",
                 )
                 .unwrap(),
-                DerivationPath::default(),
-                &hw_wallet,
-                true,
-                "",
             )
-            .unwrap(),
-        ));
-    } else {
-        signer =
-            SigningMethod::Local(read_keypair_file(&payer_keypair_path).unwrap_or_else(|_| {
+        } else {
+            Box::new(read_keypair_file(&payer_keypair_path).unwrap_or_else(|_| {
                 panic!("Failed to read key pair from {:?}.", payer_keypair_path)
-            }));
-    }
+            }))
+        };
+    // Get reference from signer
+    let signer = &*boxed_signer;
 
-    let keypair = read_keypair_file(&payer_keypair_path)
-        .unwrap_or_else(|_| panic!("Failed to read key pair from {:?}.", payer_keypair_path));
-
-    // TODO: This is a bit hacky :|
-    // We need to pass the keypair to Anchor's program by value and to our config by reference.
-    // Cluster has to be passed as value as well
-    let key_pair_copy =
-        Keypair::from_bytes(&keypair.to_bytes()).expect("Keypair returned an invalid secret");
     let config = Config {
         // Set the multisig_program_id to an invalid program, we use the program
         // just to get the rpc client, when we need to use the multisig program,
         // we'll create another instance of it.
+        // TODO: Remove the need for the anchor program
         program: get_anchor_program(
             Cluster::from_str(&opts.cluster.to_string()).unwrap(),
-            key_pair_copy,
+            Keypair::new(),
             &Pubkey::new_from_array([255u8; 32]),
         ),
         // For now, we'll assume that the provided key pair fulfils all of these
@@ -254,10 +251,11 @@ fn main() {
             print_output(opts.output_mode, &output);
         }
         SubCommand::Multisig(cmd_opts) => {
-            multisig::main(config, opts.cluster, opts.output_mode, cmd_opts);
+            multisig::main(config, opts.output_mode, cmd_opts)
+                .expect("Failed to execute multisig transaction.");
         }
         SubCommand::CreateValidatorStakeAccount(cmd_opts) => {
-            let output = command_create_validator_stake_account(config, opts.cluster, cmd_opts)
+            let output = command_create_validator_stake_account(config, cmd_opts)
                 .expect("Failed to create validator stake account");
             print_output(opts.output_mode, &output);
         }
@@ -270,18 +268,17 @@ fn main() {
                 .expect("Failed to perform maintenance.");
         }
         SubCommand::AddValidator(cmd_opts) => {
-            let output = command_add_validator(config, opts.cluster, cmd_opts)
-                .expect("Failed to add validator");
+            let output = command_add_validator(config, cmd_opts).expect("Failed to add validator");
             print_output(opts.output_mode, &output);
         }
         SubCommand::AddMaintainer(cmd_opts) => {
-            let output = command_add_maintainer(config, opts.cluster, cmd_opts)
-                .expect("Failed to add maintainer");
+            let output =
+                command_add_maintainer(config, cmd_opts).expect("Failed to add maintainer");
             print_output(opts.output_mode, &output);
         }
         SubCommand::RemoveMaintainer(cmd_opts) => {
-            let output = command_remove_maintainer(config, opts.cluster, cmd_opts)
-                .expect("Failed to remove maintainer");
+            let output =
+                command_remove_maintainer(config, cmd_opts).expect("Failed to remove maintainer");
             print_output(opts.output_mode, &output);
         }
         SubCommand::ShowSolido(cmd_opts) => {
