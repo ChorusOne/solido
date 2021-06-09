@@ -134,11 +134,29 @@ FEES:
     Multisig(MultisigOpts),
 }
 
+enum SigningMethod {
+    Hardware(Box<dyn Signer>),
+    Local(Keypair),
+}
+
+impl SigningMethod {
+    pub fn pubkey(&self) -> Pubkey {
+        return self.pubkey();
+    }
+    pub fn signer(self) -> Box<dyn Signer> {
+        match self {
+            SigningMethod::Hardware(signer) => signer,
+            SigningMethod::Local(keypair) => Box::new(keypair),
+        }
+    }
+}
+
 /// Determines which network to connect to, and who pays the fees.
 pub struct Config {
     program: Program,
     // rpc_client: RpcClient,
-    fee_payer: Keypair,
+    // fee_payer: Keypair,
+    signer: SigningMethod,
     dry_run: bool,
     output_mode: OutputMode,
 }
@@ -177,10 +195,10 @@ fn main() {
         None => get_default_keypair_path(),
     };
     // Using ledger wallet
-    let signer: Box<dyn Signer>;
+    let signer: SigningMethod;
     if payer_keypair_path.starts_with("usb://") {
         let hw_wallet = maybe_wallet_manager().unwrap().unwrap();
-        signer = Box::new(
+        signer = SigningMethod::Hardware(Box::new(
             generate_remote_keypair(
                 Locator::new_from_path(
                     payer_keypair_path
@@ -196,10 +214,10 @@ fn main() {
                 "",
             )
             .unwrap(),
-        );
+        ));
     } else {
         signer =
-            Box::new(read_keypair_file(&payer_keypair_path).unwrap_or_else(|_| {
+            SigningMethod::Local(read_keypair_file(&payer_keypair_path).unwrap_or_else(|_| {
                 panic!("Failed to read key pair from {:?}.", payer_keypair_path)
             }));
     }
@@ -223,7 +241,8 @@ fn main() {
         ),
         // For now, we'll assume that the provided key pair fulfils all of these
         // roles. We need a better way to configure keys in the future.
-        fee_payer: keypair,
+        // fee_payer: keypair,
+        signer: signer,
         // TODO: Do we want a dry-run option in the MVP at all?
         dry_run: false,
         output_mode: opts.output_mode,

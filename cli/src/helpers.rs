@@ -67,7 +67,7 @@ pub fn sign_and_send_transaction<T: Signers>(
     instructions: &[Instruction],
     signers: &T,
 ) -> Result<(), crate::Error> {
-    let mut tx = Transaction::new_with_payer(instructions, Some(&config.fee_payer.pubkey()));
+    let mut tx = Transaction::new_with_payer(instructions, Some(&config.signer.pubkey()));
 
     let (recent_blockhash, _fee_calculator) = config.rpc().get_recent_blockhash()?;
     tx.sign(signers, recent_blockhash);
@@ -249,7 +249,7 @@ pub fn command_create_solido(
         &stake_pool_authority,
         &deposit_authority,
         &fee_authority,
-        &config.fee_payer,
+        &config.signer.pubkey(),
         Fee {
             numerator: opts.fee_numerator,
             denominator: opts.fee_denominator,
@@ -272,7 +272,7 @@ pub fn command_create_solido(
         .rpc()
         .get_minimum_balance_for_rent_exemption(0)?;
     instructions.push(system_instruction::transfer(
-        &config.fee_payer.pubkey(),
+        &config.signer.pubkey(),
         &reserve_authority,
         min_balance_empty_data_account,
     ));
@@ -288,7 +288,7 @@ pub fn command_create_solido(
     sign_and_send_transaction(
         &config,
         &instructions[..],
-        &[&config.fee_payer, &st_sol_mint_keypair],
+        &[&st_sol_mint_keypair, &*config.signer.signer()],
     )?;
     instructions.clear();
     eprintln!("Did send mint init.");
@@ -304,7 +304,7 @@ pub fn command_create_solido(
     sign_and_send_transaction(
         &config,
         &instructions[..],
-        &vec![&config.fee_payer, &stake_pool_token_holder_keypair],
+        &vec![&*config.signer.signer(), &stake_pool_token_holder_keypair],
     )?;
     instructions.clear();
     eprintln!("Did send SPL account inits part 1.");
@@ -325,14 +325,18 @@ pub fn command_create_solido(
     sign_and_send_transaction(
         &config,
         &instructions[..],
-        &vec![&config.fee_payer, &treasury_keypair, &developer_keypair],
+        &vec![
+            &*config.signer.signer(),
+            &treasury_keypair,
+            &developer_keypair,
+        ],
     )?;
     instructions.clear();
     eprintln!("Did send SPL account inits.");
 
     // Create the account that holds the Solido instance itself.
     instructions.push(system_instruction::create_account(
-        &config.fee_payer.pubkey(),
+        &config.signer.pubkey(),
         &lido_keypair.pubkey(),
         lido_account_balance,
         lido_size as u64,
@@ -367,7 +371,7 @@ pub fn command_create_solido(
     sign_and_send_transaction(
         &config,
         &instructions[..],
-        &[&config.fee_payer, &lido_keypair],
+        &[&*config.signer.signer(), &lido_keypair],
     )?;
     eprintln!("Did send Lido init.");
 
