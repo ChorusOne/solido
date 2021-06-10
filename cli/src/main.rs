@@ -103,9 +103,10 @@ FEES:
 
     «treasury-fee» : «validation-fee» : «developer-fee»
 
-    For example, if all fees are set to 1, then the treasury and validators
-    would receive 66% of the fees, and the developer would receive 34%.
-    Subsequently, the validation fee is divided equally among all validators.
+    For example, if the fees are set to a 1 : 2 : 1 proportion, then the
+    treasury and developers would receive 50% of the fees, and the validation
+    would receive the remaining 50%. Subsequently, the validation fee is divided
+    equally among all validators.
     ")]
     CreateSolido(CreateSolidoOpts),
 

@@ -96,7 +96,6 @@ pub fn process_change_fee_spec(
 
     Lido::check_valid_minter_program(&lido.st_sol_mint_program, accounts.treasury_account)?;
     Lido::check_valid_minter_program(&lido.st_sol_mint_program, accounts.developer_account)?;
-    Lido::check_valid_minter_program(&lido.st_sol_mint_program, accounts.developer_account)?;
 
     lido.fee_distribution = new_fee_distribution;
     lido.fee_recipients.treasury_account = *accounts.treasury_account.key;
@@ -313,7 +312,7 @@ pub fn process_distribute_fees(program_id: &Pubkey, accounts_raw: &[AccountInfo]
         lido.sol_reserve_authority_bump_seed,
         token_shares.treasury_amount,
     )?;
-    // Mint tokens for manager
+    // Mint tokens for developer
     token_mint_to(
         accounts.lido.key,
         accounts.spl_token.clone(),
