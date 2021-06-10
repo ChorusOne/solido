@@ -337,7 +337,7 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
-        pub pool_token_to {
+        pub stake_pool_token_holder {
             is_signer: false,
             is_writable: false,
         },
@@ -396,7 +396,7 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
-        pub pool_token_to {
+        pub stake_pool_token_holder {
             is_signer: false,
             is_writable: false,
         },
@@ -515,7 +515,7 @@ accounts_struct! {
             is_signer: false,
             is_writable: true,
         },
-        pub pool_token_to {
+        pub stake_pool_token_holder {
             is_signer: false,
             is_writable: true,
         },

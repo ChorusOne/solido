@@ -110,8 +110,9 @@ pub fn process_initialize(
         program_id,
     );
 
-    let pool_to_token_account =
-        spl_token::state::Account::unpack_from_slice(&accounts.pool_token_to.data.borrow())?;
+    let pool_to_token_account = spl_token::state::Account::unpack_from_slice(
+        &accounts.stake_pool_token_holder.data.borrow(),
+    )?;
 
     if stake_pool.pool_mint != pool_to_token_account.mint {
         msg!(
@@ -151,7 +152,7 @@ pub fn process_initialize(
     lido.stake_pool_account = *accounts.stake_pool.key;
     lido.manager = *accounts.manager.key;
     lido.st_sol_mint_program = *accounts.mint_program.key;
-    lido.stake_pool_token_holder = *accounts.pool_token_to.key;
+    lido.stake_pool_token_holder = *accounts.stake_pool_token_holder.key;
     lido.token_program_id = *accounts.spl_token.key;
     lido.sol_reserve_authority_bump_seed = reserve_bump_seed;
     lido.deposit_authority_bump_seed = deposit_bump_seed;
@@ -191,8 +192,9 @@ pub fn process_deposit(
     let stake_pool = StakePool::try_from_slice(&accounts.stake_pool.data.borrow())?;
 
     let rent = &Rent::from_account_info(accounts.sysvar_rent)?;
-    let pool_to_token_account =
-        spl_token::state::Account::unpack_from_slice(&accounts.pool_token_to.data.borrow())?;
+    let pool_to_token_account = spl_token::state::Account::unpack_from_slice(
+        &accounts.stake_pool_token_holder.data.borrow(),
+    )?;
 
     let total_lamports = calc_total_lamports(
         &lido,
@@ -451,7 +453,7 @@ pub fn process_deposit_active_stake_to_pool(
         return Err(LidoError::InvalidStakeAccount.into());
     }
 
-    if &lido.stake_pool_token_holder != accounts.pool_token_to.key {
+    if &lido.stake_pool_token_holder != accounts.stake_pool_token_holder.key {
         msg!("Invalid stake pool token");
         return Err(LidoError::InvalidPoolToken.into());
     }
@@ -495,7 +497,7 @@ pub fn process_deposit_active_stake_to_pool(
                 stake_pool_withdraw_authority: *accounts.stake_pool_withdraw_authority.key,
                 deposit_stake_address: *accounts.stake_account_begin.key,
                 validator_stake_account: *accounts.validator_stake_pool_stake_account.key,
-                pool_tokens_to: *accounts.pool_token_to.key,
+                pool_tokens_to: *accounts.stake_pool_token_holder.key,
                 pool_mint: *accounts.stake_pool_mint.key,
             },
         )?,
@@ -506,7 +508,7 @@ pub fn process_deposit_active_stake_to_pool(
             accounts.stake_pool_withdraw_authority.clone(),
             accounts.stake_account_begin.clone(),
             accounts.validator_stake_pool_stake_account.clone(),
-            accounts.pool_token_to.clone(),
+            accounts.stake_pool_token_holder.clone(),
             accounts.stake_pool_mint.clone(),
             accounts.spl_token.clone(),
             accounts.stake_program.clone(),

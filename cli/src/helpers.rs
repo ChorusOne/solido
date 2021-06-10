@@ -163,7 +163,7 @@ pub struct CreateSolidoOutput {
     pub st_sol_mint_address: PubkeyBase58,
 
     /// The only depositor of the stake pool.
-    pub pool_token_to: PubkeyBase58,
+    pub stake_pool_token_holder: PubkeyBase58,
 
     /// stSOL SPL token account that holds the insurance funds.
     pub insurance_account: PubkeyBase58,
@@ -202,7 +202,11 @@ impl fmt::Display for CreateSolidoOutput {
             "  stSOL mint:                    {}",
             self.st_sol_mint_address
         )?;
-        writeln!(f, "  Solido's pool account:         {}", self.pool_token_to)?;
+        writeln!(
+            f,
+            "  Solido's pool account:         {}",
+            self.stake_pool_token_holder
+        )?;
         writeln!(
             f,
             "  Insurance SPL token account:   {}",
@@ -304,7 +308,7 @@ pub fn command_create_solido(
     eprintln!("Did send mint init.");
 
     // Set up the SPL token account that holds Lido's stake pool tokens.
-    let pool_token_to_keypair = push_create_spl_token_account(
+    let stake_pool_token_holder_keypair = push_create_spl_token_account(
         &config,
         &mut instructions,
         &stake_pool.mint_address.0,
@@ -314,7 +318,7 @@ pub fn command_create_solido(
     sign_and_send_transaction(
         &config,
         &instructions[..],
-        &vec![&config.fee_payer, &pool_token_to_keypair],
+        &vec![&config.fee_payer, &stake_pool_token_holder_keypair],
     )?;
     instructions.clear();
     eprintln!("Did send SPL account inits part 1.");
@@ -377,7 +381,7 @@ pub fn command_create_solido(
             lido: lido_keypair.pubkey(),
             stake_pool: stake_pool.stake_pool_address.0,
             mint_program: st_sol_mint_keypair.pubkey(),
-            pool_token_to: pool_token_to_keypair.pubkey(),
+            stake_pool_token_holder: stake_pool_token_holder_keypair.pubkey(),
             fee_token: stake_pool.fee_address.0,
             manager,
             insurance_account: insurance_keypair.pubkey(),
@@ -400,7 +404,7 @@ pub fn command_create_solido(
         fee_authority: fee_authority.into(),
         stake_pool_authority: stake_pool_authority.into(),
         st_sol_mint_address: st_sol_mint_keypair.pubkey().into(),
-        pool_token_to: pool_token_to_keypair.pubkey().into(),
+        stake_pool_token_holder: stake_pool_token_holder_keypair.pubkey().into(),
         insurance_account: insurance_keypair.pubkey().into(),
         treasury_account: treasury_keypair.pubkey().into(),
         manager_fee_account: manager_fee_keypair.pubkey().into(),

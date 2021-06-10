@@ -119,7 +119,11 @@ async fn test_successful_stake_deposit_stake_pool_deposit() {
 
     // Check minted tokens
     let lido_token_balance = StakePoolTokenLamports(
-        get_token_balance(&mut banks_client, &lido_accounts.pool_token_to.pubkey()).await,
+        get_token_balance(
+            &mut banks_client,
+            &lido_accounts.stake_pool_token_holder.pubkey(),
+        )
+        .await,
     );
     // In general we can't compare stake pool tokens to SOL, but in this case,
     // the exchange rate is 1.
