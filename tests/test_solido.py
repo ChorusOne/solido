@@ -340,3 +340,52 @@ transaction_address = transaction_result['transaction_address']
 approve_and_execute(
     multisig, multisig_instance, transaction_address, test_addrs[0].keypair_path
 )
+
+
+print('\nRunning maintenance (should be no-op) ...')
+result = solido(
+    'perform-maintenance',
+    '--solido-address', solido_address,
+    '--solido-program-id', solido_program_id,
+    '--stake-pool-program-id', stake_pool_program_id,
+)
+assert result == 'NothingDone', f'Huh, perform-maintenance performed {result}'
+print('> There was nothing to do, as expected.')
+
+print('\nSimulating 10 SOL deposit, then running maintenance ...')
+# TODO(#154): Perform an actual deposit here.
+reserve_authority: str = solido_instance['reserve_authority']
+solana('transfer', '--allow-unfunded-recipient', reserve_authority, '10.0')
+print(f'> Funded reserve {reserve_authority} with 10.0 SOL')
+
+result = solido(
+    'perform-maintenance',
+    '--solido-address', solido_address,
+    '--solido-program-id', solido_program_id,
+    '--stake-pool-program-id', stake_pool_program_id,
+)
+expected_result = {
+    'StakeDeposit': {
+        'validator_vote_account': validator_vote_account,
+        'amount_lamports': 10.0e9,
+    }
+}
+assert result == expected_result, f'\nExpected: {expected_result}\nActual:   {result}'
+print(f'> Staked deposit with {validator_vote_account}.')
+
+print('\nSimulating 0.0005 SOL deposit (too little to stake), then running maintenance ...')
+# TODO(#154): Perform an actual deposit here.
+reserve_authority: str = solido_instance['reserve_authority']
+solana('transfer', '--allow-unfunded-recipient', reserve_authority, '0.0005')
+print(f'> Funded reserve {reserve_authority} with 0.0005 SOL')
+
+# 0.0005 SOL is not enough to make a stake account, so even though the reserve
+# is not empty, we can't stake what's in the reserve.
+result = solido(
+    'perform-maintenance',
+    '--solido-address', solido_address,
+    '--solido-program-id', solido_program_id,
+    '--stake-pool-program-id', stake_pool_program_id,
+)
+assert result == 'NothingDone', f'Huh, perform-maintenance performed {result}'
+print('> There was nothing to do, as expected.')

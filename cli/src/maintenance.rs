@@ -2,7 +2,6 @@
 
 use crate::helpers::{get_solido, get_stake_pool, sign_and_send_transaction};
 use crate::{Config, Error};
-use borsh::BorshDeserialize;
 use clap::Clap;
 use lido::state::serialize_b58;
 use lido::state::PubkeyAndEntry;
@@ -48,11 +47,13 @@ pub enum MaintenanceOutput {
     StakeDeposit {
         #[serde(serialize_with = "serialize_b58")]
         validator_vote_account: Pubkey,
+        #[serde(rename = "amount_lamports")]
         amount: Lamports,
     },
     DepositActiveStateToPool {
         #[serde(serialize_with = "serialize_b58")]
         validator_vote_account: Pubkey,
+        #[serde(rename = "amount_lamports")]
         amount: Lamports,
     },
     NothingDone,
@@ -165,7 +166,7 @@ fn get_validator_stake_accounts(
             seed,
         );
         let account = rpc_client.get_account(&addr)?;
-        let stake_state = StakeState::try_from_slice(&account.data)
+        let stake_state: StakeState = try_from_slice_unchecked(&account.data)
             .expect("Derived stake account contains invalid data.");
         let delegation = stake_state
             .delegation()
