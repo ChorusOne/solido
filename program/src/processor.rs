@@ -298,13 +298,13 @@ pub fn process_stake_deposit(
 
     let reserve_account_seeds = &[
         &solido_address_bytes,
-        &RESERVE_AUTHORITY[..],
+        RESERVE_AUTHORITY,
         &reserve_account_bump_seed[..],
     ][..];
     let stake_account_seeds = &[
         &solido_address_bytes,
         &validator_address_bytes,
-        &VALIDATOR_STAKE_ACCOUNT[..],
+        VALIDATOR_STAKE_ACCOUNT,
         &stake_account_seed[..],
         &stake_account_bump_seed[..],
     ][..];
@@ -460,7 +460,7 @@ pub fn process_deposit_active_stake_to_pool(
     let deposit_authority_bump_seed = [lido.deposit_authority_bump_seed];
     let deposit_authority_seeds = &[
         &solido_address_bytes,
-        &DEPOSIT_AUTHORITY[..],
+        DEPOSIT_AUTHORITY,
         &deposit_authority_bump_seed,
     ];
 

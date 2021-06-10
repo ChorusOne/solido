@@ -3,7 +3,6 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use anchor_client::Cluster;
-use anchor_client::Program;
 use clap::Clap;
 use helpers::AddRemoveMaintainerOpts;
 use helpers::AddValidatorOpts;
