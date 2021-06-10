@@ -1,4 +1,4 @@
-name: Rust
+name: build
 
 on:
   push:
@@ -18,11 +18,17 @@ jobs:
         with:
           submodules: true
 
-      - name: Run fmt
+      - name: Check Rust formatting
         uses: actions-rs/cargo@v1
         with:
           command: fmt
           args: --all -- --check
+
+      - name: Check Python formatting
+        run: |
+          # TODO: Pin the exact version with Nix.
+          sudo apt-get install -y black
+          git ls-files | grep '\.py$' | xargs black --skip-string-normalization --check
 
   build:
     runs-on: ubuntu-latest
@@ -87,7 +93,7 @@ jobs:
         tests/test_multisig.py
         kill $validator
 
-  clippy:
+  lint:
     runs-on: ubuntu-latest
 
     steps:
@@ -104,13 +110,17 @@ jobs:
           cargo-clippy-${{ hashFiles('Cargo.lock') }}
           cargo-clippy
 
-    - name: install-clippy
-      run: rustup component add clippy
-
-    - name: run-clippy
+    - name: Run Clippy
       run: |
+        rustup component add clippy
         sudo apt-get install -y libudev-dev
         cargo clippy -- -W clippy::pedantic
+
+    - name: Typecheck Python
+      run: |
+        # TODO: Pin the exact version with Nix.
+        sudo apt-get install -y mypy
+        git ls-files | grep '\.py$' | xargs mypy --strict
 
   coverage:
     runs-on:  ubuntu-latest
