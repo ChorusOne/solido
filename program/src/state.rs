@@ -17,8 +17,8 @@ use crate::VALIDATOR_STAKE_ACCOUNT;
 
 /// Constant size of header size = 5 public keys, 1 u64, 4 u8
 pub const LIDO_CONSTANT_HEADER_SIZE: usize = 5 * 32 + 8 + 4;
-/// Constant size of fee struct: 3 public keys + 4 u32
-pub const LIDO_CONSTANT_FEE_SIZE: usize = 3 * 32 + 4 * 4;
+/// Constant size of fee struct: 2 public keys + 3 u32
+pub const LIDO_CONSTANT_FEE_SIZE: usize = 2 * 32 + 3 * 4;
 /// Constant size of Lido
 pub const LIDO_CONSTANT_SIZE: usize = LIDO_CONSTANT_HEADER_SIZE + LIDO_CONSTANT_FEE_SIZE;
 
@@ -288,10 +288,9 @@ impl Validator {
     Clone, Default, Debug, Eq, PartialEq, BorshSerialize, BorshDeserialize, BorshSchema, Serialize,
 )]
 pub struct FeeDistribution {
-    pub insurance_fee: u32,
     pub treasury_fee: u32,
     pub validation_fee: u32,
-    pub manager_fee: u32,
+    pub developer_fee: u32,
 }
 
 /// Specifies the fee recipients, accounts that should be created by Lido's minter
@@ -300,26 +299,15 @@ pub struct FeeDistribution {
 )]
 pub struct FeeRecipients {
     #[serde(serialize_with = "serialize_b58")]
-    pub insurance_account: Pubkey,
-    #[serde(serialize_with = "serialize_b58")]
     pub treasury_account: Pubkey,
     #[serde(serialize_with = "serialize_b58")]
-    pub manager_account: Pubkey,
+    pub developer_account: Pubkey,
 }
 
 impl FeeDistribution {
     pub fn sum(&self) -> u64 {
         // These adds don't overflow because we widen from u32 to u64 first.
-        self.insurance_fee as u64
-            + self.treasury_fee as u64
-            + self.validation_fee as u64
-            + self.manager_fee as u64
-    }
-    pub fn insurance_fraction(&self) -> Rational {
-        Rational {
-            numerator: self.insurance_fee as u64,
-            denominator: self.sum(),
-        }
+        self.treasury_fee as u64 + self.validation_fee as u64 + self.developer_fee as u64
     }
     pub fn treasury_fraction(&self) -> Rational {
         Rational {
@@ -337,10 +325,9 @@ impl FeeDistribution {
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Fees {
-    pub insurance_amount: StLamports,
     pub treasury_amount: StLamports,
     pub reward_per_validator: StLamports,
-    pub manager_amount: StLamports,
+    pub developer_amount: StLamports,
 }
 
 pub fn distribute_fees(
@@ -349,7 +336,6 @@ pub fn distribute_fees(
     amount_spt: StakePoolTokenLamports,
 ) -> Option<Fees> {
     let amount = StLamports(amount_spt.0);
-    let insurance_amount = (amount * fee_distribution.insurance_fraction())?;
     let treasury_amount = (amount * fee_distribution.treasury_fraction())?;
 
     // The actual amount that goes to validation can be a tiny bit lower
@@ -362,16 +348,12 @@ pub fn distribute_fees(
     // The leftovers are for the manager. Rather than computing the fraction,
     // we compute the leftovers, to ensure that the output amount equals the
     // input amount.
-    let manager_amount = amount
-        .sub(insurance_amount)?
-        .sub(treasury_amount)?
-        .sub(validation_actual)?;
+    let developer_amount = amount.sub(treasury_amount)?.sub(validation_actual)?;
 
     let result = Fees {
-        insurance_amount,
         treasury_amount,
         reward_per_validator,
-        manager_amount,
+        developer_amount,
     };
 
     Some(result)
@@ -551,15 +533,13 @@ mod test_lido {
             stake_pool_authority_bump_seed: 3,
             fee_manager_bump_seed: 4,
             fee_distribution: FeeDistribution {
-                insurance_fee: 1,
                 treasury_fee: 2,
                 validation_fee: 3,
-                manager_fee: 4,
+                developer_fee: 4,
             },
             fee_recipients: FeeRecipients {
-                insurance_account: Pubkey::new_unique(),
                 treasury_account: Pubkey::new_unique(),
-                manager_account: Pubkey::new_unique(),
+                developer_account: Pubkey::new_unique(),
             },
             validators: validators,
             maintainers: maintainers,
@@ -682,44 +662,39 @@ mod test_lido {
     #[test]
     fn test_fee_distribution() {
         let spec = FeeDistribution {
-            insurance_fee: 3,
             treasury_fee: 3,
             validation_fee: 2,
-            manager_fee: 1,
+            developer_fee: 1,
         };
         assert_eq!(
             Fees {
-                insurance_amount: StLamports(333),
-                treasury_amount: StLamports(333),
-                reward_per_validator: StLamports(222),
-                manager_amount: StLamports(111),
+                treasury_amount: StLamports(300),
+                reward_per_validator: StLamports(200),
+                developer_amount: StLamports(100),
             },
             // Test no rounding errors
-            distribute_fees(&spec, 1, StakePoolTokenLamports(999)).unwrap()
+            distribute_fees(&spec, 1, StakePoolTokenLamports(600)).unwrap()
         );
 
         assert_eq!(
             Fees {
-                insurance_amount: StLamports(333),
-                treasury_amount: StLamports(333),
-                reward_per_validator: StLamports(55),
-                manager_amount: StLamports(114),
+                treasury_amount: StLamports(500),
+                reward_per_validator: StLamports(83),
+                developer_amount: StLamports(168),
             },
             // Test rounding errors going to manager
             distribute_fees(&spec, 4, StakePoolTokenLamports(1_000)).unwrap()
         );
         let spec_coprime = FeeDistribution {
-            insurance_fee: 13,
             treasury_fee: 17,
             validation_fee: 23,
-            manager_fee: 19,
+            developer_fee: 19,
         };
         assert_eq!(
             Fees {
-                insurance_amount: StLamports(180),
-                treasury_amount: StLamports(236),
-                reward_per_validator: StLamports(319),
-                manager_amount: StLamports(265),
+                treasury_amount: StLamports(288),
+                reward_per_validator: StLamports(389),
+                developer_amount: StLamports(323),
             },
             distribute_fees(&spec_coprime, 1, StakePoolTokenLamports(1_000)).unwrap()
         );

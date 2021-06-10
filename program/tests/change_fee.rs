@@ -43,23 +43,18 @@ async fn test_successful_change_fee() {
     .unwrap();
     assert_eq!(lido.fee_distribution, lido_accounts.fee_distribution);
     assert_eq!(
-        lido.fee_recipients.insurance_account,
-        lido_accounts.insurance_account.pubkey(),
-    );
-    assert_eq!(
         lido.fee_recipients.treasury_account,
         lido_accounts.treasury_account.pubkey(),
     );
     assert_eq!(
-        lido.fee_recipients.manager_account,
-        lido_accounts.manager_fee_account.pubkey(),
+        lido.fee_recipients.developer_account,
+        lido_accounts.developer_account.pubkey(),
     );
 
     let new_fee = FeeDistribution {
-        insurance_fee: 16,
         treasury_fee: 87,
         validation_fee: 44,
-        manager_fee: 54,
+        developer_fee: 54,
     };
 
     let fee_recipient_keys = [Keypair::new(), Keypair::new(), Keypair::new()];
@@ -83,9 +78,8 @@ async fn test_successful_change_fee() {
             &instruction::ChangeFeeSpecMeta {
                 lido: lido_accounts.lido.pubkey(),
                 manager: lido_accounts.manager.pubkey(),
-                insurance_account: fee_recipient_keys[0].pubkey(),
                 treasury_account: fee_recipient_keys[1].pubkey(),
-                manager_fee_account: fee_recipient_keys[2].pubkey(),
+                developer_account: fee_recipient_keys[2].pubkey(),
             },
         )
         .unwrap()],
@@ -103,22 +97,18 @@ async fn test_successful_change_fee() {
     .unwrap();
     assert_eq!(lido.fee_distribution, new_fee);
     assert_eq!(
-        lido.fee_recipients.insurance_account,
-        fee_recipient_keys[0].pubkey(),
-    );
-    assert_eq!(
         lido.fee_recipients.treasury_account,
         fee_recipient_keys[1].pubkey(),
     );
     assert_eq!(
-        lido.fee_recipients.manager_account,
+        lido.fee_recipients.developer_account,
         fee_recipient_keys[2].pubkey(),
     );
 }
 #[tokio::test]
 async fn test_change_fee_wrong_minter() {
     let (mut banks_client, payer, recent_blockhash, lido_accounts) = setup().await;
-    let fee_recipient_keys = [Keypair::new(), Keypair::new(), Keypair::new()];
+    let fee_recipient_keys = [Keypair::new(), Keypair::new()];
     let mut rng = thread_rng();
     let n: usize = rng.gen_range(0..fee_recipient_keys.len());
     let wrong_mint_program = Keypair::new();
@@ -158,9 +148,8 @@ async fn test_change_fee_wrong_minter() {
             &instruction::ChangeFeeSpecMeta {
                 lido: lido_accounts.lido.pubkey(),
                 manager: lido_accounts.manager.pubkey(),
-                insurance_account: fee_recipient_keys[0].pubkey(),
-                treasury_account: fee_recipient_keys[1].pubkey(),
-                manager_fee_account: fee_recipient_keys[2].pubkey(),
+                treasury_account: fee_recipient_keys[0].pubkey(),
+                developer_account: fee_recipient_keys[1].pubkey(),
             },
         )
         .unwrap()],

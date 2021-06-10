@@ -345,15 +345,11 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
-        pub insurance_account {
-            is_signer: false,
-            is_writable: false,
-        },
         pub treasury_account {
             is_signer: false,
             is_writable: false,
         },
-        pub manager_fee_account {
+        pub developer_account {
             is_signer: false,
             is_writable: false,
         },
@@ -640,7 +636,7 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
-        pub manager_fee_account {
+        pub fee_account {
             is_signer: false,
             is_writable: false,
         },
@@ -696,15 +692,11 @@ accounts_struct! {
             is_signer: true,
             is_writable: false,
         },
-        pub insurance_account {
-            is_signer: false,
-            is_writable: false,
-        },
         pub treasury_account {
             is_signer: false,
             is_writable: false,
         },
-        pub manager_fee_account {
+        pub developer_account {
             is_signer: false,
             is_writable: false,
         },
@@ -864,15 +856,11 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
-        pub insurance_account {
-            is_signer: false,
-            is_writable: true,
-        },
         pub treasury_account {
             is_signer: false,
             is_writable: true,
         },
-        pub manager_fee_account {
+        pub developer_account {
             is_signer: false,
             is_writable: true,
         },

@@ -177,7 +177,7 @@ pub fn command_create_pool(
                     sysvar_rent: sysvar::rent::id(),
                     sysvar_token: spl_token::id(),
                     deposit_authority: *deposit_authority,
-                    manager_fee_account: pool_fee_account_keypair.pubkey(),
+                    fee_account: pool_fee_account_keypair.pubkey(),
                 },
                 fee,
                 max_validators,

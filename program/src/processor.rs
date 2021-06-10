@@ -68,9 +68,8 @@ pub fn process_initialize(
     }
 
     // Check if fee structure is valid
-    Lido::check_valid_minter_program(&accounts.mint_program.key, accounts.insurance_account)?;
     Lido::check_valid_minter_program(&accounts.mint_program.key, accounts.treasury_account)?;
-    Lido::check_valid_minter_program(&accounts.mint_program.key, accounts.manager_fee_account)?;
+    Lido::check_valid_minter_program(&accounts.mint_program.key, accounts.developer_account)?;
 
     // Bytes required for maintainers
     let bytes_for_maintainers = Maintainers::required_bytes(max_maintainers as usize);
@@ -84,9 +83,8 @@ pub fn process_initialize(
     }
     // Initialize fee structure
     lido.fee_recipients = FeeRecipients {
-        insurance_account: *accounts.insurance_account.key,
         treasury_account: *accounts.treasury_account.key,
-        manager_account: *accounts.manager_fee_account.key,
+        developer_account: *accounts.developer_account.key,
     };
     lido.validators = Validators::new(max_validators);
 
