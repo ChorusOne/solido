@@ -7,30 +7,28 @@ It exits with exit code 0 if everything works as expected, or with a nonzero
 exit code if anything fails. It expects a test validator to be running at at the
 default localhost port, and it expects a keypair at ~/.config/solana/id.json
 that corresponds to a sufficiently funded account.
+
+If TEST_LEDGER environment variable is set, it will use the ledger as a signing
+key-pair, as in `TEST_LEDGER=true ./tests/test_solido.py`
 """
 
-import sys
-import json
 import os
+from typing import Optional
 
-from util import create_test_account, solana_program_deploy, create_stake_account, create_spl_token, create_vote_account, solido, get_multisig, solana, approve_and_execute, TestAccount
+from util import create_test_account, solana_program_deploy, create_stake_account, create_spl_token, create_vote_account, get_solido, get_multisig, solana, approve_and_execute, TestAccount
 
 
-# Use in localhost to test the ledger device
-if os.getenv('TEST_LEDGER') != None:
-    test_ledger = True
-else:
-    test_ledger = False
-
-if test_ledger:
-    ledger_address = solana('--keypair', 'usb://ledger', 'address').split()[0]
-    solana('transfer', '--allow-unfunded-recipient', ledger_address, '100.0')
-
-# We start by generating three accounts that we will need later.
+# We start by generating an account that we will need later.
 print('Creating test accounts ...')
 test_addrs = [create_test_account('test-key-1.json')]
-if test_ledger:
+
+# If testing with ledger, add the ledger account.
+if os.getenv('TEST_LEDGER') != None:
+    test_ledger = True
+    ledger_address = solana('--keypair', 'usb://ledger', 'address').split()[0]
+    solana('transfer', '--allow-unfunded-recipient', ledger_address, '100.0')
     test_addrs.append(TestAccount(ledger_address, 'usb://ledger'))
+# Otherwise, generate another one from key-pair file.
 else:
     test_addrs.append(create_test_account('test-key-2.json'))
 print(f'> {test_addrs}')
@@ -55,7 +53,9 @@ print(f'> Solido program id is {solido_program_id}.')
 print('\nUploading Multisig program ...')
 multisig_program_id = solana_program_deploy('target/deploy/multisig.so')
 print(f'> Multisig program id is {multisig_program_id}.')
+
 multisig = get_multisig(multisig_program_id)
+solido = get_solido(multisig_program_id)
 
 print('\nCreating new multisig ...')
 multisig_data = multisig(
@@ -82,7 +82,6 @@ result = solido(
     '--developer-fee', '2',
     '--treasury-account-owner', treasury_account_owner,
     '--developer-account-owner', developer_account_owner,
-    '--multisig-program-id', multisig_program_id,
     '--multisig-address', multisig_instance,
     keypair_path=test_addrs[0].keypair_path
 )
@@ -132,7 +131,6 @@ transaction_result = solido('create-validator-stake-account',
                             '--solido-address', solido_address,
                             '--stake-pool-program-id', stake_pool_program_id,
                             '--validator-vote', validator_vote_account.pubkey,
-                            '--multisig-program-id', multisig_program_id,
                             '--multisig-address', multisig_instance,
                             keypair_path=test_addrs[0].keypair_path)
 transaction_address = transaction_result['transaction_address']
@@ -150,9 +148,10 @@ multisig('execute-transaction',
          '--transaction-address', transaction_address,
          keypair_path=test_addrs[1].keypair_path,
          )
-stake_account_pda = multisig('show-transaction',
-                             '--solido-program-id', solido_program_id,
-                             '--transaction-address', transaction_address)
+stake_account_pda = multisig(
+    'show-transaction',
+    '--solido-program-id', solido_program_id,
+    '--transaction-address', transaction_address)
 
 print('> Call function to add validator')
 transaction_result = solido('add-validator',
@@ -161,7 +160,6 @@ transaction_result = solido('add-validator',
                             '--stake-pool-program-id', stake_pool_program_id,
                             '--validator-vote', validator_vote_account.pubkey,
                             '--validator-rewards-address', validator_token_account,
-                            '--multisig-program-id', multisig_program_id,
                             '--multisig-address', multisig_instance,
                             keypair_path=test_addrs[1].keypair_path,
                             )
@@ -208,7 +206,6 @@ transaction_result = solido('add-maintainer',
                             '--solido-program-id', solido_program_id,
                             '--solido-address', solido_address,
                             '--maintainer-address', maintainer.pubkey,
-                            '--multisig-program-id', multisig_program_id,
                             '--multisig-address', multisig_instance,
                             keypair_path=test_addrs[0].keypair_path
                             )
@@ -229,7 +226,6 @@ transaction_result = solido('remove-maintainer',
                             '--solido-program-id', solido_program_id,
                             '--solido-address', solido_address,
                             '--maintainer-address', maintainer.pubkey,
-                            '--multisig-program-id', multisig_program_id,
                             '--multisig-address', multisig_instance,
                             keypair_path=test_addrs[1].keypair_path,
                             )
@@ -248,7 +244,6 @@ transaction_result = solido('add-maintainer',
                             '--solido-program-id', solido_program_id,
                             '--solido-address', solido_address,
                             '--maintainer-address', maintainer.pubkey,
-                            '--multisig-program-id', multisig_program_id,
                             '--multisig-address', multisig_instance,
                             keypair_path=test_addrs[1].keypair_path
                             )

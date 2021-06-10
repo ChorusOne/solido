@@ -37,10 +37,6 @@ use lido::state::serialize_b58;
 
 #[derive(Clap, Debug)]
 pub struct MultisigOpts {
-    /// Address of the Multisig program.
-    #[clap(long)]
-    multisig_program_id: Pubkey,
-
     #[clap(subcommand)]
     subcommand: SubCommand,
 }
@@ -186,32 +182,27 @@ struct ExecuteTransactionOpts {
 pub fn main(config: Config, output_mode: OutputMode, multisig_opts: MultisigOpts) {
     match multisig_opts.subcommand {
         SubCommand::CreateMultisig(cmd_opts) => {
-            let output = create_multisig(&config, multisig_opts.multisig_program_id, cmd_opts);
+            let output = create_multisig(&config, cmd_opts);
             print_output(output_mode, &output);
         }
         SubCommand::ShowMultisig(cmd_opts) => {
-            let output = show_multisig(&config, multisig_opts.multisig_program_id, cmd_opts);
+            let output = show_multisig(&config, cmd_opts);
             print_output(output_mode, &output);
         }
         SubCommand::ShowTransaction(cmd_opts) => {
-            let output = show_transaction(&config, multisig_opts.multisig_program_id, cmd_opts);
+            let output = show_transaction(&config, cmd_opts);
             print_output(output_mode, &output);
         }
         SubCommand::ProposeUpgrade(cmd_opts) => {
-            let output = propose_upgrade(&config, multisig_opts.multisig_program_id, cmd_opts);
+            let output = propose_upgrade(&config, cmd_opts);
             print_output(output_mode, &output);
         }
         SubCommand::ProposeChangeMultisig(cmd_opts) => {
-            let output =
-                propose_change_multisig(&config, multisig_opts.multisig_program_id, cmd_opts);
+            let output = propose_change_multisig(&config, cmd_opts);
             print_output(output_mode, &output);
         }
-        SubCommand::Approve(cmd_opts) => {
-            approve(&config, multisig_opts.multisig_program_id, cmd_opts)
-        }
-        SubCommand::ExecuteTransaction(cmd_opts) => {
-            execute_transaction(&config, multisig_opts.multisig_program_id, cmd_opts)
-        }
+        SubCommand::Approve(cmd_opts) => approve(&config, cmd_opts),
+        SubCommand::ExecuteTransaction(cmd_opts) => execute_transaction(&config, cmd_opts),
     }
 }
 
@@ -242,11 +233,7 @@ impl fmt::Display for CreateMultisigOutput {
     }
 }
 
-fn create_multisig(
-    config: &Config,
-    multisig_program_id: Pubkey,
-    opts: CreateMultisigOpts,
-) -> CreateMultisigOutput {
+fn create_multisig(config: &Config, opts: CreateMultisigOpts) -> CreateMultisigOutput {
     // Enforce a few basic sanity checks.
     opts.validate_or_exit();
 
@@ -266,7 +253,7 @@ fn create_multisig(
     // field in the multisig account, and the Multisig program includes it when
     // deriving its program address.
     let (program_derived_address, nonce) =
-        get_multisig_program_address(&multisig_program_id, &multisig_account.pubkey());
+        get_multisig_program_address(&config.multisig_program_id, &multisig_account.pubkey());
 
     let create_instruction = system_instruction::create_account(
         &config.signer.pubkey(),
@@ -276,15 +263,15 @@ fn create_multisig(
         // initialize the account with it, funded by the payer.
         // TODO: Ask for confirmation from the user first.
         config
-            .rpc()
+            .rpc
             .get_minimum_balance_for_rent_exemption(352)
             .expect("Failed to obtain minimum rent-exempt balance."),
         352,
-        &multisig_program_id,
+        &config.multisig_program_id,
     );
 
     let multisig_instruction = Instruction {
-        program_id: multisig_program_id,
+        program_id: config.multisig_program_id,
         data: multisig_instruction::CreateMultisig {
             owners: opts.owners,
             threshold: opts.threshold,
@@ -338,16 +325,12 @@ impl fmt::Display for ShowMultisigOutput {
     }
 }
 
-fn show_multisig(
-    config: &Config,
-    multisig_program_id: Pubkey,
-    opts: ShowMultisigOpts,
-) -> ShowMultisigOutput {
-    let multisig: multisig::Multisig = get_account(&config.rpc(), &opts.multisig_address)
+fn show_multisig(config: &Config, opts: ShowMultisigOpts) -> ShowMultisigOutput {
+    let multisig: multisig::Multisig = get_account(&config.rpc, &opts.multisig_address)
         .expect("Failed to read multisig state from account.");
 
     let (program_derived_address, _nonce) =
-        get_multisig_program_address(&multisig_program_id, &opts.multisig_address);
+        get_multisig_program_address(&config.multisig_program_id, &opts.multisig_address);
 
     ShowMultisigOutput {
         multisig_program_derived_address: program_derived_address.into(),
@@ -720,12 +703,8 @@ fn changed_addr(
     Ok(())
 }
 
-fn show_transaction(
-    config: &Config,
-    multisig_program_id: Pubkey,
-    opts: ShowTransactionOpts,
-) -> ShowTransactionOutput {
-    let transaction: multisig::Transaction = get_account(&config.rpc(), &opts.transaction_address)
+fn show_transaction(config: &Config, opts: ShowTransactionOpts) -> ShowTransactionOutput {
+    let transaction: multisig::Transaction = get_account(&config.rpc, &opts.transaction_address)
         .expect("Failed to read transaction data from account.");
 
     // Also query the multisig, to get the owner public keys, so we can display
@@ -734,7 +713,7 @@ fn show_transaction(
     // consistent, because the transaction account must be owned by the Multisig
     // program, and the multisig program never modifies the
     // `transaction.multisig` field.
-    let multisig: multisig::Multisig = get_account(&config.rpc(), &transaction.multisig)
+    let multisig: multisig::Multisig = get_account(&config.rpc, &transaction.multisig)
         .expect("Failed to read multisig state from account.");
 
     let signers = if transaction.owner_set_seqno == multisig.owner_set_seqno {
@@ -786,7 +765,7 @@ fn show_transaction(
     // currently (https://github.com/project-serum/anchor/issues/243), so we
     // hard-code the tag here (it is stable as long as the namespace and
     // function name do not change).
-    else if instr.program_id == multisig_program_id
+    else if instr.program_id == config.multisig_program_id
         && instr.data[..8] == [122, 49, 168, 177, 231, 28, 167, 204]
     {
         if let Ok(instr) =
@@ -801,7 +780,7 @@ fn show_transaction(
         }
     } else if Some(instr.program_id) == opts.solido_program_id {
         // Probably a Solido instruction
-        match try_parse_solido_instruction(&instr, &config.rpc()) {
+        match try_parse_solido_instruction(&instr, &config.rpc) {
             Ok(instr) => instr,
             Err(err) => {
                 eprintln!("Warning: failed to parse Solido instruction: {}", err);
@@ -914,7 +893,6 @@ fn get_account<T: AccountDeserialize>(
 /// Propose the given instruction to be approved and executed by the multisig.
 pub fn propose_instruction(
     config: &Config,
-    multisig_program_id: Pubkey,
     multisig_address: Pubkey,
     instruction: Instruction,
 ) -> ProposeInstructionOutput {
@@ -937,7 +915,7 @@ pub fn propose_instruction(
     // compute its size, which we need to allocate an account for it. And to
     // build the dummy transaction, we need to know how many owners the multisig
     // has.
-    let multisig: multisig::Multisig = get_account(&config.rpc(), &multisig_address)
+    let multisig: multisig::Multisig = get_account(&config.rpc, &multisig_address)
         .expect("Failed to read multisig state from account.");
 
     // Build the data that the account will hold, just to measure its size, so
@@ -970,11 +948,11 @@ pub fn propose_instruction(
         // TODO: Ask for confirmation from the user first before funding the
         // account.
         config
-            .rpc()
+            .rpc
             .get_minimum_balance_for_rent_exemption(tx_account_size)
             .expect("Failed to obtain minimum rent-exempt balance."),
         tx_account_size as u64,
-        &multisig_program_id,
+        &config.multisig_program_id,
     );
 
     // The Multisig program expects `multisig::TransactionAccount` instead of
@@ -1003,7 +981,7 @@ pub fn propose_instruction(
     };
 
     let multisig_instruction = Instruction {
-        program_id: multisig_program_id,
+        program_id: config.multisig_program_id,
         data: multisig_ins.data(),
         accounts: multisig_accounts,
     };
@@ -1018,13 +996,9 @@ pub fn propose_instruction(
     }
 }
 
-fn propose_upgrade(
-    config: &Config,
-    multisig_program_id: Pubkey,
-    opts: ProposeUpgradeOpts,
-) -> ProposeInstructionOutput {
+fn propose_upgrade(config: &Config, opts: ProposeUpgradeOpts) -> ProposeInstructionOutput {
     let (program_derived_address, _nonce) =
-        get_multisig_program_address(&multisig_program_id, &opts.multisig_address);
+        get_multisig_program_address(&config.multisig_program_id, &opts.multisig_address);
 
     let upgrade_instruction = bpf_loader_upgradeable::upgrade(
         &opts.program_address,
@@ -1034,17 +1008,11 @@ fn propose_upgrade(
         &opts.spill_address,
     );
 
-    propose_instruction(
-        config,
-        multisig_program_id,
-        opts.multisig_address,
-        upgrade_instruction,
-    )
+    propose_instruction(config, opts.multisig_address, upgrade_instruction)
 }
 
 fn propose_change_multisig(
     config: &Config,
-    multisig_program_id: Pubkey,
     opts: ProposeChangeMultisigOpts,
 ) -> ProposeInstructionOutput {
     // Check that the new settings make sense. This check is shared between a
@@ -1052,7 +1020,7 @@ fn propose_change_multisig(
     CreateMultisigOpts::from(&opts).validate_or_exit();
 
     let (program_derived_address, _nonce) =
-        get_multisig_program_address(&multisig_program_id, &opts.multisig_address);
+        get_multisig_program_address(&config.multisig_program_id, &opts.multisig_address);
 
     let change_data = multisig_instruction::SetOwnersAndChangeThreshold {
         owners: opts.owners,
@@ -1065,20 +1033,15 @@ fn propose_change_multisig(
 
     let override_is_signer = None;
     let change_instruction = Instruction {
-        program_id: multisig_program_id,
+        program_id: config.multisig_program_id,
         data: change_data.data(),
         accounts: change_addrs.to_account_metas(override_is_signer),
     };
 
-    propose_instruction(
-        config,
-        multisig_program_id,
-        opts.multisig_address,
-        change_instruction,
-    )
+    propose_instruction(config, opts.multisig_address, change_instruction)
 }
 
-fn approve(config: &Config, multisig_program_id: Pubkey, opts: ApproveOpts) {
+fn approve(config: &Config, opts: ApproveOpts) {
     let approve_accounts = multisig_accounts::Approve {
         multisig: opts.multisig_address,
         transaction: opts.transaction_address,
@@ -1088,7 +1051,7 @@ fn approve(config: &Config, multisig_program_id: Pubkey, opts: ApproveOpts) {
         owner: config.signer.pubkey(),
     };
     let approve_instruction = Instruction {
-        program_id: multisig_program_id,
+        program_id: config.multisig_program_id,
         data: multisig_instruction::Approve.data(),
         accounts: approve_accounts.to_account_metas(None),
     };
@@ -1135,11 +1098,11 @@ impl anchor_lang::ToAccountMetas for TransactionAccounts {
     }
 }
 
-fn execute_transaction(config: &Config, multisig_program_id: Pubkey, opts: ExecuteTransactionOpts) {
+fn execute_transaction(config: &Config, opts: ExecuteTransactionOpts) {
     let (program_derived_address, _nonce) =
-        get_multisig_program_address(&multisig_program_id, &opts.multisig_address);
+        get_multisig_program_address(&config.multisig_program_id, &opts.multisig_address);
 
-    let transaction: multisig::Transaction = get_account(&config.rpc(), &opts.transaction_address)
+    let transaction: multisig::Transaction = get_account(&config.rpc, &opts.transaction_address)
         .unwrap_or_else(|_| panic!("Failed to get transaction {}", opts.transaction_address));
 
     let tx_inner_accounts = TransactionAccounts {
@@ -1156,7 +1119,7 @@ fn execute_transaction(config: &Config, multisig_program_id: Pubkey, opts: Execu
     accounts.append(&mut tx_inner_accounts.to_account_metas(None));
 
     let multisig_instruction = Instruction {
-        program_id: multisig_program_id,
+        program_id: config.multisig_program_id,
         data: multisig_instruction::ExecuteTransaction.data(),
         accounts,
     };

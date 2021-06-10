@@ -85,16 +85,16 @@ pub fn command_create_pool(
     let validator_list = Keypair::new();
 
     let reserve_stake_balance = config
-        .rpc()
+        .rpc
         .get_minimum_balance_for_rent_exemption(STAKE_STATE_LEN)?
         + 1;
     let stake_pool_account_lamports = config
-        .rpc()
+        .rpc
         .get_minimum_balance_for_rent_exemption(get_packed_len::<StakePool>())?;
     let empty_validator_list = ValidatorList::new(max_validators);
     let validator_list_size = get_instance_packed_len(&empty_validator_list)?;
     let validator_list_balance = config
-        .rpc()
+        .rpc
         .get_minimum_balance_for_rent_exemption(validator_list_size)?;
 
     // Calculate withdraw authority used for minting pool tokens
@@ -183,7 +183,7 @@ pub fn command_create_pool(
         Some(&config.signer.pubkey()),
     );
 
-    let (recent_blockhash, _fee_calculator) = config.rpc().get_recent_blockhash()?;
+    let (recent_blockhash, _fee_calculator) = config.rpc.get_recent_blockhash()?;
 
     let initialize_signers = vec![config.signer, &stake_pool_keypair, &validator_list];
     initialize_transaction.sign(&initialize_signers, recent_blockhash);

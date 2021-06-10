@@ -33,28 +33,32 @@ def run(*args: str) -> str:
     return result.stdout
 
 
-def solido(*args: str, keypair_path: Optional[str] = None) -> Any:
-    """
-    Run 'solido' against localhost, return its parsed json output.
-    """
-    output = run(
-        'target/debug/solido',
-        '--cluster', 'localnet',
-        '--output', 'json',
-        *([] if keypair_path is None else ['--keypair-path', keypair_path]),
-        *args,
-    )
-    if keypair_path != None and keypair_path[:12] == 'usb://ledger':
-        output = '\n'.join(output.split('\n')[2:])
-    if output == '':
-        return {}
-    else:
-        try:
-            return json.loads(output)
-        except json.JSONDecodeError:
-            print('Failed to decode output as json, output was:')
-            print(output)
-            raise
+def get_solido(multisig_program_id: str) -> Callable:
+
+    def solido(*args: str, keypair_path: Optional[str] = None) -> Any:
+        """
+        Run 'solido' against localhost, return its parsed json output.
+        """
+        output = run(
+            'target/debug/solido',
+            '--cluster', 'localnet',
+            '--output', 'json',
+            '--multisig-program-id', multisig_program_id,
+            *([] if keypair_path is None else ['--keypair-path', keypair_path]),
+            *args,
+        )
+        if keypair_path != None and keypair_path[:12] == 'usb://ledger':
+            output = '\n'.join(output.split('\n')[2:])
+        if output == '':
+            return {}
+        else:
+            try:
+                return json.loads(output)
+            except json.JSONDecodeError:
+                print('Failed to decode output as json, output was:')
+                print(output)
+                raise
+    return solido
 
 
 def solana(*args: str) -> str:
@@ -194,8 +198,8 @@ def get_multisig(multisig_program_id: str) -> Any:
             '--cluster', 'localnet',
             '--output', 'json',
             *([] if keypair_path is None else ['--keypair-path', keypair_path]),
-            'multisig',
             '--multisig-program-id', multisig_program_id,
+            'multisig',
             *args,
         )
         # Ledger prints two lines with "Waiting for your approval on Ledger...

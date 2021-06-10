@@ -1,6 +1,5 @@
 use std::fmt;
 
-use anchor_client::{Client, Cluster, Program};
 use anchor_lang::AnchorDeserialize;
 use clap::Clap;
 use lido::{
@@ -12,7 +11,6 @@ use solana_client::rpc_client::RpcClient;
 use solana_program::{pubkey::Pubkey, system_instruction};
 use solana_sdk::{
     borsh::try_from_slice_unchecked,
-    commitment_config::CommitmentConfig,
     instruction::Instruction,
     signature::{Keypair, Signer},
     signer::signers::Signers,
@@ -38,20 +36,20 @@ pub fn send_transaction(
     transaction: Transaction,
 ) -> solana_client::client_error::Result<()> {
     if config.dry_run {
-        config.rpc().simulate_transaction(&transaction)?;
+        config.rpc.simulate_transaction(&transaction)?;
     } else {
         let _signature = match config.output_mode {
             OutputMode::Text => {
                 // In text mode, we can display a spinner.
                 config
-                    .rpc()
+                    .rpc
                     .send_and_confirm_transaction_with_spinner(&transaction)?
             }
             OutputMode::Json => {
                 // In json mode, printing a spinner to stdout would break the
                 // json that we also print to stdout, so opt for the silent
                 // version.
-                config.rpc().send_and_confirm_transaction(&transaction)?
+                config.rpc.send_and_confirm_transaction(&transaction)?
             }
         };
     }
@@ -66,22 +64,14 @@ pub fn sign_and_send_transaction<T: Signers>(
     let mut tx = Transaction::new_with_payer(instructions, Some(&config.signer.pubkey()));
 
     let (recent_blockhash, _fee_calculator) = config
-        .rpc()
+        .rpc
         .get_recent_blockhash()
         .expect("Failed to get recent blockhash.");
 
     // Add multisig signer
     tx.sign(signers, recent_blockhash);
-    send_transaction(&config, tx).expect("Failed to sign transaction.");
-}
-
-pub fn get_anchor_program(
-    cluster: Cluster,
-    payer: Keypair,
-    multisig_program_id: &Pubkey,
-) -> Program {
-    let client = Client::new_with_options(cluster, payer, CommitmentConfig::confirmed());
-    client.program(*multisig_program_id)
+    send_transaction(&config, tx)
+        .unwrap_or_else(|err| panic!("Failed while sending transaction with error {}.", err));
 }
 
 #[derive(Clap, Debug)]
@@ -133,9 +123,6 @@ pub struct CreateSolidoOpts {
     /// Multisig instance.
     #[clap(long, value_name = "address")]
     pub multisig_address: Pubkey,
-    /// Multisig program id.
-    #[clap(long, value_name = "address")]
-    pub multisig_program_id: Pubkey,
 }
 
 #[derive(Serialize)]
@@ -243,7 +230,7 @@ pub fn command_create_solido(
     );
 
     let (manager, _nonce) =
-        get_multisig_program_address(&opts.multisig_program_id, &opts.multisig_address);
+        get_multisig_program_address(&config.multisig_program_id, &opts.multisig_address);
 
     let stake_pool = command_create_pool(
         &config,
@@ -261,14 +248,14 @@ pub fn command_create_solido(
 
     let lido_size = Lido::calculate_size(opts.max_validators, opts.max_maintainers);
     let lido_account_balance = config
-        .rpc()
+        .rpc
         .get_minimum_balance_for_rent_exemption(lido_size)?;
 
     let mut instructions = Vec::new();
 
     // We need to fund Lido's reserve account so it is rent-exempt, otherwise it
     // might disappear.
-    let min_balance_empty_data_account = config.rpc().get_minimum_balance_for_rent_exemption(0)?;
+    let min_balance_empty_data_account = config.rpc.get_minimum_balance_for_rent_exemption(0)?;
     instructions.push(system_instruction::transfer(
         &config.signer.pubkey(),
         &reserve_authority,
@@ -390,9 +377,6 @@ pub struct AddValidatorOpts {
     /// Multisig instance.
     #[clap(long, value_name = "address")]
     pub multisig_address: Pubkey,
-    /// Multisig program id.
-    #[clap(long, value_name = "address")]
-    pub multisig_program_id: Pubkey,
 }
 
 /// Command to add a validator to Solido.
@@ -400,8 +384,8 @@ pub fn command_add_validator(
     config: Config,
     opts: AddValidatorOpts,
 ) -> Result<ProposeInstructionOutput, crate::Error> {
-    let solido = get_solido(&config.rpc(), &opts.solido_address)?;
-    let stake_pool = get_stake_pool(&config.rpc(), &solido.stake_pool_account)?;
+    let solido = get_solido(&config.rpc, &opts.solido_address)?;
+    let stake_pool = get_stake_pool(&config.rpc, &solido.stake_pool_account)?;
 
     let (stake_pool_authority, _) = lido::find_authority_program_address(
         &opts.solido_program_id,
@@ -425,7 +409,7 @@ pub fn command_add_validator(
     );
 
     let (multisig_address, _) =
-        get_multisig_program_address(&opts.multisig_program_id, &opts.multisig_address);
+        get_multisig_program_address(&config.multisig_program_id, &opts.multisig_address);
 
     let instruction = lido::instruction::add_validator(
         &opts.solido_program_id,
@@ -443,7 +427,6 @@ pub fn command_add_validator(
     )?;
     Ok(propose_instruction(
         &config,
-        opts.multisig_program_id,
         opts.multisig_address,
         instruction,
     ))
@@ -464,9 +447,6 @@ pub struct AddRemoveMaintainerOpts {
     /// Multisig instance.
     #[clap(long, value_name = "address")]
     pub multisig_address: Pubkey,
-    /// Multisig program id.
-    #[clap(long, value_name = "address")]
-    pub multisig_program_id: Pubkey,
 }
 
 /// Command to add a validator to Solido.
@@ -475,7 +455,7 @@ pub fn command_add_maintainer(
     opts: AddRemoveMaintainerOpts,
 ) -> Result<ProposeInstructionOutput, crate::Error> {
     let (multisig_address, _) =
-        get_multisig_program_address(&opts.multisig_program_id, &opts.multisig_address);
+        get_multisig_program_address(&config.multisig_program_id, &opts.multisig_address);
     let instruction = lido::instruction::add_maintainer(
         &opts.solido_program_id,
         &lido::instruction::AddMaintainerMeta {
@@ -486,7 +466,6 @@ pub fn command_add_maintainer(
     )?;
     Ok(propose_instruction(
         &config,
-        opts.multisig_program_id,
         opts.multisig_address,
         instruction,
     ))
@@ -498,7 +477,7 @@ pub fn command_remove_maintainer(
     opts: AddRemoveMaintainerOpts,
 ) -> Result<ProposeInstructionOutput, crate::Error> {
     let (multisig_address, _) =
-        get_multisig_program_address(&opts.multisig_program_id, &opts.multisig_address);
+        get_multisig_program_address(&config.multisig_program_id, &opts.multisig_address);
     let instruction = lido::instruction::remove_maintainer(
         &opts.solido_program_id,
         &lido::instruction::RemoveMaintainerMeta {
@@ -509,7 +488,6 @@ pub fn command_remove_maintainer(
     )?;
     Ok(propose_instruction(
         &config,
-        opts.multisig_program_id,
         opts.multisig_address,
         instruction,
     ))
@@ -534,9 +512,6 @@ pub struct CreateValidatorStakeAccountOpts {
     /// Multisig instance.
     #[clap(long, value_name = "address")]
     pub multisig_address: Pubkey,
-    /// Multisig program id.
-    #[clap(long, value_name = "address")]
-    pub multisig_program_id: Pubkey,
 }
 
 /// Command to add a validator to Solido.
@@ -544,7 +519,7 @@ pub fn command_create_validator_stake_account(
     config: Config,
     opts: CreateValidatorStakeAccountOpts,
 ) -> Result<ProposeInstructionOutput, crate::Error> {
-    let solido = get_solido(&config.rpc(), &opts.solido_address)?;
+    let solido = get_solido(&config.rpc, &opts.solido_address)?;
 
     let (stake_pool_authority, _) = lido::find_authority_program_address(
         &opts.solido_program_id,
@@ -559,7 +534,7 @@ pub fn command_create_validator_stake_account(
     );
 
     let (multisig_address, _) =
-        get_multisig_program_address(&opts.multisig_program_id, &opts.multisig_address);
+        get_multisig_program_address(&config.multisig_program_id, &opts.multisig_address);
     let instruction = lido::instruction::create_validator_stake_account(
         &opts.solido_program_id,
         &lido::instruction::CreateValidatorStakeAccountMeta {
@@ -575,7 +550,6 @@ pub fn command_create_validator_stake_account(
     )?;
     Ok(propose_instruction(
         &config,
-        opts.multisig_program_id,
         opts.multisig_address,
         instruction,
     ))
@@ -694,7 +668,7 @@ pub fn command_show_solido(
     config: Config,
     opts: ShowSolidoOpts,
 ) -> Result<ShowSolidoOutput, crate::Error> {
-    let lido = get_solido(&config.rpc(), &opts.solido_address)?;
+    let lido = get_solido(&config.rpc, &opts.solido_address)?;
     let reserve_authority = Pubkey::create_program_address(
         &[
             &opts.solido_address.to_bytes(),

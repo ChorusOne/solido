@@ -14,16 +14,16 @@ use solana_client::rpc_client::RpcClient;
 use solana_remote_wallet::locator::Locator;
 use solana_remote_wallet::remote_keypair::generate_remote_keypair;
 use solana_remote_wallet::remote_wallet::maybe_wallet_manager;
+use solana_sdk::commitment_config::CommitmentConfig;
 use solana_sdk::derivation_path::DerivationPath;
 use solana_sdk::pubkey::Pubkey;
-use solana_sdk::signature::{read_keypair_file, Keypair};
+use solana_sdk::signature::read_keypair_file;
 use solana_sdk::signer::Signer;
 
 use crate::helpers::command_add_maintainer;
 use crate::helpers::command_create_validator_stake_account;
 use crate::helpers::command_remove_maintainer;
 use crate::helpers::command_show_solido;
-use crate::helpers::get_anchor_program;
 use crate::helpers::{command_add_validator, command_create_solido, CreateSolidoOpts};
 use crate::maintenance::PerformMaintenanceOpts;
 use crate::multisig::MultisigOpts;
@@ -67,6 +67,10 @@ struct Opts {
     /// The keypair to sign and pay with. [default: ~/.config/solana/id.json]
     #[clap(long)]
     keypair_path: Option<PathBuf>,
+
+    /// Address of the Multisig program.
+    #[clap(long)]
+    multisig_program_id: Pubkey,
 
     /// Cluster to connect to (mainnet, testnet, devnet, localnet, or url).
     #[clap(long, default_value = "localnet")]
@@ -135,19 +139,16 @@ FEES:
 
 /// Determines which network to connect to, and who pays the fees.
 pub struct Config<'a> {
-    program: Program,
-    // rpc_client: RpcClient,
-    // fee_payer: Keypair,
-    // signer: SigningMethod<'static>,
+    /// Address of the Multisig program.
+    multisig_program_id: Pubkey,
+    /// Program instance, so we can call RPC methods.
+    rpc: RpcClient,
+    /// Reference to a signer, can be a keypair or ledger device.
     signer: &'a dyn Signer,
+    /// TODO: Not used.
     dry_run: bool,
+    /// output mode, can be json or text.
     output_mode: OutputMode,
-}
-
-impl<'a> Config<'a> {
-    pub fn rpc(&self) -> RpcClient {
-        self.program.rpc()
-    }
 }
 
 /// Resolve ~/.config/solana/id.json.
@@ -177,7 +178,7 @@ fn main() {
         Some(path) => path,
         None => get_default_keypair_path(),
     };
-    // Get a boxed signer that lives enough for we to use it in the Config.
+    // Get a boxed signer that lives long enough for us to use it in the Config.
     let boxed_signer: Box<dyn Signer> = if payer_keypair_path.starts_with("usb://") {
         let hw_wallet = maybe_wallet_manager()
             .unwrap_or_else(|err| panic!("Remote wallet found, but failed to establish protocol. Maybe the Solana app is not open: {}", err))
@@ -193,8 +194,8 @@ fn main() {
                 .unwrap_or_else(|err| panic!("Failed reading URL: {}", err)),
                 DerivationPath::default(),
                 &hw_wallet,
-                false,
-                "",
+                false,    /* Confirm public key */
+                "Solido", /* When multiple wallets are connected, used to display a hint */
             )
             .unwrap_or_else(|err| panic!("Failed to contact remote wallet {}", err)),
         )
@@ -209,16 +210,11 @@ fn main() {
     let signer = &*boxed_signer;
 
     let config = Config {
-        // Set the multisig_program_id to an invalid program, we use the program
-        // just to get the rpc client, when we need to use the multisig program,
-        // we'll create another instance of it.
-        // TODO: Remove the need for the anchor program
-        program: get_anchor_program(
-            Cluster::from_str(&opts.cluster.to_string())
-                .unwrap_or_else(|err| panic!("Failed to create Solana client: {}", err)),
-            Keypair::new(),
-            &Pubkey::new_from_array([255u8; 32]),
+        rpc: RpcClient::new_with_commitment(
+            opts.cluster.url().to_string(),
+            CommitmentConfig::confirmed(),
         ),
+        multisig_program_id: opts.multisig_program_id,
         // For now, we'll assume that the provided key pair fulfils all of these
         // roles. We need a better way to configure keys in the future.
         // fee_payer: keypair,
