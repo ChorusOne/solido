@@ -110,16 +110,18 @@ jobs:
           cargo-clippy-${{ hashFiles('Cargo.lock') }}
           cargo-clippy
 
+    - name: Install linters
+      run: |
+        # TODO: Pin the exact version with Nix.
+        sudo apt-get install -y mypy libudev-dev
+        rustup component add clippy
+
     - name: Run Clippy
       run: |
-        rustup component add clippy
-        sudo apt-get install -y libudev-dev
         cargo clippy -- -W clippy::pedantic
 
     - name: Typecheck Python
       run: |
-        # TODO: Pin the exact version with Nix.
-        sudo apt-get install -y mypy
         git ls-files | grep '\.py$' | xargs mypy --strict
 
   coverage:
