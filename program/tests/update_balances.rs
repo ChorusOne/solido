@@ -171,7 +171,7 @@ async fn test_successful_update_balance() {
     let lido_tokens_for_a = StakePoolTokenLamports(
         get_token_balance(
             &mut context.banks_client,
-            &lido_accounts.pool_token_to.pubkey(),
+            &lido_accounts.stake_pool_token_holder.pubkey(),
         )
         .await,
     );

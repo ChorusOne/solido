@@ -48,7 +48,7 @@ pub struct LidoAccounts {
     pub manager: Keypair,
     pub lido: Keypair,
     pub mint_program: Keypair,
-    pub pool_token_to: Keypair,
+    pub stake_pool_token_holder: Keypair,
     pub maintainer: Keypair,
 
     // Fees
@@ -69,7 +69,7 @@ impl LidoAccounts {
         let manager = Keypair::new();
         let lido = Keypair::new();
         let mint_program = Keypair::new();
-        let pool_token_to = Keypair::new();
+        let stake_pool_token_holder = Keypair::new();
         let maintainer = Keypair::new();
 
         // Fees
@@ -109,7 +109,7 @@ impl LidoAccounts {
             manager,
             lido,
             mint_program,
-            pool_token_to,
+            stake_pool_token_holder,
             maintainer,
             insurance_account,
             treasury_account,
@@ -155,7 +155,7 @@ impl LidoAccounts {
             banks_client,
             &payer,
             &recent_blockhash,
-            &self.pool_token_to,
+            &self.stake_pool_token_holder,
             &self.stake_pool_accounts.pool_mint.pubkey(),
             &self.stake_pool_authority,
         )
@@ -221,7 +221,7 @@ impl LidoAccounts {
                         stake_pool: self.stake_pool_accounts.stake_pool.pubkey(),
                         manager: self.manager.pubkey(),
                         mint_program: self.mint_program.pubkey(),
-                        pool_token_to: self.pool_token_to.pubkey(),
+                        stake_pool_token_holder: self.stake_pool_token_holder.pubkey(),
                         fee_token: self.stake_pool_accounts.pool_fee_account.pubkey(),
                         insurance_account: self.insurance_account.pubkey(),
                         treasury_account: self.treasury_account.pubkey(),
@@ -284,7 +284,7 @@ impl LidoAccounts {
                 &instruction::DepositAccountsMeta {
                     lido: self.lido.pubkey(),
                     stake_pool: self.stake_pool_accounts.stake_pool.pubkey(),
-                    pool_token_to: self.pool_token_to.pubkey(),
+                    stake_pool_token_holder: self.stake_pool_token_holder.pubkey(),
                     manager: self.manager.pubkey(),
                     user: user.pubkey(),
                     recipient: recipient.pubkey(),
@@ -362,7 +362,7 @@ impl LidoAccounts {
                     maintainer: self.maintainer.pubkey(),
                     stake_account_begin: *stake_account,
                     deposit_authority: self.deposit_authority,
-                    pool_token_to: self.pool_token_to.pubkey(),
+                    stake_pool_token_holder: self.stake_pool_token_holder.pubkey(),
                     stake_pool_program: spl_stake_pool::id(),
                     stake_pool: self.stake_pool_accounts.stake_pool.pubkey(),
                     stake_pool_validator_list: self.stake_pool_accounts.validator_list.pubkey(),
@@ -485,7 +485,7 @@ impl LidoAccounts {
                 &lido::instruction::DistributeFeesMeta {
                     lido: self.lido.pubkey(),
                     manager: self.manager.pubkey(),
-                    token_holder_stake_pool: self.pool_token_to.pubkey(),
+                    token_holder_stake_pool: self.stake_pool_token_holder.pubkey(),
                     mint_program: self.mint_program.pubkey(),
                     reserve_authority: self.reserve_authority,
                     insurance_account: self.insurance_account.pubkey(),
