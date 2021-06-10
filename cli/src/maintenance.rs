@@ -16,7 +16,7 @@ use std::ops::Add;
 type Result<T> = std::result::Result<T, Error>;
 
 /// A brief description of the maintenance performed. Not relevant functionally,
-/// but helpful for automated testing.
+/// but helpful for automated testing, and just for info.
 pub enum MaintenanceTask {
     StakeDeposit {
         validator_vote_account: Pubkey,
@@ -62,6 +62,7 @@ struct SolidoState {
     /// end seed.
     validator_stake_accounts: Vec<Vec<(Pubkey, StakeBalance)>>,
 
+    reserve_address: Pubkey,
     reserve_account: Account,
     rent: Rent,
 
@@ -173,8 +174,8 @@ impl SolidoState {
         let validator_list =
             try_from_slice_unchecked::<ValidatorList>(&validator_list_account.data)?;
 
-        let reserve_account =
-            rpc.get_account(&solido.get_reserve_account(solido_program_id, solido_address)?)?;
+        let reserve_address = solido.get_reserve_account(solido_program_id, solido_address)?;
+        let reserve_account = rpc.get_account(&reserve_address)?;
 
         let rent_account = rpc.get_account(&sysvar::rent::ID)?;
         let rent: Rent = bincode::deserialize(&rent_account.data)?;
@@ -199,6 +200,7 @@ impl SolidoState {
             validator_list_account,
             validator_list,
             validator_stake_accounts,
+            reserve_address,
             reserve_account,
             rent,
             // The entity executing the maintenance transactions, is the maintainer.
@@ -232,9 +234,66 @@ impl SolidoState {
             return Ok(None);
         }
 
-        // We can make a deposit.
-        // TODO: Implement
-        Ok(None)
+        // If there is enough reserve, we can make a deposit. To keep the pool
+        // balanced, find the validator furthest below its target balance, and
+        // deposit to that validator.
+        let stake_infos = &self.validator_list.validators[..];
+        let mut targets = vec![Lamports(0); stake_infos.len()];
+        assert_eq!(targets.len(), self.solido.validators.entries.len());
+
+        let undelegated_lamports = reserve_balance;
+        lido::balance::get_target_balance(
+            undelegated_lamports,
+            stake_infos,
+            &mut targets[..],
+        ).expect("Failed to compute target balance.");
+
+        let (validator_index, amount_below_target) = lido::balance::get_validator_furthest_below_target(
+            stake_infos,
+            &targets[..]
+        );
+
+        // NOTE: We assume here that the order in the stake pool's validator list
+        // is the same as in Solido's list.
+        let validator = &self.solido.validators.entries[validator_index];
+        let stake_info = &self.validator_list.validators[validator_index];
+
+        let (stake_account_end, _bump_seed) = Validator::find_stake_account_address(
+            &self.solido_program_id,
+            &self.solido_address,
+            &validator.pubkey,
+            validator.entry.stake_accounts_seed_end,
+        );
+
+        let (deposit_authority, _bump_seed) = lido::find_authority_program_address(
+            &self.solido_program_id,
+            &self.solido_address,
+            DEPOSIT_AUTHORITY,
+        );
+
+        // Top up the validator to at most its target. If that means we don't use the full
+        // reserve, a future maintenance run will stake the remainder with the next validator.
+        let amount_to_deposit = amount_below_target.min(reserve_balance);
+
+        let instruction = lido::instruction::stake_deposit(
+            &self.solido_program_id,
+            &lido::instruction::StakeDepositAccountsMeta {
+                lido: self.solido_address,
+                reserve: self.reserve_address,
+                validator_stake_pool_stake_account: validator.pubkey,
+                validator_vote_account: stake_info.vote_account_address,
+                stake_account_end,
+                deposit_authority,
+            },
+            amount_to_deposit,
+        ).expect("Failed to construct StakeDeposit instruction.");
+
+        let task = MaintenanceTask::StakeDeposit {
+            validator_vote_account: stake_info.vote_account_address,
+            amount: amount_to_deposit,
+        };
+
+        Ok(Some((instruction, task)))
     }
 
     /// If there is active stake that can be deposited to the stake pool,
