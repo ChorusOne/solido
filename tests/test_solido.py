@@ -15,7 +15,7 @@ key-pair, as in `TEST_LEDGER=true ./tests/test_solido.py`
 import os
 from typing import Optional
 
-from util import create_test_account, solana_program_deploy, create_stake_account, create_spl_token, create_vote_account, get_solido, get_multisig, solana, approve_and_execute, TestAccount
+from util import create_test_account, solana_program_deploy, create_spl_token, create_vote_account, get_solido, get_multisig, solana, approve_and_execute, TestAccount
 
 
 # We start by generating an account that we will need later.
@@ -80,8 +80,8 @@ result = solido(
     '--treasury-fee', '5',
     '--validation-fee', '3',
     '--developer-fee', '2',
-    '--treasury-account-owner', treasury_account_owner,
-    '--developer-account-owner', developer_account_owner,
+    '--treasury-account-owner', treasury_account_owner.pubkey,
+    '--developer-account-owner', developer_account_owner.pubkey,
     '--multisig-address', multisig_instance,
     keypair_path=test_addrs[0].keypair_path
 )
