@@ -29,6 +29,8 @@ use crate::multisig::MultisigOpts;
 extern crate lazy_static;
 extern crate spl_stake_pool;
 
+mod prometheus;
+mod daemon;
 mod helpers;
 mod maintenance;
 mod multisig;
