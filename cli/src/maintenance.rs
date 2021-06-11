@@ -135,9 +135,18 @@ impl StakeBalance {
             .expect("Should not overflow: stake parts should be less than the total.")
     }
 
+    /// Return whether the stake account reached its maximum activation.
+    ///
+    /// Stake accounts in Solana can be partially active, and the maximum amount
+    /// of active stake it reaches is set at `delegate_stake` time. This means
+    /// that a stake account can contain both active and inactive SOL, but still
+    /// be fully active. Normally this should not happen, but in principle anybody
+    /// can deposit SOL into a stake account after calling `delegate_stake`, and
+    /// that additional SOL will not be activated. Therefore this method does not
+    /// look at `inactive` SOL, it considers the account to be fully active when
+    /// nothing is activating or deactivating.
     pub fn is_fully_active(&self) -> bool {
         true
-        && self.inactive == Lamports(0)
         && self.activating == Lamports(0)
         && self.deactivating == Lamports(0)
         // We define an empty stake account to not be fully active,
