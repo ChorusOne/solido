@@ -70,8 +70,7 @@ pub fn sign_and_send_transaction<T: Signers>(
 
     // Add multisig signer
     tx.sign(signers, recent_blockhash);
-    send_transaction(&config, tx)
-        .unwrap_or_else(|err| panic!("Failed while sending transaction with error {}.", err));
+    send_transaction(&config, tx).expect("Failed while sending transaction.");
 }
 
 #[derive(Clap, Debug)]

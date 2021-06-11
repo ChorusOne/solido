@@ -180,8 +180,8 @@ fn main() {
     // Get a boxed signer that lives long enough for us to use it in the Config.
     let boxed_signer: Box<dyn Signer> = if payer_keypair_path.starts_with("usb://") {
         let hw_wallet = maybe_wallet_manager()
-            .unwrap_or_else(|err| panic!("Remote wallet found, but failed to establish protocol. Maybe the Solana app is not open: {}", err))
-            .unwrap_or_else(|| panic!("Failed to find a remote wallet, maybe Ledger is not connected or locked."));
+            .expect("Remote wallet found, but failed to establish protocol. Maybe the Solana app is not open.")
+            .expect("Failed to find a remote wallet, maybe Ledger is not connected or locked.");
         Box::new(
             generate_remote_keypair(
                 Locator::new_from_path(
@@ -190,19 +190,17 @@ fn main() {
                         .into_string()
                         .expect("Should have failed before"),
                 )
-                .unwrap_or_else(|err| panic!("Failed reading URL: {}", err)),
+                .expect("Failed reading URL."),
                 DerivationPath::default(),
                 &hw_wallet,
                 false,    /* Confirm public key */
                 "Solido", /* When multiple wallets are connected, used to display a hint */
             )
-            .unwrap_or_else(|err| panic!("Failed to contact remote wallet {}", err)),
+            .expect("Failed to contact remote wallet"),
         )
     } else {
         Box::new(
-            read_keypair_file(&payer_keypair_path).unwrap_or_else(|_| {
-                panic!("Failed to read key pair from {:?}.", payer_keypair_path)
-            }),
+            read_keypair_file(&payer_keypair_path).expect("Failed to read key pair from file."),
         )
     };
     // Get reference from signer
@@ -214,9 +212,6 @@ fn main() {
             CommitmentConfig::confirmed(),
         ),
         multisig_program_id: opts.multisig_program_id,
-        // For now, we'll assume that the provided key pair fulfils all of these
-        // roles. We need a better way to configure keys in the future.
-        // fee_payer: keypair,
         signer,
         // TODO: Do we want a dry-run option in the MVP at all?
         dry_run: false,
