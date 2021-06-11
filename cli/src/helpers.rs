@@ -35,24 +35,20 @@ pub fn send_transaction(
     config: &Config,
     transaction: Transaction,
 ) -> solana_client::client_error::Result<()> {
-    if config.dry_run {
-        config.rpc.simulate_transaction(&transaction)?;
-    } else {
-        let _signature = match config.output_mode {
-            OutputMode::Text => {
-                // In text mode, we can display a spinner.
-                config
-                    .rpc
-                    .send_and_confirm_transaction_with_spinner(&transaction)?
-            }
-            OutputMode::Json => {
-                // In json mode, printing a spinner to stdout would break the
-                // json that we also print to stdout, so opt for the silent
-                // version.
-                config.rpc.send_and_confirm_transaction(&transaction)?
-            }
-        };
-    }
+    let _signature = match config.output_mode {
+        OutputMode::Text => {
+            // In text mode, we can display a spinner.
+            config
+                .rpc
+                .send_and_confirm_transaction_with_spinner(&transaction)?
+        }
+        OutputMode::Json => {
+            // In json mode, printing a spinner to stdout would break the
+            // json that we also print to stdout, so opt for the silent
+            // version.
+            config.rpc.send_and_confirm_transaction(&transaction)?
+        }
+    };
     Ok(())
 }
 

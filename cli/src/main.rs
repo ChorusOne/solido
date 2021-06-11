@@ -144,8 +144,6 @@ pub struct Config<'a> {
     rpc: RpcClient,
     /// Reference to a signer, can be a keypair or ledger device.
     signer: &'a dyn Signer,
-    /// TODO: Not used.
-    dry_run: bool,
     /// output mode, can be json or text.
     output_mode: OutputMode,
 }
@@ -213,8 +211,6 @@ fn main() {
         ),
         multisig_program_id: opts.multisig_program_id,
         signer,
-        // TODO: Do we want a dry-run option in the MVP at all?
-        dry_run: false,
         output_mode: opts.output_mode,
     };
     match opts.subcommand {
