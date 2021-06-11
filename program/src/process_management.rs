@@ -71,6 +71,7 @@ pub fn process_create_validator_stake_account(
             accounts.stake_pool_stake_account.clone(),
             accounts.validator_vote_account.clone(),
             accounts.sysvar_rent.clone(),
+            accounts.sysvar_clock.clone(),
             accounts.sysvar_stake_history.clone(),
             accounts.stake_program_config.clone(),
             accounts.system_program.clone(),

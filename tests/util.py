@@ -49,7 +49,7 @@ def get_solido(multisig_program_id: str) -> Callable[..., Any]:
         """
         output = run(
             'target/debug/solido',
-            '--cluster', 'localnet',
+            '--cluster', 'http://127.0.0.1:8899',
             '--output', 'json',
             '--multisig-program-id', multisig_program_id,
             *([] if keypair_path is None else ['--keypair-path', keypair_path]),
@@ -195,7 +195,7 @@ def get_multisig(multisig_program_id: str) -> Callable[..., Any]:
         """
         output = run(
             'target/debug/solido',
-            '--cluster', 'localnet',
+            '--cluster', 'http://127.0.0.1:8899',
             '--output', 'json',
             *([] if keypair_path is None else ['--keypair-path', keypair_path]),
             '--multisig-program-id', multisig_program_id,

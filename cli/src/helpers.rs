@@ -187,7 +187,7 @@ impl fmt::Display for CreateSolidoOutput {
         writeln!(
             f,
             "  Developer fee SPL token account: {}",
-            self.treasury_account
+            self.developer_account
         )?;
         writeln!(f, "Stake pool details:\n{}", self.stake_pool)?;
         Ok(())
@@ -596,22 +596,22 @@ impl fmt::Display for ShowSolidoOutput {
         writeln!(f, "Authorities (public key, bump seed):")?;
         writeln!(
             f,
-            "  {}, {}",
+            "Reserve:     {}, {}",
             self.reserve_authority, self.solido.sol_reserve_authority_bump_seed
         )?;
         writeln!(
             f,
-            "  {}, {}",
+            "Deposit:     {}, {}",
             self.deposit_authority, self.solido.deposit_authority_bump_seed
         )?;
         writeln!(
             f,
-            "  {}, {}",
+            "Stake pool:  {}, {}",
             self.stake_pool_authority, self.solido.stake_pool_authority_bump_seed
         )?;
         writeln!(
             f,
-            "  {}, {}",
+            "Fee manager: {}, {}",
             self.fee_manager_authority, self.solido.fee_manager_bump_seed
         )?;
         writeln!(f, "\nFee distribution:")?;
@@ -629,10 +629,22 @@ impl fmt::Display for ShowSolidoOutput {
         )?;
         writeln!(
             f,
-            "Developer:       {}/{}",
+            "Developer:     {}/{}",
             self.solido.fee_distribution.developer_fee,
             self.solido.fee_distribution.sum()
         )?;
+        writeln!(f, "\nFee recipients:")?;
+        writeln!(
+            f,
+            "Treasury SPL token account:      {}",
+            self.solido.fee_recipients.treasury_account
+        )?;
+        writeln!(
+            f,
+            "Developer fee SPL token account: {}",
+            self.solido.fee_recipients.developer_account
+        )?;
+        writeln!(f)?;
         writeln!(
             f,
             "Validators: {} in use out of {} that the instance can support",
