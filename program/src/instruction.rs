@@ -617,7 +617,7 @@ accounts_struct! {
             is_writable: true,
         },
         pub manager {
-            is_signer: true,
+            is_signer: false,
             is_writable: false,
         },
         pub staker {

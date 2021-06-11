@@ -76,7 +76,7 @@ pub fn command_create_pool(
     stake_pool_authority: &Pubkey,
     deposit_authority: &Pubkey,
     fee_authority: &Pubkey,
-    manager: &Keypair,
+    manager: &Pubkey,
     fee: Fee,
     max_validators: u32,
 ) -> Result<CreatePoolOutput, crate::Error> {
@@ -85,19 +85,16 @@ pub fn command_create_pool(
     let validator_list = Keypair::new();
 
     let reserve_stake_balance = config
-        .program
-        .rpc()
+        .rpc
         .get_minimum_balance_for_rent_exemption(STAKE_STATE_LEN)?
         + 1;
     let stake_pool_account_lamports = config
-        .program
-        .rpc()
+        .rpc
         .get_minimum_balance_for_rent_exemption(get_packed_len::<StakePool>())?;
     let empty_validator_list = ValidatorList::new(max_validators);
     let validator_list_size = get_instance_packed_len(&empty_validator_list)?;
     let validator_list_balance = config
-        .program
-        .rpc()
+        .rpc
         .get_minimum_balance_for_rent_exemption(validator_list_size)?;
 
     // Calculate withdraw authority used for minting pool tokens
@@ -109,7 +106,7 @@ pub fn command_create_pool(
     let mut instructions = vec![
         // Account for the stake pool reserve
         system_instruction::create_account(
-            &config.fee_payer.pubkey(),
+            &config.signer.pubkey(),
             &reserve_stake.pubkey(),
             reserve_stake_balance,
             STAKE_STATE_LEN as u64,
@@ -138,18 +135,18 @@ pub fn command_create_pool(
         config,
         &instructions[..],
         &[
-            &config.fee_payer,
+            config.signer,
             &reserve_stake,
             &mint_keypair,
             &pool_fee_account_keypair,
         ],
-    )?;
+    );
 
     let mut initialize_transaction = Transaction::new_with_payer(
         &[
             // Validator stake account list storage
             system_instruction::create_account(
-                &config.fee_payer.pubkey(),
+                &config.signer.pubkey(),
                 &validator_list.pubkey(),
                 validator_list_balance,
                 validator_list_size as u64,
@@ -157,7 +154,7 @@ pub fn command_create_pool(
             ),
             // Account for the stake pool
             system_instruction::create_account(
-                &config.fee_payer.pubkey(),
+                &config.signer.pubkey(),
                 &stake_pool_keypair.pubkey(),
                 stake_pool_account_lamports,
                 get_packed_len::<StakePool>() as u64,
@@ -168,7 +165,7 @@ pub fn command_create_pool(
                 stake_pool_program_id,
                 &lido::instruction::InitializeStakePoolWithAuthorityAccountsMeta {
                     stake_pool: stake_pool_keypair.pubkey(),
-                    manager: manager.pubkey(),
+                    manager: *manager,
                     staker: *stake_pool_authority,
                     validator_list: validator_list.pubkey(),
                     reserve_stake: reserve_stake.pubkey(),
@@ -183,17 +180,12 @@ pub fn command_create_pool(
                 max_validators,
             )?,
         ],
-        Some(&config.fee_payer.pubkey()),
+        Some(&config.signer.pubkey()),
     );
 
-    let (recent_blockhash, _fee_calculator) = config.rpc().get_recent_blockhash()?;
+    let (recent_blockhash, _fee_calculator) = config.rpc.get_recent_blockhash()?;
 
-    let initialize_signers = vec![
-        &config.fee_payer,
-        &stake_pool_keypair,
-        &validator_list,
-        &manager,
-    ];
+    let initialize_signers = vec![config.signer, &stake_pool_keypair, &validator_list];
     initialize_transaction.sign(&initialize_signers, recent_blockhash);
     send_transaction(&config, initialize_transaction)?;
 

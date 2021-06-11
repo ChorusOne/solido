@@ -274,7 +274,7 @@ impl Validator {
         let seeds = [
             &solido_account.to_bytes(),
             &validator_vote_account.to_bytes(),
-            &VALIDATOR_STAKE_ACCOUNT[..],
+            VALIDATOR_STAKE_ACCOUNT,
             &seed.to_le_bytes()[..],
         ];
         Pubkey::find_program_address(&seeds, program_id)
@@ -432,17 +432,15 @@ impl<T: Default> AccountMap<T> {
     pub fn get(&self, address: &Pubkey) -> Result<&PubkeyAndEntry<T>, ProgramError> {
         self.entries
             .iter()
-            .filter(|pe| &pe.pubkey == address)
-            .next()
-            .ok_or(LidoError::InvalidAccountMember.into())
+            .find(|pe| &pe.pubkey == address)
+            .ok_or_else(|| LidoError::InvalidAccountMember.into())
     }
 
     pub fn get_mut(&mut self, address: &Pubkey) -> Result<&mut PubkeyAndEntry<T>, ProgramError> {
         self.entries
             .iter_mut()
-            .filter(|pe| &pe.pubkey == address)
-            .next()
-            .ok_or(LidoError::InvalidAccountMember.into())
+            .find(|pe| &pe.pubkey == address)
+            .ok_or_else(|| LidoError::InvalidAccountMember.into())
     }
 
     /// Return how many bytes are needed to serialize an instance holding `max_entries`.

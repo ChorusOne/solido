@@ -43,9 +43,9 @@ print('\nCreating new multisig ...')
 result = multisig(
     'create-multisig',
     '--threshold', '2',
-    '--owner', addr1,
-    '--owner', addr2,
-    '--owner', addr3,
+    '--owner', addr1.pubkey,
+    '--owner', addr2.pubkey,
+    '--owner', addr3.pubkey,
 )
 multisig_address = result['multisig_address']
 multisig_program_derived_address = result['multisig_program_derived_address']
@@ -130,8 +130,8 @@ result = multisig(
     '--multisig-address', multisig_address,
     '--program-address', program_id,
     '--buffer-address', buffer_address,
-    '--spill-address', addr1,
-    keypair_path='test-key-1.json',
+    '--spill-address', addr1.pubkey,
+    keypair_path=addr1.keypair_path,
 )
 upgrade_transaction_address = result['transaction_address']
 print(f'> Transaction address is {upgrade_transaction_address}.')
@@ -150,12 +150,12 @@ assert result['parsed_instruction']['BpfLoaderUpgrade'] == {
     'program_to_upgrade': program_id,
     'program_data_address': upload_info.program_data_address,
     'buffer_address': buffer_address,
-    'spill_address': addr1,
+    'spill_address': addr1.pubkey,
 }
 assert result['signers']['Current']['signers'] == [
-    {'owner': addr1, 'did_sign': True},
-    {'owner': addr2, 'did_sign': False},
-    {'owner': addr3, 'did_sign': False},
+    {'owner': addr1.pubkey, 'did_sign': True},
+    {'owner': addr2.pubkey, 'did_sign': False},
+    {'owner': addr3.pubkey, 'did_sign': False},
 ]
 
 
@@ -186,16 +186,16 @@ multisig(
     'approve',
     '--multisig-address', multisig_address,
     '--transaction-address', upgrade_transaction_address,
-    keypair_path='test-key-2.json',
+    keypair_path=addr2.keypair_path,
 )
 result = multisig(
     'show-transaction',
     '--transaction-address', upgrade_transaction_address,
 )
 assert result['signers']['Current']['signers'] == [
-    {'owner': addr1, 'did_sign': True},
-    {'owner': addr2, 'did_sign': True},
-    {'owner': addr3, 'did_sign': False},
+    {'owner': addr1.pubkey, 'did_sign': True},
+    {'owner': addr2.pubkey, 'did_sign': True},
+    {'owner': addr3.pubkey, 'did_sign': False},
 ]
 print(f'> Transaction is now signed by {addr2} as well.')
 
@@ -242,11 +242,12 @@ else:
 
 # Next we are going to test changing the multisig. Before we go and do that,
 # confirm that it currently looks like we expect it to look.
-multisig_before = multisig('show-multisig', '--multisig-address', multisig_address)
+multisig_before = multisig(
+    'show-multisig', '--multisig-address', multisig_address)
 assert multisig_before == {
     'multisig_program_derived_address': multisig_program_derived_address,
     'threshold': 2,
-    'owners': [addr1, addr2, addr3],
+    'owners': [addr1.pubkey, addr2.pubkey, addr3.pubkey],
 }
 
 
@@ -256,9 +257,9 @@ result = multisig(
     'propose-change-multisig',
     '--multisig-address', multisig_address,
     '--threshold', '2',
-    '--owner', addr1,
-    '--owner', addr2,
-    keypair_path='test-key-1.json',
+    '--owner', addr1.pubkey,
+    '--owner', addr2.pubkey,
+    keypair_path=addr1.keypair_path,
 )
 change_multisig_transaction_address = result['transaction_address']
 print(f'> Transaction address is {change_multisig_transaction_address}.')
@@ -269,16 +270,16 @@ multisig(
     'approve',
     '--multisig-address', multisig_address,
     '--transaction-address', change_multisig_transaction_address,
-    keypair_path='test-key-3.json',
+    keypair_path=addr3.keypair_path,
 )
 result = multisig(
     'show-transaction',
     '--transaction-address', change_multisig_transaction_address,
 )
 assert result['signers']['Current']['signers'] == [
-    {'owner': addr1, 'did_sign': True},
-    {'owner': addr2, 'did_sign': False},
-    {'owner': addr3, 'did_sign': True},
+    {'owner': addr1.pubkey, 'did_sign': True},
+    {'owner': addr2.pubkey, 'did_sign': False},
+    {'owner': addr3.pubkey, 'did_sign': True},
 ]
 print('> Transaction has the required number of signatures.')
 
@@ -296,11 +297,12 @@ result = multisig(
 assert result['did_execute'] == True
 print('> Transaction is marked as executed.')
 
-multisig_after = multisig('show-multisig', '--multisig-address', multisig_address)
+multisig_after = multisig(
+    'show-multisig', '--multisig-address', multisig_address)
 assert multisig_after == {
     'multisig_program_derived_address': multisig_program_derived_address,
     'threshold': 2,
-    'owners': [addr1, addr2],
+    'owners': [addr1.pubkey, addr2.pubkey],
 }
 print(f'> The third owner was removed.')
 
@@ -326,8 +328,8 @@ result = multisig(
     '--multisig-address', multisig_address,
     '--program-address', program_id,
     '--buffer-address', buffer_address,
-    '--spill-address', addr1,
-    keypair_path='test-key-1.json',
+    '--spill-address', addr1.pubkey,
+    keypair_path=addr1.keypair_path,
 )
 upgrade_transaction_address = result['transaction_address']
 print(f'> Transaction address is {upgrade_transaction_address}.')
@@ -339,7 +341,7 @@ try:
         'approve',
         '--multisig-address', multisig_address,
         '--transaction-address', upgrade_transaction_address,
-        keypair_path='test-key-3.json',
+        keypair_path=addr3.keypair_path,
     )
 except subprocess.CalledProcessError as err:
     assert err.returncode != 0
@@ -353,8 +355,8 @@ except subprocess.CalledProcessError as err:
         '--transaction-address', upgrade_transaction_address,
     )
     assert result['signers']['Current']['signers'] == [
-        {'owner': addr1, 'did_sign': True},
-        {'owner': addr2, 'did_sign': False},
+        {'owner': addr1.pubkey, 'did_sign': True},
+        {'owner': addr2.pubkey, 'did_sign': False},
     ]
     print('> Approve failed as expected.')
 else:

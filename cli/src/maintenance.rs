@@ -57,7 +57,7 @@ impl SolidoState {
         solido_program_id: &Pubkey,
         solido_address: &Pubkey,
     ) -> Result<SolidoState> {
-        let rpc = &config.rpc();
+        let rpc = &config.rpc;
 
         // TODO(ruuda): Transactions can execute in between those reads, leading to
         // a torn state. Make a function that re-reads everything with get_multiple_accounts.
@@ -71,7 +71,7 @@ impl SolidoState {
         let reserve_account =
             rpc.get_account(&solido.get_reserve_account(solido_program_id, solido_address)?)?;
 
-        let rent_account = config.rpc().get_account(&sysvar::rent::ID)?;
+        let rent_account = rpc.get_account(&sysvar::rent::ID)?;
         let rent: Rent = bincode::deserialize(&rent_account.data)?;
 
         Ok(SolidoState {

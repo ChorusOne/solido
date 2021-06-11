@@ -7,7 +7,15 @@ import os.path
 import subprocess
 import sys
 
-from typing import List, NamedTuple, Any, Optional, Callable
+from typing import List, NamedTuple, Any, Optional, Callable, Dict
+
+
+class TestAccount(NamedTuple):
+    pubkey: str
+    keypair_path: str
+
+    def __repr__(self) -> str:
+        return self.pubkey
 
 
 def run(*args: str) -> str:
@@ -33,28 +41,32 @@ def run(*args: str) -> str:
     return result.stdout
 
 
-def solido(*args: str, keypair_path: Optional[str] = None) -> Any:
-    """
-    Run 'solido' against localhost, return its parsed json output.
-    """
+def get_solido(multisig_program_id: str) -> Callable[..., Any]:
 
-    output = run(
-        'target/debug/solido',
-        '--cluster', 'localnet',
-        '--output', 'json',
-        *([] if keypair_path is None else ['--keypair-path', keypair_path]),
-        *args,
-    )
-
-    if output == '':
-        return {}
-    else:
-        try:
-            return json.loads(output)
-        except json.JSONDecodeError:
-            print('Failed to decode output as json, output was:')
-            print(output)
-            raise
+    def solido(*args: str, keypair_path: Optional[str] = None) -> Any:
+        """
+        Run 'solido' against localhost, return its parsed json output.
+        """
+        output = run(
+            'target/debug/solido',
+            '--cluster', 'localnet',
+            '--output', 'json',
+            '--multisig-program-id', multisig_program_id,
+            *([] if keypair_path is None else ['--keypair-path', keypair_path]),
+            *args,
+        )
+        if keypair_path is not None and keypair_path.startswith('usb://ledger'):
+            output = '\n'.join(output.split('\n')[2:])
+        if output == '':
+            return {}
+        else:
+            try:
+                return json.loads(output)
+            except json.JSONDecodeError:
+                print('Failed to decode output as json, output was:')
+                print(output)
+                raise
+    return solido
 
 
 def solana(*args: str) -> str:
@@ -106,7 +118,7 @@ def solana_program_show(program_id: str) -> SolanaProgramInfo:
     )
 
 
-def create_test_account(keypair_fname: str, *, fund: bool = True) -> str:
+def create_test_account(keypair_fname: str, *, fund: bool = True) -> TestAccount:
     """
     Generate a key pair, fund the account with 1 SOL, and return its public key.
     """
@@ -122,33 +134,33 @@ def create_test_account(keypair_fname: str, *, fund: bool = True) -> str:
     pubkey = run('solana-keygen', 'pubkey', keypair_fname).strip()
     if fund:
         solana('transfer', '--allow-unfunded-recipient', pubkey, '10.0')
-    return pubkey
+    return TestAccount(pubkey, keypair_fname)
 
 
-def create_stake_account(keypair_fname: str) -> str:
+def create_stake_account(keypair_fname: str) -> TestAccount:
     """
     Generate a stake account funded with 2 Sol, returns its public key.
     """
-    pubkey = create_test_account(keypair_fname, fund=False)
+    test_account = create_test_account(keypair_fname, fund=False)
     solana(
         'create-stake-account',
         keypair_fname,
         '2',
     )
-    return pubkey
+    return test_account
 
 
-def create_vote_account(vote_key_fname: str, validator_key_fname: str):
+def create_vote_account(vote_key_fname: str, validator_key_fname: str) -> TestAccount:
     """
     Generate a vote account for the validator
     """
-    pubkey = create_test_account(vote_key_fname, fund=False)
+    test_account = create_test_account(vote_key_fname, fund=False)
     solana(
         'create-vote-account',
         vote_key_fname,
         validator_key_fname,
     )
-    return pubkey
+    return test_account
 
 
 def create_spl_token(owner_keypair_fname: str, minter: str) -> str:
@@ -161,31 +173,23 @@ def create_spl_token(owner_keypair_fname: str, minter: str) -> str:
     return spl_token('create-account', minter, '--owner', owner_keypair_fname).split('\n')[0].split(' ')[2]
 
 
-class TestAccount(NamedTuple):
-    pubkey: str
-    keypair_path: str
-
-    def __repr__(self):
-        return self.pubkey
-
-
 def create_test_accounts(*, num_accounts: int) -> List[TestAccount]:
     result = []
 
     for i in range(num_accounts):
         fname = f'test-key-{i + 1}.json'
-        pubkey = create_test_account(fname)
-        result.append(TestAccount(pubkey, fname))
+        test_account = create_test_account(fname)
+        result.append(test_account)
 
     return result
 
 
 # Multisig utils
-def get_multisig(multisig_program_id: str) -> Any:
+def get_multisig(multisig_program_id: str) -> Callable[..., Any]:
     """
     Returns a function to perform multisig transactions with the provided program argument
     """
-    def multisig(*args: str, keypair_path: Optional[str] = None):
+    def multisig(*args: str, keypair_path: Optional[str] = None) -> Any:
         """
         Run 'solido multisig' against localhost, return its parsed json output.
         """
@@ -194,10 +198,15 @@ def get_multisig(multisig_program_id: str) -> Any:
             '--cluster', 'localnet',
             '--output', 'json',
             *([] if keypair_path is None else ['--keypair-path', keypair_path]),
-            'multisig',
             '--multisig-program-id', multisig_program_id,
+            'multisig',
             *args,
         )
+        # Ledger prints two lines with "Waiting for your approval on Ledger...
+        # ✅ Approved
+        # These lines should be ignored
+        if keypair_path is not None and keypair_path.startswith('usb://ledger'):
+            output = '\n'.join(output.split('\n')[2:])
         if output == '':
             return {}
         else:
@@ -210,7 +219,7 @@ def get_multisig(multisig_program_id: str) -> Any:
     return multisig
 
 
-def approve_and_execute(multisig_func: Callable, multisig_instance: str, transaction_address: str, keypair_path: str):
+def approve_and_execute(multisig_func: Callable[..., Any], multisig_instance: str, transaction_address: str, keypair_path: str) -> None:
     """
     Helper to approve and execute a transaction with a single key
     """

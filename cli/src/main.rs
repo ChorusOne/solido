@@ -3,7 +3,6 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use anchor_client::Cluster;
-use anchor_client::Program;
 use clap::Clap;
 use helpers::AddRemoveMaintainerOpts;
 use helpers::AddValidatorOpts;
@@ -11,16 +10,20 @@ use helpers::CreateValidatorStakeAccountOpts;
 use helpers::ShowSolidoOpts;
 use serde::Serialize;
 use solana_client::rpc_client::RpcClient;
+use solana_remote_wallet::locator::Locator;
+use solana_remote_wallet::remote_keypair::generate_remote_keypair;
+use solana_remote_wallet::remote_wallet::maybe_wallet_manager;
+use solana_sdk::commitment_config::CommitmentConfig;
+use solana_sdk::derivation_path::DerivationPath;
 use solana_sdk::pubkey::Pubkey;
-use solana_sdk::signature::{read_keypair_file, Keypair};
+use solana_sdk::signature::read_keypair_file;
+use solana_sdk::signer::Signer;
 
 use crate::helpers::command_add_maintainer;
 use crate::helpers::command_create_validator_stake_account;
 use crate::helpers::command_remove_maintainer;
 use crate::helpers::command_show_solido;
-use crate::helpers::{
-    command_add_validator, command_create_solido, get_anchor_program, CreateSolidoOpts,
-};
+use crate::helpers::{command_add_validator, command_create_solido, CreateSolidoOpts};
 use crate::maintenance::PerformMaintenanceOpts;
 use crate::multisig::MultisigOpts;
 
@@ -63,6 +66,10 @@ struct Opts {
     /// The keypair to sign and pay with. [default: ~/.config/solana/id.json]
     #[clap(long)]
     keypair_path: Option<PathBuf>,
+
+    /// Address of the Multisig program.
+    #[clap(long)]
+    multisig_program_id: Pubkey,
 
     /// Cluster to connect to (mainnet, testnet, devnet, localnet, or url).
     #[clap(long, default_value = "localnet")]
@@ -130,18 +137,15 @@ FEES:
 }
 
 /// Determines which network to connect to, and who pays the fees.
-pub struct Config {
-    program: Program,
-    // rpc_client: RpcClient,
-    fee_payer: Keypair,
-    dry_run: bool,
+pub struct Config<'a> {
+    /// Address of the Multisig program.
+    multisig_program_id: Pubkey,
+    /// Program instance, so we can call RPC methods.
+    rpc: RpcClient,
+    /// Reference to a signer, can be a keypair or ledger device.
+    signer: &'a dyn Signer,
+    /// output mode, can be json or text.
     output_mode: OutputMode,
-}
-
-impl Config {
-    pub fn rpc(&self) -> RpcClient {
-        self.program.rpc()
-    }
 }
 
 /// Resolve ~/.config/solana/id.json.
@@ -171,28 +175,42 @@ fn main() {
         Some(path) => path,
         None => get_default_keypair_path(),
     };
-    let keypair = read_keypair_file(&payer_keypair_path)
-        .unwrap_or_else(|_| panic!("Failed to read key pair from {:?}.", payer_keypair_path));
+    // Get a boxed signer that lives long enough for us to use it in the Config.
+    let boxed_signer: Box<dyn Signer> = if payer_keypair_path.starts_with("usb://") {
+        let hw_wallet = maybe_wallet_manager()
+            .expect("Remote wallet found, but failed to establish protocol. Maybe the Solana app is not open.")
+            .expect("Failed to find a remote wallet, maybe Ledger is not connected or locked.");
+        Box::new(
+            generate_remote_keypair(
+                Locator::new_from_path(
+                    payer_keypair_path
+                        .into_os_string()
+                        .into_string()
+                        .expect("Should have failed before"),
+                )
+                .expect("Failed reading URL."),
+                DerivationPath::default(),
+                &hw_wallet,
+                false,    /* Confirm public key */
+                "Solido", /* When multiple wallets are connected, used to display a hint */
+            )
+            .expect("Failed to contact remote wallet"),
+        )
+    } else {
+        Box::new(
+            read_keypair_file(&payer_keypair_path).expect("Failed to read key pair from file."),
+        )
+    };
+    // Get reference from signer
+    let signer = &*boxed_signer;
 
-    // TODO: This is a bit hacky :|
-    // We need to pass the keypair to Anchor's program by value and to our config by reference.
-    // Cluster has to be passed as value as well
-    let key_pair_copy =
-        Keypair::from_bytes(&keypair.to_bytes()).expect("Keypair returned an invalid secret");
     let config = Config {
-        // Set the multisig_program_id to an invalid program, we use the program
-        // just to get the rpc client, when we need to use the multisig program,
-        // we'll create another instance of it.
-        program: get_anchor_program(
-            Cluster::from_str(&opts.cluster.to_string()).unwrap(),
-            key_pair_copy,
-            &Pubkey::new_from_array([255u8; 32]),
+        rpc: RpcClient::new_with_commitment(
+            opts.cluster.url().to_string(),
+            CommitmentConfig::confirmed(),
         ),
-        // For now, we'll assume that the provided key pair fulfils all of these
-        // roles. We need a better way to configure keys in the future.
-        fee_payer: keypair,
-        // TODO: Do we want a dry-run option in the MVP at all?
-        dry_run: false,
+        multisig_program_id: opts.multisig_program_id,
+        signer,
         output_mode: opts.output_mode,
     };
     match opts.subcommand {
@@ -201,11 +219,9 @@ fn main() {
                 command_create_solido(config, cmd_opts).expect("Failed to create Solido instance.");
             print_output(opts.output_mode, &output);
         }
-        SubCommand::Multisig(cmd_opts) => {
-            multisig::main(config, opts.cluster, opts.output_mode, cmd_opts);
-        }
+        SubCommand::Multisig(cmd_opts) => multisig::main(config, opts.output_mode, cmd_opts),
         SubCommand::CreateValidatorStakeAccount(cmd_opts) => {
-            let output = command_create_validator_stake_account(config, opts.cluster, cmd_opts)
+            let output = command_create_validator_stake_account(config, cmd_opts)
                 .expect("Failed to create validator stake account");
             print_output(opts.output_mode, &output);
         }
@@ -218,18 +234,17 @@ fn main() {
                 .expect("Failed to perform maintenance.");
         }
         SubCommand::AddValidator(cmd_opts) => {
-            let output = command_add_validator(config, opts.cluster, cmd_opts)
-                .expect("Failed to add validator");
+            let output = command_add_validator(config, cmd_opts).expect("Failed to add validator");
             print_output(opts.output_mode, &output);
         }
         SubCommand::AddMaintainer(cmd_opts) => {
-            let output = command_add_maintainer(config, opts.cluster, cmd_opts)
-                .expect("Failed to add maintainer");
+            let output =
+                command_add_maintainer(config, cmd_opts).expect("Failed to add maintainer");
             print_output(opts.output_mode, &output);
         }
         SubCommand::RemoveMaintainer(cmd_opts) => {
-            let output = command_remove_maintainer(config, opts.cluster, cmd_opts)
-                .expect("Failed to remove maintainer");
+            let output =
+                command_remove_maintainer(config, cmd_opts).expect("Failed to remove maintainer");
             print_output(opts.output_mode, &output);
         }
         SubCommand::ShowSolido(cmd_opts) => {
