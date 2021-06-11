@@ -56,7 +56,6 @@ pub enum MaintenanceOutput {
         #[serde(rename = "amount_lamports")]
         amount: Lamports,
     },
-    NothingDone,
 }
 
 impl fmt::Display for MaintenanceOutput {
@@ -77,9 +76,6 @@ impl fmt::Display for MaintenanceOutput {
                 writeln!(f, "Deposited stake to pool.")?;
                 writeln!(f, "  Validator vote account: {}", validator_vote_account)?;
                 writeln!(f, "  Amount staked:          {}", amount)?;
-            }
-            MaintenanceOutput::NothingDone => {
-                writeln!(f, "Nothing done, there was no maintenance to perform.")?;
             }
         }
         Ok(())
@@ -420,13 +416,12 @@ impl SolidoState {
 /// performed, do so. Returns a description of the task performed, if any.
 ///
 /// This takes only one step, there might be more work left to do after this
-/// function returns. Call it in a loop until it returns
-/// [`MaintenanceResult::NothingToDo`]. (And then still call it in a loop,
-/// because the on-chain state might change.)
+/// function returns. Call it in a loop until it returns `None`. (And then still
+/// call it in a loop, because the on-chain state might change.)
 pub fn perform_maintenance(
     config: &Config,
-    opts: PerformMaintenanceOpts,
-) -> Result<MaintenanceOutput> {
+    opts: &PerformMaintenanceOpts,
+) -> Result<Option<MaintenanceOutput>> {
     let state = SolidoState::new(
         config,
         &opts.solido_program_id,
@@ -445,9 +440,9 @@ pub fn perform_maintenance(
             // For maintenance operations, the maintainer is the only signer,
             // and that should be sufficient.
             sign_and_send_transaction(config, &[instr], &[config.signer]);
-            Ok(output)
+            Ok(Some(output))
         }
         Some(Err(err)) => Err(err),
-        None => Ok(MaintenanceOutput::NothingDone),
+        None => Ok(None),
     }
 }

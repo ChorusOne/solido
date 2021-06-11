@@ -3690,6 +3690,7 @@ dependencies = [
  "lazy_static",
  "lido",
  "multisig",
+ "rand 0.8.3",
  "serde",
  "serde_json",
  "solana-account-decoder",
