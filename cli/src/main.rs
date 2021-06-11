@@ -70,10 +70,8 @@ struct Opts {
     #[clap(long)]
     multisig_program_id: Pubkey,
 
-    /// Cluster to connect to (mainnet, testnet, devnet, localnet, or url).
+    /// URL of cluster to connect to (e.g., https://api.devnet.solana.com for solana devnet)
     #[clap(long, default_value = "localnet")]
-    // Although we don't use Anchor here, we use it’s `Cluster` type because
-    // it has a convenient `FromStr` implementation.
     cluster: String,
 
     /// Whether to output text or json.
