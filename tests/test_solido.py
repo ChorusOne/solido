@@ -23,11 +23,8 @@ print(f'> {addrs}')
 treasury_account_owner = create_test_account('treasury-key.json')
 print(f'> Treasury account owner:    {treasury_account_owner}')
 
-insurance_account_owner = create_test_account('insurance-key.json')
-print(f'> Insurance account owner:   {insurance_account_owner}')
-
-manager_fee_account_owner = create_test_account('manager-fee-key.json')
-print(f'> Manager fee account owner: {manager_fee_account_owner}')
+developer_account_owner = create_test_account('developer-fee-key.json')
+print(f'> Developer fee account owner: {developer_account_owner}')
 
 
 print('\nUploading stake pool program ...')
@@ -65,21 +62,18 @@ result = solido(
     '--fee-denominator', '31',
     '--max-validators', '9',
     '--max-maintainers', '1',
-    '--insurance-fee', '7',
     '--treasury-fee', '5',
     '--validation-fee', '3',
-    '--manager-fee', '2',
+    '--developer-fee', '2',
     '--treasury-account-owner', treasury_account_owner,
-    '--insurance-account-owner', insurance_account_owner,
-    '--manager-fee-account-owner', manager_fee_account_owner,
+    '--developer-account-owner', developer_account_owner,
     '--multisig-program-id', multisig_program_id,
     '--multisig-address', multisig_instance,
     keypair_path='test-key-1.json'
 )
 solido_address = result['solido_address']
 treasury_account = result['treasury_account']
-insurance_account = result['insurance_account']
-manager_fee_account = result['manager_fee_account']
+developer_account = result['developer_account']
 st_sol_mint_account = result['st_sol_mint_address']
 
 print(f'> Created instance at {solido_address}.')
@@ -91,10 +85,9 @@ solido_instance = solido('show-solido',
 assert solido_instance['solido']['manager'] == multisig_pda
 assert solido_instance['solido']['st_sol_total_shares'] == 0
 assert solido_instance['solido']['fee_distribution'] == {
-    'insurance_fee': 7,
     'treasury_fee': 5,
     'validation_fee': 3,
-    'manager_fee': 2
+    'developer_fee': 2
 }
 
 print('\nAdding a validator ...')

@@ -52,9 +52,8 @@ pub struct LidoAccounts {
     pub maintainer: Keypair,
 
     // Fees
-    pub insurance_account: Keypair,
     pub treasury_account: Keypair,
-    pub manager_fee_account: Keypair,
+    pub developer_account: Keypair,
     pub fee_distribution: FeeDistribution,
 
     pub reserve_authority: Pubkey,
@@ -73,15 +72,13 @@ impl LidoAccounts {
         let maintainer = Keypair::new();
 
         // Fees
-        let insurance_account = Keypair::new();
         let treasury_account = Keypair::new();
-        let manager_fee_account = Keypair::new();
+        let developer_account = Keypair::new();
 
         let fee_distribution = FeeDistribution {
-            insurance_fee: 2,
             treasury_fee: 2,
             validation_fee: 2,
-            manager_fee: 4,
+            developer_fee: 4,
         };
 
         let (reserve_authority, _) = Pubkey::find_program_address(
@@ -111,9 +108,8 @@ impl LidoAccounts {
             mint_program,
             stake_pool_token_holder,
             maintainer,
-            insurance_account,
             treasury_account,
-            manager_fee_account,
+            developer_account,
             fee_distribution,
             reserve_authority,
             deposit_authority,
@@ -166,16 +162,6 @@ impl LidoAccounts {
             banks_client,
             payer,
             recent_blockhash,
-            &self.insurance_account,
-            &self.mint_program.pubkey(),
-            &self.insurance_account.pubkey(),
-        )
-        .await
-        .unwrap();
-        create_token_account(
-            banks_client,
-            payer,
-            recent_blockhash,
             &self.treasury_account,
             &self.mint_program.pubkey(),
             &self.treasury_account.pubkey(),
@@ -186,9 +172,9 @@ impl LidoAccounts {
             banks_client,
             payer,
             recent_blockhash,
-            &self.manager_fee_account,
+            &self.developer_account,
             &self.mint_program.pubkey(),
-            &self.manager_fee_account.pubkey(),
+            &self.developer_account.pubkey(),
         )
         .await
         .unwrap();
@@ -223,9 +209,8 @@ impl LidoAccounts {
                         mint_program: self.mint_program.pubkey(),
                         stake_pool_token_holder: self.stake_pool_token_holder.pubkey(),
                         fee_token: self.stake_pool_accounts.pool_fee_account.pubkey(),
-                        insurance_account: self.insurance_account.pubkey(),
                         treasury_account: self.treasury_account.pubkey(),
-                        manager_fee_account: self.manager_fee_account.pubkey(),
+                        developer_account: self.developer_account.pubkey(),
                         reserve_account: self.reserve_authority,
                     },
                 )
@@ -488,9 +473,8 @@ impl LidoAccounts {
                     token_holder_stake_pool: self.stake_pool_token_holder.pubkey(),
                     mint_program: self.mint_program.pubkey(),
                     reserve_authority: self.reserve_authority,
-                    insurance_account: self.insurance_account.pubkey(),
                     treasury_account: self.treasury_account.pubkey(),
-                    manager_fee_account: self.manager_fee_account.pubkey(),
+                    developer_account: self.developer_account.pubkey(),
                     stake_pool: self.stake_pool_accounts.stake_pool.pubkey(),
                     stake_pool_fee_account: self.stake_pool_accounts.pool_fee_account.pubkey(),
                     stake_pool_manager_fee_account: self.fee_manager_authority,

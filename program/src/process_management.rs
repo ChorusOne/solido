@@ -94,14 +94,12 @@ pub fn process_change_fee_spec(
     let mut lido = deserialize_lido(program_id, accounts.lido)?;
     lido.check_manager(accounts.manager)?;
 
-    Lido::check_valid_minter_program(&lido.st_sol_mint_program, accounts.insurance_account)?;
     Lido::check_valid_minter_program(&lido.st_sol_mint_program, accounts.treasury_account)?;
-    Lido::check_valid_minter_program(&lido.st_sol_mint_program, accounts.manager_fee_account)?;
+    Lido::check_valid_minter_program(&lido.st_sol_mint_program, accounts.developer_account)?;
 
     lido.fee_distribution = new_fee_distribution;
-    lido.fee_recipients.insurance_account = *accounts.insurance_account.key;
     lido.fee_recipients.treasury_account = *accounts.treasury_account.key;
-    lido.fee_recipients.manager_account = *accounts.manager_fee_account.key;
+    lido.fee_recipients.developer_account = *accounts.developer_account.key;
 
     lido.serialize(&mut *accounts.lido.data.borrow_mut())
         .map_err(|e| e.into())
@@ -303,17 +301,6 @@ pub fn process_distribute_fees(program_id: &Pubkey, accounts_raw: &[AccountInfo]
         stake_pool_fee_account.amount,
     )?;
 
-    // Mint tokens for insurance
-    token_mint_to(
-        accounts.lido.key,
-        accounts.spl_token.clone(),
-        accounts.mint_program.clone(),
-        accounts.insurance_account.clone(),
-        accounts.reserve_authority.clone(),
-        RESERVE_AUTHORITY,
-        lido.sol_reserve_authority_bump_seed,
-        token_shares.insurance_amount,
-    )?;
     // Mint tokens for treasury
     token_mint_to(
         accounts.lido.key,
@@ -325,16 +312,16 @@ pub fn process_distribute_fees(program_id: &Pubkey, accounts_raw: &[AccountInfo]
         lido.sol_reserve_authority_bump_seed,
         token_shares.treasury_amount,
     )?;
-    // Mint tokens for manager
+    // Mint tokens for developer
     token_mint_to(
         accounts.lido.key,
         accounts.spl_token.clone(),
         accounts.mint_program.clone(),
-        accounts.manager_fee_account.clone(),
+        accounts.developer_account.clone(),
         accounts.reserve_authority.clone(),
         RESERVE_AUTHORITY,
         lido.sol_reserve_authority_bump_seed,
-        token_shares.manager_amount,
+        token_shares.developer_amount,
     )?;
 
     // Update validator list that can be claimed at a later time

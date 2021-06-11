@@ -113,28 +113,22 @@ pub struct CreateSolidoOpts {
 
     // Fees are divided proportionally to the sum of all specified fees, for instance,
     // if all the fees are the same value, they will be divided equally.
-    /// Insurance fee share
-    #[clap(long, value_name = "int")]
-    pub insurance_fee: u32,
     /// Treasury fee share
     #[clap(long, value_name = "int")]
     pub treasury_fee: u32,
     /// Validation fee share, to be divided equally among validators
     #[clap(long, value_name = "int")]
     pub validation_fee: u32,
-    /// Manager fee share
+    /// Developer fee share
     #[clap(long, value_name = "int")]
-    pub manager_fee: u32,
+    pub developer_fee: u32,
 
-    /// Account who will own the stSOL SPL token account that receives insurance fees.
-    #[clap(long, value_name = "address")]
-    pub insurance_account_owner: Pubkey,
     /// Account who will own the stSOL SPL token account that receives treasury fees.
     #[clap(long, value_name = "address")]
     pub treasury_account_owner: Pubkey,
-    /// Account who will own the stSOL SPL token account that receives the manager fees.
+    /// Account who will own the stSOL SPL token account that receives the developer fees.
     #[clap(long, value_name = "address")]
-    pub manager_fee_account_owner: Pubkey,
+    pub developer_account_owner: Pubkey,
 
     /// Used to compute Solido's manager.
     /// Multisig instance.
@@ -165,14 +159,11 @@ pub struct CreateSolidoOutput {
     /// The only depositor of the stake pool.
     pub stake_pool_token_holder: PubkeyBase58,
 
-    /// stSOL SPL token account that holds the insurance funds.
-    pub insurance_account: PubkeyBase58,
-
     /// stSOL SPL token account that holds the treasury funds.
     pub treasury_account: PubkeyBase58,
 
-    /// stSOL SPL token account that receives the manager fees.
-    pub manager_fee_account: PubkeyBase58,
+    /// stSOL SPL token account that receives the developer fees.
+    pub developer_account: PubkeyBase58,
 
     /// Details of the stake pool managed by Solido.
     pub stake_pool: CreatePoolOutput,
@@ -209,17 +200,12 @@ impl fmt::Display for CreateSolidoOutput {
         )?;
         writeln!(
             f,
-            "  Insurance SPL token account:   {}",
-            self.insurance_account
-        )?;
-        writeln!(
-            f,
             "  Treasury SPL token account:    {}",
             self.treasury_account
         )?;
         writeln!(
             f,
-            "  Manager fee SPL token account: {}",
+            "  Developer fee SPL token account: {}",
             self.treasury_account
         )?;
         writeln!(f, "Stake pool details:\n{}", self.stake_pool)?;
@@ -324,33 +310,22 @@ pub fn command_create_solido(
     eprintln!("Did send SPL account inits part 1.");
 
     // Set up the SPL token account that receive the fees in stSOL.
-    let insurance_keypair = push_create_spl_token_account(
-        &config,
-        &mut instructions,
-        &st_sol_mint_keypair.pubkey(),
-        &opts.insurance_account_owner,
-    )?;
     let treasury_keypair = push_create_spl_token_account(
         &config,
         &mut instructions,
         &st_sol_mint_keypair.pubkey(),
         &opts.treasury_account_owner,
     )?;
-    let manager_fee_keypair = push_create_spl_token_account(
+    let developer_keypair = push_create_spl_token_account(
         &config,
         &mut instructions,
         &st_sol_mint_keypair.pubkey(),
-        &opts.manager_fee_account_owner,
+        &opts.developer_account_owner,
     )?;
     sign_and_send_transaction(
         &config,
         &instructions[..],
-        &vec![
-            &config.fee_payer,
-            &insurance_keypair,
-            &treasury_keypair,
-            &manager_fee_keypair,
-        ],
+        &vec![&config.fee_payer, &treasury_keypair, &developer_keypair],
     )?;
     instructions.clear();
     eprintln!("Did send SPL account inits.");
@@ -370,10 +345,9 @@ pub fn command_create_solido(
     instructions.push(lido::instruction::initialize(
         &opts.solido_program_id,
         FeeDistribution {
-            insurance_fee: opts.insurance_fee,
             treasury_fee: opts.treasury_fee,
             validation_fee: opts.validation_fee,
-            manager_fee: opts.manager_fee,
+            developer_fee: opts.developer_fee,
         },
         opts.max_validators,
         opts.max_maintainers,
@@ -384,9 +358,8 @@ pub fn command_create_solido(
             stake_pool_token_holder: stake_pool_token_holder_keypair.pubkey(),
             fee_token: stake_pool.fee_address.0,
             manager,
-            insurance_account: insurance_keypair.pubkey(),
             treasury_account: treasury_keypair.pubkey(),
-            manager_fee_account: manager_fee_keypair.pubkey(),
+            developer_account: developer_keypair.pubkey(),
             reserve_account: reserve_authority,
         },
     )?);
@@ -405,9 +378,8 @@ pub fn command_create_solido(
         stake_pool_authority: stake_pool_authority.into(),
         st_sol_mint_address: st_sol_mint_keypair.pubkey().into(),
         stake_pool_token_holder: stake_pool_token_holder_keypair.pubkey().into(),
-        insurance_account: insurance_keypair.pubkey().into(),
         treasury_account: treasury_keypair.pubkey().into(),
-        manager_fee_account: manager_fee_keypair.pubkey().into(),
+        developer_account: developer_keypair.pubkey().into(),
         stake_pool,
     };
     Ok(result)
@@ -701,12 +673,6 @@ impl fmt::Display for ShowSolidoOutput {
         writeln!(f, "\nFee distribution:")?;
         writeln!(
             f,
-            "Insurance:     {}/{}",
-            self.solido.fee_distribution.insurance_fee,
-            self.solido.fee_distribution.sum()
-        )?;
-        writeln!(
-            f,
             "Treasury:      {}/{}",
             self.solido.fee_distribution.treasury_fee,
             self.solido.fee_distribution.sum()
@@ -719,8 +685,8 @@ impl fmt::Display for ShowSolidoOutput {
         )?;
         writeln!(
             f,
-            "Manager:       {}/{}",
-            self.solido.fee_distribution.manager_fee,
+            "Developer:       {}/{}",
+            self.solido.fee_distribution.developer_fee,
             self.solido.fee_distribution.sum()
         )?;
         writeln!(

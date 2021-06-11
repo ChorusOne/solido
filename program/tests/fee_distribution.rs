@@ -155,11 +155,6 @@ async fn test_successful_fee_distribution() {
         .await;
     assert!(fee_error.is_none());
 
-    let insurance_token_amount = get_token_balance(
-        &mut context.banks_client,
-        &lido_accounts.insurance_account.pubkey(),
-    )
-    .await;
     let treasury_token_account = get_token_balance(
         &mut context.banks_client,
         &lido_accounts.treasury_account.pubkey(),
@@ -167,7 +162,7 @@ async fn test_successful_fee_distribution() {
     .await;
     let manager_token_account = get_token_balance(
         &mut context.banks_client,
-        &lido_accounts.manager_fee_account.pubkey(),
+        &lido_accounts.developer_account.pubkey(),
     )
     .await;
 
@@ -179,16 +174,12 @@ async fn test_successful_fee_distribution() {
     .unwrap();
 
     assert_eq!(
-        StLamports(insurance_token_amount),
-        calculated_fee_distribution.insurance_amount,
-    );
-    assert_eq!(
         StLamports(treasury_token_account),
         calculated_fee_distribution.treasury_amount,
     );
     assert_eq!(
         StLamports(manager_token_account),
-        calculated_fee_distribution.manager_amount,
+        calculated_fee_distribution.developer_amount,
     );
 
     let validator_token_accounts: Vec<Pubkey> = stake_accounts

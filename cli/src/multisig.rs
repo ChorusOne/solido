@@ -654,14 +654,6 @@ fn print_changed_fee(
     let new_sum = fee_disribution.sum();
     changed_fee(
         f,
-        current_solido.fee_distribution.insurance_fee,
-        fee_disribution.insurance_fee,
-        current_sum,
-        new_sum,
-        "insurance",
-    )?;
-    changed_fee(
-        f,
         current_solido.fee_distribution.treasury_fee,
         fee_disribution.treasury_fee,
         current_sum,
@@ -678,11 +670,11 @@ fn print_changed_fee(
     )?;
     changed_fee(
         f,
-        current_solido.fee_distribution.manager_fee,
-        fee_disribution.manager_fee,
+        current_solido.fee_distribution.developer_fee,
+        fee_disribution.developer_fee,
         current_sum,
         new_sum,
-        "manager",
+        "developer",
     )?;
     Ok(())
 }
@@ -693,21 +685,15 @@ fn print_changed_recipients(
 ) -> fmt::Result {
     changed_addr(
         f,
-        &current_solido.fee_recipients.insurance_account,
-        &fee_recipients.insurance_account,
-        "insurance",
-    )?;
-    changed_addr(
-        f,
         &current_solido.fee_recipients.treasury_account,
         &fee_recipients.treasury_account,
         "treasury",
     )?;
     changed_addr(
         f,
-        &current_solido.fee_recipients.manager_account,
-        &fee_recipients.manager_account,
-        "manager",
+        &current_solido.fee_recipients.developer_account,
+        &fee_recipients.developer_account,
+        "developer",
     )?;
     Ok(())
 }
@@ -844,9 +830,8 @@ fn try_parse_solido_instruction(
                 solido_instance: accounts.lido,
                 manager: accounts.manager,
                 fee_recipients: FeeRecipients {
-                    insurance_account: accounts.insurance_account,
                     treasury_account: accounts.treasury_account,
-                    manager_account: accounts.manager_fee_account,
+                    developer_account: accounts.developer_account,
                 },
             })
         }

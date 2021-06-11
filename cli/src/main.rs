@@ -98,14 +98,15 @@ FEES:
     rewards get distributed implicitly to stSOL holders because they now own
     a share of a larger pool of SOL.
 
-    The fees are distributed among the insurance, treasury, validators, and the
-    manager, according to the ratio
+    The fees are distributed among the treasury, validators, and the
+    developer, according to the ratio
 
-    «insurance-fee» : «treasury-fee» : «validation-fee» : «manager-fee»
+    «treasury-fee» : «validation-fee» : «developer-fee»
 
-    For example, if all fees are set to 1, then the four parties would each
-    receive 25% of the fees. Subsequently, the validation fee is divided equally
-    among all validators.
+    For example, if the fees are set to a 1 : 2 : 1 proportion, then the
+    treasury and developers would receive 50% of the fees, and the validation
+    would receive the remaining 50%. Subsequently, the validation fee is divided
+    equally among all validators.
     ")]
     CreateSolido(CreateSolidoOpts),
 
