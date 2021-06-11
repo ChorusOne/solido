@@ -2,7 +2,6 @@ use std::fmt;
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use anchor_client::Cluster;
 use clap::Clap;
 use helpers::AddRemoveMaintainerOpts;
 use helpers::AddValidatorOpts;
@@ -75,7 +74,7 @@ struct Opts {
     #[clap(long, default_value = "localnet")]
     // Although we don't use Anchor here, we use it’s `Cluster` type because
     // it has a convenient `FromStr` implementation.
-    cluster: Cluster,
+    cluster: String,
 
     /// Whether to output text or json.
     #[clap(long = "output", default_value = "text", possible_values = &["text", "json"])]
@@ -205,10 +204,7 @@ fn main() {
     let signer = &*boxed_signer;
 
     let config = Config {
-        rpc: RpcClient::new_with_commitment(
-            opts.cluster.url().to_string(),
-            CommitmentConfig::confirmed(),
-        ),
+        rpc: RpcClient::new_with_commitment(opts.cluster, CommitmentConfig::confirmed()),
         multisig_program_id: opts.multisig_program_id,
         signer,
         output_mode: opts.output_mode,
