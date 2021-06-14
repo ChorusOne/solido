@@ -272,6 +272,7 @@ pub fn process_claim_validator_fee(
 pub fn process_distribute_fees(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> ProgramResult {
     let accounts = DistributeFeesInfo::try_from_slice(accounts_raw)?;
     let mut lido = deserialize_lido(program_id, accounts.lido)?;
+    lido.check_maintainer(accounts.maintainer)?;
     lido.check_stake_pool(accounts.stake_pool)?;
 
     let stake_pool = StakePool::try_from_slice(&accounts.stake_pool.data.borrow())?;

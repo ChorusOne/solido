@@ -844,7 +844,7 @@ accounts_struct! {
             is_signer: false,
             is_writable: true,
         },
-        pub manager {
+        pub maintainer {
             is_signer: true,
             is_writable: false,
         },
