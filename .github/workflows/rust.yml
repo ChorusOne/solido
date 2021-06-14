@@ -92,7 +92,7 @@ jobs:
         export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
 
         # Loop airdrop as devnet doesn't seem to support large drops
-        for i in {1..50}; do solana airdrop 10.0; done
+        for i in {1..4}; do solana airdrop 10.0; done
 
         NETWORK='https://api.devnet.solana.com' tests/test_solido.py
 
