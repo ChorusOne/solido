@@ -24,10 +24,16 @@ jobs:
           command: fmt
           args: --all -- --check
 
+      - name: Install tools
+        run: |
+          # Install with Pip instead of Apt because Ubuntu ships ancient versions.
+          # TODO: Pin the exact version with Nix instead, to make it easier to use
+          # the same version locally.
+          sudo apt-get install -y python3-pip
+          sudo pip3 install black==21.6b0
+
       - name: Check Python formatting
         run: |
-          # TODO: Pin the exact version with Nix.
-          sudo apt-get install -y black
           git ls-files | grep '\.py$' | xargs black --skip-string-normalization --check --diff --color
 
   build:
@@ -113,7 +119,11 @@ jobs:
     - name: Install linters
       run: |
         # TODO: Pin the exact version with Nix.
-        sudo apt-get install -y mypy libudev-dev
+        sudo apt-get install -y python3-pip libudev-dev
+        # Install with Pip instead of Apt because Ubuntu ships ancient versions.
+        # TODO: Pin the exact version with Nix instead, to make it easier to use
+        # the same version locally.
+        sudo pip3 install mypy==0.902
         rustup component add clippy
 
     - name: Run Clippy
