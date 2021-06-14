@@ -1,7 +1,7 @@
 //! Entry point for maintenance operations, such as updating the pool balance.
 
 use crate::helpers::{get_solido, get_stake_pool, sign_and_send_transaction};
-use crate::{Config, Error};
+use crate::{Config};
 use clap::Clap;
 use lido::state::serialize_b58;
 use lido::state::PubkeyAndEntry;
@@ -16,7 +16,7 @@ use solana_program::{
     clock::Clock, pubkey::Pubkey, rent::Rent, stake_history::StakeHistory, sysvar,
 };
 use solana_sdk::{
-    account::Account, borsh::try_from_slice_unchecked, instruction::Instruction, signature::Signer,
+    account::Account, borsh::try_from_slice_unchecked, instruction::Instruction
 };
 use spl_stake_pool::stake_program::StakeState;
 use spl_stake_pool::state::{StakePool, ValidatorList};
@@ -439,7 +439,7 @@ pub fn perform_maintenance(
         Some(Ok((instr, output))) => {
             // For maintenance operations, the maintainer is the only signer,
             // and that should be sufficient.
-            sign_and_send_transaction(config, &[instr], &[config.signer]);
+            sign_and_send_transaction(config, &[instr], &[config.signer])?;
             Ok(Some(output))
         }
         Some(Err(err)) => Err(err),

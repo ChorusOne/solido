@@ -289,7 +289,7 @@ fn create_multisig(config: &Config, opts: CreateMultisigOpts) -> CreateMultisigO
         config,
         &[create_instruction, multisig_instruction],
         &[&multisig_account, config.signer],
-    );
+    ).expect("Failed to sign or send transaction.");
 
     CreateMultisigOutput {
         multisig_address: multisig_account.pubkey().into(),
@@ -990,7 +990,7 @@ pub fn propose_instruction(
         &config,
         &[create_instruction, multisig_instruction],
         &[config.signer, &transaction_account],
-    );
+    ).expect("Failed to sign or send transaction.");
     ProposeInstructionOutput {
         transaction_address: transaction_account.pubkey().into(),
     }
@@ -1055,7 +1055,8 @@ fn approve(config: &Config, opts: ApproveOpts) {
         data: multisig_instruction::Approve.data(),
         accounts: approve_accounts.to_account_metas(None),
     };
-    sign_and_send_transaction(&config, &[approve_instruction], &[config.signer]);
+    sign_and_send_transaction(&config, &[approve_instruction], &[config.signer])
+        .expect("Failed to sign or send transaction.");
 }
 
 /// Wrapper type needed to implement `ToAccountMetas`.
@@ -1123,5 +1124,6 @@ fn execute_transaction(config: &Config, opts: ExecuteTransactionOpts) {
         data: multisig_instruction::ExecuteTransaction.data(),
         accounts,
     };
-    sign_and_send_transaction(config, &[multisig_instruction], &[config.signer]);
+    sign_and_send_transaction(config, &[multisig_instruction], &[config.signer])
+        .expect("Failed to sign or send transaction.");
 }
