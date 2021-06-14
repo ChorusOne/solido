@@ -128,8 +128,14 @@ FEES:
     /// Show an instance of solido in detail
     ShowSolido(ShowSolidoOpts),
 
-    /// Execute periodic maintenance logic.
+    /// Execute one iteration of periodic maintenance logic.
+    ///
+    /// This is mainly useful for testing. To perform maintenance continuously,
+    /// use 'run-maintainer' instead.
     PerformMaintenance(PerformMaintenanceOpts),
+
+    /// Start the maintainer daemon.
+    RunMaintainer(PerformMaintenanceOpts),
 
     /// Interact with a deployed Multisig program for governance tasks.
     Multisig(MultisigOpts),
@@ -233,6 +239,9 @@ fn main() {
                 (OutputMode::Json, None) => println!("null"),
                 (mode, Some(output)) => print_output(mode, &output),
             }
+        }
+        SubCommand::RunMaintainer(cmd_opts) => {
+            daemon::main(&config, cmd_opts);
         }
         SubCommand::AddValidator(cmd_opts) => {
             let output = command_add_validator(config, cmd_opts).expect("Failed to add validator");
