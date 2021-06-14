@@ -4,3 +4,4 @@ target
 bin
 **/lido.so
 **/.DS_Store
+build
