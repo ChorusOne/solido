@@ -21,7 +21,13 @@ import tempfile
 
 from typing import Any, Dict, Optional, NamedTuple
 
-from util import solana, create_test_account, solana_program_deploy, solana_program_show, get_multisig
+from util import (
+    solana,
+    create_test_account,
+    solana_program_deploy,
+    solana_program_show,
+    get_multisig,
+)
 
 
 # We start by generating three accounts that we will need later.
@@ -42,10 +48,14 @@ multisig = get_multisig(multisig_program_id)
 print('\nCreating new multisig ...')
 result = multisig(
     'create-multisig',
-    '--threshold', '2',
-    '--owner', addr1.pubkey,
-    '--owner', addr2.pubkey,
-    '--owner', addr3.pubkey,
+    '--threshold',
+    '2',
+    '--owner',
+    addr1.pubkey,
+    '--owner',
+    addr2.pubkey,
+    '--owner',
+    addr3.pubkey,
 )
 multisig_address = result['multisig_address']
 multisig_program_derived_address = result['multisig_program_derived_address']
@@ -83,8 +93,10 @@ with tempfile.TemporaryDirectory() as scratch_dir:
     result = solana(
         'program',
         'write-buffer',
-        '--output', 'json',
-        '--buffer-authority', multisig_program_derived_address,
+        '--output',
+        'json',
+        '--buffer-authority',
+        multisig_program_derived_address,
         program_fname,
     )
     buffer_address = json.loads(result)['buffer']
@@ -111,8 +123,10 @@ try:
     solana(
         'program',
         'deploy',
-        '--program-id', program_id,
-        '--buffer', buffer_address,
+        '--program-id',
+        program_id,
+        '--buffer',
+        buffer_address,
     )
 except subprocess.CalledProcessError as err:
     assert err.returncode == 1
@@ -127,10 +141,14 @@ else:
 print('\nProposing program upgrade ...')
 result = multisig(
     'propose-upgrade',
-    '--multisig-address', multisig_address,
-    '--program-address', program_id,
-    '--buffer-address', buffer_address,
-    '--spill-address', addr1.pubkey,
+    '--multisig-address',
+    multisig_address,
+    '--program-address',
+    program_id,
+    '--buffer-address',
+    buffer_address,
+    '--spill-address',
+    addr1.pubkey,
     keypair_path=addr1.keypair_path,
 )
 upgrade_transaction_address = result['transaction_address']
@@ -141,7 +159,8 @@ print(f'> Transaction address is {upgrade_transaction_address}.')
 # it is the upgrade transaction that we intended.
 result = multisig(
     'show-transaction',
-    '--transaction-address', upgrade_transaction_address,
+    '--transaction-address',
+    upgrade_transaction_address,
 )
 assert result['did_execute'] == False
 
@@ -163,8 +182,10 @@ print('\nTrying to execute with 1 of 2 signatures, which should fail ...')
 try:
     multisig(
         'execute-transaction',
-        '--multisig-address', multisig_address,
-        '--transaction-address', upgrade_transaction_address,
+        '--multisig-address',
+        multisig_address,
+        '--transaction-address',
+        upgrade_transaction_address,
     )
 except subprocess.CalledProcessError as err:
     assert err.returncode != 0
@@ -184,13 +205,16 @@ else:
 print('\nApproving transaction from a second account ...')
 multisig(
     'approve',
-    '--multisig-address', multisig_address,
-    '--transaction-address', upgrade_transaction_address,
+    '--multisig-address',
+    multisig_address,
+    '--transaction-address',
+    upgrade_transaction_address,
     keypair_path=addr2.keypair_path,
 )
 result = multisig(
     'show-transaction',
-    '--transaction-address', upgrade_transaction_address,
+    '--transaction-address',
+    upgrade_transaction_address,
 )
 assert result['signers']['Current']['signers'] == [
     {'owner': addr1.pubkey, 'did_sign': True},
@@ -203,12 +227,15 @@ print(f'> Transaction is now signed by {addr2} as well.')
 print('\nTrying to execute with 2 of 2 signatures, which should succeed ...')
 multisig(
     'execute-transaction',
-    '--multisig-address', multisig_address,
-    '--transaction-address', upgrade_transaction_address,
+    '--multisig-address',
+    multisig_address,
+    '--transaction-address',
+    upgrade_transaction_address,
 )
 result = multisig(
     'show-transaction',
-    '--transaction-address', upgrade_transaction_address,
+    '--transaction-address',
+    upgrade_transaction_address,
 )
 assert result['did_execute'] == True
 print('> Transaction is marked as executed.')
@@ -222,8 +249,10 @@ print('\nTrying to execute a second time, which should fail ...')
 try:
     multisig(
         'execute-transaction',
-        '--multisig-address', multisig_address,
-        '--transaction-address', upgrade_transaction_address,
+        '--multisig-address',
+        multisig_address,
+        '--transaction-address',
+        upgrade_transaction_address,
     )
 except subprocess.CalledProcessError as err:
     assert err.returncode != 0
@@ -242,8 +271,7 @@ else:
 
 # Next we are going to test changing the multisig. Before we go and do that,
 # confirm that it currently looks like we expect it to look.
-multisig_before = multisig(
-    'show-multisig', '--multisig-address', multisig_address)
+multisig_before = multisig('show-multisig', '--multisig-address', multisig_address)
 assert multisig_before == {
     'multisig_program_derived_address': multisig_program_derived_address,
     'threshold': 2,
@@ -255,10 +283,14 @@ print('\nProposing to remove the third owner from the multisig ...')
 # This time we omit the third owner. The threshold remains 2.
 result = multisig(
     'propose-change-multisig',
-    '--multisig-address', multisig_address,
-    '--threshold', '2',
-    '--owner', addr1.pubkey,
-    '--owner', addr2.pubkey,
+    '--multisig-address',
+    multisig_address,
+    '--threshold',
+    '2',
+    '--owner',
+    addr1.pubkey,
+    '--owner',
+    addr2.pubkey,
     keypair_path=addr1.keypair_path,
 )
 change_multisig_transaction_address = result['transaction_address']
@@ -268,13 +300,16 @@ print(f'> Transaction address is {change_multisig_transaction_address}.')
 print('\nApproving transaction from a second account ...')
 multisig(
     'approve',
-    '--multisig-address', multisig_address,
-    '--transaction-address', change_multisig_transaction_address,
+    '--multisig-address',
+    multisig_address,
+    '--transaction-address',
+    change_multisig_transaction_address,
     keypair_path=addr3.keypair_path,
 )
 result = multisig(
     'show-transaction',
-    '--transaction-address', change_multisig_transaction_address,
+    '--transaction-address',
+    change_multisig_transaction_address,
 )
 assert result['signers']['Current']['signers'] == [
     {'owner': addr1.pubkey, 'did_sign': True},
@@ -287,18 +322,20 @@ print('> Transaction has the required number of signatures.')
 print('\nExecuting multisig change transaction ...')
 multisig(
     'execute-transaction',
-    '--multisig-address', multisig_address,
-    '--transaction-address', change_multisig_transaction_address,
+    '--multisig-address',
+    multisig_address,
+    '--transaction-address',
+    change_multisig_transaction_address,
 )
 result = multisig(
     'show-transaction',
-    '--transaction-address', change_multisig_transaction_address,
+    '--transaction-address',
+    change_multisig_transaction_address,
 )
 assert result['did_execute'] == True
 print('> Transaction is marked as executed.')
 
-multisig_after = multisig(
-    'show-multisig', '--multisig-address', multisig_address)
+multisig_after = multisig('show-multisig', '--multisig-address', multisig_address)
 assert multisig_after == {
     'multisig_program_derived_address': multisig_program_derived_address,
     'threshold': 2,
@@ -310,7 +347,8 @@ print(f'> The third owner was removed.')
 print('\nChecking that the old transaction does not show outdated owner info ...')
 result = multisig(
     'show-transaction',
-    '--transaction-address', upgrade_transaction_address,
+    '--transaction-address',
+    upgrade_transaction_address,
 )
 assert 'Outdated' in result['signers']
 assert result['signers']['Outdated'] == {
@@ -325,10 +363,14 @@ print('> Owners ids are gone, but approval count is preserved as expected.')
 print('\nProposing new program upgrade ...')
 result = multisig(
     'propose-upgrade',
-    '--multisig-address', multisig_address,
-    '--program-address', program_id,
-    '--buffer-address', buffer_address,
-    '--spill-address', addr1.pubkey,
+    '--multisig-address',
+    multisig_address,
+    '--program-address',
+    program_id,
+    '--buffer-address',
+    buffer_address,
+    '--spill-address',
+    addr1.pubkey,
     keypair_path=addr1.keypair_path,
 )
 upgrade_transaction_address = result['transaction_address']
@@ -339,8 +381,10 @@ print('\nApproving this transaction from owner 3, which should fail ...')
 try:
     multisig(
         'approve',
-        '--multisig-address', multisig_address,
-        '--transaction-address', upgrade_transaction_address,
+        '--multisig-address',
+        multisig_address,
+        '--transaction-address',
+        upgrade_transaction_address,
         keypair_path=addr3.keypair_path,
     )
 except subprocess.CalledProcessError as err:
@@ -352,7 +396,8 @@ except subprocess.CalledProcessError as err:
     assert 'custom program error: 0x64' in err.stderr
     result = multisig(
         'show-transaction',
-        '--transaction-address', upgrade_transaction_address,
+        '--transaction-address',
+        upgrade_transaction_address,
     )
     assert result['signers']['Current']['signers'] == [
         {'owner': addr1.pubkey, 'did_sign': True},
