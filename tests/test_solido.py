@@ -43,16 +43,16 @@ print(f'> Developer fee account owner: {developer_account_owner}')
 
 print('\nUploading stake pool program ...')
 stake_pool_program_id = solana_program_deploy(
-    'target/deploy/spl_stake_pool.so')
+    get_solido_program_path() + '/spl_stake_pool.so')
 print(f'> Stake pool program id is {stake_pool_program_id}.')
 
 
 print('\nUploading Solido program ...')
-solido_program_id = solana_program_deploy('target/deploy/lido.so')
+solido_program_id = solana_program_deploy(get_solido_program_path() + '/lido.so')
 print(f'> Solido program id is {solido_program_id}.')
 
 print('\nUploading Multisig program ...')
-multisig_program_id = solana_program_deploy('target/deploy/multisig.so')
+multisig_program_id = solana_program_deploy('/multisig.so')
 print(f'> Multisig program id is {multisig_program_id}.')
 
 multisig = get_multisig(multisig_program_id)

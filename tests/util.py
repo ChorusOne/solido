@@ -41,7 +41,7 @@ def run(*args: str) -> str:
     return result.stdout
 
 
-def get_solido_contract_path() -> str:
+def get_solido_program_path() -> str:
     solidopath = os.getenv('SOLCONPATH')
     if solido == None:
         solidopath = 'target/deploy'
