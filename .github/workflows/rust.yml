@@ -91,13 +91,10 @@ jobs:
       run: |
         export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
 
-        # Perform initial Solana setup.
-        solana-keygen new --no-bip39-passphrase --silent
-        solana config set --url https://api.devnet.solana.com
-        solana airdrop 500.0
+        # Loop airdrop as devnet doesn't seem to support large drops
+        for i in {1..50}; do solana airdrop 10.0; done
 
         NETWORK='https://api.devnet.solana.com' tests/test_solido.py
-        kill $validator
 
     - name: Run Multisig integration test
       run: |
