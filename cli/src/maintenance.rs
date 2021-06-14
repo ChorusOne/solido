@@ -412,23 +412,10 @@ impl SolidoState {
     }
 }
 
-/// Inspect the on-chain Solido state, and if there is maintenance that can be
-/// performed, do so. Returns a description of the task performed, if any.
-///
-/// This takes only one step, there might be more work left to do after this
-/// function returns. Call it in a loop until it returns `None`. (And then still
-/// call it in a loop, because the on-chain state might change.)
-pub fn perform_maintenance(
+pub fn try_perform_maintenance(
     config: &Config,
-    opts: &PerformMaintenanceOpts,
+    state: &SolidoState,
 ) -> Result<Option<MaintenanceOutput>> {
-    let state = SolidoState::new(
-        config,
-        &opts.solido_program_id,
-        &opts.solido_address,
-        &opts.stake_pool_program_id,
-    )?;
-
     // Try all of these operations one by one, and select the first one that
     // produces an instruction.
     let instruction: Option<Result<(Instruction, MaintenanceOutput)>> = None
@@ -445,4 +432,23 @@ pub fn perform_maintenance(
         Some(Err(err)) => Err(err),
         None => Ok(None),
     }
+}
+
+/// Inspect the on-chain Solido state, and if there is maintenance that can be
+/// performed, do so. Returns a description of the task performed, if any.
+///
+/// This takes only one step, there might be more work left to do after this
+/// function returns. Call it in a loop until it returns `None`. (And then still
+/// call it in a loop, because the on-chain state might change.)
+pub fn run_perform_maintenance(
+    config: &Config,
+    opts: &PerformMaintenanceOpts,
+) -> Result<Option<MaintenanceOutput>> {
+    let state = SolidoState::new(
+        config,
+        &opts.solido_program_id,
+        &opts.solido_address,
+        &opts.stake_pool_program_id,
+    )?;
+    try_perform_maintenance(config, &state)
 }

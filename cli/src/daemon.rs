@@ -17,9 +17,9 @@ use rand::Rng;
 use solana_sdk::pubkey::Pubkey;
 use tiny_http::{Server, Response, Request};
 
-use crate::maintenance::{PerformMaintenanceOpts, MaintenanceOutput, SolidoState, perform_maintenance};
+use crate::maintenance::{MaintenanceOutput, SolidoState, try_perform_maintenance};
 use crate::prometheus::{MetricFamily, Metric, write_metric};
-use crate::{Config, Error};
+use crate::Config;
 
 #[derive(Clap, Clone, Debug)]
 pub struct RunMaintainerOpts {
@@ -50,6 +50,7 @@ pub struct RunMaintainerOpts {
 }
 
 /// Metrics counters that track how many maintenance operations we performed.
+#[derive(Clone)]
 struct MaintenanceMetrics {
     /// Number of times that we checked if there was maintenance to perform.
     polls: u64,
@@ -81,7 +82,7 @@ impl MaintenanceMetrics {
             name: "solido_maintenance_errors_total",
             help: "Number of times we encountered an error while trying to perform maintenance, since launch.",
             type_: "counter",
-            metrics: vec![Metric::simple(self.polls)]
+            metrics: vec![Metric::simple(self.errors)]
         })?;
         write_metric(out, &MetricFamily {
             name: "solido_maintenance_transactions_total",
@@ -98,7 +99,7 @@ impl MaintenanceMetrics {
 
 struct Snapshot {
     metrics: MaintenanceMetrics,
-    solido: SolidoState,
+    solido: Option<SolidoState>,
 }
 
 type SnapshotMutex = Mutex<Option<Arc<Snapshot>>>;
@@ -117,18 +118,18 @@ fn run_main_loop(
     };
     let mut rng = rand::thread_rng();
 
-    // The perform-maintenance options are a subset of the run-maintainer options.
-    let maintenance_opts = PerformMaintenanceOpts {
-        solido_address: opts.solido_address,
-        solido_program_id: opts.solido_program_id,
-        stake_pool_program_id: opts.stake_pool_program_id,
-    };
-
     loop {
         let mut do_wait = false;
-        match perform_maintenance(config, &maintenance_opts) {
-            Err(err) => {
-                println!("Error in maintenance: {:?}", err);
+
+        let state_result = SolidoState::new(
+            config,
+            &opts.solido_program_id,
+            &opts.solido_address,
+            &opts.stake_pool_program_id,
+        );
+        match &state_result {
+            &Err(ref err) => {
+                println!("Failed to obtain Solido state: {:?}", err);
                 metrics.errors += 1;
 
                 // If the error was caused by a connectivity problem, we shouldn't
@@ -136,23 +137,40 @@ fn run_main_loop(
                 // exponential backoff with jitter, but let's not go there right now.
                 do_wait = true;
             }
-            Ok(None) => {
-                // Nothing to be done, try again later.
-                do_wait = true
-            },
-            Ok(Some(something_done)) => {
-                println!("{}", something_done);
-                match something_done {
-                    MaintenanceOutput::StakeDeposit {..} => {
-                        metrics.transactions_stake_deposit += 1
+            &Ok(ref state) => {
+                match try_perform_maintenance(config, &state) {
+                    Err(err) => {
+                        println!("Error in maintenance: {:?}", err);
+                        metrics.errors += 1;
+                        do_wait = true;
+                    }
+                    Ok(None) => {
+                        // Nothing to be done, try again later.
+                        do_wait = true;
                     },
-                    MaintenanceOutput::DepositActiveStateToPool {..} => {
-                        metrics.transactions_deposit_active_stake_to_pool += 1
-                    },
+                    Ok(Some(something_done)) => {
+                        println!("{}", something_done);
+                        match something_done {
+                            MaintenanceOutput::StakeDeposit {..} => {
+                                metrics.transactions_stake_deposit += 1
+                            },
+                            MaintenanceOutput::DepositActiveStateToPool {..} => {
+                                metrics.transactions_deposit_active_stake_to_pool += 1
+                            },
+                        }
+                    }
                 }
             }
         }
+
         metrics.polls += 1;
+
+        // Publish the new state and metrics, so the webserver can serve them.
+        let snapshot = Snapshot {
+            metrics: metrics.clone(),
+            solido: state_result.ok(),
+        };
+        snapshot_mutex.lock().unwrap().replace(Arc::new(snapshot));
 
         if do_wait {
             // Sleep a random time, to avoid a thundering herd problem, in case
@@ -184,11 +202,8 @@ fn serve_request(request: Request, snapshot_mutex: &SnapshotMutex) -> Result<(),
         }
     };
 
-    println!("received request! method: {:?}, url: {:?}, headers: {:?}",
-             request.method(),
-             request.url(),
-             request.headers()
-    );
+    // We don't even look at the request, for now we always serve the metrics.
+
     let mut out: Vec<u8> = Vec::new();
     let is_ok = snapshot.metrics.write_prometheus(&mut out).is_ok();
 

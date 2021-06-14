@@ -71,7 +71,8 @@ pub fn write_metric<W: Write>(out: &mut W, family: &MetricFamily) -> io::Result<
         writeln!(out, " {}", metric.value)?;
     }
 
-    Ok(())
+    // Add a blank line for readability by humans.
+    writeln!(out)
 }
 
 #[cfg(test)]
@@ -94,7 +95,7 @@ mod test {
             Ok(
                 "# HELP goats_teleported_total Number of goats teleported since launch.\n\
                  # TYPE goats_teleported_total counter\n\
-                 goats_teleported_total 144\n\
+                 goats_teleported_total 144\n\n\
                 "
             )
         )
@@ -125,7 +126,7 @@ mod test {
                  teleported_goat_weight_kg_bucket{le=\"75.0\"} 67\n\
                  teleported_goat_weight_kg_bucket{le=\"+Inf\"} 144\n\
                  teleported_goat_weight_kg_sum 11520\n\
-                 teleported_goat_weight_kg_count 144\n\
+                 teleported_goat_weight_kg_count 144\n\n\
                 "
             )
         )
@@ -150,7 +151,7 @@ mod test {
                 "# HELP goats_teleported_total Number of goats teleported since launch by departure and arrival.\n\
                  # TYPE goats_teleported_total counter\n\
                  goats_teleported_total{src=\"AMS\",dst=\"ZRH\"} 10\n\
-                 goats_teleported_total{src=\"ZRH\",dst=\"DXB\"} 53\n\
+                 goats_teleported_total{src=\"ZRH\",dst=\"DXB\"} 53\n\n\
                 "
             )
         )

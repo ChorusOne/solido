@@ -233,7 +233,7 @@ fn main() {
             // might add a daemon mode that runs continuously, and which logs
             // to stdout and exposes Prometheus metrics (also to monitor Solido,
             // not just the maintenance itself).
-            let output = maintenance::perform_maintenance(&config, &cmd_opts)
+            let output = maintenance::run_perform_maintenance(&config, &cmd_opts)
                 .expect("Failed to perform maintenance.");
             match (opts.output_mode, output) {
                 (OutputMode::Text, None) => println!("Nothing done, there was no maintenance to perform."),
