@@ -367,7 +367,7 @@ result = solido(
 expected_result = {
     'StakeDeposit': {
         'validator_vote_account': validator_vote_account,
-        'amount_lamports': 10.0e9,
+        'amount_lamports': int(10.0e9),
     }
 }
 assert result == expected_result, f'\nExpected: {expected_result}\nActual:   {result}'
