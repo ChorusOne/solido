@@ -192,6 +192,7 @@ pub fn process_remove_validator(
         return Err(LidoError::InvalidOwner.into());
     }
     let mut lido = deserialize_lido(program_id, accounts.lido)?;
+    lido.check_manager(accounts.manager)?;
     if &lido.stake_pool_account != accounts.stake_pool.key {
         msg!("Invalid stake pool");
         return Err(LidoError::InvalidStakePool.into());
