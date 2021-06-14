@@ -90,7 +90,6 @@ jobs:
     - name: Run Solido integration test against devnet
       run: |
         export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
-        validator=$(tests/start_test_validator.py)
 
         # Perform initial Solana setup.
         solana-keygen new --no-bip39-passphrase --silent
