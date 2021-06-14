@@ -240,9 +240,9 @@ pub fn process_stake_deposit(
 ) -> ProgramResult {
     let accounts = StakeDepositAccountsInfo::try_from_slice(raw_accounts)?;
 
-    lido.check_manager(accounts.manager)?;
     let rent = &Rent::from_account_info(accounts.sysvar_rent)?;
     let mut lido = deserialize_lido(program_id, accounts.lido)?;
+    lido.check_manager(accounts.manager)?;
 
     let minium_stake_balance =
         Lamports(rent.minimum_balance(std::mem::size_of::<stake_program::StakeState>()));
