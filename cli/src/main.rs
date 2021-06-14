@@ -24,6 +24,7 @@ use crate::helpers::command_remove_maintainer;
 use crate::helpers::command_show_solido;
 use crate::helpers::{command_add_validator, command_create_solido, CreateSolidoOpts};
 use crate::maintenance::PerformMaintenanceOpts;
+use crate::daemon::RunMaintainerOpts;
 use crate::multisig::MultisigOpts;
 
 extern crate lazy_static;
@@ -135,7 +136,7 @@ FEES:
     PerformMaintenance(PerformMaintenanceOpts),
 
     /// Start the maintainer daemon.
-    RunMaintainer(PerformMaintenanceOpts),
+    RunMaintainer(RunMaintainerOpts),
 
     /// Interact with a deployed Multisig program for governance tasks.
     Multisig(MultisigOpts),
@@ -241,7 +242,7 @@ fn main() {
             }
         }
         SubCommand::RunMaintainer(cmd_opts) => {
-            daemon::main(&config, cmd_opts);
+            daemon::main(&config, &cmd_opts);
         }
         SubCommand::AddValidator(cmd_opts) => {
             let output = command_add_validator(config, cmd_opts).expect("Failed to add validator");

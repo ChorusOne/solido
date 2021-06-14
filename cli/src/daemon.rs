@@ -1,16 +1,46 @@
 //! Maintenance daemon that periodically executes maintenance tasks, and serves metrics.
 
+use std::io;
+use std::sync::Arc;
+use std::time::Duration;
+use std::thread::JoinHandle;
+
+use clap::Clap;
+use rand::Rng;
+use solana_sdk::pubkey::Pubkey;
+use tiny_http::{Server, Response, Request};
+
+use crate::maintenance::{PerformMaintenanceOpts, MaintenanceOutput, perform_maintenance};
 use crate::prometheus::{MetricFamily, Metric, write_metric};
 use crate::{Config, Error};
-use crate::maintenance::{PerformMaintenanceOpts, MaintenanceOutput, perform_maintenance};
-use std::time::Duration;
-use rand::Rng;
-use std::io;
 
-/// Maximum time to wait after there was no maintenance to perform, before checking again.
-///
-/// The expected wait time is half the max poll interval.
-const MAX_POLL_INTERVAL: Duration = Duration::from_secs(120);
+#[derive(Clap, Clone, Debug)]
+pub struct RunMaintainerOpts {
+    /// Address of the Solido program.
+    #[clap(long)]
+    pub solido_program_id: Pubkey,
+
+    /// Account that stores the data for this Solido instance.
+    #[clap(long)]
+    pub solido_address: Pubkey,
+
+    /// Stake pool program id
+    #[clap(long)]
+    pub stake_pool_program_id: Pubkey,
+
+    /// Listen address and port for the http server that serves a /metrics endpoint.
+    #[clap(long, default_value = "0.0.0.0:8923")]
+    pub listen: String,
+
+    /// Maximum time to wait after there was no maintenance to perform, before checking again.
+    ///
+    /// The expected wait time is half the max poll interval. A max poll interval
+    /// of a few minutes should be plenty fast for a production deployment, but
+    /// for testing you can reduce this value to make the daemon more responsive,
+    /// to eliminate some waiting time.
+    #[clap(long, default_value = "120")]
+    pub max_poll_interval_seconds: u64,
+}
 
 /// Metrics counters that track how many maintenance operations we performed.
 struct MaintenanceMetrics {
@@ -59,10 +89,10 @@ impl MaintenanceMetrics {
     }
 }
 
-/// Run the maintenance daemon.
-pub fn main(
+/// Run the maintenance loop
+pub fn run_main_loop(
     config: &Config,
-    opts: PerformMaintenanceOpts,
+    opts: &RunMaintainerOpts,
 ) {
     let mut metrics = MaintenanceMetrics {
         polls: 0,
@@ -72,9 +102,16 @@ pub fn main(
     };
     let mut rng = rand::thread_rng();
 
+    // The perform-maintenance options are a subset of the run-maintainer options.
+    let maintenance_opts = PerformMaintenanceOpts {
+        solido_address: opts.solido_address,
+        solido_program_id: opts.solido_program_id,
+        stake_pool_program_id: opts.stake_pool_program_id,
+    };
+
     loop {
         let mut do_wait = false;
-        match perform_maintenance(config, &opts) {
+        match perform_maintenance(config, &maintenance_opts) {
             Err(err) => {
                 println!("Error in maintenance: {:?}", err);
                 metrics.errors += 1;
@@ -106,8 +143,57 @@ pub fn main(
             // Sleep a random time, to avoid a thundering herd problem, in case
             // multiple maintainer bots happened to run in sync. They would all
             // try to create the same transaction, and only one would pass.
-            let sleep_time = rng.gen_range(Duration::from_secs(0)..MAX_POLL_INTERVAL);
+            let max_poll_interval = Duration::from_secs(opts.max_poll_interval_seconds);
+            let sleep_time = rng.gen_range(Duration::from_secs(0)..max_poll_interval);
             std::thread::sleep(sleep_time);
         }
+    }
+}
+
+pub fn serve_request(request: Request) {
+    println!("received request! method: {:?}, url: {:?}, headers: {:?}",
+             request.method(),
+             request.url(),
+             request.headers()
+    );
+
+    let response = Response::from_string("hello world");
+    request.respond(response);
+}
+
+/// Spawn threads that run the http server.
+pub fn start_http_server(opts: &RunMaintainerOpts) -> Vec<JoinHandle<()>> {
+    let server = Arc::new(Server::http(opts.listen.clone()).unwrap());
+    println!("Http server listening on {}", opts.listen);
+
+    // Spawn a number of http handler threads, so we can handle requests in
+    // parallel. This server is only used to serve metrics, it can be super basic,
+    // but some degree of parallelism is nice in case a client is slow to send
+    // its request or something like that.
+    (0..8)
+        .map(|i| {
+            let server_clone = server.clone();
+            std::thread::Builder::new().name(format!("http_handler_{}", i)).spawn(move || {
+                for request in server_clone.incoming_requests() {
+                    serve_request(request);
+                }
+            }).expect("Failed to spawn http handler thread.")
+        })
+        .collect()
+}
+
+/// Run the maintenance daemon.
+pub fn main(
+    config: &Config,
+    opts: &RunMaintainerOpts,
+) {
+    let http_threads = start_http_server(&opts);
+
+    run_main_loop(config, opts);
+
+    // We never get here, the main loop should run indefinitely until the program
+    // is killed, and while the main loop runs, the http server also serves.
+    for thread in http_threads {
+        thread.join().unwrap();
     }
 }
