@@ -372,7 +372,7 @@ result = solido(
 )
 expected_result = {
     'StakeDeposit': {
-        'validator_vote_account': validator_vote_account,
+        'validator_vote_account': validator_vote_account.pubkey,
         'amount_lamports': int(10.0e9),
     }
 }
@@ -383,7 +383,6 @@ print(
     '\nSimulating 0.0005 SOL deposit (too little to stake), then running maintenance ...'
 )
 # TODO(#154): Perform an actual deposit here.
-reserve_authority: str = solido_instance['reserve_authority']
 solana('transfer', '--allow-unfunded-recipient', reserve_authority, '0.0005')
 print(f'> Funded reserve {reserve_authority} with 0.0005 SOL')
 
