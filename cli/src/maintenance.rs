@@ -238,10 +238,10 @@ impl SolidoState {
         let rent_account = rpc.get_account(&sysvar::rent::ID)?;
         let rent: Rent = bincode::deserialize(&rent_account.data)?;
 
-        let clock_account = config.rpc().get_account(&sysvar::clock::ID)?;
+        let clock_account = rpc.get_account(&sysvar::clock::ID)?;
         let clock: Clock = bincode::deserialize(&clock_account.data)?;
 
-        let stake_history_account = config.rpc().get_account(&sysvar::stake_history::ID)?;
+        let stake_history_account = rpc.get_account(&sysvar::stake_history::ID)?;
         let stake_history: StakeHistory = bincode::deserialize(&stake_history_account.data)?;
 
         let mut validator_stake_accounts = Vec::new();
@@ -271,7 +271,7 @@ impl SolidoState {
             // The entity executing the maintenance transactions, is the maintainer.
             // We don't verify here if it is part of the maintainer set, the on-chain
             // program does that anyway.
-            maintainer_address: config.fee_payer.pubkey(),
+            maintainer_address: config.signer.pubkey(),
         })
     }
 
@@ -443,7 +443,7 @@ pub fn perform_maintenance(
         Some(Ok((instr, output))) => {
             // For maintenance operations, the maintainer is the only signer,
             // and that should be sufficient.
-            sign_and_send_transaction(config, &[instr], &[&config.fee_payer])?;
+            sign_and_send_transaction(config, &[instr], &[config.signer]);
             Ok(output)
         }
         Some(Err(err)) => Err(err),
