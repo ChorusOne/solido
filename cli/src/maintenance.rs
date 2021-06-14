@@ -312,7 +312,7 @@ impl SolidoState {
             lido::balance::get_validator_furthest_below_target(stake_infos, &targets[..]);
 
         // NOTE: We assume here that the order in the stake pool's validator list
-        // is the same as in Solido's list.
+        // is the same as in Solido's list. This is the case as long as we only add validators.
         let validator = &self.solido.validators.entries[validator_index];
         let stake_info = &self.validator_list.validators[validator_index];
 
@@ -366,7 +366,7 @@ impl SolidoState {
             DEPOSIT_AUTHORITY,
         );
 
-        // TODO(fynn): Should the withdraw authority be set to the stake pool authority?
+        // The stake pool withdraw authority is the stake pool authority.
         let (withdraw_authority, _bump_seed) = lido::find_authority_program_address(
             &self.solido_program_id,
             &self.solido_address,
