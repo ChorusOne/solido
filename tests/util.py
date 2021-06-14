@@ -102,7 +102,7 @@ def solana(*args: str) -> str:
 
 def spl_token(*args: str) -> str:
     """
-    Run 'spl_token' against nextwork.
+    Run 'spl_token' against network.
     """
     return run('spl-token', '--url', get_network() , *args)
 
