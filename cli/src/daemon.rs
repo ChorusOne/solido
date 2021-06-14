@@ -47,14 +47,14 @@ impl MaintenanceMetrics {
                 help:
                     "Number of times we checked if there is maintenance to perform, since launch.",
                 type_: "counter",
-                metrics: vec![Metric::simple(self.polls)],
+                metrics: vec![Metric::new(self.polls)],
             },
         )?;
         write_metric(out, &MetricFamily {
             name: "solido_maintenance_errors_total",
             help: "Number of times we encountered an error while trying to perform maintenance, since launch.",
             type_: "counter",
-            metrics: vec![Metric::simple(self.errors)]
+            metrics: vec![Metric::new(self.errors)]
         })?;
         write_metric(
             out,
@@ -62,11 +62,8 @@ impl MaintenanceMetrics {
                 name: "solido_maintenance_transactions_total",
                 help: "Number of maintenance transactions executed, since launch.",
                 type_: "counter",
-                metrics: vec![Metric::singleton(
-                    "operation",
-                    "StakeDeposit",
-                    self.transactions_stake_deposit,
-                )],
+                metrics: vec![Metric::new(self.transactions_stake_deposit)
+                    .with_label("operation", "StakeDeposit".to_string())],
             },
         )?;
         Ok(())
@@ -183,7 +180,11 @@ fn serve_request(request: Request, snapshot_mutex: &SnapshotMutex) -> Result<(),
     // We don't even look at the request, for now we always serve the metrics.
 
     let mut out: Vec<u8> = Vec::new();
-    let is_ok = snapshot.metrics.write_prometheus(&mut out).is_ok();
+    let mut is_ok = snapshot.metrics.write_prometheus(&mut out).is_ok();
+
+    if let Some(ref solido) = snapshot.solido {
+        is_ok = is_ok && solido.write_prometheus(&mut out).is_ok();
+    }
 
     return if is_ok {
         request.respond(Response::from_data(out))

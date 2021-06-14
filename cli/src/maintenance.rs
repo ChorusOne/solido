@@ -1,6 +1,7 @@
 //! Entry point for maintenance operations, such as updating the pool balance.
 
 use std::fmt;
+use std::io;
 
 use serde::Serialize;
 use solana_client::rpc_client::RpcClient;
@@ -16,11 +17,12 @@ use lido::{
     token::Lamports,
     DEPOSIT_AUTHORITY,
 };
+use spl_stake_pool::stake_program::StakeState;
 
 use crate::config::PerformMaintenanceOpts;
 use crate::helpers::{get_solido, sign_and_send_transaction};
+use crate::stake_account::StakeBalance;
 use crate::{error::Error, Config};
-use spl_stake_pool::stake_program::StakeState;
 
 type Result<T> = std::result::Result<T, Error>;
 
@@ -66,20 +68,11 @@ pub struct SolidoState {
     pub reserve_address: Pubkey,
     pub reserve_account: Account,
     pub rent: Rent,
+    pub clock: Clock,
 
     /// Public key of the maintainer executing the maintenance.
     /// Must be a member of `solido.maintainers`.
     pub maintainer_address: Pubkey,
-}
-
-/// The balance of a stake account, split into the four states that stake can be in.
-///
-/// The sum of the four fields is equal to the SOL balance of the stake account.
-pub struct StakeBalance {
-    pub inactive: Lamports,
-    pub activating: Lamports,
-    pub active: Lamports,
-    pub deactivating: Lamports,
 }
 
 fn get_validator_stake_accounts(
@@ -110,28 +103,12 @@ fn get_validator_stake_accounts(
             "Expected the stake account for validator to delegate to that validator."
         );
 
-        let target_epoch = clock.epoch;
-        let history = Some(stake_history);
-        // TODO(#184): Confirm the meaning of this.
-        let fix_stake_deactivate = true;
-
-        let (active_lamports, activating_lamports, deactivating_lamports) = delegation
-            .stake_activating_and_deactivating(target_epoch, history, fix_stake_deactivate);
-
-        let inactive_lamports = account.lamports
-            .checked_sub(active_lamports)
-            .expect("Active stake cannot be larger than stake account balance.")
-            .checked_sub(activating_lamports)
-            .expect("Activating stake cannot be larger than stake account balance - active.")
-            .checked_sub(deactivating_lamports)
-            .expect("Deactivating stake cannot be larger than stake account balance - active - activating.");
-
-        let balance = StakeBalance {
-            inactive: Lamports(inactive_lamports),
-            activating: Lamports(activating_lamports),
-            active: Lamports(active_lamports),
-            deactivating: Lamports(deactivating_lamports),
-        };
+        let balance = StakeBalance::from_delegated_account(
+            Lamports(account.lamports),
+            &delegation,
+            clock,
+            stake_history,
+        );
 
         result.push((addr, balance));
     }
@@ -183,6 +160,7 @@ impl SolidoState {
             reserve_address,
             reserve_account,
             rent,
+            clock,
             // The entity executing the maintenance transactions, is the maintainer.
             // We don't verify here if it is part of the maintainer set, the on-chain
             // program does that anyway.
@@ -269,6 +247,77 @@ impl SolidoState {
         };
 
         Ok(Some((instruction, task)))
+    }
+
+    /// Write metrics about the current Solido instance in Prometheus format.
+    pub fn write_prometheus<W: io::Write>(&self, out: &mut W) -> io::Result<()> {
+        use crate::prometheus::{write_metric, Metric, MetricFamily};
+
+        let at = self.clock.unix_timestamp;
+
+        write_metric(
+            out,
+            &MetricFamily {
+                name: "solido_solana_block_height",
+                help: "Solana slot that we read the Solido details from.",
+                type_: "gauge",
+                metrics: vec![Metric::new(self.clock.slot).at(at)],
+            },
+        )?;
+
+        // Gather the different components that make up Solido's SOL balance.
+        // The values are stored in Lamports (1e-9 SOL), but Prometheus convention
+        // is to use base units, so we set `.nano()` to report them in SOL.
+        let mut balance_sol_metrics = vec![Metric::new(self.get_effective_reserve().0)
+            .nano()
+            .at(at)
+            .with_label("status", "reserve".to_string())];
+
+        for (validator, stake_accounts) in self
+            .solido
+            .validators
+            .entries
+            .iter()
+            .zip(self.validator_stake_accounts.iter())
+        {
+            let stake_balance: StakeBalance =
+                stake_accounts.iter().map(|(_addr, balance)| *balance).sum();
+            let metric = |amount: Lamports, status: &'static str| {
+                Metric::new(amount.0)
+                    .nano()
+                    .at(at)
+                    .with_label("status", status.to_string())
+                    .with_label("vote_account", validator.pubkey.to_string())
+            };
+            balance_sol_metrics.push(metric(stake_balance.inactive, "inactive"));
+            balance_sol_metrics.push(metric(stake_balance.activating, "activating"));
+            balance_sol_metrics.push(metric(stake_balance.active, "active"));
+            balance_sol_metrics.push(metric(stake_balance.deactivating, "deactivating"));
+        }
+
+        write_metric(
+            out,
+            &MetricFamily {
+                name: "solido_balance_sol",
+                help: "Amount of SOL managed by Solido.",
+                type_: "gauge",
+                metrics: balance_sol_metrics,
+            },
+        )?;
+
+        write_metric(
+            out,
+            &MetricFamily {
+                name: "solido_st_sol_supply_st_sol",
+                help: "Amount of stSOL that exists.",
+                type_: "gauge",
+                metrics: vec![
+                    // TODO(ruuda): Add stSOL mint to accounts to scan.
+                ],
+            },
+        )?;
+
+        Ok(())
     }
 }
 
