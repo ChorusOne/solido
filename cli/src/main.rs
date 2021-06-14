@@ -18,23 +18,23 @@ use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::read_keypair_file;
 use solana_sdk::signer::Signer;
 
+use crate::daemon::RunMaintainerOpts;
 use crate::helpers::command_add_maintainer;
 use crate::helpers::command_create_validator_stake_account;
 use crate::helpers::command_remove_maintainer;
 use crate::helpers::command_show_solido;
 use crate::helpers::{command_add_validator, command_create_solido, CreateSolidoOpts};
 use crate::maintenance::PerformMaintenanceOpts;
-use crate::daemon::RunMaintainerOpts;
 use crate::multisig::MultisigOpts;
 
 extern crate lazy_static;
 extern crate spl_stake_pool;
 
-mod prometheus;
 mod daemon;
 mod helpers;
 mod maintenance;
 mod multisig;
+mod prometheus;
 mod spl_token_utils;
 mod stake_pool_helpers;
 mod util;
@@ -236,7 +236,9 @@ fn main() {
             let output = maintenance::run_perform_maintenance(&config, &cmd_opts)
                 .expect("Failed to perform maintenance.");
             match (opts.output_mode, output) {
-                (OutputMode::Text, None) => println!("Nothing done, there was no maintenance to perform."),
+                (OutputMode::Text, None) => {
+                    println!("Nothing done, there was no maintenance to perform.")
+                }
                 (OutputMode::Json, None) => println!("null"),
                 (mode, Some(output)) => print_output(mode, &output),
             }

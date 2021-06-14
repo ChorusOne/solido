@@ -8,17 +8,17 @@
 
 use std::io;
 use std::sync::Arc;
-use std::time::Duration;
-use std::thread::JoinHandle;
 use std::sync::Mutex;
+use std::thread::JoinHandle;
+use std::time::Duration;
 
 use clap::Clap;
 use rand::Rng;
 use solana_sdk::pubkey::Pubkey;
-use tiny_http::{Server, Response, Request};
+use tiny_http::{Request, Response, Server};
 
-use crate::maintenance::{MaintenanceOutput, SolidoState, try_perform_maintenance};
-use crate::prometheus::{MetricFamily, Metric, write_metric};
+use crate::maintenance::{try_perform_maintenance, MaintenanceOutput, SolidoState};
+use crate::prometheus::{write_metric, Metric, MetricFamily};
 use crate::Config;
 
 #[derive(Clap, Clone, Debug)]
@@ -63,7 +63,6 @@ struct MaintenanceMetrics {
 
     /// Number of times we performed `DepositActiveStakeToPool`.
     transactions_deposit_active_stake_to_pool: u64,
-
     // TODO(#96#issuecomment-859388866): Track how much the daemon spends on transaction fees,
     // so we know how much SOL it costs to operate.
     // spent_lamports_total: u64
@@ -72,27 +71,38 @@ struct MaintenanceMetrics {
 impl MaintenanceMetrics {
     /// Serialize metrics in Prometheus text format.
     pub fn write_prometheus<W: io::Write>(&self, out: &mut W) -> io::Result<()> {
-        write_metric(out, &MetricFamily {
-            name: "solido_maintenance_polls_total",
-            help: "Number of times we checked if there is maintenance to perform, since launch.",
-            type_: "counter",
-            metrics: vec![Metric::simple(self.polls)]
-        })?;
+        write_metric(
+            out,
+            &MetricFamily {
+                name: "solido_maintenance_polls_total",
+                help:
+                    "Number of times we checked if there is maintenance to perform, since launch.",
+                type_: "counter",
+                metrics: vec![Metric::simple(self.polls)],
+            },
+        )?;
         write_metric(out, &MetricFamily {
             name: "solido_maintenance_errors_total",
             help: "Number of times we encountered an error while trying to perform maintenance, since launch.",
             type_: "counter",
             metrics: vec![Metric::simple(self.errors)]
         })?;
-        write_metric(out, &MetricFamily {
-            name: "solido_maintenance_transactions_total",
-            help: "Number of maintenance transactions executed, since launch.",
-            type_: "counter",
-            metrics: vec![
-                Metric::singleton("operation", "StakeDeposit", self.transactions_stake_deposit),
-                Metric::singleton("operation", "DepositActiveStakeToPool", self.transactions_deposit_active_stake_to_pool),
-            ],
-        })?;
+        write_metric(
+            out,
+            &MetricFamily {
+                name: "solido_maintenance_transactions_total",
+                help: "Number of maintenance transactions executed, since launch.",
+                type_: "counter",
+                metrics: vec![
+                    Metric::singleton("operation", "StakeDeposit", self.transactions_stake_deposit),
+                    Metric::singleton(
+                        "operation",
+                        "DepositActiveStakeToPool",
+                        self.transactions_deposit_active_stake_to_pool,
+                    ),
+                ],
+            },
+        )?;
         Ok(())
     }
 }
@@ -105,11 +115,7 @@ struct Snapshot {
 type SnapshotMutex = Mutex<Option<Arc<Snapshot>>>;
 
 /// Run the maintenance loop
-fn run_main_loop(
-    config: &Config,
-    opts: &RunMaintainerOpts,
-    snapshot_mutex: &SnapshotMutex,
-) {
+fn run_main_loop(config: &Config, opts: &RunMaintainerOpts, snapshot_mutex: &SnapshotMutex) {
     let mut metrics = MaintenanceMetrics {
         polls: 0,
         errors: 0,
@@ -147,16 +153,16 @@ fn run_main_loop(
                     Ok(None) => {
                         // Nothing to be done, try again later.
                         do_wait = true;
-                    },
+                    }
                     Ok(Some(something_done)) => {
                         println!("{}", something_done);
                         match something_done {
-                            MaintenanceOutput::StakeDeposit {..} => {
+                            MaintenanceOutput::StakeDeposit { .. } => {
                                 metrics.transactions_stake_deposit += 1
-                            },
-                            MaintenanceOutput::DepositActiveStateToPool {..} => {
+                            }
+                            MaintenanceOutput::DepositActiveStateToPool { .. } => {
                                 metrics.transactions_deposit_active_stake_to_pool += 1
-                            },
+                            }
                         }
                     }
                 }
@@ -183,7 +189,7 @@ fn run_main_loop(
     }
 }
 
-fn serve_request(request: Request, snapshot_mutex: &SnapshotMutex) -> Result<(), std::io::Error>{
+fn serve_request(request: Request, snapshot_mutex: &SnapshotMutex) -> Result<(), std::io::Error> {
     // Take the current snapshot. This only holds the lock briefly, and does
     // not prevent other threads from updating the snapshot while this request
     // handler is running.
@@ -196,8 +202,10 @@ fn serve_request(request: Request, snapshot_mutex: &SnapshotMutex) -> Result<(),
         Some(arc_snapshot) => arc_snapshot,
         None => {
             return request.respond(
-                Response::from_string("Service Unavailable\n\nServer is still starting, try again shortly.")
-                    .with_status_code(503)
+                Response::from_string(
+                    "Service Unavailable\n\nServer is still starting, try again shortly.",
+                )
+                .with_status_code(503),
             );
         }
     };
@@ -211,11 +219,14 @@ fn serve_request(request: Request, snapshot_mutex: &SnapshotMutex) -> Result<(),
         request.respond(Response::from_data(out))
     } else {
         request.respond(Response::from_string("error").with_status_code(500))
-    }
+    };
 }
 
 /// Spawn threads that run the http server.
-fn start_http_server(opts: &RunMaintainerOpts, snapshot_mutex: Arc<SnapshotMutex>) -> Vec<JoinHandle<()>> {
+fn start_http_server(
+    opts: &RunMaintainerOpts,
+    snapshot_mutex: Arc<SnapshotMutex>,
+) -> Vec<JoinHandle<()>> {
     let server = Arc::new(Server::http(opts.listen.clone()).unwrap());
     println!("Http server listening on {}", opts.listen);
 
@@ -227,22 +238,22 @@ fn start_http_server(opts: &RunMaintainerOpts, snapshot_mutex: Arc<SnapshotMutex
         .map(|i| {
             let server_clone = server.clone();
             let snapshot_mutex_clone = snapshot_mutex.clone();
-            std::thread::Builder::new().name(format!("http_handler_{}", i)).spawn(move || {
-                for request in server_clone.incoming_requests() {
-                    // Ignore any errors; if we fail to respond, then there's little
-                    // we can do about it here ... the client should just retry.
-                    let _ = serve_request(request, &*snapshot_mutex_clone);
-                }
-            }).expect("Failed to spawn http handler thread.")
+            std::thread::Builder::new()
+                .name(format!("http_handler_{}", i))
+                .spawn(move || {
+                    for request in server_clone.incoming_requests() {
+                        // Ignore any errors; if we fail to respond, then there's little
+                        // we can do about it here ... the client should just retry.
+                        let _ = serve_request(request, &*snapshot_mutex_clone);
+                    }
+                })
+                .expect("Failed to spawn http handler thread.")
         })
         .collect()
 }
 
 /// Run the maintenance daemon.
-pub fn main(
-    config: &Config,
-    opts: &RunMaintainerOpts,
-) {
+pub fn main(config: &Config, opts: &RunMaintainerOpts) {
     let snapshot_mutex = Arc::new(Mutex::new(None));
     let http_threads = start_http_server(&opts, snapshot_mutex.clone());
 

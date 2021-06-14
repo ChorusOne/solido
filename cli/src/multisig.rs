@@ -289,7 +289,8 @@ fn create_multisig(config: &Config, opts: CreateMultisigOpts) -> CreateMultisigO
         config,
         &[create_instruction, multisig_instruction],
         &[&multisig_account, config.signer],
-    ).expect("Failed to sign or send transaction.");
+    )
+    .expect("Failed to sign or send transaction.");
 
     CreateMultisigOutput {
         multisig_address: multisig_account.pubkey().into(),
@@ -990,7 +991,8 @@ pub fn propose_instruction(
         &config,
         &[create_instruction, multisig_instruction],
         &[config.signer, &transaction_account],
-    ).expect("Failed to sign or send transaction.");
+    )
+    .expect("Failed to sign or send transaction.");
     ProposeInstructionOutput {
         transaction_address: transaction_account.pubkey().into(),
     }

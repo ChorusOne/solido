@@ -15,9 +15,7 @@ use solana_client::rpc_client::RpcClient;
 use solana_program::{
     clock::Clock, pubkey::Pubkey, rent::Rent, stake_history::StakeHistory, sysvar,
 };
-use solana_sdk::{
-    account::Account, borsh::try_from_slice_unchecked, instruction::Instruction
-};
+use solana_sdk::{account::Account, borsh::try_from_slice_unchecked, instruction::Instruction};
 use spl_stake_pool::stake_program::StakeState;
 use spl_stake_pool::state::{StakePool, ValidatorList};
 use std::fmt;

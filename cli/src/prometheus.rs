@@ -2,8 +2,8 @@
 //!
 //! See also https://prometheus.io/docs/instrumenting/exposition_formats/#text-based-format.
 
-use std::io::Write;
 use std::io;
+use std::io::Write;
 
 pub struct MetricFamily<'a> {
     /// Name of the metric, e.g. `goats_teleported_total`.
@@ -13,7 +13,7 @@ pub struct MetricFamily<'a> {
     /// TYPE line content. Most common are `counter`, `gauge`, and `histogram`.
     pub type_: &'a str,
     /// Values for this metric, possibly with labels or a suffix.
-    pub metrics: Vec<Metric<'a>>
+    pub metrics: Vec<Metric<'a>>,
 }
 
 pub struct Metric<'a> {
@@ -28,22 +28,43 @@ pub struct Metric<'a> {
 impl<'a> Metric<'a> {
     /// Just a value, no labels.
     pub fn simple(value: u64) -> Metric<'a> {
-        Metric { labels: Vec::new(), suffix: "", value }
+        Metric {
+            labels: Vec::new(),
+            suffix: "",
+            value,
+        }
     }
 
     /// A suffix and value but no labels.
     pub fn suffix(suffix: &'a str, value: u64) -> Metric<'a> {
-        Metric { labels: Vec::new(), suffix, value }
+        Metric {
+            labels: Vec::new(),
+            suffix,
+            value,
+        }
     }
 
     /// A value, and a single key-value label.
     pub fn singleton(label_key: &'a str, label_value: &'a str, value: u64) -> Metric<'a> {
-        Metric { labels: vec![(label_key, label_value)], suffix: "", value }
+        Metric {
+            labels: vec![(label_key, label_value)],
+            suffix: "",
+            value,
+        }
     }
 
     /// A value, and a single key-value label.
-    pub fn suffix_singleton(suffix: &'a str, label_key: &'a str, label_value: &'a str, value: u64) -> Metric<'a> {
-        Metric { labels: vec![(label_key, label_value)], suffix, value }
+    pub fn suffix_singleton(
+        suffix: &'a str,
+        label_key: &'a str,
+        label_value: &'a str,
+        value: u64,
+    ) -> Metric<'a> {
+        Metric {
+            labels: vec![(label_key, label_value)],
+            suffix,
+            value,
+        }
     }
 }
 
@@ -61,7 +82,7 @@ pub fn write_metric<W: Write>(out: &mut W, family: &MetricFamily) -> io::Result<
         if metric.labels.len() > 0 {
             write!(out, "{{")?;
             let mut separator = "";
-            for (key, value)  in metric.labels.iter() {
+            for (key, value) in metric.labels.iter() {
                 write!(out, "{}{}={:?}", separator, key, value)?;
                 separator = ",";
             }
@@ -77,18 +98,22 @@ pub fn write_metric<W: Write>(out: &mut W, family: &MetricFamily) -> io::Result<
 
 #[cfg(test)]
 mod test {
-    use super::{MetricFamily, Metric, write_metric};
+    use super::{write_metric, Metric, MetricFamily};
     use std::str;
 
     #[test]
     fn write_metric_without_labels() {
         let mut out: Vec<u8> = Vec::new();
-        write_metric(&mut out, &MetricFamily {
-            name: "goats_teleported_total",
-            help: "Number of goats teleported since launch.",
-            type_: "counter",
-            metrics: vec![Metric::simple(144)],
-        }).unwrap();
+        write_metric(
+            &mut out,
+            &MetricFamily {
+                name: "goats_teleported_total",
+                help: "Number of goats teleported since launch.",
+                type_: "counter",
+                metrics: vec![Metric::simple(144)],
+            },
+        )
+        .unwrap();
 
         assert_eq!(
             str::from_utf8(&out[..]),
@@ -104,18 +129,22 @@ mod test {
     #[test]
     fn write_metric_histogram() {
         let mut out: Vec<u8> = Vec::new();
-        write_metric(&mut out, &MetricFamily {
-            name: "teleported_goat_weight_kg",
-            help: "Histogram of the weight of teleported goats.",
-            type_: "histogram",
-            metrics: vec![
-                Metric::suffix_singleton("_bucket", "le", "50.0", 44),
-                Metric::suffix_singleton("_bucket", "le", "75.0", 67),
-                Metric::suffix_singleton("_bucket", "le", "+Inf", 144),
-                Metric::suffix("_sum", 11520),
-                Metric::suffix("_count", 144),
-            ],
-        }).unwrap();
+        write_metric(
+            &mut out,
+            &MetricFamily {
+                name: "teleported_goat_weight_kg",
+                help: "Histogram of the weight of teleported goats.",
+                type_: "histogram",
+                metrics: vec![
+                    Metric::suffix_singleton("_bucket", "le", "50.0", 44),
+                    Metric::suffix_singleton("_bucket", "le", "75.0", 67),
+                    Metric::suffix_singleton("_bucket", "le", "+Inf", 144),
+                    Metric::suffix("_sum", 11520),
+                    Metric::suffix("_count", 144),
+                ],
+            },
+        )
+        .unwrap();
 
         assert_eq!(
             str::from_utf8(&out[..]),
@@ -135,15 +164,27 @@ mod test {
     #[test]
     fn write_metric_multiple_labels() {
         let mut out: Vec<u8> = Vec::new();
-        write_metric(&mut out, &MetricFamily {
-            name: "goats_teleported_total",
-            help: "Number of goats teleported since launch by departure and arrival.",
-            type_: "counter",
-            metrics: vec![
-                Metric { suffix: "", labels: vec![("src", "AMS"), ("dst", "ZRH")], value: 10 },
-                Metric { suffix: "", labels: vec![("src", "ZRH"), ("dst", "DXB")], value: 53 },
-            ],
-        }).unwrap();
+        write_metric(
+            &mut out,
+            &MetricFamily {
+                name: "goats_teleported_total",
+                help: "Number of goats teleported since launch by departure and arrival.",
+                type_: "counter",
+                metrics: vec![
+                    Metric {
+                        suffix: "",
+                        labels: vec![("src", "AMS"), ("dst", "ZRH")],
+                        value: 10,
+                    },
+                    Metric {
+                        suffix: "",
+                        labels: vec![("src", "ZRH"), ("dst", "DXB")],
+                        value: 53,
+                    },
+                ],
+            },
+        )
+        .unwrap();
 
         assert_eq!(
             str::from_utf8(&out[..]),
