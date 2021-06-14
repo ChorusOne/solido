@@ -15,6 +15,8 @@ use solana_sdk::derivation_path::DerivationPath;
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::read_keypair_file;
 use solana_sdk::signer::Signer;
+use util::read_create_solido_config;
+use util::CommonOpts;
 
 use crate::daemon::RunMaintainerOpts;
 use crate::error::Abort;
@@ -67,10 +69,10 @@ struct Opts {
 
     /// Address of the Multisig program.
     #[clap(long)]
-    multisig_program_id: Pubkey,
+    multisig_program_id: Option<Pubkey>,
 
     /// URL of cluster to connect to (e.g., https://api.devnet.solana.com for solana devnet)
-    #[clap(long, default_value = "localnet")]
+    #[clap(long, default_value = "http://127.0.0.1:8899")]
     cluster: String,
 
     /// Whether to output text or json.
@@ -79,6 +81,13 @@ struct Opts {
 
     #[clap(subcommand)]
     subcommand: SubCommand,
+
+    /// Optional config path
+    #[clap(long)]
+    config: Option<String>,
+    /// Override filepath for config, replacing the `config` filepath with a new config
+    #[clap(long)]
+    override_config: bool,
 }
 
 #[derive(Clap, Debug)]
@@ -169,6 +178,20 @@ fn print_output<Output: fmt::Display + Serialize>(mode: OutputMode, output: &Out
 
 fn main() {
     let opts = Opts::parse();
+    let multisig_program_id;
+    // Read from config file
+    let arguments = match opts.config {
+        Some(path) => {
+            let common_opts =
+                read_create_solido_config(path).expect("Failed to get options from file.");
+            multisig_program_id = common_opts.multisig_program_id;
+            parse_opts_config(&opts.subcommand, common_opts)
+        }
+        None => {
+            multisig_program_id = opts.multisig_program_id.expect("The multisig program id should be passed either in arguments with --multisig-program-id or in the config file");
+            opts.subcommand
+        }
+    };
     solana_logger::setup_with_default("solana=info");
 
     let payer_keypair_path = match opts.keypair_path {
@@ -205,12 +228,13 @@ fn main() {
     let signer = &*boxed_signer;
 
     let config = Config {
+        multisig_program_id: opts.multisig_program_id.unwrap_or(multisig_program_id),
         rpc: RpcClient::new_with_commitment(opts.cluster, CommitmentConfig::confirmed()),
-        multisig_program_id: opts.multisig_program_id,
         signer,
         output_mode: opts.output_mode,
     };
-    match opts.subcommand {
+
+    match arguments {
         SubCommand::CreateSolido(cmd_opts) => {
             let output = command_create_solido(config, cmd_opts)
                 .ok_or_abort_with("Failed to create Solido instance.");
@@ -255,5 +279,15 @@ fn main() {
                 .ok_or_abort_with("Failed to show Solido data.");
             print_output(opts.output_mode, &output);
         }
+    }
+}
+
+fn parse_opts_config(subcommand: &SubCommand, common_opts: CommonOpts) -> SubCommand {
+    match subcommand {
+        SubCommand::ShowSolido(_) => SubCommand::ShowSolido(ShowSolidoOpts {
+            solido_address: Some(common_opts.solido_address),
+            solido_program_id: Some(common_opts.solido_program_id),
+        }),
+        _ => todo!(),
     }
 }
