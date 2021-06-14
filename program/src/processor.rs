@@ -242,7 +242,7 @@ pub fn process_stake_deposit(
 
     let rent = &Rent::from_account_info(accounts.sysvar_rent)?;
     let mut lido = deserialize_lido(program_id, accounts.lido)?;
-    lido.check_manager(accounts.manager)?;
+    lido.check_maintainer(accounts.maintainer)?;
 
     let minium_stake_balance =
         Lamports(rent.minimum_balance(std::mem::size_of::<stake_program::StakeState>()));
