@@ -442,6 +442,10 @@ accounts_struct! {
             is_signer: false,
             is_writable: true,
         },
+        pub maintainer {
+            is_signer: true,
+            is_writable: false,
+        },
         pub reserve {
             is_signer: false,
             is_writable: true,
