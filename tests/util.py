@@ -41,6 +41,30 @@ def run(*args: str) -> str:
     return result.stdout
 
 
+def get_solido_contract_path() -> str:
+    solidopath = os.getenv('SOLCONPATH')
+    if solido == None:
+        solidopath = 'target/debug'
+
+    return network
+
+
+
+def get_solido_path() -> str:
+    solidopath = os.getenv('SOLPATH')
+    if solido == None:
+        solidopath = 'target/debug/solido'
+
+    return network
+
+def get_network() -> str:
+    network = os.getenv('NETWORK')
+    if network == None:
+        network = 'http://127.0.0.1:8899'
+
+    return network
+
+
 def get_solido(multisig_program_id: str) -> Callable[..., Any]:
 
     def solido(*args: str, keypair_path: Optional[str] = None) -> Any:
@@ -48,8 +72,8 @@ def get_solido(multisig_program_id: str) -> Callable[..., Any]:
         Run 'solido' against localhost, return its parsed json output.
         """
         output = run(
-            'target/debug/solido',
-            '--cluster', 'http://127.0.0.1:8899',
+            get_solido_path(),
+            '--cluster', get_network() ,
             '--output', 'json',
             '--multisig-program-id', multisig_program_id,
             *([] if keypair_path is None else ['--keypair-path', keypair_path]),
@@ -71,16 +95,16 @@ def get_solido(multisig_program_id: str) -> Callable[..., Any]:
 
 def solana(*args: str) -> str:
     """
-    Run 'solana' against localhost.
+    Run 'solana' against network.
     """
-    return run('solana', '--url', 'localhost', *args)
+    return run('solana', '--url', get_network() , *args)
 
 
 def spl_token(*args: str) -> str:
     """
-    Run 'spl_token' against localhost.
+    Run 'spl_token' against nextwork.
     """
-    return run('spl-token', '--url', 'localhost', *args)
+    return run('spl-token', '--url', get_network() , *args)
 
 
 def solana_program_deploy(fname: str) -> str:
@@ -194,8 +218,8 @@ def get_multisig(multisig_program_id: str) -> Callable[..., Any]:
         Run 'solido multisig' against localhost, return its parsed json output.
         """
         output = run(
-            'target/debug/solido',
-            '--cluster', 'http://127.0.0.1:8899',
+            get_solido_path(),
+            '--cluster',get_network(),
             '--output', 'json',
             *([] if keypair_path is None else ['--keypair-path', keypair_path]),
             '--multisig-program-id', multisig_program_id,

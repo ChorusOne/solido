@@ -31,6 +31,7 @@ if os.getenv('TEST_LEDGER') != None:
 # Otherwise, generate another one from key-pair file.
 else:
     test_addrs.append(create_test_account('test-key-2.json'))
+
 print(f'> {test_addrs}')
 
 treasury_account_owner = create_test_account('treasury-key.json')
