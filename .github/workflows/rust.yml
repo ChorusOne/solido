@@ -96,7 +96,7 @@ jobs:
 
         NETWORK='https://api.devnet.solana.com' tests/test_solido.py
 
-    - name: Run Multisig integration test
+    - name: Run Multisig integration test against devnet
       run: |
         export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
 
@@ -104,7 +104,6 @@ jobs:
         # should still be there from the previous run.
 
         NETWORK='https://api.devnet.solana.com' tests/test_multisig.py
-        kill $validator
   clippy:
     runs-on: ubuntu-latest
 
