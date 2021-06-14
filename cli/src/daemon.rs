@@ -107,14 +107,23 @@ impl MaintenanceMetrics {
     }
 }
 
+/// Snapshot of metrics and Solido state.
 struct Snapshot {
     metrics: MaintenanceMetrics,
     solido: Option<SolidoState>,
 }
 
+/// Mutex that holds the latest snapshot.
+///
+/// At startup it holds None, after that it will always hold Some Arc.
+/// To read the current snapshot, we only have to lock the mutex briefly,
+/// so we can clone the arc, and then we can continue to work with that
+/// snapshot without any lock. This holds for publishing a new state as well:
+/// we can prepare it privately, and we only need to lock the mutex briefly
+/// to swap the Arc.
 type SnapshotMutex = Mutex<Option<Arc<Snapshot>>>;
 
-/// Run the maintenance loop
+/// Run the maintenance loop.
 fn run_main_loop(config: &Config, opts: &RunMaintainerOpts, snapshot_mutex: &SnapshotMutex) {
     let mut metrics = MaintenanceMetrics {
         polls: 0,
