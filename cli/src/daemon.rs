@@ -1,16 +1,23 @@
 //! Maintenance daemon that periodically executes maintenance tasks, and serves metrics.
+//!
+//! The daemon consists of two parts: a main loop, and http server threads. The
+//! main loop polls the latest state from the chain through the normal RPC, and
+//! executes maintenance tasks if needed. It also publishes a snapshot of its
+//! most recently seen Solido state in an `Arc` so the http threads can serve it
+//! without blocking the main loop.
 
 use std::io;
 use std::sync::Arc;
 use std::time::Duration;
 use std::thread::JoinHandle;
+use std::sync::Mutex;
 
 use clap::Clap;
 use rand::Rng;
 use solana_sdk::pubkey::Pubkey;
 use tiny_http::{Server, Response, Request};
 
-use crate::maintenance::{PerformMaintenanceOpts, MaintenanceOutput, perform_maintenance};
+use crate::maintenance::{PerformMaintenanceOpts, MaintenanceOutput, SolidoState, perform_maintenance};
 use crate::prometheus::{MetricFamily, Metric, write_metric};
 use crate::{Config, Error};
 
@@ -89,10 +96,18 @@ impl MaintenanceMetrics {
     }
 }
 
+struct Snapshot {
+    metrics: MaintenanceMetrics,
+    solido: SolidoState,
+}
+
+type SnapshotMutex = Mutex<Option<Arc<Snapshot>>>;
+
 /// Run the maintenance loop
-pub fn run_main_loop(
+fn run_main_loop(
     config: &Config,
     opts: &RunMaintainerOpts,
+    snapshot_mutex: &SnapshotMutex,
 ) {
     let mut metrics = MaintenanceMetrics {
         polls: 0,
@@ -150,19 +165,42 @@ pub fn run_main_loop(
     }
 }
 
-pub fn serve_request(request: Request) {
+fn serve_request(request: Request, snapshot_mutex: &SnapshotMutex) -> Result<(), std::io::Error>{
+    // Take the current snapshot. This only holds the lock briefly, and does
+    // not prevent other threads from updating the snapshot while this request
+    // handler is running.
+    let maybe_snapshot = snapshot_mutex.lock().unwrap().clone();
+
+    // It might be that no snapshot is available yet. This happens when we just
+    // started the server, and the main loop has not yet queried the RPC for the
+    // latest state.
+    let snapshot = match maybe_snapshot {
+        Some(arc_snapshot) => arc_snapshot,
+        None => {
+            return request.respond(
+                Response::from_string("Service Unavailable\n\nServer is still starting, try again shortly.")
+                    .with_status_code(503)
+            );
+        }
+    };
+
     println!("received request! method: {:?}, url: {:?}, headers: {:?}",
              request.method(),
              request.url(),
              request.headers()
     );
+    let mut out: Vec<u8> = Vec::new();
+    let is_ok = snapshot.metrics.write_prometheus(&mut out).is_ok();
 
-    let response = Response::from_string("hello world");
-    request.respond(response);
+    return if is_ok {
+        request.respond(Response::from_data(out))
+    } else {
+        request.respond(Response::from_string("error").with_status_code(500))
+    }
 }
 
 /// Spawn threads that run the http server.
-pub fn start_http_server(opts: &RunMaintainerOpts) -> Vec<JoinHandle<()>> {
+fn start_http_server(opts: &RunMaintainerOpts, snapshot_mutex: Arc<SnapshotMutex>) -> Vec<JoinHandle<()>> {
     let server = Arc::new(Server::http(opts.listen.clone()).unwrap());
     println!("Http server listening on {}", opts.listen);
 
@@ -173,9 +211,12 @@ pub fn start_http_server(opts: &RunMaintainerOpts) -> Vec<JoinHandle<()>> {
     (0..8)
         .map(|i| {
             let server_clone = server.clone();
+            let snapshot_mutex_clone = snapshot_mutex.clone();
             std::thread::Builder::new().name(format!("http_handler_{}", i)).spawn(move || {
                 for request in server_clone.incoming_requests() {
-                    serve_request(request);
+                    // Ignore any errors; if we fail to respond, then there's little
+                    // we can do about it here ... the client should just retry.
+                    let _ = serve_request(request, &*snapshot_mutex_clone);
                 }
             }).expect("Failed to spawn http handler thread.")
         })
@@ -187,9 +228,10 @@ pub fn main(
     config: &Config,
     opts: &RunMaintainerOpts,
 ) {
-    let http_threads = start_http_server(&opts);
+    let snapshot_mutex = Arc::new(Mutex::new(None));
+    let http_threads = start_http_server(&opts, snapshot_mutex.clone());
 
-    run_main_loop(config, opts);
+    run_main_loop(config, opts, &*snapshot_mutex);
 
     // We never get here, the main loop should run indefinitely until the program
     // is killed, and while the main loop runs, the http server also serves.
