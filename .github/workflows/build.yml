@@ -28,7 +28,7 @@ jobs:
         run: |
           # TODO: Pin the exact version with Nix.
           sudo apt-get install -y black
-          git ls-files | grep '\.py$' | xargs black --skip-string-normalization --check
+          git ls-files | grep '\.py$' | xargs black --skip-string-normalization --check --diff --color
 
   build:
     runs-on: ubuntu-latest
