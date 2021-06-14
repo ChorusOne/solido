@@ -358,7 +358,7 @@ result = solido(
     stake_pool_program_id,
     keypair_path=maintainer.keypair_path,
 )
-assert result == 'NothingDone', f'Huh, perform-maintenance performed {result}'
+assert result is None, f'Huh, perform-maintenance performed {result}'
 print('> There was nothing to do, as expected.')
 
 print('\nSimulating 10 SOL deposit, then running maintenance ...')
@@ -405,5 +405,5 @@ result = solido(
     stake_pool_program_id,
     keypair_path=maintainer.keypair_path,
 )
-assert result == 'NothingDone', f'Huh, perform-maintenance performed {result}'
+assert result is None, f'Huh, perform-maintenance performed {result}'
 print('> There was nothing to do, as expected.')
