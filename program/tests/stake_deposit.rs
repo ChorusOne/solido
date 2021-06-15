@@ -160,4 +160,5 @@ async fn test_successful_stake_deposit_stake_pool_deposit() {
     );
 }
 #[tokio::test]
-async fn test_stake_exists_stake_deposit() {} // TODO
+// TODO(#187) Implement test for stake_exists_stake_deposit
+async fn test_stake_exists_stake_deposit() {}

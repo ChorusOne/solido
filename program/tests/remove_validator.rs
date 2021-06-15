@@ -47,6 +47,6 @@ async fn test_successful_remove_validator() {
     assert_eq!(lido.validators.entries.len(), 0);
 }
 
-// TODO
+// TODO(#179) Add Test for Remove Validator with Unclaimed Rewards
 #[tokio::test]
 async fn test_remove_validator_with_unclaimed_rewards() {}

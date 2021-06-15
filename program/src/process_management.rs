@@ -451,7 +451,7 @@ pub fn process_decrease_validator_stake(
     )
 }
 
-/// TODO
+/// TODO(#186) Allow validator to change fee account
 /// Called by the validator, changes the fee account which the validator
 /// receives tokens
 pub fn _process_change_validator_fee_account(
