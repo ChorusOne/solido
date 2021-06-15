@@ -28,9 +28,12 @@ from util import (
 )
 
 
-# We start by generating an account that we will need later.
+# We start by generating an account that we will need later. We put the tests
+# keys in a directory where we can .gitignore them, so they don't litter the
+# working directory so much.
 print('Creating test accounts ...')
-test_addrs = [create_test_account('test-key-1.json')]
+os.makedirs('tests/.keys', exist_ok=True)
+test_addrs = [create_test_account('tests/.keys/test-key-1.json')]
 
 # If testing with ledger, add the ledger account.
 if os.getenv('TEST_LEDGER') != None:
@@ -40,13 +43,13 @@ if os.getenv('TEST_LEDGER') != None:
     test_addrs.append(TestAccount(ledger_address, 'usb://ledger'))
 # Otherwise, generate another one from key-pair file.
 else:
-    test_addrs.append(create_test_account('test-key-2.json'))
+    test_addrs.append(create_test_account('tests/.keys/test-key-2.json'))
 print(f'> {test_addrs}')
 
-treasury_account_owner = create_test_account('treasury-key.json')
+treasury_account_owner = create_test_account('tests/.keys/treasury-key.json')
 print(f'> Treasury account owner:    {treasury_account_owner}')
 
-developer_account_owner = create_test_account('developer-fee-key.json')
+developer_account_owner = create_test_account('tests/.keys/developer-fee-key.json')
 print(f'> Developer fee account owner: {developer_account_owner}')
 
 
@@ -133,13 +136,15 @@ assert solido_instance['solido']['fee_distribution'] == {
 }
 
 print('\nAdding a validator ...')
-validator_token_account_owner = create_test_account('validator-token-account-key.json')
+validator_token_account_owner = create_test_account(
+    'tests/.keys/validator-token-account-key.json'
+)
 print(f'> Validator token account owner: {validator_token_account_owner}')
 
-validator = create_test_account('validator-account-key.json')
+validator = create_test_account('tests/.keys/validator-account-key.json')
 
 validator_vote_account = create_vote_account(
-    'validator-vote-account-key.json', validator.keypair_path
+    'tests/.keys/validator-vote-account-key.json', validator.keypair_path
 )
 print(f'> Creating validator vote account {validator_vote_account}')
 
@@ -147,7 +152,7 @@ print(f'> Creating validator token account with owner {validator_token_account_o
 
 # Create SPL token
 validator_token_account = create_spl_token(
-    'validator-token-account-key.json', st_sol_mint_account
+    'tests/.keys/validator-token-account-key.json', st_sol_mint_account
 )
 print(f'> Validator stSol token account: {validator_token_account}')
 print('Creating validator stake account')
@@ -262,7 +267,7 @@ assert solido_instance['solido']['validators']['entries'][0] == {
     },
 }
 
-maintainer = create_test_account('maintainer-account-key.json')
+maintainer = create_test_account('tests/.keys/maintainer-account-key.json')
 
 print(f'\nAdd and remove maintainer ...')
 print(f'> Adding maintainer {maintainer}')
@@ -340,3 +345,62 @@ transaction_address = transaction_result['transaction_address']
 approve_and_execute(
     multisig, multisig_instance, transaction_address, test_addrs[0].keypair_path
 )
+
+
+print('\nRunning maintenance (should be no-op) ...')
+result = solido(
+    'perform-maintenance',
+    '--solido-address',
+    solido_address,
+    '--solido-program-id',
+    solido_program_id,
+    '--stake-pool-program-id',
+    stake_pool_program_id,
+)
+assert result == 'NothingDone', f'Huh, perform-maintenance performed {result}'
+print('> There was nothing to do, as expected.')
+
+print('\nSimulating 10 SOL deposit, then running maintenance ...')
+# TODO(#154): Perform an actual deposit here.
+reserve_authority: str = solido_instance['reserve_authority']
+solana('transfer', '--allow-unfunded-recipient', reserve_authority, '10.0')
+print(f'> Funded reserve {reserve_authority} with 10.0 SOL')
+
+result = solido(
+    'perform-maintenance',
+    '--solido-address',
+    solido_address,
+    '--solido-program-id',
+    solido_program_id,
+    '--stake-pool-program-id',
+    stake_pool_program_id,
+)
+expected_result = {
+    'StakeDeposit': {
+        'validator_vote_account': validator_vote_account.pubkey,
+        'amount_lamports': int(10.0e9),
+    }
+}
+assert result == expected_result, f'\nExpected: {expected_result}\nActual:   {result}'
+print(f'> Staked deposit with {validator_vote_account}.')
+
+print(
+    '\nSimulating 0.0005 SOL deposit (too little to stake), then running maintenance ...'
+)
+# TODO(#154): Perform an actual deposit here.
+solana('transfer', '--allow-unfunded-recipient', reserve_authority, '0.0005')
+print(f'> Funded reserve {reserve_authority} with 0.0005 SOL')
+
+# 0.0005 SOL is not enough to make a stake account, so even though the reserve
+# is not empty, we can't stake what's in the reserve.
+result = solido(
+    'perform-maintenance',
+    '--solido-address',
+    solido_address,
+    '--solido-program-id',
+    solido_program_id,
+    '--stake-pool-program-id',
+    stake_pool_program_id,
+)
+assert result == 'NothingDone', f'Huh, perform-maintenance performed {result}'
+print('> There was nothing to do, as expected.')

@@ -30,11 +30,14 @@ from util import (
 )
 
 
-# We start by generating three accounts that we will need later.
+# We start by generating accounts that we will need later. We put the tests
+# keys in a directory where we can .gitignore them, so they don't litter the
+# working directory so much.
 print('Creating test accounts ...')
-addr1 = create_test_account('test-key-1.json')
-addr2 = create_test_account('test-key-2.json')
-addr3 = create_test_account('test-key-3.json')
+os.makedirs('tests/.keys', exist_ok=True)
+addr1 = create_test_account('tests/.keys/test-key-1.json')
+addr2 = create_test_account('tests/.keys/test-key-2.json')
+addr3 = create_test_account('tests/.keys/test-key-3.json')
 print(f'> {addr1}')
 print(f'> {addr2}')
 print(f'> {addr3}')

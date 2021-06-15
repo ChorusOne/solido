@@ -224,8 +224,9 @@ fn main() {
             // might add a daemon mode that runs continuously, and which logs
             // to stdout and exposes Prometheus metrics (also to monitor Solido,
             // not just the maintenance itself).
-            maintenance::perform_maintenance(&config, cmd_opts)
+            let output = maintenance::perform_maintenance(&config, cmd_opts)
                 .expect("Failed to perform maintenance.");
+            print_output(opts.output_mode, &output);
         }
         SubCommand::AddValidator(cmd_opts) => {
             let output = command_add_validator(config, cmd_opts).expect("Failed to add validator");
