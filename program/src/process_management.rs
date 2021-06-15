@@ -192,6 +192,7 @@ pub fn process_remove_validator(
         return Err(LidoError::InvalidOwner.into());
     }
     let mut lido = deserialize_lido(program_id, accounts.lido)?;
+    lido.check_manager(accounts.manager)?;
     if &lido.stake_pool_account != accounts.stake_pool.key {
         msg!("Invalid stake pool");
         return Err(LidoError::InvalidStakePool.into());
@@ -272,6 +273,7 @@ pub fn process_claim_validator_fee(
 pub fn process_distribute_fees(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> ProgramResult {
     let accounts = DistributeFeesInfo::try_from_slice(accounts_raw)?;
     let mut lido = deserialize_lido(program_id, accounts.lido)?;
+    lido.check_maintainer(accounts.maintainer)?;
     lido.check_stake_pool(accounts.stake_pool)?;
 
     let stake_pool = StakePool::try_from_slice(&accounts.stake_pool.data.borrow())?;

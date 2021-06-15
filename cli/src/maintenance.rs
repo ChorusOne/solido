@@ -337,6 +337,7 @@ impl SolidoState {
             &self.solido_program_id,
             &lido::instruction::StakeDepositAccountsMeta {
                 lido: self.solido_address,
+                maintainer: self.maintainer_address,
                 reserve: self.reserve_address,
                 validator_stake_pool_stake_account: validator.pubkey,
                 validator_vote_account: stake_info.vote_account_address,

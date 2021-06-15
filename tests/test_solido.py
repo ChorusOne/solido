@@ -11,7 +11,7 @@ that corresponds to a sufficiently funded account.
 If TEST_LEDGER environment variable is set, it will use the ledger as a signing
 key-pair, as in `TEST_LEDGER=true ./tests/test_solido.py`
 """
-
+import sys
 import os
 from typing import Optional
 
@@ -356,6 +356,7 @@ result = solido(
     solido_program_id,
     '--stake-pool-program-id',
     stake_pool_program_id,
+    keypair_path=maintainer.keypair_path,
 )
 assert result == 'NothingDone', f'Huh, perform-maintenance performed {result}'
 print('> There was nothing to do, as expected.')
@@ -374,6 +375,7 @@ result = solido(
     solido_program_id,
     '--stake-pool-program-id',
     stake_pool_program_id,
+    keypair_path=maintainer.keypair_path,
 )
 expected_result = {
     'StakeDeposit': {
@@ -401,6 +403,7 @@ result = solido(
     solido_program_id,
     '--stake-pool-program-id',
     stake_pool_program_id,
+    keypair_path=maintainer.keypair_path,
 )
 assert result == 'NothingDone', f'Huh, perform-maintenance performed {result}'
 print('> There was nothing to do, as expected.')
