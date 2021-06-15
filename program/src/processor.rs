@@ -515,12 +515,12 @@ pub fn process_deposit_active_stake_to_pool(
     Ok(())
 }
 
+// TODO(#93) Implement withdraw
 pub fn process_withdraw(
     _program_id: &Pubkey,
     _pool_tokens: StLamports,
     _accounts: &[AccountInfo],
 ) -> ProgramResult {
-    // TODO(#93) 
     Ok(())
 }
 
