@@ -193,7 +193,7 @@ try:
 except subprocess.CalledProcessError as err:
     assert err.returncode != 0
     # assert 'Not enough owners signed this transaction' in err.stderr
-    # TODO: Previously the error included a human-readable message, why does it
+    # TODO(#177) Previously the error included a human-readable message, why does it
     # only include the error code now? Something to do with different Anchor
     # versions?
     assert 'custom program error: 0x65' in err.stderr
@@ -260,7 +260,7 @@ try:
 except subprocess.CalledProcessError as err:
     assert err.returncode != 0
     # assert 'The given transaction has already been executed.' in err.stderr
-    # TODO: Previously the error included a human-readable message, why does it
+    # TODO(#177) Previously the error included a human-readable message, why does it
     # only include the error code now? Something to do with different Anchor
     # versions?
     assert 'custom program error: 0x69' in err.stderr
@@ -393,7 +393,7 @@ try:
 except subprocess.CalledProcessError as err:
     assert err.returncode != 0
     # assert 'The given owner is not part of this multisig.' in err.stderr
-    # TODO: Previously the error included a human-readable message, why does it
+    # TODO(#177) Previously the error included a human-readable message, why does it
     # only include the error code now? Something to do with different Anchor
     # versions?
     assert 'custom program error: 0x64' in err.stderr
