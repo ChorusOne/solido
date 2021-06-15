@@ -326,7 +326,7 @@ impl LidoAccounts {
             .unwrap()],
             Some(&payer.pubkey()),
         );
-        transaction.sign(&[payer], *recent_blockhash);
+        transaction.sign(&[payer, &self.maintainer], *recent_blockhash);
         banks_client.process_transaction(transaction).await.unwrap();
 
         stake_account
@@ -483,7 +483,7 @@ impl LidoAccounts {
             )
             .unwrap()],
             Some(&payer.pubkey()),
-            &[payer, &self.manager],
+            &[payer, &self.maintainer],
             *recent_blockhash,
         );
         banks_client.process_transaction(transaction).await.err()
