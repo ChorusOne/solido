@@ -26,6 +26,11 @@ use crate::helpers::command_show_solido;
 use crate::helpers::{command_add_validator, command_create_solido, CreateSolidoOpts};
 use crate::maintenance::PerformMaintenanceOpts;
 use crate::multisig::MultisigOpts;
+use crate::util::Abort;
+use solana_client::client_error::ClientError;
+use solana_sdk::transaction::TransactionError;
+use spl_stake_pool::solana_program::program_error::ProgramError;
+use spl_stake_pool::solana_program::pubkey::PubkeyError;
 
 extern crate lazy_static;
 extern crate spl_stake_pool;
@@ -39,7 +44,54 @@ mod spl_token_utils;
 mod stake_pool_helpers;
 mod util;
 
-type Error = Box<dyn std::error::Error>;
+// Note: this is the leaf error type. If you find yourself wanting to derive
+// `Display` or `Debug` for it, it is probably better to import `util::Abort`
+// and call `.ok_or_abort()` instead. If you do want to print the error without
+// aborting, use `.print_pretty()`.
+pub enum Error {
+    ClientError(ClientError),
+    ProgramError(ProgramError),
+    TransactionError(TransactionError),
+    IoError(std::io::Error),
+    BincodeError(Box<bincode::ErrorKind>),
+    PubkeyError(PubkeyError),
+}
+
+impl From<ClientError> for Error {
+    fn from(err: ClientError) -> Error {
+        Error::ClientError(err)
+    }
+}
+
+impl From<ProgramError> for Error {
+    fn from(err: ProgramError) -> Error {
+        Error::ProgramError(err)
+    }
+}
+
+impl From<TransactionError> for Error {
+    fn from(err: TransactionError) -> Error {
+        Error::TransactionError(err)
+    }
+}
+
+impl From<PubkeyError> for Error {
+    fn from(err: PubkeyError) -> Error {
+        Error::PubkeyError(err)
+    }
+}
+
+impl From<std::io::Error> for Error {
+    fn from(err: std::io::Error) -> Error {
+        Error::IoError(err)
+    }
+}
+
+impl From<Box<bincode::ErrorKind>> for Error {
+    fn from(err: Box<bincode::ErrorKind>) -> Error {
+        Error::BincodeError(err)
+    }
+}
 
 #[derive(Copy, Clone, Debug)]
 pub enum OutputMode {
@@ -218,14 +270,14 @@ fn main() {
     };
     match opts.subcommand {
         SubCommand::CreateSolido(cmd_opts) => {
-            let output =
-                command_create_solido(config, cmd_opts).expect("Failed to create Solido instance.");
+            let output = command_create_solido(config, cmd_opts)
+                .ok_or_abort_with("Failed to create Solido instance.");
             print_output(opts.output_mode, &output);
         }
         SubCommand::Multisig(cmd_opts) => multisig::main(config, opts.output_mode, cmd_opts),
         SubCommand::CreateValidatorStakeAccount(cmd_opts) => {
             let output = command_create_validator_stake_account(config, cmd_opts)
-                .expect("Failed to create validator stake account");
+                .ok_or_abort_with("Failed to create validator stake account.");
             print_output(opts.output_mode, &output);
         }
         SubCommand::PerformMaintenance(cmd_opts) => {
@@ -234,7 +286,7 @@ fn main() {
             // to stdout and exposes Prometheus metrics (also to monitor Solido,
             // not just the maintenance itself).
             let output = maintenance::run_perform_maintenance(&config, &cmd_opts)
-                .expect("Failed to perform maintenance.");
+                .ok_or_abort_with("Failed to perform maintenance.");
             match (opts.output_mode, output) {
                 (OutputMode::Text, None) => {
                     println!("Nothing done, there was no maintenance to perform.")
@@ -247,21 +299,23 @@ fn main() {
             daemon::main(&config, &cmd_opts);
         }
         SubCommand::AddValidator(cmd_opts) => {
-            let output = command_add_validator(config, cmd_opts).expect("Failed to add validator");
+            let output = command_add_validator(config, cmd_opts)
+                .ok_or_abort_with("Failed to add validator.");
             print_output(opts.output_mode, &output);
         }
         SubCommand::AddMaintainer(cmd_opts) => {
-            let output =
-                command_add_maintainer(config, cmd_opts).expect("Failed to add maintainer");
+            let output = command_add_maintainer(config, cmd_opts)
+                .ok_or_abort_with("Failed to add maintainer.");
             print_output(opts.output_mode, &output);
         }
         SubCommand::RemoveMaintainer(cmd_opts) => {
-            let output =
-                command_remove_maintainer(config, cmd_opts).expect("Failed to remove maintainer");
+            let output = command_remove_maintainer(config, cmd_opts)
+                .ok_or_abort_with("Failed to remove maintainer.");
             print_output(opts.output_mode, &output);
         }
         SubCommand::ShowSolido(cmd_opts) => {
-            let output = command_show_solido(config, cmd_opts).expect("Failed to show Solido data");
+            let output = command_show_solido(config, cmd_opts)
+                .ok_or_abort_with("Failed to show Solido data.");
             print_output(opts.output_mode, &output);
         }
     }

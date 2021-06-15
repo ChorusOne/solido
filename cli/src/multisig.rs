@@ -30,7 +30,7 @@ use solana_sdk::transaction::TransactionError;
 
 use crate::helpers::get_solido;
 use crate::helpers::sign_and_send_transaction;
-use crate::util::PubkeyBase58;
+use crate::util::{Abort, AsPrettyError, PubkeyBase58};
 use crate::Config;
 use crate::{print_output, OutputMode};
 use lido::state::serialize_b58;
@@ -290,7 +290,7 @@ fn create_multisig(config: &Config, opts: CreateMultisigOpts) -> CreateMultisigO
         &[create_instruction, multisig_instruction],
         &[&multisig_account, config.signer],
     )
-    .expect("Failed to sign or send transaction.");
+    .ok_or_abort();
 
     CreateMultisigOutput {
         multisig_address: multisig_account.pubkey().into(),
@@ -328,7 +328,7 @@ impl fmt::Display for ShowMultisigOutput {
 
 fn show_multisig(config: &Config, opts: ShowMultisigOpts) -> ShowMultisigOutput {
     let multisig: multisig::Multisig = get_account(&config.rpc, &opts.multisig_address)
-        .expect("Failed to read multisig state from account.");
+        .ok_or_abort_with("Failed to read multisig state from account.");
 
     let (program_derived_address, _nonce) =
         get_multisig_program_address(&config.multisig_program_id, &opts.multisig_address);
@@ -706,7 +706,7 @@ fn changed_addr(
 
 fn show_transaction(config: &Config, opts: ShowTransactionOpts) -> ShowTransactionOutput {
     let transaction: multisig::Transaction = get_account(&config.rpc, &opts.transaction_address)
-        .expect("Failed to read transaction data from account.");
+        .ok_or_abort_with("Failed to read transaction data from account.");
 
     // Also query the multisig, to get the owner public keys, so we can display
     // exactly who voted.
@@ -715,7 +715,7 @@ fn show_transaction(config: &Config, opts: ShowTransactionOpts) -> ShowTransacti
     // program, and the multisig program never modifies the
     // `transaction.multisig` field.
     let multisig: multisig::Multisig = get_account(&config.rpc, &transaction.multisig)
-        .expect("Failed to read multisig state from account.");
+        .ok_or_abort_with("Failed to read multisig state from account.");
 
     let signers = if transaction.owner_set_seqno == multisig.owner_set_seqno {
         // If the owners did not change, match up every vote with its owner.
@@ -784,7 +784,8 @@ fn show_transaction(config: &Config, opts: ShowTransactionOpts) -> ShowTransacti
         match try_parse_solido_instruction(&instr, &config.rpc) {
             Ok(instr) => instr,
             Err(err) => {
-                eprintln!("Warning: failed to parse Solido instruction: {}", err);
+                println!("Warning: Failed to parse Solido instruction.");
+                err.print_pretty();
                 ParsedInstruction::InvalidSolidoInstruction
             }
         }
@@ -916,8 +917,7 @@ pub fn propose_instruction(
     // compute its size, which we need to allocate an account for it. And to
     // build the dummy transaction, we need to know how many owners the multisig
     // has.
-    let multisig: multisig::Multisig = get_account(&config.rpc, &multisig_address)
-        .expect("Failed to read multisig state from account.");
+    let multisig: multisig::Multisig = get_account(&config.rpc, &multisig_address).ok_or_abort();
 
     // Build the data that the account will hold, just to measure its size, so
     // we can allocate an account of the right size.
@@ -992,7 +992,7 @@ pub fn propose_instruction(
         &[create_instruction, multisig_instruction],
         &[config.signer, &transaction_account],
     )
-    .expect("Failed to sign or send transaction.");
+    .ok_or_abort();
     ProposeInstructionOutput {
         transaction_address: transaction_account.pubkey().into(),
     }
@@ -1057,8 +1057,7 @@ fn approve(config: &Config, opts: ApproveOpts) {
         data: multisig_instruction::Approve.data(),
         accounts: approve_accounts.to_account_metas(None),
     };
-    sign_and_send_transaction(&config, &[approve_instruction], &[config.signer])
-        .expect("Failed to sign or send transaction.");
+    sign_and_send_transaction(&config, &[approve_instruction], &[config.signer]).ok_or_abort();
 }
 
 /// Wrapper type needed to implement `ToAccountMetas`.
@@ -1126,6 +1125,5 @@ fn execute_transaction(config: &Config, opts: ExecuteTransactionOpts) {
         data: multisig_instruction::ExecuteTransaction.data(),
         accounts,
     };
-    sign_and_send_transaction(config, &[multisig_instruction], &[config.signer])
-        .expect("Failed to sign or send transaction.");
+    sign_and_send_transaction(config, &[multisig_instruction], &[config.signer]).ok_or_abort();
 }

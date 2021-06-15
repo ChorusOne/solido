@@ -19,6 +19,7 @@ use tiny_http::{Request, Response, Server};
 
 use crate::maintenance::{try_perform_maintenance, MaintenanceOutput, SolidoState};
 use crate::prometheus::{write_metric, Metric, MetricFamily};
+use crate::util::AsPrettyError;
 use crate::Config;
 
 #[derive(Clap, Clone, Debug)]
@@ -144,7 +145,8 @@ fn run_main_loop(config: &Config, opts: &RunMaintainerOpts, snapshot_mutex: &Sna
         );
         match &state_result {
             &Err(ref err) => {
-                println!("Failed to obtain Solido state: {:?}", err);
+                println!("Failed to obtain Solido state.");
+                err.print_pretty();
                 metrics.errors += 1;
 
                 // If the error was caused by a connectivity problem, we shouldn't
@@ -155,7 +157,8 @@ fn run_main_loop(config: &Config, opts: &RunMaintainerOpts, snapshot_mutex: &Sna
             &Ok(ref state) => {
                 match try_perform_maintenance(config, &state) {
                     Err(err) => {
-                        println!("Error in maintenance: {:?}", err);
+                        println!("Error in maintenance.");
+                        err.print_pretty();
                         metrics.errors += 1;
                         do_wait = true;
                     }
