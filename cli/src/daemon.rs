@@ -202,12 +202,12 @@ fn serve_request(request: Request, snapshot_mutex: &SnapshotMutex) -> Result<(),
     // Take the current snapshot. This only holds the lock briefly, and does
     // not prevent other threads from updating the snapshot while this request
     // handler is running.
-    let maybe_snapshot = snapshot_mutex.lock().unwrap().clone();
+    let option_snapshot = snapshot_mutex.lock().unwrap().clone();
 
     // It might be that no snapshot is available yet. This happens when we just
     // started the server, and the main loop has not yet queried the RPC for the
     // latest state.
-    let snapshot = match maybe_snapshot {
+    let snapshot = match option_snapshot {
         Some(arc_snapshot) => arc_snapshot,
         None => {
             return request.respond(
