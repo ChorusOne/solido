@@ -193,6 +193,7 @@ fn run_main_loop(config: &Config, opts: &RunMaintainerOpts, snapshot_mutex: &Sna
             // try to create the same transaction, and only one would pass.
             let max_poll_interval = Duration::from_secs(opts.max_poll_interval_seconds);
             let sleep_time = rng.gen_range(Duration::from_secs(0)..max_poll_interval);
+            println!("Sleeping {:?} until next iteration ...", sleep_time);
             std::thread::sleep(sleep_time);
         }
     }
