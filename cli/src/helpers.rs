@@ -722,7 +722,7 @@ pub fn command_show_solido(
     })
 }
 
-// TODO: Make `get_solido` and `get_stake_pool` return the structures in a single call to
+// TODO(#181): Make `get_solido` and `get_stake_pool` return the structures in a single call to
 // `rpc_client.get_multiple_accounts(..)`.
 /// Gets the Solido data structure
 pub fn get_solido(rpc_client: &RpcClient, solido_address: &Pubkey) -> Result<Lido, crate::Error> {

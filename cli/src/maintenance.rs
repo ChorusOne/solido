@@ -181,13 +181,13 @@ fn get_validator_stake_accounts(
             .delegation()
             .expect("Encountered undelegated stake account, this should not happen.");
 
-        // TODO: Confirm that `delegation.voter_pubkey == validator.vote_account`. Unfortunately we
+        // TODO(#182): Confirm that `delegation.voter_pubkey == validator.vote_account`. Unfortunately we
         // do not store the vote account in there at the moment. Once we switch to using the vote
         // account as key for the dictionary, we could check that here.
 
         let target_epoch = clock.epoch;
         let history = Some(stake_history);
-        // TODO(ruuda): Confirm the meaning of this.
+        // TODO(#184): Confirm the meaning of this.
         let fix_stake_deactivate = true;
 
         let (active_lamports, activating_lamports, deactivating_lamports) = delegation
@@ -223,7 +223,7 @@ impl SolidoState {
     ) -> Result<SolidoState> {
         let rpc = &config.rpc;
 
-        // TODO(ruuda): Transactions can execute in between those reads, leading to
+        // TODO(#183): Transactions can execute in between those reads, leading to
         // a torn state. Make a function that re-reads everything with get_multiple_accounts.
         let solido = get_solido(rpc, solido_address)?;
         let stake_pool = get_stake_pool(rpc, &solido.stake_pool_account)?;
@@ -404,7 +404,7 @@ impl SolidoState {
                     return Ok(Some((
                         instr,
                         MaintenanceOutput::DepositActiveStateToPool {
-                            // TODO: This is not actually the vote account.
+                            // TODO(#185): This is not actually the vote account.
                             validator_vote_account: validator.pubkey,
                             amount: stake_balance.total(),
                         },
