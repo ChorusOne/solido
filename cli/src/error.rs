@@ -172,8 +172,14 @@ impl<T, E: AsPrettyError> Abort for Result<T, E> {
     }
 
     fn ok_or_abort_with(self, message: &'static str) -> T {
-        println!("{}", message);
-        self.ok_or_abort()
+        match self {
+            Ok(result) => result,
+            Err(err) => {
+                println!("{}", message);
+                err.print_pretty();
+                std::process::exit(1);
+            }
+        }
     }
 }
 
