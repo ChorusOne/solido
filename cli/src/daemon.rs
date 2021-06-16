@@ -244,7 +244,7 @@ fn start_http_server(
     // parallel. This server is only used to serve metrics, it can be super basic,
     // but some degree of parallelism is nice in case a client is slow to send
     // its request or something like that.
-    (0..8)
+    (0..num_cpus::get())
         .map(|i| {
             let server_clone = server.clone();
             let snapshot_mutex_clone = snapshot_mutex.clone();

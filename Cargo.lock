@@ -3702,6 +3702,7 @@ dependencies = [
  "lazy_static",
  "lido",
  "multisig",
+ "num_cpus",
  "rand 0.8.3",
  "serde",
  "serde_json",
