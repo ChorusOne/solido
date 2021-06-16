@@ -159,7 +159,7 @@ struct ShowTransactionOpts {
 #[derive(Clap, Debug)]
 struct ApproveOpts {
     /// The multisig account whose owners should vote for this proposal.
-    // TODO: Can be omitted, we can obtain it from the transaction account.
+    // : Can be omitted, we can obtain it from the transaction account.
     #[clap(long)]
     multisig_address: Pubkey,
 
@@ -171,7 +171,7 @@ struct ApproveOpts {
 #[derive(Clap, Debug)]
 struct ExecuteTransactionOpts {
     /// The multisig account whose owners approved this transaction.
-    // TODO: Can be omitted, we can obtain it from the transaction account.
+    // : Can be omitted, we can obtain it from the transaction account.
     #[clap(long)]
     multisig_address: Pubkey,
 
@@ -262,7 +262,8 @@ fn create_multisig(config: &Config, opts: CreateMultisigOpts) -> CreateMultisigO
         // 352 bytes should be sufficient to hold a multisig state with 10
         // owners. Get the minimum rent-exempt balance for that, and
         // initialize the account with it, funded by the payer.
-        // TODO: Ask for confirmation from the user first.
+        // TODO(#180)
+        // Ask for confirmation from the user first.
         config
             .rpc
             .get_minimum_balance_for_rent_exemption(352)
@@ -445,7 +446,8 @@ struct ShowTransactionOutput {
     multisig_address: PubkeyBase58,
     did_execute: bool,
     signers: ShowTransactionSigners,
-    // TODO: when using --output-json, the addresses in here get serialized as
+    // TODO(#180)
+    // when using --output-json, the addresses in here get serialized as
     // arrays of numbers instead of base58 strings, because this uses the
     // regular Solana `Pubkey` types. But I don't feel like creating an
     // `Instruction` duplicate just for this purpose right now, we can create
@@ -947,7 +949,8 @@ pub fn propose_instruction(
     let create_instruction = system_instruction::create_account(
         &config.signer.pubkey(),
         &transaction_account.pubkey(),
-        // TODO: Ask for confirmation from the user first before funding the
+        // TODO(#180)
+        // Ask for confirmation from the user first before funding the
         // account.
         config
             .rpc

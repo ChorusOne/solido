@@ -261,10 +261,7 @@ pub fn process_stake_deposit(
     let validator = lido
         .validators
         .get_mut(&accounts.validator_stake_pool_stake_account.key)?;
-
-    // We will create a new fresh stake account for this validator.
-    // TODO: Merge into the preceding stake account, if possible, such that we
-    // don't create a new account per `StakeDeposit`, but only per epoch.
+    // TODO(#174) Merge into preceding stake account if possible
     let (stake_addr, stake_addr_bump_seed) = Validator::find_stake_account_address(
         program_id,
         accounts.lido.key,
@@ -424,7 +421,7 @@ pub fn process_deposit_active_stake_to_pool(
         .get_mut(&accounts.validator_stake_pool_stake_account.key)?;
 
     if validator.entry.stake_accounts_seed_begin >= validator.entry.stake_accounts_seed_end {
-        // TODO: add a proper error for this.
+        // TODO(#175) add a proper error for this.
         panic!(
             "Validator {} has no pending stake accounts.",
             validator.pubkey
@@ -466,7 +463,8 @@ pub fn process_deposit_active_stake_to_pool(
     // Before we put the stake account in the pool, record how much SOL it held,
     // because that SOL is now no longer activating, so we need to update the
     // `Validator` instance.
-    // TODO: If rewards have been paid out before we deposited this account to
+    // TODO(#176) Record SOL held by stake account  ...
+    // If rewards have been paid out before we deposited this account to
     // the stake pool, then the `stake_accounts_balance` will now become too
     // low. (Or rather, it started being wrong at the start of the epoch, when
     // rewards were paid, but now we may get an underflow.)
@@ -517,12 +515,12 @@ pub fn process_deposit_active_stake_to_pool(
     Ok(())
 }
 
+// TODO(#93) Implement withdraw
 pub fn process_withdraw(
     _program_id: &Pubkey,
     _pool_tokens: StLamports,
     _accounts: &[AccountInfo],
 ) -> ProgramResult {
-    // TODO
     Ok(())
 }
 
