@@ -17,9 +17,9 @@ use rand::Rng;
 use solana_sdk::pubkey::Pubkey;
 use tiny_http::{Request, Response, Server};
 
+use crate::error::AsPrettyError;
 use crate::maintenance::{try_perform_maintenance, MaintenanceOutput, SolidoState};
 use crate::prometheus::{write_metric, Metric, MetricFamily};
-use crate::util::AsPrettyError;
 use crate::Config;
 
 #[derive(Clap, Clone, Debug)]

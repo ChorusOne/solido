@@ -7,7 +7,6 @@ use std::str::FromStr;
 
 use clap::Clap;
 use serde::Serialize;
-use solana_client::client_error::ClientError;
 use solana_client::rpc_client::RpcClient;
 use solana_remote_wallet::locator::Locator;
 use solana_remote_wallet::remote_keypair::generate_remote_keypair;
@@ -17,12 +16,9 @@ use solana_sdk::derivation_path::DerivationPath;
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::read_keypair_file;
 use solana_sdk::signer::Signer;
-use solana_sdk::transaction::TransactionError;
-
-use spl_stake_pool::solana_program::program_error::ProgramError;
-use spl_stake_pool::solana_program::pubkey::PubkeyError;
 
 use crate::daemon::RunMaintainerOpts;
+use crate::error::Abort;
 use crate::helpers::command_add_maintainer;
 use crate::helpers::command_create_validator_stake_account;
 use crate::helpers::command_remove_maintainer;
@@ -34,9 +30,9 @@ use crate::helpers::ShowSolidoOpts;
 use crate::helpers::{command_add_validator, command_create_solido, CreateSolidoOpts};
 use crate::maintenance::PerformMaintenanceOpts;
 use crate::multisig::MultisigOpts;
-use crate::util::{Abort, AsPrettyError};
 
 mod daemon;
+mod error;
 mod helpers;
 mod maintenance;
 mod multisig;
@@ -44,44 +40,6 @@ mod prometheus;
 mod spl_token_utils;
 mod stake_pool_helpers;
 mod util;
-
-type Error = Box<dyn AsPrettyError + 'static>;
-
-impl From<ClientError> for Error {
-    fn from(err: ClientError) -> Error {
-        Box::new(err)
-    }
-}
-
-impl From<ProgramError> for Error {
-    fn from(err: ProgramError) -> Error {
-        Box::new(err)
-    }
-}
-
-impl From<TransactionError> for Error {
-    fn from(err: TransactionError) -> Error {
-        Box::new(err)
-    }
-}
-
-impl From<PubkeyError> for Error {
-    fn from(err: PubkeyError) -> Error {
-        Box::new(err)
-    }
-}
-
-impl From<std::io::Error> for Error {
-    fn from(err: std::io::Error) -> Error {
-        Box::new(err)
-    }
-}
-
-impl From<Box<bincode::ErrorKind>> for Error {
-    fn from(err: Box<bincode::ErrorKind>) -> Error {
-        Box::new(*err)
-    }
-}
 
 #[derive(Copy, Clone, Debug)]
 pub enum OutputMode {

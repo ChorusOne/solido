@@ -28,9 +28,10 @@ use solana_client::rpc_client::RpcClient;
 use solana_sdk::commitment_config::CommitmentConfig;
 use solana_sdk::transaction::TransactionError;
 
+use crate::error::{Abort, AsPrettyError, Error};
 use crate::helpers::get_solido;
 use crate::helpers::sign_and_send_transaction;
-use crate::util::{Abort, AsPrettyError, PubkeyBase58};
+use crate::util::PubkeyBase58;
 use crate::Config;
 use crate::{print_output, OutputMode};
 use lido::state::serialize_b58;
@@ -805,7 +806,7 @@ fn show_transaction(config: &Config, opts: ShowTransactionOpts) -> ShowTransacti
 fn try_parse_solido_instruction(
     instr: &Instruction,
     rpc_client: &RpcClient,
-) -> Result<ParsedInstruction, crate::Error> {
+) -> Result<ParsedInstruction, Error> {
     let instruction: LidoInstruction = BorshDeserialize::deserialize(&mut instr.data.as_slice())?;
     Ok(match instruction {
         LidoInstruction::DistributeFees => todo!(),
@@ -883,7 +884,7 @@ impl fmt::Display for ProposeInstructionOutput {
 fn get_account<T: AccountDeserialize>(
     rpc_client: &RpcClient,
     address: &Pubkey,
-) -> Result<T, crate::Error> {
+) -> Result<T, Error> {
     let account = rpc_client
         .get_account_with_commitment(address, CommitmentConfig::processed())?
         .value

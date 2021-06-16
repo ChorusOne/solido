@@ -1,3 +1,4 @@
+use crate::error::Error;
 use crate::Config;
 use solana_program::{program_pack::Pack, pubkey::Pubkey, system_instruction};
 use solana_sdk::{
@@ -12,7 +13,7 @@ pub fn push_create_spl_token_mint(
     config: &Config,
     instructions: &mut Vec<Instruction>,
     mint_authority: &Pubkey,
-) -> Result<Keypair, crate::Error> {
+) -> Result<Keypair, Error> {
     let mint_account_min_sol_balance = config
         .rpc
         .get_minimum_balance_for_rent_exemption(spl_token::state::Mint::LEN)?;
@@ -53,7 +54,7 @@ pub fn push_create_spl_token_account(
     instructions: &mut Vec<Instruction>,
     mint: &Pubkey,
     owner: &Pubkey,
-) -> Result<Keypair, crate::Error> {
+) -> Result<Keypair, Error> {
     let spl_token_min_sol_balance = config
         .rpc
         .get_minimum_balance_for_rent_exemption(spl_token::state::Account::LEN)?;
