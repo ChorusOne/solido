@@ -1,4 +1,3 @@
-extern crate lazy_static;
 extern crate spl_stake_pool;
 
 use std::fmt;
