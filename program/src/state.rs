@@ -15,8 +15,7 @@ use crate::token::{Lamports, Rational, StLamports, StakePoolTokenLamports};
 use crate::RESERVE_AUTHORITY;
 use crate::VALIDATOR_STAKE_ACCOUNT;
 
-
-pub const LIDO_VERSION:u8 = 0;
+pub const LIDO_VERSION: u8 = 0;
 /// Constant size of header size = 1 version, 5 public keys, 1 u64, 4 u8
 pub const LIDO_CONSTANT_HEADER_SIZE: usize = 1 + 5 * 32 + 8 + 4;
 /// Constant size of fee struct: 2 public keys + 3 u32
@@ -69,8 +68,6 @@ pub struct Lido {
 
     pub validators: Validators,
     pub maintainers: Maintainers,
-
-
 }
 
 impl Lido {

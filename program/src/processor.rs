@@ -22,7 +22,7 @@ use crate::{
     },
     state::{
         FeeDistribution, FeeRecipients, Lido, Maintainers, Validator, Validators,
-        LIDO_CONSTANT_SIZE,LIDO_VERSION,
+        LIDO_CONSTANT_SIZE, LIDO_VERSION,
     },
     token::{Lamports, StLamports},
     DEPOSIT_AUTHORITY, FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY, STAKE_POOL_AUTHORITY,
@@ -146,7 +146,6 @@ pub fn process_initialize(
         msg!("Fee account has an invalid owner, it should owned by the fee manager authority");
         return Err(LidoError::InvalidOwner.into());
     }
-
 
     lido.lido_version = version;
     lido.maintainers = Maintainers::new(max_maintainers);
