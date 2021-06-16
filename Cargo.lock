@@ -3699,7 +3699,6 @@ dependencies = [
  "borsh",
  "bs58 0.4.0",
  "clap 3.0.0-beta.2",
- "lazy_static",
  "lido",
  "multisig",
  "num_cpus",

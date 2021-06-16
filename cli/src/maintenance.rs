@@ -1,7 +1,7 @@
 //! Entry point for maintenance operations, such as updating the pool balance.
 
 use crate::helpers::{get_solido, get_stake_pool, sign_and_send_transaction};
-use crate::{Config, Error};
+use crate::{error::Error, Config};
 use clap::Clap;
 use lido::state::serialize_b58;
 use lido::state::PubkeyAndEntry;
