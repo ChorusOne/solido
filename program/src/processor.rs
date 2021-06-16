@@ -22,7 +22,7 @@ use crate::{
     },
     state::{
         FeeDistribution, FeeRecipients, Lido, Maintainers, Validator, Validators,
-        LIDO_CONSTANT_SIZE,
+        LIDO_CONSTANT_SIZE,LIDO_VERSION,
     },
     token::{Lamports, StLamports},
     DEPOSIT_AUTHORITY, FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY, STAKE_POOL_AUTHORITY,
@@ -46,6 +46,7 @@ use {
 
 /// Program state handler.
 pub fn process_initialize(
+    version: u8,
     program_id: &Pubkey,
     fee_distribution: FeeDistribution,
     max_validators: u32,
@@ -146,6 +147,8 @@ pub fn process_initialize(
         return Err(LidoError::InvalidOwner.into());
     }
 
+
+    lido.lido_version = version;
     lido.maintainers = Maintainers::new(max_maintainers);
     lido.stake_pool_account = *accounts.stake_pool.key;
     lido.manager = *accounts.manager.key;
@@ -535,6 +538,7 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
             max_validators,
             max_maintainers,
         } => process_initialize(
+            LIDO_VERSION,
             program_id,
             fee_distribution,
             max_validators,

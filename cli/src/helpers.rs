@@ -302,6 +302,7 @@ pub fn command_create_solido(
     instructions.clear();
     eprintln!("Did send SPL account inits.");
 
+
     // Create the account that holds the Solido instance itself.
     instructions.push(system_instruction::create_account(
         &config.signer.pubkey(),

@@ -15,8 +15,10 @@ use crate::token::{Lamports, Rational, StLamports, StakePoolTokenLamports};
 use crate::RESERVE_AUTHORITY;
 use crate::VALIDATOR_STAKE_ACCOUNT;
 
-/// Constant size of header size = 5 public keys, 1 u64, 4 u8
-pub const LIDO_CONSTANT_HEADER_SIZE: usize = 5 * 32 + 8 + 4;
+
+pub const LIDO_VERSION:u8 = 0;
+/// Constant size of header size = 1 version, 5 public keys, 1 u64, 4 u8
+pub const LIDO_CONSTANT_HEADER_SIZE: usize = 1 + 5 * 32 + 8 + 4;
 /// Constant size of fee struct: 2 public keys + 3 u32
 pub const LIDO_CONSTANT_FEE_SIZE: usize = 2 * 32 + 3 * 4;
 /// Constant size of Lido
@@ -35,6 +37,8 @@ where
     Clone, Debug, Default, BorshDeserialize, BorshSerialize, BorshSchema, Eq, PartialEq, Serialize,
 )]
 pub struct Lido {
+    /// Version number for the Lido
+    pub lido_version: u8,
     /// Stake pool account associated with Lido
     #[serde(serialize_with = "serialize_b58")]
     pub stake_pool_account: Pubkey,
@@ -65,6 +69,8 @@ pub struct Lido {
 
     pub validators: Validators,
     pub maintainers: Maintainers,
+
+
 }
 
 impl Lido {
@@ -520,6 +526,7 @@ mod test_lido {
             .unwrap();
         let maintainers = Maintainers::new(1);
         let lido = Lido {
+            lido_version: 0,
             stake_pool_account: Pubkey::new_unique(),
             manager: Pubkey::new_unique(),
             st_sol_mint_program: Pubkey::new_unique(),
