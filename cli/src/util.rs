@@ -5,9 +5,8 @@ use solana_client::client_error::{ClientError, ClientErrorKind};
 use solana_client::rpc_request::{RpcError, RpcResponseErrorData};
 use solana_program::pubkey::Pubkey;
 use solana_sdk::transaction::TransactionError;
-use spl_stake_pool::solana_program::program_error::ProgramError;
 
-use crate::Error;
+use spl_stake_pool::solana_program::program_error::ProgramError;
 use spl_stake_pool::solana_program::pubkey::PubkeyError;
 
 /// Wrapper for `Pubkey` to serialize it as base58 in json, instead of a list of numbers.
@@ -170,16 +169,9 @@ impl AsPrettyError for PubkeyError {
     }
 }
 
-impl AsPrettyError for crate::Error {
+impl AsPrettyError for Box<dyn AsPrettyError + 'static> {
     fn print_pretty(&self) {
-        match self {
-            Error::ClientError(err) => err.print_pretty(),
-            Error::BincodeError(err) => err.print_pretty(),
-            Error::IoError(err) => err.print_pretty(),
-            Error::ProgramError(err) => err.print_pretty(),
-            Error::TransactionError(err) => err.print_pretty(),
-            Error::PubkeyError(err) => err.print_pretty(),
-        }
+        (*self).print_pretty()
     }
 }
 

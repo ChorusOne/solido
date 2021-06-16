@@ -1,13 +1,13 @@
+extern crate lazy_static;
+extern crate spl_stake_pool;
+
 use std::fmt;
 use std::path::PathBuf;
 use std::str::FromStr;
 
 use clap::Clap;
-use helpers::AddRemoveMaintainerOpts;
-use helpers::AddValidatorOpts;
-use helpers::CreateValidatorStakeAccountOpts;
-use helpers::ShowSolidoOpts;
 use serde::Serialize;
+use solana_client::client_error::ClientError;
 use solana_client::rpc_client::RpcClient;
 use solana_remote_wallet::locator::Locator;
 use solana_remote_wallet::remote_keypair::generate_remote_keypair;
@@ -17,23 +17,24 @@ use solana_sdk::derivation_path::DerivationPath;
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::read_keypair_file;
 use solana_sdk::signer::Signer;
+use solana_sdk::transaction::TransactionError;
+
+use spl_stake_pool::solana_program::program_error::ProgramError;
+use spl_stake_pool::solana_program::pubkey::PubkeyError;
 
 use crate::daemon::RunMaintainerOpts;
 use crate::helpers::command_add_maintainer;
 use crate::helpers::command_create_validator_stake_account;
 use crate::helpers::command_remove_maintainer;
 use crate::helpers::command_show_solido;
+use crate::helpers::AddRemoveMaintainerOpts;
+use crate::helpers::AddValidatorOpts;
+use crate::helpers::CreateValidatorStakeAccountOpts;
+use crate::helpers::ShowSolidoOpts;
 use crate::helpers::{command_add_validator, command_create_solido, CreateSolidoOpts};
 use crate::maintenance::PerformMaintenanceOpts;
 use crate::multisig::MultisigOpts;
-use crate::util::Abort;
-use solana_client::client_error::ClientError;
-use solana_sdk::transaction::TransactionError;
-use spl_stake_pool::solana_program::program_error::ProgramError;
-use spl_stake_pool::solana_program::pubkey::PubkeyError;
-
-extern crate lazy_static;
-extern crate spl_stake_pool;
+use crate::util::{Abort, AsPrettyError};
 
 mod daemon;
 mod helpers;
@@ -44,52 +45,41 @@ mod spl_token_utils;
 mod stake_pool_helpers;
 mod util;
 
-// Note: this is the leaf error type. If you find yourself wanting to derive
-// `Display` or `Debug` for it, it is probably better to import `util::Abort`
-// and call `.ok_or_abort()` instead. If you do want to print the error without
-// aborting, use `.print_pretty()`.
-pub enum Error {
-    ClientError(ClientError),
-    ProgramError(ProgramError),
-    TransactionError(TransactionError),
-    IoError(std::io::Error),
-    BincodeError(Box<bincode::ErrorKind>),
-    PubkeyError(PubkeyError),
-}
+type Error = Box<dyn AsPrettyError + 'static>;
 
 impl From<ClientError> for Error {
     fn from(err: ClientError) -> Error {
-        Error::ClientError(err)
+        Box::new(err)
     }
 }
 
 impl From<ProgramError> for Error {
     fn from(err: ProgramError) -> Error {
-        Error::ProgramError(err)
+        Box::new(err)
     }
 }
 
 impl From<TransactionError> for Error {
     fn from(err: TransactionError) -> Error {
-        Error::TransactionError(err)
+        Box::new(err)
     }
 }
 
 impl From<PubkeyError> for Error {
     fn from(err: PubkeyError) -> Error {
-        Error::PubkeyError(err)
+        Box::new(err)
     }
 }
 
 impl From<std::io::Error> for Error {
     fn from(err: std::io::Error) -> Error {
-        Error::IoError(err)
+        Box::new(err)
     }
 }
 
 impl From<Box<bincode::ErrorKind>> for Error {
     fn from(err: Box<bincode::ErrorKind>) -> Error {
-        Error::BincodeError(err)
+        Box::new(*err)
     }
 }
 
