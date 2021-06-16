@@ -15,9 +15,7 @@ use solana_client::rpc_client::RpcClient;
 use solana_program::{
     clock::Clock, pubkey::Pubkey, rent::Rent, stake_history::StakeHistory, sysvar,
 };
-use solana_sdk::{
-    account::Account, borsh::try_from_slice_unchecked, instruction::Instruction, signature::Signer,
-};
+use solana_sdk::{account::Account, borsh::try_from_slice_unchecked, instruction::Instruction};
 use spl_stake_pool::stake_program::StakeState;
 use spl_stake_pool::state::{StakePool, ValidatorList};
 use std::fmt;
@@ -56,7 +54,6 @@ pub enum MaintenanceOutput {
         #[serde(rename = "amount_lamports")]
         amount: Lamports,
     },
-    NothingDone,
 }
 
 impl fmt::Display for MaintenanceOutput {
@@ -78,50 +75,47 @@ impl fmt::Display for MaintenanceOutput {
                 writeln!(f, "  Validator vote account: {}", validator_vote_account)?;
                 writeln!(f, "  Amount staked:          {}", amount)?;
             }
-            MaintenanceOutput::NothingDone => {
-                writeln!(f, "Nothing done, there was no maintenance to perform.")?;
-            }
         }
         Ok(())
     }
 }
 
 /// A snapshot of on-chain accounts relevant to Solido.
-struct SolidoState {
-    solido_program_id: Pubkey,
-    solido_address: Pubkey,
-    solido: Lido,
+pub struct SolidoState {
+    pub solido_program_id: Pubkey,
+    pub solido_address: Pubkey,
+    pub solido: Lido,
 
-    stake_pool_program_id: Pubkey,
-    stake_pool: StakePool,
+    pub stake_pool_program_id: Pubkey,
+    pub stake_pool: StakePool,
 
     #[allow(dead_code)]
-    validator_list_account: Account,
+    pub validator_list_account: Account,
     #[allow(dead_code)]
-    validator_list: ValidatorList,
+    pub validator_list: ValidatorList,
 
     /// For each validator, in the same order as in `solido.validators`, holds
     /// the stake balance of the derived stake accounts from the begin seed until
     /// end seed.
-    validator_stake_accounts: Vec<Vec<(Pubkey, StakeBalance)>>,
+    pub validator_stake_accounts: Vec<Vec<(Pubkey, StakeBalance)>>,
 
-    reserve_address: Pubkey,
-    reserve_account: Account,
-    rent: Rent,
+    pub reserve_address: Pubkey,
+    pub reserve_account: Account,
+    pub rent: Rent,
 
     /// Public key of the maintainer executing the maintenance.
     /// Must be a member of `solido.maintainers`.
-    maintainer_address: Pubkey,
+    pub maintainer_address: Pubkey,
 }
 
 /// The balance of a stake account, split into the four states that stake can be in.
 ///
 /// The sum of the four fields is equal to the SOL balance of the stake account.
-struct StakeBalance {
-    inactive: Lamports,
-    activating: Lamports,
-    active: Lamports,
-    deactivating: Lamports,
+pub struct StakeBalance {
+    pub inactive: Lamports,
+    pub activating: Lamports,
+    pub active: Lamports,
+    pub deactivating: Lamports,
 }
 
 impl StakeBalance {
@@ -416,24 +410,10 @@ impl SolidoState {
     }
 }
 
-/// Inspect the on-chain Solido state, and if there is maintenance that can be
-/// performed, do so. Returns a description of the task performed, if any.
-///
-/// This takes only one step, there might be more work left to do after this
-/// function returns. Call it in a loop until it returns
-/// [`MaintenanceResult::NothingToDo`]. (And then still call it in a loop,
-/// because the on-chain state might change.)
-pub fn perform_maintenance(
+pub fn try_perform_maintenance(
     config: &Config,
-    opts: PerformMaintenanceOpts,
-) -> Result<MaintenanceOutput> {
-    let state = SolidoState::new(
-        config,
-        &opts.solido_program_id,
-        &opts.solido_address,
-        &opts.stake_pool_program_id,
-    )?;
-
+    state: &SolidoState,
+) -> Result<Option<MaintenanceOutput>> {
     // Try all of these operations one by one, and select the first one that
     // produces an instruction.
     let instruction: Option<Result<(Instruction, MaintenanceOutput)>> = None
@@ -444,10 +424,29 @@ pub fn perform_maintenance(
         Some(Ok((instr, output))) => {
             // For maintenance operations, the maintainer is the only signer,
             // and that should be sufficient.
-            sign_and_send_transaction(config, &[instr], &[config.signer]);
-            Ok(output)
+            sign_and_send_transaction(config, &[instr], &[config.signer])?;
+            Ok(Some(output))
         }
         Some(Err(err)) => Err(err),
-        None => Ok(MaintenanceOutput::NothingDone),
+        None => Ok(None),
     }
+}
+
+/// Inspect the on-chain Solido state, and if there is maintenance that can be
+/// performed, do so. Returns a description of the task performed, if any.
+///
+/// This takes only one step, there might be more work left to do after this
+/// function returns. Call it in a loop until it returns `None`. (And then still
+/// call it in a loop, because the on-chain state might change.)
+pub fn run_perform_maintenance(
+    config: &Config,
+    opts: &PerformMaintenanceOpts,
+) -> Result<Option<MaintenanceOutput>> {
+    let state = SolidoState::new(
+        config,
+        &opts.solido_program_id,
+        &opts.solido_address,
+        &opts.stake_pool_program_id,
+    )?;
+    try_perform_maintenance(config, &state)
 }
