@@ -25,6 +25,7 @@ from util import (
     solana,
     approve_and_execute,
     TestAccount,
+    get_solido_program_path,
 )
 
 
@@ -55,7 +56,8 @@ print(f'> Developer fee account owner: {developer_account_owner}')
 
 print('\nUploading stake pool program ...')
 stake_pool_program_id = solana_program_deploy(
-    get_solido_program_path() + '/spl_stake_pool.so')
+    get_solido_program_path() + '/spl_stake_pool.so'
+)
 print(f'> Stake pool program id is {stake_pool_program_id}.')
 
 
