@@ -297,21 +297,22 @@ impl SolidoState {
         // If there is enough reserve, we can make a deposit. To keep the pool
         // balanced, find the validator furthest below its target balance, and
         // deposit to that validator.
-        let stake_infos = &self.validator_list.validators[..];
-        let mut targets = vec![Lamports(0); stake_infos.len()];
-        assert_eq!(targets.len(), self.solido.validators.entries.len());
+        let mut targets = vec![Lamports(0); self.solido.validators.len()];
 
         let undelegated_lamports = reserve_balance;
-        lido::balance::get_target_balance(undelegated_lamports, stake_infos, &mut targets[..])
-            .expect("Failed to compute target balance.");
+        lido::balance::get_target_balance(
+            undelegated_lamports,
+            &self.solido.validators,
+            &mut targets[..],
+        )
+        .expect("Failed to compute target balance.");
 
         let (validator_index, amount_below_target) =
-            lido::balance::get_validator_furthest_below_target(stake_infos, &targets[..]);
-
-        // NOTE: We assume here that the order in the stake pool's validator list
-        // is the same as in Solido's list. This is the case as long as we only add validators.
+            lido::balance::get_validator_furthest_below_target(
+                &self.solido.validators,
+                &targets[..],
+            );
         let validator = &self.solido.validators.entries[validator_index];
-        let stake_info = &self.validator_list.validators[validator_index];
 
         let (stake_account_end, _bump_seed) = Validator::find_stake_account_address(
             &self.solido_program_id,
@@ -337,7 +338,9 @@ impl SolidoState {
                 maintainer: self.maintainer_address,
                 reserve: self.reserve_address,
                 validator_stake_pool_stake_account: validator.pubkey,
-                validator_vote_account: stake_info.vote_account_address,
+                // TODO(ruuda): This is wrong for now, but will be removed as
+                // part of #190.
+                validator_vote_account: validator.pubkey,
                 stake_account_end,
                 deposit_authority,
             },
@@ -346,7 +349,8 @@ impl SolidoState {
         .expect("Failed to construct StakeDeposit instruction.");
 
         let task = MaintenanceOutput::StakeDeposit {
-            validator_vote_account: stake_info.vote_account_address,
+            // TODO(ruuda): Also here.
+            validator_vote_account: validator.pubkey,
             amount: amount_to_deposit,
         };
 
