@@ -27,6 +27,7 @@ from util import (
     solana_program_deploy,
     solana_program_show,
     get_multisig,
+    get_solido_program_path,
 )
 
 

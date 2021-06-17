@@ -41,39 +41,42 @@ def run(*args: str) -> str:
 
 
 def get_solido_program_path() -> str:
-    solidopath = os.getenv('SOLCONPATH')
-    if solido == None:
-        solidopath = 'target/deploy'
-
-    return network
-
+    solido_program_path = os.getenv('SOLCONPATH')
+    if solido_program_path is None:
+        return 'target/deploy'
+    else:
+        return solido_program_path
 
 
 def get_solido_path() -> str:
-    solidopath = os.getenv('SOLPATH')
-    if solido == None:
-        solidopath = 'target/debug/solido'
+    solido_path = os.getenv('SOLPATH')
+    if solido_path is None:
+        return 'target/debug/solido'
+    else:
+        return solido_path
 
-    return network
 
 def get_network() -> str:
     network = os.getenv('NETWORK')
-    if network == None:
-        network = 'http://127.0.0.1:8899'
-
-    return network
+    if network is None:
+        return 'http://127.0.0.1:8899'
+    else:
+        return network
 
 
 def get_solido(multisig_program_id: str) -> Callable[..., Any]:
     def solido(*args: str, keypair_path: Optional[str] = None) -> Any:
         """
-        Run 'solido' against localhost, return its parsed json output.
+        Run 'solido' against network, return its parsed json output.
         """
         output = run(
             get_solido_path(),
-            '--cluster', get_network() ,
-            '--output', 'json',
-            '--multisig-program-id', multisig_program_id,
+            '--cluster',
+            get_network(),
+            '--output',
+            'json',
+            '--multisig-program-id',
+            multisig_program_id,
             *([] if keypair_path is None else ['--keypair-path', keypair_path]),
             *args,
         )
@@ -96,14 +99,14 @@ def solana(*args: str) -> str:
     """
     Run 'solana' against network.
     """
-    return run('solana', '--url', get_network() , *args)
+    return run('solana', '--url', get_network(), *args)
 
 
 def spl_token(*args: str) -> str:
     """
     Run 'spl_token' against network.
     """
-    return run('spl-token', '--url', get_network() , *args)
+    return run('spl-token', '--url', get_network(), *args)
 
 
 def solana_program_deploy(fname: str) -> str:
@@ -219,12 +222,14 @@ def get_multisig(multisig_program_id: str) -> Callable[..., Any]:
 
     def multisig(*args: str, keypair_path: Optional[str] = None) -> Any:
         """
-        Run 'solido multisig' against localhost, return its parsed json output.
+        Run 'solido multisig' against network, return its parsed json output.
         """
         output = run(
             get_solido_path(),
-            '--cluster',get_network(),
-            '--output', 'json',
+            '--cluster',
+            get_network(),
+            '--output',
+            'json',
             *([] if keypair_path is None else ['--keypair-path', keypair_path]),
             '--multisig-program-id',
             multisig_program_id,
