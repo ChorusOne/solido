@@ -450,10 +450,6 @@ accounts_struct! {
             is_signer: false,
             is_writable: true,
         },
-        pub validator_stake_pool_stake_account {
-            is_signer: false,
-            is_writable: true,
-        },
         pub validator_vote_account {
             is_signer: false,
             is_writable: false,
@@ -732,31 +728,11 @@ accounts_struct! {
             is_signer: true,
             is_writable: false,
         },
-        pub stake_pool_manager_authority {
+        pub validator_vote_account {
             is_signer: false,
             is_writable: false,
         },
-        pub stake_pool_program {
-            is_signer: false,
-            is_writable: false,
-        },
-        pub stake_pool {
-            is_signer: false,
-            is_writable: true,
-        },
-        pub stake_pool_withdraw_authority {
-            is_signer: false,
-            is_writable: false,
-        },
-        pub stake_pool_validator_list {
-            is_signer: false,
-            is_writable: true,
-        },
-        pub stake_account {
-            is_signer: false,
-            is_writable: true,
-        },
-        pub validator_token_account {
+        pub validator_fee_st_sol_account {
             is_signer: false,
             is_writable: false,
         },
@@ -787,40 +763,9 @@ accounts_struct! {
             is_signer: true,
             is_writable: false,
         },
-        pub stake_pool_manager_authority {
+        pub validator_vote_account_to_remove {
             is_signer: false,
             is_writable: false,
-        },
-        pub stake_pool_program {
-            is_signer: false,
-            is_writable: false,
-        },
-        pub stake_pool {
-            is_signer: false,
-            is_writable: true,
-        },
-        pub stake_pool_withdraw_authority {
-            is_signer: false,
-            is_writable: false,
-        },
-        // New Staker and Withdrawer authority of the stake account
-        pub new_withdraw_authority {
-            is_signer: false,
-            is_writable: false,
-        },
-        pub stake_pool_validator_list {
-            is_signer: false,
-            is_writable: true,
-        },
-        // Stake account to remove
-        pub stake_account_to_remove {
-            is_signer: false,
-            is_writable:  true,
-        },
-        // Validator's transient stake
-        pub transient_stake {
-            is_signer: false,
-            is_writable:  false,
         },
         const sysvar_clock = sysvar::clock::id(),
         const sysvar_stake_program = stake_program::id(),
@@ -965,7 +910,7 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
-        pub validator_token {
+        pub validator_fee_st_sol_account {
             is_signer: false,
             is_writable: true,
         },

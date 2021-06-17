@@ -6,8 +6,7 @@ use solana_program::{
 use spl_stake_pool::{
     error::StakePoolError,
     instruction::{
-        add_validator_to_pool, create_validator_stake_account, decrease_validator_stake,
-        increase_validator_stake, remove_validator_from_pool,
+        create_validator_stake_account, decrease_validator_stake, increase_validator_stake,
     },
     state::StakePool,
 };
@@ -108,63 +107,25 @@ pub fn process_change_fee_spec(
 
 pub fn process_add_validator(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> ProgramResult {
     let accounts = AddValidatorInfo::try_from_slice(accounts_raw)?;
-    if accounts.stake_pool.owner != accounts.stake_pool_program.key {
-        msg!(
-            "Stake pool state is owned by {} but should be owned by {}",
-            accounts.stake_pool.owner,
-            accounts.stake_pool_program.key,
-        );
-        return Err(LidoError::InvalidOwner.into());
-    }
     let mut lido = deserialize_lido(program_id, accounts.lido)?;
     lido.check_manager(accounts.manager)?;
-    lido.check_stake_pool(accounts.stake_pool)?;
-    if &lido.stake_pool_account != accounts.stake_pool.key {
-        msg!("Invalid stake pool");
-        return Err(LidoError::InvalidStakePool.into());
-    }
 
-    let validator_token_account = spl_token::state::Account::unpack_from_slice(
-        &accounts.validator_token_account.data.borrow(),
+    let validator_fee_st_sol_account = spl_token::state::Account::unpack_from_slice(
+        &accounts.validator_fee_st_sol_account.data.borrow(),
     )?;
-    if lido.st_sol_mint_program != validator_token_account.mint {
+    if lido.st_sol_mint_program != validator_fee_st_sol_account.mint {
+        msg!("Validator fee account minter should be the same as Lido minter.");
         msg!(
-            "Validator account minter should be the same as Lido minter {}",
-            lido.st_sol_mint_program
+            "Expected {}, got {}.",
+            lido.st_sol_mint_program,
+            validator_fee_st_sol_account.mint
         );
         return Err(LidoError::InvalidTokenMinter.into());
     }
 
-    invoke_signed(
-        &add_validator_to_pool(
-            accounts.stake_pool_program.key,
-            accounts.stake_pool.key,
-            accounts.stake_pool_manager_authority.key,
-            accounts.stake_pool_withdraw_authority.key,
-            accounts.stake_pool_validator_list.key,
-            accounts.stake_account.key,
-        ),
-        &[
-            accounts.stake_pool_program.clone(),
-            accounts.stake_pool.clone(),
-            accounts.stake_pool_manager_authority.clone(),
-            accounts.stake_pool_withdraw_authority.clone(),
-            accounts.stake_pool_validator_list.clone(),
-            accounts.stake_account.clone(),
-            accounts.sysvar_clock.clone(),
-            accounts.sysvar_stake_history.clone(),
-            accounts.sysvar_stake_program.clone(),
-        ],
-        &[&[
-            &accounts.lido.key.to_bytes(),
-            STAKE_POOL_AUTHORITY,
-            &[lido.stake_pool_authority_bump_seed],
-        ]],
-    )?;
-
     lido.validators.add(
-        *accounts.stake_account.key,
-        Validator::new(*accounts.validator_token_account.key),
+        *accounts.validator_vote_account.key,
+        Validator::new(*accounts.validator_fee_st_sol_account.key),
     )?;
     lido.serialize(&mut *accounts.lido.data.borrow_mut())
         .map_err(|err| err.into())
@@ -183,56 +144,14 @@ pub fn process_remove_validator(
     accounts_raw: &[AccountInfo],
 ) -> ProgramResult {
     let accounts = RemoveValidatorInfo::try_from_slice(accounts_raw)?;
-    if accounts.stake_pool.owner != accounts.stake_pool_program.key {
-        msg!(
-            "Stake pool state is owned by {} but should be owned by {}",
-            accounts.stake_pool.owner,
-            accounts.stake_pool_program.key,
-        );
-        return Err(LidoError::InvalidOwner.into());
-    }
     let mut lido = deserialize_lido(program_id, accounts.lido)?;
     lido.check_manager(accounts.manager)?;
-    if &lido.stake_pool_account != accounts.stake_pool.key {
-        msg!("Invalid stake pool");
-        return Err(LidoError::InvalidStakePool.into());
-    }
 
-    invoke_signed(
-        &remove_validator_from_pool(
-            accounts.stake_pool_program.key,
-            accounts.stake_pool.key,
-            accounts.stake_pool_manager_authority.key,
-            accounts.stake_pool_withdraw_authority.key,
-            accounts.new_withdraw_authority.key,
-            accounts.stake_pool_validator_list.key,
-            accounts.stake_account_to_remove.key,
-            accounts.transient_stake.key,
-        ),
-        &[
-            accounts.stake_pool_program.clone(),
-            accounts.stake_pool.clone(),
-            accounts.stake_pool_manager_authority.clone(),
-            accounts.stake_pool_withdraw_authority.clone(),
-            accounts.new_withdraw_authority.clone(),
-            accounts.stake_pool_validator_list.clone(),
-            accounts.stake_account_to_remove.clone(),
-            accounts.sysvar_clock.clone(),
-            accounts.sysvar_stake_program.clone(),
-        ],
-        &[&[
-            &accounts.lido.key.to_bytes(),
-            STAKE_POOL_AUTHORITY,
-            &[lido.stake_pool_authority_bump_seed],
-        ]],
-    )?;
-
-    // finds the validator index, this should never return an error
-    let validator = lido
+    let removed_validator = lido
         .validators
-        .remove(accounts.stake_account_to_remove.key)?;
+        .remove(accounts.validator_vote_account_to_remove.key)?;
 
-    if validator.fee_credit != StLamports(0) {
+    if removed_validator.fee_credit != StLamports(0) {
         msg!("Validator still has tokens to claim. Reclaim tokens before removing the validator");
         return Err(LidoError::ValidatorHasUnclaimedCredit.into());
     }
@@ -252,14 +171,14 @@ pub fn process_claim_validator_fee(
         .validators
         .entries
         .iter_mut()
-        .find(|pe| &pe.entry.fee_address == accounts.validator_token.key)
+        .find(|pe| &pe.entry.fee_address == accounts.validator_fee_st_sol_account.key)
         .ok_or(LidoError::InvalidValidatorCreditAccount)?;
 
     token_mint_to(
         accounts.lido.key,
         accounts.spl_token.clone(),
         accounts.mint_program.clone(),
-        accounts.validator_token.clone(),
+        accounts.validator_fee_st_sol_account.clone(),
         accounts.reserve_authority.clone(),
         RESERVE_AUTHORITY,
         lido.sol_reserve_authority_bump_seed,

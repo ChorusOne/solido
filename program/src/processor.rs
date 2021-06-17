@@ -260,7 +260,8 @@ pub fn process_stake_deposit(
 
     let validator = lido
         .validators
-        .get_mut(&accounts.validator_stake_pool_stake_account.key)?;
+        .get_mut(&accounts.validator_vote_account.key)?;
+
     // TODO(#174) Merge into preceding stake account if possible
     let (stake_addr, stake_addr_bump_seed) = Validator::find_stake_account_address(
         program_id,
@@ -290,7 +291,7 @@ pub fn process_stake_deposit(
     let reserve_account_bump_seed = [lido.sol_reserve_authority_bump_seed];
     let stake_account_seed = validator.entry.stake_accounts_seed_end.to_le_bytes();
     let stake_account_bump_seed = [stake_addr_bump_seed];
-    let validator_address_bytes = accounts.validator_stake_pool_stake_account.key.to_bytes();
+    let validator_vote_account_bytes = accounts.validator_vote_account.key.to_bytes();
 
     let reserve_account_seeds = &[
         &solido_address_bytes,
@@ -299,7 +300,7 @@ pub fn process_stake_deposit(
     ][..];
     let stake_account_seeds = &[
         &solido_address_bytes,
-        &validator_address_bytes,
+        &validator_vote_account_bytes,
         VALIDATOR_STAKE_ACCOUNT,
         &stake_account_seed[..],
         &stake_account_bump_seed[..],
