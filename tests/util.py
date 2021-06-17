@@ -48,13 +48,13 @@ def get_solido_program_path() -> str:
     return network
 
 
-
 def get_solido_path() -> str:
     solidopath = os.getenv('SOLPATH')
     if solido == None:
         solidopath = 'target/debug/solido'
 
     return network
+
 
 def get_network() -> str:
     network = os.getenv('NETWORK')
