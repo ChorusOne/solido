@@ -2,7 +2,7 @@ use clap::Clap;
 use serde::Deserialize;
 use serde_json::Value;
 use solana_sdk::pubkey::{ParsePubkeyError, Pubkey};
-use std::{fs::File, path::PathBuf, str::FromStr};
+use std::{path::PathBuf, str::FromStr};
 
 pub fn get_option_from_config<T: FromStr>(
     name: &'static str,
