@@ -24,6 +24,9 @@ pub const LIDO_CONSTANT_FEE_SIZE: usize = 2 * 32 + 3 * 4;
 /// Constant size of Lido
 pub const LIDO_CONSTANT_SIZE: usize = LIDO_CONSTANT_HEADER_SIZE + LIDO_CONSTANT_FEE_SIZE;
 
+pub type Validators = AccountMap<Validator>;
+pub type Maintainers = AccountSet;
+
 #[repr(C)]
 #[derive(
     Clone, Debug, Default, BorshDeserialize, BorshSerialize, BorshSchema, Eq, PartialEq, Serialize,
@@ -60,7 +63,7 @@ pub struct Lido {
     /// The set of enrolled validators.
     ///
     /// This map/dictionary is indexed by the validator's vote account.
-    pub validators: AccountMap<Validator>,
+    pub validators: Validators,
 
     /// The set of maintainers.
     ///
@@ -68,7 +71,7 @@ pub struct Lido {
     /// expected to run the maintenance daemon, that invokes the maintenance
     /// operations. These are gated on the signer being present in this set.
     /// In the future we plan to make maintenance operations callable by anybody.
-    pub maintainers: AccountSet,
+    pub maintainers: Maintainers,
 }
 
 impl Lido {
@@ -78,8 +81,8 @@ impl Lido {
     /// with Lido's constant size.
     pub fn calculate_size(max_validators: u32, max_maintainers: u32) -> usize {
         let lido_instance = Lido {
-            validators: AccountMap::new_fill_default(max_validators),
-            maintainers: AccountSet::new_fill_default(max_maintainers),
+            validators: Validators::new_fill_default(max_validators),
+            maintainers: Maintainers::new_fill_default(max_maintainers),
             ..Default::default()
         };
         get_instance_packed_len(&lido_instance).unwrap()
@@ -371,8 +374,8 @@ mod test_lido {
     #[test]
     fn test_account_map_required_bytes_relates_to_maximum_entries() {
         for buffer_size in 0..8_000 {
-            let max_entries = AccountMap::<Validator>::maximum_entries(buffer_size);
-            let needed_size = AccountMap::<Validator>::required_bytes(max_entries);
+            let max_entries = Validators::maximum_entries(buffer_size);
+            let needed_size = Validators::required_bytes(max_entries);
             assert!(
                 needed_size <= buffer_size || max_entries == 0,
                 "Buffer of len {} can fit {} validators which need {} bytes.",
@@ -381,8 +384,8 @@ mod test_lido {
                 needed_size,
             );
 
-            let max_entries = AccountSet::maximum_entries(buffer_size);
-            let needed_size = AccountSet::required_bytes(max_entries);
+            let max_entries = Maintainers::maximum_entries(buffer_size);
+            let needed_size = Maintainers::required_bytes(max_entries);
             assert!(
                 needed_size <= buffer_size || max_entries == 0,
                 "Buffer of len {} can fit {} maintainers which need {} bytes.",
@@ -413,7 +416,7 @@ mod test_lido {
         validators
             .add(Pubkey::new_unique(), Validator::new(Pubkey::new_unique()))
             .unwrap();
-        let maintainers = AccountSet::new(1);
+        let maintainers = Maintainers::new(1);
         let lido = Lido {
             stake_pool_account: Pubkey::new_unique(),
             manager: Pubkey::new_unique(),

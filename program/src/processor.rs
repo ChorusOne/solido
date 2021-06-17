@@ -4,7 +4,6 @@ use solana_program::program_pack::Pack;
 use spl_stake_pool::{stake_program, state::StakePool};
 
 use crate::{
-    account_map::{AccountMap, AccountSet},
     error::LidoError,
     instruction::{
         stake_pool_deposit, DepositAccountsInfo, DepositActiveStakeToPoolAccountsInfo,
@@ -21,7 +20,10 @@ use crate::{
         process_decrease_validator_stake, process_distribute_fees,
         process_increase_validator_stake, process_remove_maintainer, process_remove_validator,
     },
-    state::{FeeDistribution, FeeRecipients, Lido, Validator, LIDO_CONSTANT_SIZE},
+    state::{
+        FeeDistribution, FeeRecipients, Lido, Maintainers, Validator, Validators,
+        LIDO_CONSTANT_SIZE,
+    },
     token::{Lamports, StLamports},
     DEPOSIT_AUTHORITY, FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY, STAKE_POOL_AUTHORITY,
     VALIDATOR_STAKE_ACCOUNT,
@@ -70,9 +72,9 @@ pub fn process_initialize(
     Lido::check_valid_minter_program(&accounts.mint_program.key, accounts.developer_account)?;
 
     // Bytes required for maintainers
-    let bytes_for_maintainers = AccountSet::required_bytes(max_maintainers as usize);
+    let bytes_for_maintainers = Maintainers::required_bytes(max_maintainers as usize);
     // Bytes required for validators
-    let bytes_for_validators = AccountMap::<Validator>::required_bytes(max_validators as usize);
+    let bytes_for_validators = Validators::required_bytes(max_validators as usize);
     // Calculate the expected lido's size
     let bytes_sum = LIDO_CONSTANT_SIZE + bytes_for_validators + bytes_for_maintainers;
     if bytes_sum != accounts.lido.data_len() {
@@ -84,7 +86,7 @@ pub fn process_initialize(
         treasury_account: *accounts.treasury_account.key,
         developer_account: *accounts.developer_account.key,
     };
-    lido.validators = AccountMap::new(max_validators);
+    lido.validators = Validators::new(max_validators);
 
     let (_, reserve_bump_seed) = Pubkey::find_program_address(
         &[&accounts.lido.key.to_bytes(), RESERVE_AUTHORITY],
@@ -144,7 +146,7 @@ pub fn process_initialize(
         return Err(LidoError::InvalidOwner.into());
     }
 
-    lido.maintainers = AccountSet::new(max_maintainers);
+    lido.maintainers = Maintainers::new(max_maintainers);
     lido.stake_pool_account = *accounts.stake_pool.key;
     lido.manager = *accounts.manager.key;
     lido.st_sol_mint_program = *accounts.mint_program.key;
