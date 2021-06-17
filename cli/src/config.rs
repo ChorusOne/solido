@@ -4,7 +4,7 @@ use serde_json::Value;
 use solana_sdk::pubkey::{ParsePubkeyError, Pubkey};
 use std::{fs::File, str::FromStr};
 
-fn get_option_from_config<T: FromStr>(
+pub fn get_option_from_config<T: FromStr>(
     name: &'static str,
     config_file: &Option<ConfigFile>,
 ) -> Option<T> {
@@ -28,13 +28,62 @@ fn get_option_from_config<T: FromStr>(
         None => None,
     }
 }
+/// Generates a struct that derives `Clap` for usage with a config file.
+///
+/// This macro avoids code repetition by implementing a function that sweeps
+/// every field from the struct and checks if it is set either by argument or by
+/// a config file. If the field is set by neither, it will print all the
+/// missing fields.
+/// It will also implement getters that unwrap every field of the struct,
+/// this is necessary to use optional arguments in clap, that will be filled
+/// in case they were defined in the configuration file.
+
+/// Optionally, a default value can be passed for the structure with `=> <default>`,
+/// If the value is neither passed by argument or by config file, it will be set
+/// as `default`.
+
+/// The arguments expected are the same as the names defined in the macro
+/// substituting all '_' with '-', in case of the config file, the names are the
+/// same as defined in the struct.
+
+/// Example:
+/// ```
+/// cli_opt_struct! {
+///     FooOpts {
+///         Address of the Solido program.
+///         #[clap(long, value_name = "address")]
+///         foo_arg: Pubkey,
+///         def_arg: i32 => 3 // argument is 3 by default
+///     }
+/// }
+/// ```
+/// This generates the struct:
+/// ```
+/// struct FooOpts {
+///     #[clap(long, value_name = "address")]
+///     foo_arg: Option<Pubkey>,
+///     def_arg: Option<i32>, // If not present in config, the value will be 3 by default.
+/// }
+///
+/// impl FooOpts {
+///     pub fn merge_with_config(&mut self, config_file: &Option<ConfigFile>);
+/// }
+/// ```
+/// When `merge_with_config(config_file)` is called, if the `foo` field has a
+/// value (set by passing `--foo-arg <pubkey>`) it does nothing, otherwise,
+/// search `config_file` for the key 'foo_arg' and sets the field accordingly.
+/// The type must implement the `FromStr` trait.
+/// In the example, `def_arg` will have value 3 if not present in the config file.
 
 macro_rules! cli_opt_struct {
     {
+        // Struct name
         $name:ident {
             $(
+                // Foward the properties
                 $(#$properties:tt)?
-                $field:ident : $type:ty
+                // Field name and type, specify default value
+                $field:ident : $type:ty $(=> $default:expr)?
             ),*
             $(,)?
         }
@@ -48,12 +97,27 @@ macro_rules! cli_opt_struct {
         }
 
         impl $name {
+            /// Merges the struct with a config file.
+            /// Fails if a field is not present (None) in the struct *and* not
+            /// present in the config file. When failing, prints all the missing
+            /// fields.
+            #[allow(dead_code)]
             pub fn merge_with_config(&mut self, config_file: &Option<ConfigFile>) {
                 let mut failed = false;
                 $(
                     let str_field = stringify!($field);
+                    // Sets the field with the argument or the config field.
                     self.$field = self.$field.take().or(get_option_from_config(str_field, config_file));
-                    if self.$field.is_none() {
+                    #[allow(unused_mut, unused_assignments)]
+                    let mut is_optional = false;
+                    $(
+                        // If a default value was passed and the field is None, sets the default value.
+                        self.$field = self.$field.take().or(Some($default));
+                        is_optional = true;
+                    )?
+                    // If field is still none, prints an error, this will fail in the end of the function.
+                    // If the value has a default, let it be None
+                    if !is_optional && self.$field.is_none() {
                         failed = true;
                         eprintln!("Expected --{} to be provided on arguments, or set in config file with key {}.", str_field.replace("_", "-"), str_field);
                     }
@@ -64,6 +128,7 @@ macro_rules! cli_opt_struct {
             }
 
             $(
+                // Implement a getter for every field in the struct
                 #[allow(dead_code)]
                 pub fn $field(&self) -> &$type {
                     self.$field.as_ref().unwrap()
@@ -73,8 +138,11 @@ macro_rules! cli_opt_struct {
     }
 }
 
+/// Type to represent a vector of `Pubkey`
 #[derive(Debug, Clone)]
 pub struct PubkeyVec(pub Vec<Pubkey>);
+/// Constructs a `PubkeyVec` from a string by splitting the string by ',' and
+/// constructing a Pubkey for each of the tokens
 impl FromStr for PubkeyVec {
     type Err = ParsePubkeyError;
 
@@ -92,43 +160,31 @@ pub struct ConfigFile {
     pub values: Value,
 }
 
-impl ConfigFile {
-    pub fn get_pubkey(
-        config_file: &Option<ConfigFile>,
-        arg_opt: Option<Pubkey>,
-        option_name: &str,
-        option_arg: &str,
-    ) -> Pubkey {
-        match (config_file, arg_opt) {
-            (None, None) => {
-                None
-            }
-            (None, Some(pubkey)) => Some(pubkey),
-            (Some(config_file), None) => match config_file.values.get(option_name) {
-                None => None,
-                Some(value) => {
-                    if let Value::String(pubkey) = value {
-                        Some(
-                            Pubkey::from_str(pubkey)
-                                .expect("Failed to parse public key from file."),
-                        )
-                    } else {
-                        None
-                    }
-                }
-            },
-            (Some(_), Some(pubkey)) => {
-                eprintln!("Argument {} will override config file", option_arg);
-                Some(pubkey)
-            },
-        }.unwrap_or_else(|| panic!("'{}' was not specified. Either pass '{}', or add a line '{} = \"...\" to the config file", option_name, option_arg, option_name))
-    }
-}
-
 pub fn read_config(config_path: String) -> ConfigFile {
     let file = File::open(config_path).expect("Failed to open file.");
     let values: Value = serde_json::from_reader(file).expect("Error while reading config.");
     ConfigFile { values }
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum OutputMode {
+    /// Output human-readable text to stdout.
+    Text,
+
+    /// Output machine-readable json to stdout.
+    Json,
+}
+
+impl FromStr for OutputMode {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<OutputMode, &'static str> {
+        match s {
+            "text" => Ok(OutputMode::Text),
+            "json" => Ok(OutputMode::Json),
+            _ => Err("Invalid output mode, expected 'text' or 'json'."),
+        }
+    }
 }
 
 cli_opt_struct! {
@@ -136,10 +192,6 @@ cli_opt_struct! {
         // Address of the Solido program.
         #[clap(long, value_name = "address")]
         solido_program_id: Pubkey,
-
-        // Address of the SPL stake pool program.
-        #[clap(long, value_name = "address")]
-        stake_pool_program_id: Pubkey,
 
         // Numerator of the fee fraction.
         #[clap(long, value_name = "int")]
@@ -191,15 +243,12 @@ cli_opt_struct! {
         // Account that stores the data for this Solido instance.
         #[clap(long, value_name = "address")]
         solido_address: Pubkey,
-        // Stake pool program id.
-        #[clap(long, value_name = "address")]
-        stake_pool_program_id: Pubkey,
         // Address of the validator vote account.
         #[clap(long, value_name = "address")]
-        validator_vote: Pubkey,
+        validator_vote_account: Pubkey,
         // Validator stSol token account.
         #[clap(long, value_name = "address")]
-        validator_rewards_address: Pubkey,
+        validator_fee_account: Pubkey,
         // Multisig instance.
         #[clap(long, value_name = "address")]
         multisig_address: Pubkey,
@@ -234,9 +283,6 @@ cli_opt_struct! {
         #[clap(long, value_name = "address")]
         solido_address: Pubkey,
 
-        // Stake pool program id
-        #[clap(long, value_name = "address")]
-        stake_pool_program_id: Pubkey,
         // Address of the validator vote account.
         #[clap(long, value_name = "address")]
         validator_vote: Pubkey,
@@ -266,10 +312,6 @@ cli_opt_struct! {
         // Account that stores the data for this Solido instance.
         #[clap(long, value_name = "address")]
         solido_address: Pubkey,
-
-        // Stake pool program id
-        #[clap(long, value_name = "address")]
-        stake_pool_program_id: Pubkey,
     }
 }
 
@@ -384,6 +426,31 @@ cli_opt_struct! {
         // The public keys of the multisig owners, who can sign transactions.
         #[clap(long = "owner")]
         owners: PubkeyVec,
+    }
+}
+
+cli_opt_struct! {
+    RunMaintainerOpts {
+        // Address of the Solido program.
+        #[clap(long)]
+        solido_program_id: Pubkey,
+
+        // Account that stores the data for this Solido instance.
+        #[clap(long)]
+         solido_address: Pubkey,
+
+        // Listen address and port for the http server that serves a /metrics endpoint.
+        #[clap(long)]
+        listen: String => "0.0.0.0:8923".to_owned(),
+
+        // Maximum time to wait after there was no maintenance to perform, before checking again.
+        //
+        // The expected wait time is half the max poll interval. A max poll interval
+        // of a few minutes should be plenty fast for a production deployment, but
+        // for testing you can reduce this value to make the daemon more responsive,
+        // to eliminate some waiting time.
+        #[clap(long)]
+        max_poll_interval_seconds: u64 => 120,
     }
 }
 

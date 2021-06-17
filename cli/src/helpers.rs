@@ -1,6 +1,6 @@
 use std::fmt;
 
-use clap::Clap;
+use crate::config::{AddRemoveMaintainerOpts, AddValidatorOpts, CreateSolidoOpts, ShowSolidoOpts};
 use lido::{
     state::{FeeDistribution, Lido},
     DEPOSIT_AUTHORITY, RESERVE_AUTHORITY,
@@ -62,56 +62,6 @@ pub fn sign_and_send_transaction<T: Signers>(
     send_transaction(&config, tx)
 }
 
-#[derive(Clap, Debug)]
-pub struct CreateSolidoOpts {
-    /// Address of the Solido program.
-    #[clap(long, value_name = "address")]
-    pub solido_program_id: Pubkey,
-
-    /// Numerator of the fee fraction.
-    #[clap(long, value_name = "int")]
-    pub fee_numerator: u64,
-
-    /// Denominator of the fee fraction.
-    #[clap(long, value_name = "int")]
-    pub fee_denominator: u64,
-
-    /// The maximum number of validators that this Solido instance will support.
-    #[clap(long, value_name = "int")]
-    pub max_validators: u32,
-
-    /// The maximum number of maintainers that this Solido instance will support.
-    #[clap(long, value_name = "int")]
-    pub max_maintainers: u32,
-
-    // Fees are divided proportionally to the sum of all specified fees, for instance,
-    // if all the fees are the same value, they will be divided equally.
-    /// Treasury fee share
-    #[clap(long, value_name = "int")]
-    pub treasury_fee: u32,
-
-    /// Validation fee share, to be divided equally among validators
-    #[clap(long, value_name = "int")]
-    pub validation_fee: u32,
-
-    /// Developer fee share
-    #[clap(long, value_name = "int")]
-    pub developer_fee: u32,
-
-    /// Account who will own the stSOL SPL token account that receives treasury fees.
-    #[clap(long, value_name = "address")]
-    pub treasury_account_owner: Pubkey,
-
-    /// Account who will own the stSOL SPL token account that receives the developer fees.
-    #[clap(long, value_name = "address")]
-    pub developer_account_owner: Pubkey,
-
-    /// Used to compute Solido's manager.
-    /// Multisig instance.
-    #[clap(long, value_name = "address")]
-    pub multisig_address: Pubkey,
-}
-
 #[derive(Serialize)]
 pub struct CreateSolidoOutput {
     /// Account that stores the data for this Solido instance.
@@ -169,15 +119,15 @@ pub fn command_create_solido(
     let lido_keypair = Keypair::new();
 
     let (reserve_authority, _) = lido::find_authority_program_address(
-        &opts.solido_program_id,
+        &opts.solido_program_id(),
         &lido_keypair.pubkey(),
         RESERVE_AUTHORITY,
     );
 
     let (manager, _nonce) =
-        get_multisig_program_address(&config.multisig_program_id, &opts.multisig_address);
+        get_multisig_program_address(&config.multisig_program_id, opts.multisig_address());
 
-    let lido_size = Lido::calculate_size(opts.max_validators, opts.max_maintainers);
+    let lido_size = Lido::calculate_size(*opts.max_validators(), *opts.max_maintainers());
     let lido_account_balance = config
         .rpc
         .get_minimum_balance_for_rent_exemption(lido_size)?;
@@ -211,13 +161,13 @@ pub fn command_create_solido(
         &config,
         &mut instructions,
         &st_sol_mint_keypair.pubkey(),
-        &opts.treasury_account_owner,
+        opts.treasury_account_owner(),
     )?;
     let developer_keypair = push_create_spl_token_account(
         &config,
         &mut instructions,
         &st_sol_mint_keypair.pubkey(),
-        &opts.developer_account_owner,
+        opts.developer_account_owner(),
     )?;
     sign_and_send_transaction(
         &config,
@@ -233,18 +183,18 @@ pub fn command_create_solido(
         &lido_keypair.pubkey(),
         lido_account_balance,
         lido_size as u64,
-        &opts.solido_program_id,
+        opts.solido_program_id(),
     ));
 
     instructions.push(lido::instruction::initialize(
-        &opts.solido_program_id,
+        opts.solido_program_id(),
         FeeDistribution {
-            treasury_fee: opts.treasury_fee,
-            validation_fee: opts.validation_fee,
-            developer_fee: opts.developer_fee,
+            treasury_fee: *opts.treasury_fee(),
+            validation_fee: *opts.validation_fee(),
+            developer_fee: *opts.developer_fee(),
         },
-        opts.max_validators,
-        opts.max_maintainers,
+        *opts.max_validators(),
+        *opts.max_maintainers(),
         &lido::instruction::InitializeAccountsMeta {
             lido: lido_keypair.pubkey(),
             st_sol_mint: st_sol_mint_keypair.pubkey(),
@@ -268,67 +218,28 @@ pub fn command_create_solido(
     Ok(result)
 }
 
-#[derive(Clap, Debug)]
-pub struct AddValidatorOpts {
-    /// Address of the Solido program.
-    #[clap(long, value_name = "address")]
-    pub solido_program_id: Pubkey,
-    /// Account that stores the data for this Solido instance.
-    #[clap(long, value_name = "address")]
-    pub solido_address: Pubkey,
-
-    /// Address of the validator vote account.
-    #[clap(long, value_name = "address")]
-    pub validator_vote_account: Pubkey,
-
-    /// Validator stSOL token account to deposit fees into.
-    #[clap(long, value_name = "address")]
-    pub validator_fee_account: Pubkey,
-
-    /// Multisig instance.
-    #[clap(long, value_name = "address")]
-    pub multisig_address: Pubkey,
-}
-
 /// Command to add a validator to Solido.
 pub fn command_add_validator(
     config: Config,
     opts: AddValidatorOpts,
 ) -> Result<ProposeInstructionOutput, Error> {
     let (multisig_address, _) =
-        get_multisig_program_address(&config.multisig_program_id, &opts.multisig_address);
+        get_multisig_program_address(&config.multisig_program_id, opts.multisig_address());
 
     let instruction = lido::instruction::add_validator(
-        &opts.solido_program_id,
+        opts.solido_program_id(),
         &lido::instruction::AddValidatorMeta {
-            lido: opts.solido_address,
+            lido: *opts.solido_address(),
             manager: multisig_address,
-            validator_vote_account: opts.validator_vote_account,
-            validator_fee_st_sol_account: opts.validator_fee_account,
+            validator_vote_account: *opts.validator_vote_account(),
+            validator_fee_st_sol_account: *opts.validator_fee_account(),
         },
     )?;
     Ok(propose_instruction(
         &config,
-        opts.multisig_address,
+        *opts.multisig_address(),
         instruction,
     ))
-}
-#[derive(Clap, Debug)]
-pub struct AddRemoveMaintainerOpts {
-    /// Address of the Solido program.
-    #[clap(long, value_name = "address")]
-    pub solido_program_id: Pubkey,
-    /// Account that stores the data for this Solido instance.
-    #[clap(long, value_name = "address")]
-    pub solido_address: Pubkey,
-
-    // Maintainer to add or remove.
-    #[clap(long, value_name = "address")]
-    pub maintainer_address: Pubkey,
-
-    /// Multisig instance.
-    #[clap(long, value_name = "address")]
-    pub multisig_address: Pubkey,
 }
 
 /// Command to add a validator to Solido.
@@ -337,18 +248,18 @@ pub fn command_add_maintainer(
     opts: AddRemoveMaintainerOpts,
 ) -> Result<ProposeInstructionOutput, Error> {
     let (multisig_address, _) =
-        get_multisig_program_address(&config.multisig_program_id, &opts.multisig_address);
+        get_multisig_program_address(&config.multisig_program_id, opts.multisig_address());
     let instruction = lido::instruction::add_maintainer(
-        &opts.solido_program_id,
+        opts.solido_program_id(),
         &lido::instruction::AddMaintainerMeta {
-            lido: opts.solido_address,
+            lido: *opts.solido_address(),
             manager: multisig_address,
-            maintainer: opts.maintainer_address,
+            maintainer: *opts.maintainer_address(),
         },
     )?;
     Ok(propose_instruction(
         &config,
-        opts.multisig_address,
+        *opts.multisig_address(),
         instruction,
     ))
 }
@@ -359,29 +270,20 @@ pub fn command_remove_maintainer(
     opts: AddRemoveMaintainerOpts,
 ) -> Result<ProposeInstructionOutput, Error> {
     let (multisig_address, _) =
-        get_multisig_program_address(&config.multisig_program_id, &opts.multisig_address);
+        get_multisig_program_address(&config.multisig_program_id, opts.multisig_address());
     let instruction = lido::instruction::remove_maintainer(
-        &opts.solido_program_id,
+        opts.solido_program_id(),
         &lido::instruction::RemoveMaintainerMeta {
-            lido: opts.solido_address,
+            lido: *opts.solido_address(),
             manager: multisig_address,
-            maintainer: opts.maintainer_address,
+            maintainer: *opts.maintainer_address(),
         },
     )?;
     Ok(propose_instruction(
         &config,
-        opts.multisig_address,
+        *opts.multisig_address(),
         instruction,
     ))
-}
-
-#[derive(Clap, Debug)]
-pub struct ShowSolidoOpts {
-    /// The solido instance to show
-    #[clap(long, value_name = "address")]
-    pub solido_address: Pubkey,
-    #[clap(long, value_name = "address")]
-    pub solido_program_id: Pubkey,
 }
 
 #[derive(Serialize)]
@@ -478,28 +380,28 @@ pub fn command_show_solido(
     config: Config,
     opts: ShowSolidoOpts,
 ) -> Result<ShowSolidoOutput, Error> {
-    let lido = get_solido(&config.rpc, &opts.solido_address)?;
+    let lido = get_solido(&config.rpc, opts.solido_address())?;
     let reserve_authority = Pubkey::create_program_address(
         &[
-            &opts.solido_address.to_bytes(),
+            &opts.solido_address().to_bytes(),
             RESERVE_AUTHORITY,
             &[lido.sol_reserve_authority_bump_seed],
         ],
-        &opts.solido_program_id,
+        opts.solido_program_id(),
     )?;
 
     let deposit_authority = Pubkey::create_program_address(
         &[
-            &opts.solido_address.to_bytes(),
+            &opts.solido_address().to_bytes(),
             DEPOSIT_AUTHORITY,
             &[lido.deposit_authority_bump_seed],
         ],
-        &opts.solido_program_id,
+        opts.solido_program_id(),
     )?;
 
     Ok(ShowSolidoOutput {
-        solido_program_id: opts.solido_program_id.into(),
-        solido_address: opts.solido_address.into(),
+        solido_program_id: opts.solido_program_id().into(),
+        solido_address: opts.solido_address().into(),
         solido: lido,
         reserve_authority: reserve_authority.into(),
         deposit_authority: deposit_authority.into(),

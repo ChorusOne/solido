@@ -12,39 +12,14 @@ use std::sync::Mutex;
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use clap::Clap;
 use rand::Rng;
-use solana_sdk::pubkey::Pubkey;
 use tiny_http::{Request, Response, Server};
 
+use crate::config::RunMaintainerOpts;
 use crate::error::AsPrettyError;
 use crate::maintenance::{try_perform_maintenance, MaintenanceOutput, SolidoState};
 use crate::prometheus::{write_metric, Metric, MetricFamily};
 use crate::Config;
-
-#[derive(Clap, Clone, Debug)]
-pub struct RunMaintainerOpts {
-    /// Address of the Solido program.
-    #[clap(long)]
-    pub solido_program_id: Pubkey,
-
-    /// Account that stores the data for this Solido instance.
-    #[clap(long)]
-    pub solido_address: Pubkey,
-
-    /// Listen address and port for the http server that serves a /metrics endpoint.
-    #[clap(long, default_value = "0.0.0.0:8923")]
-    pub listen: String,
-
-    /// Maximum time to wait after there was no maintenance to perform, before checking again.
-    ///
-    /// The expected wait time is half the max poll interval. A max poll interval
-    /// of a few minutes should be plenty fast for a production deployment, but
-    /// for testing you can reduce this value to make the daemon more responsive,
-    /// to eliminate some waiting time.
-    #[clap(long, default_value = "120")]
-    pub max_poll_interval_seconds: u64,
-}
 
 /// Metrics counters that track how many maintenance operations we performed.
 #[derive(Clone)]
@@ -126,7 +101,8 @@ fn run_main_loop(config: &Config, opts: &RunMaintainerOpts, snapshot_mutex: &Sna
     loop {
         let mut do_wait = false;
 
-        let state_result = SolidoState::new(config, &opts.solido_program_id, &opts.solido_address);
+        let state_result =
+            SolidoState::new(config, &opts.solido_program_id(), &opts.solido_address());
         match &state_result {
             &Err(ref err) => {
                 println!("Failed to obtain Solido state.");
@@ -175,7 +151,7 @@ fn run_main_loop(config: &Config, opts: &RunMaintainerOpts, snapshot_mutex: &Sna
             // Sleep a random time, to avoid a thundering herd problem, in case
             // multiple maintainer bots happened to run in sync. They would all
             // try to create the same transaction, and only one would pass.
-            let max_poll_interval = Duration::from_secs(opts.max_poll_interval_seconds);
+            let max_poll_interval = Duration::from_secs(*opts.max_poll_interval_seconds());
             let sleep_time = rng.gen_range(Duration::from_secs(0)..max_poll_interval);
             println!("Sleeping {:?} until next iteration ...", sleep_time);
             std::thread::sleep(sleep_time);
@@ -221,8 +197,8 @@ fn start_http_server(
     opts: &RunMaintainerOpts,
     snapshot_mutex: Arc<SnapshotMutex>,
 ) -> Vec<JoinHandle<()>> {
-    let server = Arc::new(Server::http(opts.listen.clone()).unwrap());
-    println!("Http server listening on {}", opts.listen);
+    let server = Arc::new(Server::http(opts.listen().clone()).unwrap());
+    println!("Http server listening on {}", opts.listen());
 
     // Spawn a number of http handler threads, so we can handle requests in
     // parallel. This server is only used to serve metrics, it can be super basic,

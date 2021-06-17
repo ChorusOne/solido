@@ -1,7 +1,6 @@
 extern crate spl_stake_pool;
 use std::fmt;
 use std::path::PathBuf;
-use std::str::FromStr;
 
 use clap::Clap;
 use serde::Serialize;
@@ -16,16 +15,11 @@ use solana_sdk::signature::read_keypair_file;
 use solana_sdk::signer::Signer;
 
 use crate::config::*;
-use crate::daemon::RunMaintainerOpts;
 use crate::error::Abort;
 use crate::helpers::command_add_maintainer;
 use crate::helpers::command_remove_maintainer;
 use crate::helpers::command_show_solido;
-use crate::helpers::AddRemoveMaintainerOpts;
-use crate::helpers::AddValidatorOpts;
-use crate::helpers::ShowSolidoOpts;
-use crate::helpers::{command_add_validator, command_create_solido, CreateSolidoOpts};
-use crate::maintenance::PerformMaintenanceOpts;
+use crate::helpers::{command_add_validator, command_create_solido};
 use crate::multisig::MultisigOpts;
 
 mod config;
@@ -37,27 +31,6 @@ mod multisig;
 mod prometheus;
 mod spl_token_utils;
 mod util;
-
-#[derive(Copy, Clone, Debug)]
-pub enum OutputMode {
-    /// Output human-readable text to stdout.
-    Text,
-
-    /// Output machine-readable json to stdout.
-    Json,
-}
-
-impl FromStr for OutputMode {
-    type Err = &'static str;
-
-    fn from_str(s: &str) -> Result<OutputMode, &'static str> {
-        match s {
-            "text" => Ok(OutputMode::Text),
-            "json" => Ok(OutputMode::Json),
-            _ => Err("Invalid output mode, expected 'text' or 'json'."),
-        }
-    }
-}
 
 /// Solido -- Interact with Lido for Solana.
 #[derive(Clap, Debug)]
@@ -86,7 +59,7 @@ struct Opts {
     config: Option<String>,
     /// Override filepath for config, replacing the `config` filepath with a new config
     #[clap(long)]
-    override_config: bool,
+    override_config: Option<bool>,
 }
 
 #[derive(Clap, Debug)]
@@ -177,20 +150,16 @@ fn print_output<Output: fmt::Display + Serialize>(mode: OutputMode, output: &Out
 
 fn main() {
     let mut opts = Opts::parse();
+
     // Read from config file
     let config_file = opts.config.map(read_config);
-    let multisig_program_id = ConfigFile::get_pubkey(
-        &config_file,
-        opts.multisig_program_id,
-        "multisig_program_id",
-        "multisig-program-id",
-    );
+    let multisig_program_id = opts
+        .multisig_program_id
+        .unwrap_or_else(|| get_option_from_config("multisig_program_id", &config_file).expect("--multisig-program-id must be provided in arguments, or multisig_program_id in configuration file."));
+
     solana_logger::setup_with_default("solana=info");
 
-    let payer_keypair_path = match opts.keypair_path {
-        Some(path) => path,
-        None => get_default_keypair_path(),
-    };
+    let payer_keypair_path = opts.keypair_path.unwrap_or_else(get_default_keypair_path);
     let signer = &*get_signer(payer_keypair_path);
 
     let config = Config {
@@ -199,15 +168,16 @@ fn main() {
         signer,
         output_mode: opts.output_mode,
     };
+    let output_mode = opts.output_mode;
 
     merge_with_config(&mut opts.subcommand, &config_file);
     match opts.subcommand {
         SubCommand::CreateSolido(cmd_opts) => {
             let output = command_create_solido(config, cmd_opts)
                 .ok_or_abort_with("Failed to create Solido instance.");
-            print_output(opts.output_mode, &output);
+            print_output(output_mode, &output);
         }
-        SubCommand::Multisig(cmd_opts) => multisig::main(config, opts.output_mode, cmd_opts),
+        SubCommand::Multisig(cmd_opts) => multisig::main(config, output_mode, cmd_opts),
         SubCommand::PerformMaintenance(cmd_opts) => {
             // For now, this does one maintenance iteration. In the future we
             // might add a daemon mode that runs continuously, and which logs
@@ -215,7 +185,7 @@ fn main() {
             // not just the maintenance itself).
             let output = maintenance::run_perform_maintenance(&config, &cmd_opts)
                 .ok_or_abort_with("Failed to perform maintenance.");
-            match (opts.output_mode, output) {
+            match (output_mode, output) {
                 (OutputMode::Text, None) => {
                     println!("Nothing done, there was no maintenance to perform.")
                 }
@@ -229,22 +199,22 @@ fn main() {
         SubCommand::AddValidator(cmd_opts) => {
             let output = command_add_validator(config, cmd_opts)
                 .ok_or_abort_with("Failed to add validator.");
-            print_output(opts.output_mode, &output);
+            print_output(output_mode, &output);
         }
         SubCommand::AddMaintainer(cmd_opts) => {
             let output = command_add_maintainer(config, cmd_opts)
                 .ok_or_abort_with("Failed to add maintainer.");
-            print_output(opts.output_mode, &output);
+            print_output(output_mode, &output);
         }
         SubCommand::RemoveMaintainer(cmd_opts) => {
             let output = command_remove_maintainer(config, cmd_opts)
                 .ok_or_abort_with("Failed to remove maintainer.");
-            print_output(opts.output_mode, &output);
+            print_output(output_mode, &output);
         }
         SubCommand::ShowSolido(cmd_opts) => {
             let output = command_show_solido(config, cmd_opts)
                 .ok_or_abort_with("Failed to show Solido data.");
-            print_output(opts.output_mode, &output);
+            print_output(output_mode, &output);
         }
     }
 }
@@ -258,7 +228,7 @@ fn merge_with_config(subcommand: &mut SubCommand, config_file: &Option<ConfigFil
         SubCommand::ShowSolido(opts) => opts.merge_with_config(config_file),
         SubCommand::PerformMaintenance(opts) => opts.merge_with_config(config_file),
         SubCommand::Multisig(opts) => opts.merge_with_config(config_file),
-        SubCommand::RunMaintainer(_opts) => {}
+        SubCommand::RunMaintainer(opts) => opts.merge_with_config(config_file),
     }
 }
 
