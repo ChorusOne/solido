@@ -2,7 +2,7 @@ use clap::Clap;
 use serde::Deserialize;
 use serde_json::Value;
 use solana_sdk::pubkey::{ParsePubkeyError, Pubkey};
-use std::{fs::File, str::FromStr};
+use std::{fs::File, path::PathBuf, str::FromStr};
 
 pub fn get_option_from_config<T: FromStr>(
     name: &'static str,
@@ -16,7 +16,7 @@ pub fn get_option_from_config<T: FromStr>(
                 match T::from_str(str_value) {
                     Err(_) => {
                         eprintln!("Could not convert {} from string", str_value);
-                        None
+                        std::process::exit(1);
                     }
                     Ok(pubkey) => Some(pubkey),
                 }
@@ -119,7 +119,7 @@ macro_rules! cli_opt_struct {
                     // If the value has a default, let it be None
                     if !is_optional && self.$field.is_none() {
                         failed = true;
-                        eprintln!("Expected --{} to be provided on arguments, or set in config file with key {}.", str_field.replace("_", "-"), str_field);
+                        eprintln!("Expected --{} to be provided on the command line, or set in config file with key {}.", str_field.replace("_", "-"), str_field);
                     }
                 )*
                 if failed {
@@ -160,9 +160,10 @@ pub struct ConfigFile {
     pub values: Value,
 }
 
-pub fn read_config(config_path: String) -> ConfigFile {
-    let file = File::open(config_path).expect("Failed to open file.");
-    let values: Value = serde_json::from_reader(file).expect("Error while reading config.");
+pub fn read_config(config_path: PathBuf) -> ConfigFile {
+    // let file = File::open(config_path).expect("Failed to open file.");
+    let file_content = std::fs::read(config_path).expect("Failed to open file.");
+    let values: Value = serde_json::from_slice(&file_content).expect("Error while reading config.");
     ConfigFile { values }
 }
 

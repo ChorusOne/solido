@@ -56,7 +56,7 @@ struct Opts {
 
     /// Optional config path
     #[clap(long)]
-    config: Option<String>,
+    config: Option<PathBuf>,
     /// Override filepath for config, replacing the `config` filepath with a new config
     #[clap(long)]
     override_config: Option<bool>,

@@ -68,7 +68,7 @@ multisig_data = multisig(
     '--threshold',
     '2',
     '--owner',
-    ','.join(map(lambda t: t.pubkey, test_addrs)),
+    ','.join(t.pubkey for t in test_addrs),
 )
 multisig_instance = multisig_data['multisig_address']
 multisig_pda = multisig_data['multisig_program_derived_address']
