@@ -54,6 +54,10 @@ impl<T: Default> AccountMap<T> {
         }
     }
 
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
     pub fn add(&mut self, address: Pubkey, value: T) -> ProgramResult {
         if self.entries.len() == self.maximum_entries as usize {
             return Err(LidoError::MaximumNumberOfAccountsExceeded.into());
@@ -112,5 +116,24 @@ impl<T: Default> AccountMap<T> {
         let entry_size = key_size + value_size;
 
         buffer_size.saturating_sub(8) / entry_size
+    }
+
+    /// Iterate just the values, not the keys.
+    pub fn iter_entries(&self) -> IterEntries<T> {
+        IterEntries {
+            iter: self.entries.iter(),
+        }
+    }
+}
+
+pub struct IterEntries<'a, T: 'a> {
+    iter: std::slice::Iter<'a, PubkeyAndEntry<T>>,
+}
+
+impl<'a, T: 'a> std::iter::Iterator for IterEntries<'a, T> {
+    type Item = &'a T;
+
+    fn next(&mut self) -> Option<&'a T> {
+        self.iter.next().map(|pubkey_entry| &pubkey_entry.entry)
     }
 }
