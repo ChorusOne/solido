@@ -41,27 +41,27 @@ def run(*args: str) -> str:
 
 
 def get_solido_program_path() -> str:
-    solidopath = os.getenv('SOLCONPATH')
-    if solido == None:
-        solidopath = 'target/deploy'
-
-    return network
+    solido_program_path = os.getenv('SOLCONPATH')
+    if solido_program_path is None:
+        return 'target/deploy'
+    else:
+        return solido_program_path
 
 
 def get_solido_path() -> str:
-    solidopath = os.getenv('SOLPATH')
-    if solido == None:
-        solidopath = 'target/debug/solido'
-
-    return network
+    solido_path = os.getenv('SOLPATH')
+    if solido_path is None:
+        return 'target/debug/solido'
+    else:
+        return solido_path
 
 
 def get_network() -> str:
     network = os.getenv('NETWORK')
-    if network == None:
-        network = 'http://127.0.0.1:8899'
-
-    return network
+    if network is None:
+        return 'http://127.0.0.1:8899'
+    else:
+        return network
 
 
 def get_solido(multisig_program_id: str) -> Callable[..., Any]:
