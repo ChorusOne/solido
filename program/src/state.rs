@@ -709,4 +709,23 @@ mod test_lido {
 
         assert_eq!(Validators::maximum_entries(size) as u64, n_validators);
     }
+
+    #[test]
+    fn test_version_serialise() {
+        use solana_sdk::borsh::try_from_slice_unchecked;
+
+        for i in 0..=255 {
+            let lido = Lido {
+                lido_version: i,
+                ..Lido::default()
+            };
+            let mut res: Vec<u8> = Vec::new();
+            BorshSerialize::serialize(&lido, &mut res).unwrap();
+
+            assert_eq!(res[0], i);
+
+            let lido_recovered = try_from_slice_unchecked(&res[..]).unwrap();
+            assert_eq!(lido, lido_recovered);
+        }
+    }
 }
