@@ -1,4 +1,4 @@
-name: Rust
+name: build
 
 on:
   push:
@@ -18,11 +18,23 @@ jobs:
         with:
           submodules: true
 
-      - name: Run fmt
+      - name: Check Rust formatting
         uses: actions-rs/cargo@v1
         with:
           command: fmt
           args: --all -- --check
+
+      - name: Install tools
+        run: |
+          # Install with Pip instead of Apt because Ubuntu ships ancient versions.
+          # TODO: Pin the exact version with Nix instead, to make it easier to use
+          # the same version locally.
+          sudo apt-get install -y python3-pip
+          sudo pip3 install black==21.6b0
+
+      - name: Check Python formatting
+        run: |
+          git ls-files | grep '\.py$' | xargs black --skip-string-normalization --check --diff --color
 
   build:
     runs-on: ubuntu-latest
@@ -105,7 +117,7 @@ jobs:
         # should still be there from the previous run.
 
         NETWORK='https://api.devnet.solana.com' tests/test_multisig.py
-  clippy:
+  lint:
     runs-on: ubuntu-latest
 
     steps:
@@ -122,13 +134,23 @@ jobs:
           cargo-clippy-${{ hashFiles('Cargo.lock') }}
           cargo-clippy
 
-    - name: install-clippy
-      run: rustup component add clippy
-
-    - name: run-clippy
+    - name: Install linters
       run: |
-        sudo apt-get install -y libudev-dev
+        # TODO: Pin the exact version with Nix.
+        sudo apt-get install -y python3-pip libudev-dev
+        # Install with Pip instead of Apt because Ubuntu ships ancient versions.
+        # TODO: Pin the exact version with Nix instead, to make it easier to use
+        # the same version locally.
+        sudo pip3 install mypy==0.902
+        rustup component add clippy
+
+    - name: Run Clippy
+      run: |
         cargo clippy -- -W clippy::pedantic
+
+    - name: Typecheck Python
+      run: |
+        git ls-files | grep '\.py$' | xargs mypy --strict
 
   coverage:
     runs-on:  ubuntu-latest
