@@ -16,3 +16,8 @@ local validator.
 The following programs must be present in the local network:
 
  * The SPL token program, which `solana-test-validator` includes by default.
+
+## Keys
+
+The tests generate various key pairs to test with multiple accounts. These are
+stored in `tests/.keys`. They are not valuable or security-sensitive whatsoever.

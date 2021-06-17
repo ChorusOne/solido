@@ -23,8 +23,7 @@ def run(*args: str) -> str:
     Run a program, ensure it exits with code 0, return its stdout.
     """
     try:
-        result = subprocess.run(
-            args, check=True, capture_output=True, encoding='utf-8')
+        result = subprocess.run(args, check=True, capture_output=True, encoding='utf-8')
 
     except subprocess.CalledProcessError as err:
         # If a test fails, it is helpful to print stdout and stderr here, but
@@ -66,7 +65,6 @@ def get_network() -> str:
 
 
 def get_solido(multisig_program_id: str) -> Callable[..., Any]:
-
     def solido(*args: str, keypair_path: Optional[str] = None) -> Any:
         """
         Run 'solido' against localhost, return its parsed json output.
@@ -90,6 +88,7 @@ def get_solido(multisig_program_id: str) -> Callable[..., Any]:
                 print('Failed to decode output as json, output was:')
                 print(output)
                 raise
+
     return solido
 
 
@@ -194,7 +193,11 @@ def create_spl_token(owner_keypair_fname: str, minter: str) -> str:
              Signature: <tx-signature>'
     This function returns <address>
     """
-    return spl_token('create-account', minter, '--owner', owner_keypair_fname).split('\n')[0].split(' ')[2]
+    return (
+        spl_token('create-account', minter, '--owner', owner_keypair_fname)
+        .split('\n')[0]
+        .split(' ')[2]
+    )
 
 
 def create_test_accounts(*, num_accounts: int) -> List[TestAccount]:
@@ -213,6 +216,7 @@ def get_multisig(multisig_program_id: str) -> Callable[..., Any]:
     """
     Returns a function to perform multisig transactions with the provided program argument
     """
+
     def multisig(*args: str, keypair_path: Optional[str] = None) -> Any:
         """
         Run 'solido multisig' against localhost, return its parsed json output.
@@ -222,7 +226,8 @@ def get_multisig(multisig_program_id: str) -> Callable[..., Any]:
             '--cluster',get_network(),
             '--output', 'json',
             *([] if keypair_path is None else ['--keypair-path', keypair_path]),
-            '--multisig-program-id', multisig_program_id,
+            '--multisig-program-id',
+            multisig_program_id,
             'multisig',
             *args,
         )
@@ -240,20 +245,32 @@ def get_multisig(multisig_program_id: str) -> Callable[..., Any]:
                 print('Failed to decode output as json, output was:')
                 print(output)
                 raise
+
     return multisig
 
 
-def approve_and_execute(multisig_func: Callable[..., Any], multisig_instance: str, transaction_address: str, keypair_path: str) -> None:
+def approve_and_execute(
+    multisig_func: Callable[..., Any],
+    multisig_instance: str,
+    transaction_address: str,
+    keypair_path: str,
+) -> None:
     """
     Helper to approve and execute a transaction with a single key
     """
-    multisig_func('approve',
-                  '--multisig-address', multisig_instance,
-                  '--transaction-address', transaction_address,
-                  keypair_path=keypair_path
-                  )
-    multisig_func('execute-transaction',
-                  '--multisig-address', multisig_instance,
-                  '--transaction-address', transaction_address,
-                  keypair_path=keypair_path
-                  )
+    multisig_func(
+        'approve',
+        '--multisig-address',
+        multisig_instance,
+        '--transaction-address',
+        transaction_address,
+        keypair_path=keypair_path,
+    )
+    multisig_func(
+        'execute-transaction',
+        '--multisig-address',
+        multisig_instance,
+        '--transaction-address',
+        transaction_address,
+        keypair_path=keypair_path,
+    )

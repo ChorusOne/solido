@@ -1,6 +1,7 @@
 use solana_program::sysvar;
 use std::fmt;
 use {
+    crate::error::Error,
     crate::helpers::{send_transaction, sign_and_send_transaction},
     crate::spl_token_utils::{push_create_spl_token_account, push_create_spl_token_mint},
     crate::util::PubkeyBase58,
@@ -79,7 +80,7 @@ pub fn command_create_pool(
     manager: &Pubkey,
     fee: Fee,
     max_validators: u32,
-) -> Result<CreatePoolOutput, crate::Error> {
+) -> Result<CreatePoolOutput, Error> {
     let reserve_stake = Keypair::new();
     let stake_pool_keypair = Keypair::new();
     let validator_list = Keypair::new();
@@ -140,7 +141,7 @@ pub fn command_create_pool(
             &mint_keypair,
             &pool_fee_account_keypair,
         ],
-    );
+    )?;
 
     let mut initialize_transaction = Transaction::new_with_payer(
         &[

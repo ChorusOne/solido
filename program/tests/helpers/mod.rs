@@ -314,6 +314,7 @@ impl LidoAccounts {
                 &id(),
                 &instruction::StakeDepositAccountsMeta {
                     lido: self.lido.pubkey(),
+                    maintainer: self.maintainer.pubkey(),
                     validator_stake_pool_stake_account: validator.stake_pool_stake_account,
                     validator_vote_account: validator.vote.pubkey(),
                     reserve: self.reserve_authority,
@@ -325,7 +326,7 @@ impl LidoAccounts {
             .unwrap()],
             Some(&payer.pubkey()),
         );
-        transaction.sign(&[payer], *recent_blockhash);
+        transaction.sign(&[payer, &self.maintainer], *recent_blockhash);
         banks_client.process_transaction(transaction).await.unwrap();
 
         stake_account
@@ -469,7 +470,7 @@ impl LidoAccounts {
                 &id(),
                 &lido::instruction::DistributeFeesMeta {
                     lido: self.lido.pubkey(),
-                    manager: self.manager.pubkey(),
+                    maintainer: self.maintainer.pubkey(),
                     token_holder_stake_pool: self.stake_pool_token_holder.pubkey(),
                     mint_program: self.mint_program.pubkey(),
                     reserve_authority: self.reserve_authority,
@@ -482,7 +483,7 @@ impl LidoAccounts {
             )
             .unwrap()],
             Some(&payer.pubkey()),
-            &[payer, &self.manager],
+            &[payer, &self.maintainer],
             *recent_blockhash,
         );
         banks_client.process_transaction(transaction).await.err()
