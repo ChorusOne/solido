@@ -8,7 +8,7 @@ ENV SOLIDORELEASEPATH="$SOLPATH/solido"
 
 # Install Solana tools
 RUN apt -y update \
-    && apt -y install libssl-dev libudev-dev pkg-config zlib1g-dev llvm clang make curl \
+    && apt -y install libssl-dev libudev-dev pkg-config zlib1g-dev llvm clang make curl python3 \
     && curl -sSfLO https://release.solana.com/v$SOLVERSION/install \
     && echo "$SOLINSTALLCHECKSUM  install" | sha256sum -c - \
     && /bin/sh install
@@ -21,7 +21,8 @@ RUN echo $(solana --version | awk '{print $2}') >> $SOLPATH/instsolversion
 # Make dirs for build artefacts
 RUN mkdir -p $SOLIDOBUILDPATH \
     && mkdir -p $SOLIDORELEASEPATH/deploy \
-    && mkdir -p $SOLIDORELEASEPATH/cli
+    && mkdir -p $SOLIDORELEASEPATH/cli \
+    && mkdir -p $SOLIDORELEASEPATH/tests
 
 COPY . $SOLIDOBUILDPATH/
 
@@ -34,6 +35,7 @@ RUN cd $SOLIDOBUILDPATH \
 RUN cd $SOLIDOBUILDPATH \
     && cp -rf $SOLIDOBUILDPATH/target/deploy $SOLIDORELEASEPATH \
     && cp -rf $SOLIDOBUILDPATH/target/release/* $SOLIDORELEASEPATH/cli \
+    && cp -rf $SOLIDOBUILDPATH/tests/* $SOLIDORELEASEPATH/tests \
     && rm -rf $SOLIDOBUILDPATH
 
 # Hash on-chain programs
