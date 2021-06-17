@@ -379,9 +379,9 @@ pub fn command_remove_maintainer(
 pub struct ShowSolidoOpts {
     /// The solido instance to show
     #[clap(long, value_name = "address")]
-    pub solido_address: Option<Pubkey>,
+    pub solido_address: Pubkey,
     #[clap(long, value_name = "address")]
-    pub solido_program_id: Option<Pubkey>,
+    pub solido_program_id: Pubkey,
 }
 
 #[derive(Serialize)]
@@ -478,28 +478,28 @@ pub fn command_show_solido(
     config: Config,
     opts: ShowSolidoOpts,
 ) -> Result<ShowSolidoOutput, Error> {
-    let lido = get_solido(&config.rpc, &opts.solido_address.unwrap())?;
+    let lido = get_solido(&config.rpc, &opts.solido_address)?;
     let reserve_authority = Pubkey::create_program_address(
         &[
-            &opts.solido_address.unwrap().to_bytes(),
+            &opts.solido_address.to_bytes(),
             RESERVE_AUTHORITY,
             &[lido.sol_reserve_authority_bump_seed],
         ],
-        &opts.solido_program_id.unwrap(),
+        &opts.solido_program_id,
     )?;
 
     let deposit_authority = Pubkey::create_program_address(
         &[
-            &opts.solido_address.unwrap().to_bytes(),
+            &opts.solido_address.to_bytes(),
             DEPOSIT_AUTHORITY,
             &[lido.deposit_authority_bump_seed],
         ],
-        &opts.solido_program_id.unwrap(),
+        &opts.solido_program_id,
     )?;
 
     Ok(ShowSolidoOutput {
-        solido_program_id: opts.solido_program_id.unwrap().into(),
-        solido_address: opts.solido_address.unwrap().into(),
+        solido_program_id: opts.solido_program_id.into(),
+        solido_address: opts.solido_address.into(),
         solido: lido,
         reserve_authority: reserve_authority.into(),
         deposit_authority: deposit_authority.into(),

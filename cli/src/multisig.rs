@@ -27,6 +27,11 @@ use solana_client::rpc_client::RpcClient;
 use solana_sdk::commitment_config::CommitmentConfig;
 use solana_sdk::transaction::TransactionError;
 
+use crate::config::ConfigFile;
+use crate::config::{
+    ApproveOpts, CreateMultisigOpts, ExecuteTransactionOpts, ProposeChangeMultisigOpts,
+    ProposeUpgradeOpts, ShowMultisigOpts, ShowTransactionOpts,
+};
 use crate::error::{Abort, AsPrettyError, Error};
 use crate::helpers::get_solido;
 use crate::helpers::sign_and_send_transaction;
@@ -39,6 +44,20 @@ use lido::util::serialize_b58;
 pub struct MultisigOpts {
     #[clap(subcommand)]
     subcommand: SubCommand,
+}
+
+impl MultisigOpts {
+    pub fn merge_with_config(&mut self, config_file: &Option<ConfigFile>) {
+        match &mut self.subcommand {
+            SubCommand::CreateMultisig(opts) => opts.merge_with_config(config_file),
+            SubCommand::ShowMultisig(opts) => opts.merge_with_config(config_file),
+            SubCommand::ShowTransaction(opts) => opts.merge_with_config(config_file),
+            SubCommand::ProposeUpgrade(opts) => opts.merge_with_config(config_file),
+            SubCommand::ProposeChangeMultisig(opts) => opts.merge_with_config(config_file),
+            SubCommand::Approve(opts) => opts.merge_with_config(config_file),
+            SubCommand::ExecuteTransaction(opts) => opts.merge_with_config(config_file),
+        }
+    }
 }
 
 #[derive(Clap, Debug)]
@@ -63,120 +82,6 @@ enum SubCommand {
 
     /// Execute a transaction that has enough approvals.
     ExecuteTransaction(ExecuteTransactionOpts),
-}
-
-#[derive(Clap, Debug)]
-struct CreateMultisigOpts {
-    /// How many signatures are needed to approve a transaction.
-    #[clap(long)]
-    threshold: u64,
-
-    /// The public keys of the multisig owners, who can sign transactions.
-    #[clap(long = "owner", required = true)]
-    owners: Vec<Pubkey>,
-}
-
-impl CreateMultisigOpts {
-    /// Perform a few basic checks to rule out nonsensical multisig settings.
-    ///
-    /// Exits if validation fails.
-    fn validate_or_exit(&self) {
-        if self.threshold > self.owners.len() as u64 {
-            println!("Threshold must be at most the number of owners.");
-            std::process::exit(1);
-        }
-        if self.threshold == 0 {
-            println!("Threshold must be at least 1.");
-            std::process::exit(1);
-        }
-    }
-}
-
-#[derive(Clap, Debug)]
-struct ProposeUpgradeOpts {
-    /// The multisig account whose owners should vote for this proposal.
-    #[clap(long)]
-    multisig_address: Pubkey,
-
-    /// The program id of the program to upgrade.
-    #[clap(long)]
-    program_address: Pubkey,
-
-    /// The address that holds the new program data.
-    #[clap(long)]
-    buffer_address: Pubkey,
-
-    /// Account that will receive leftover funds from the buffer account.
-    #[clap(long)]
-    spill_address: Pubkey,
-}
-
-#[derive(Clap, Debug)]
-struct ProposeChangeMultisigOpts {
-    /// The multisig account to modify.
-    #[clap(long)]
-    multisig_address: Pubkey,
-
-    // The fields below are the same as for `CreateMultisigOpts`, but we can't
-    // just embed a `CreateMultisigOpts`, because Clap does not support that.
-    /// How many signatures are needed to approve a transaction.
-    #[clap(long)]
-    threshold: u64,
-
-    /// The public keys of the multisig owners, who can sign transactions.
-    #[clap(long = "owner", required = true)]
-    owners: Vec<Pubkey>,
-}
-
-impl From<&ProposeChangeMultisigOpts> for CreateMultisigOpts {
-    fn from(opts: &ProposeChangeMultisigOpts) -> CreateMultisigOpts {
-        CreateMultisigOpts {
-            threshold: opts.threshold,
-            owners: opts.owners.clone(),
-        }
-    }
-}
-
-#[derive(Clap, Debug)]
-struct ShowMultisigOpts {
-    /// The multisig account to display.
-    #[clap(long)]
-    multisig_address: Pubkey,
-}
-
-#[derive(Clap, Debug)]
-struct ShowTransactionOpts {
-    /// The transaction to display.
-    #[clap(long)]
-    transaction_address: Pubkey,
-
-    /// The transaction to display.
-    #[clap(long)]
-    solido_program_id: Option<Pubkey>,
-}
-
-#[derive(Clap, Debug)]
-struct ApproveOpts {
-    /// The multisig account whose owners should vote for this proposal.
-    // : Can be omitted, we can obtain it from the transaction account.
-    #[clap(long)]
-    multisig_address: Pubkey,
-
-    /// The transaction to approve.
-    #[clap(long)]
-    transaction_address: Pubkey,
-}
-
-#[derive(Clap, Debug)]
-struct ExecuteTransactionOpts {
-    /// The multisig account whose owners approved this transaction.
-    // : Can be omitted, we can obtain it from the transaction account.
-    #[clap(long)]
-    multisig_address: Pubkey,
-
-    /// The transaction to execute.
-    #[clap(long)]
-    transaction_address: Pubkey,
 }
 
 pub fn main(config: Config, output_mode: OutputMode, multisig_opts: MultisigOpts) {
@@ -274,8 +179,8 @@ fn create_multisig(config: &Config, opts: CreateMultisigOpts) -> CreateMultisigO
     let multisig_instruction = Instruction {
         program_id: config.multisig_program_id,
         data: multisig_instruction::CreateMultisig {
-            owners: opts.owners,
-            threshold: opts.threshold,
+            owners: opts.owners().clone().0,
+            threshold: *opts.threshold(),
             nonce,
         }
         .data(),
@@ -328,11 +233,11 @@ impl fmt::Display for ShowMultisigOutput {
 }
 
 fn show_multisig(config: &Config, opts: ShowMultisigOpts) -> ShowMultisigOutput {
-    let multisig: multisig::Multisig = get_account(&config.rpc, &opts.multisig_address)
+    let multisig: multisig::Multisig = get_account(&config.rpc, opts.multisig_address())
         .ok_or_abort_with("Failed to read multisig state from account.");
 
     let (program_derived_address, _nonce) =
-        get_multisig_program_address(&config.multisig_program_id, &opts.multisig_address);
+        get_multisig_program_address(&config.multisig_program_id, opts.multisig_address());
 
     ShowMultisigOutput {
         multisig_program_derived_address: program_derived_address.into(),
@@ -669,7 +574,7 @@ fn changed_addr(
 }
 
 fn show_transaction(config: &Config, opts: ShowTransactionOpts) -> ShowTransactionOutput {
-    let transaction: multisig::Transaction = get_account(&config.rpc, &opts.transaction_address)
+    let transaction: multisig::Transaction = get_account(&config.rpc, opts.transaction_address())
         .ok_or_abort_with("Failed to read transaction data from account.");
 
     // Also query the multisig, to get the owner public keys, so we can display
@@ -743,7 +648,7 @@ fn show_transaction(config: &Config, opts: ShowTransactionOpts) -> ShowTransacti
         } else {
             ParsedInstruction::Unrecognized
         }
-    } else if Some(instr.program_id) == opts.solido_program_id {
+    } else if &instr.program_id == opts.solido_program_id() {
         // Probably a Solido instruction
         match try_parse_solido_instruction(&instr, &config.rpc) {
             Ok(instr) => instr,
@@ -951,17 +856,17 @@ pub fn propose_instruction(
 
 fn propose_upgrade(config: &Config, opts: ProposeUpgradeOpts) -> ProposeInstructionOutput {
     let (program_derived_address, _nonce) =
-        get_multisig_program_address(&config.multisig_program_id, &opts.multisig_address);
+        get_multisig_program_address(&config.multisig_program_id, &opts.multisig_address());
 
     let upgrade_instruction = bpf_loader_upgradeable::upgrade(
-        &opts.program_address,
-        &opts.buffer_address,
+        &opts.program_address(),
+        &opts.buffer_address(),
         // The upgrade authority is the multisig-derived program address.
         &program_derived_address,
-        &opts.spill_address,
+        &opts.spill_address(),
     );
 
-    propose_instruction(config, opts.multisig_address, upgrade_instruction)
+    propose_instruction(config, *opts.multisig_address(), upgrade_instruction)
 }
 
 fn propose_change_multisig(
@@ -973,14 +878,14 @@ fn propose_change_multisig(
     CreateMultisigOpts::from(&opts).validate_or_exit();
 
     let (program_derived_address, _nonce) =
-        get_multisig_program_address(&config.multisig_program_id, &opts.multisig_address);
+        get_multisig_program_address(&config.multisig_program_id, opts.multisig_address());
 
     let change_data = multisig_instruction::SetOwnersAndChangeThreshold {
-        owners: opts.owners,
-        threshold: opts.threshold,
+        owners: opts.owners().clone().0,
+        threshold: *opts.threshold(),
     };
     let change_addrs = multisig_accounts::Auth {
-        multisig: opts.multisig_address,
+        multisig: *opts.multisig_address(),
         multisig_signer: program_derived_address,
     };
 
@@ -991,13 +896,13 @@ fn propose_change_multisig(
         accounts: change_addrs.to_account_metas(override_is_signer),
     };
 
-    propose_instruction(config, opts.multisig_address, change_instruction)
+    propose_instruction(config, *opts.multisig_address(), change_instruction)
 }
 
 fn approve(config: &Config, opts: ApproveOpts) {
     let approve_accounts = multisig_accounts::Approve {
-        multisig: opts.multisig_address,
-        transaction: opts.transaction_address,
+        multisig: *opts.multisig_address(),
+        transaction: *opts.transaction_address(),
         // The owner that signs the multisig proposed transaction, should be
         // the public key that signs the entire approval transaction (which
         // is also the payer).
@@ -1053,10 +958,10 @@ impl anchor_lang::ToAccountMetas for TransactionAccounts {
 
 fn execute_transaction(config: &Config, opts: ExecuteTransactionOpts) {
     let (program_derived_address, _nonce) =
-        get_multisig_program_address(&config.multisig_program_id, &opts.multisig_address);
+        get_multisig_program_address(&config.multisig_program_id, opts.multisig_address());
 
-    let transaction: multisig::Transaction = get_account(&config.rpc, &opts.transaction_address)
-        .unwrap_or_else(|_| panic!("Failed to get transaction {}", opts.transaction_address));
+    let transaction: multisig::Transaction = get_account(&config.rpc, opts.transaction_address())
+        .unwrap_or_else(|_| panic!("Failed to get transaction {}", opts.transaction_address()));
 
     let tx_inner_accounts = TransactionAccounts {
         accounts: transaction.accounts,
@@ -1064,9 +969,9 @@ fn execute_transaction(config: &Config, opts: ExecuteTransactionOpts) {
     };
 
     let mut accounts = multisig_accounts::ExecuteTransaction {
-        multisig: opts.multisig_address,
+        multisig: *opts.multisig_address(),
         multisig_signer: program_derived_address,
-        transaction: opts.transaction_address,
+        transaction: *opts.transaction_address(),
     }
     .to_account_metas(None);
     accounts.append(&mut tx_inner_accounts.to_account_metas(None));

@@ -68,9 +68,7 @@ multisig_data = multisig(
     '--threshold',
     '2',
     '--owner',
-    test_addrs[0].pubkey,
-    '--owner',
-    test_addrs[1].pubkey,
+    ','.join(map(lambda t: t.pubkey, test_addrs)),
 )
 multisig_instance = multisig_data['multisig_address']
 multisig_pda = multisig_data['multisig_program_derived_address']
@@ -165,6 +163,8 @@ transaction_result = solido(
 transaction_address = transaction_result['transaction_address']
 transaction_status = multisig(
     'show-transaction',
+    '--solido-program-id',
+    solido_program_id,
     '--transaction-address',
     transaction_address,
 )
@@ -180,6 +180,8 @@ approve_and_execute(
 )
 transaction_status = multisig(
     'show-transaction',
+    '--solido-program-id',
+    solido_program_id,
     '--transaction-address',
     transaction_address,
 )
