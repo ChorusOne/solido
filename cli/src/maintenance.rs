@@ -1,25 +1,28 @@
 //! Entry point for maintenance operations, such as updating the pool balance.
 
-use crate::helpers::{get_solido, get_stake_pool, sign_and_send_transaction};
-use crate::{error::Error, Config};
+use std::fmt;
+use std::ops::Add;
+
 use clap::Clap;
-use lido::state::serialize_b58;
-use lido::state::PubkeyAndEntry;
-use lido::{
-    state::{Lido, Validator},
-    token::Lamports,
-    DEPOSIT_AUTHORITY, STAKE_POOL_AUTHORITY,
-};
 use serde::Serialize;
 use solana_client::rpc_client::RpcClient;
 use solana_program::{
     clock::Clock, pubkey::Pubkey, rent::Rent, stake_history::StakeHistory, sysvar,
 };
 use solana_sdk::{account::Account, borsh::try_from_slice_unchecked, instruction::Instruction};
+
+use lido::account_map::PubkeyAndEntry;
+use lido::util::serialize_b58;
+use lido::{
+    state::{Lido, Validator},
+    token::Lamports,
+    DEPOSIT_AUTHORITY, STAKE_POOL_AUTHORITY,
+};
 use spl_stake_pool::stake_program::StakeState;
 use spl_stake_pool::state::{StakePool, ValidatorList};
-use std::fmt;
-use std::ops::Add;
+
+use crate::helpers::{get_solido, get_stake_pool, sign_and_send_transaction};
+use crate::{error::Error, Config};
 
 type Result<T> = std::result::Result<T, Error>;
 

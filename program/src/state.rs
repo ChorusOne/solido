@@ -1,6 +1,6 @@
 //! State transition types
 
-use serde::{Serialize, Serializer};
+use serde::Serialize;
 use std::ops::Sub;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
@@ -10,8 +10,10 @@ use solana_program::{
     program_pack::Pack, pubkey::Pubkey,
 };
 
+use crate::account_map::{AccountMap, AccountSet, PubkeyAndEntry};
 use crate::error::LidoError;
 use crate::token::{Lamports, Rational, StLamports, StakePoolTokenLamports};
+use crate::util::serialize_b58;
 use crate::RESERVE_AUTHORITY;
 use crate::VALIDATOR_STAKE_ACCOUNT;
 
@@ -22,13 +24,8 @@ pub const LIDO_CONSTANT_FEE_SIZE: usize = 2 * 32 + 3 * 4;
 /// Constant size of Lido
 pub const LIDO_CONSTANT_SIZE: usize = LIDO_CONSTANT_HEADER_SIZE + LIDO_CONSTANT_FEE_SIZE;
 
-/// Function to use when serializing a public key, to print it using base58
-pub fn serialize_b58<S>(x: &Pubkey, s: S) -> Result<S::Ok, S::Error>
-where
-    S: Serializer,
-{
-    s.serialize_str(&x.to_string())
-}
+pub type Validators = AccountMap<Validator>;
+pub type Maintainers = AccountSet;
 
 #[repr(C)]
 #[derive(
@@ -63,7 +60,17 @@ pub struct Lido {
     pub fee_distribution: FeeDistribution,
     pub fee_recipients: FeeRecipients,
 
+    /// The set of enrolled validators.
+    ///
+    /// This map/dictionary is indexed by the validator's vote account.
     pub validators: Validators,
+
+    /// The set of maintainers.
+    ///
+    /// Maintainers are granted low security risk privileges. Maintainers are
+    /// expected to run the maintenance daemon, that invokes the maintenance
+    /// operations. These are gated on the signer being present in this set.
+    /// In the future we plan to make maintenance operations callable by anybody.
     pub maintainers: Maintainers,
 }
 
@@ -214,8 +221,6 @@ impl Lido {
     }
 }
 
-pub type Validators = AccountMap<Validator>;
-
 #[repr(C)]
 #[derive(
     Clone, Debug, Default, Eq, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema, Serialize,
@@ -357,113 +362,6 @@ pub fn distribute_fees(
     };
 
     Some(result)
-}
-
-/// Maintainers are granted low security risk privileges, they can call
-/// `IncreaseValidatorStake` and `DecreaseValidatorStake`. Maintainers are set
-/// by the manager
-pub type Maintainers = AccountMap<()>;
-
-#[derive(
-    Clone, Default, Debug, Eq, PartialEq, BorshSerialize, BorshDeserialize, BorshSchema, Serialize,
-)]
-pub struct PubkeyAndEntry<T> {
-    #[serde(serialize_with = "serialize_b58")]
-    pub pubkey: Pubkey,
-    pub entry: T,
-}
-
-#[derive(
-    Clone, Default, Debug, Eq, PartialEq, BorshSerialize, BorshDeserialize, BorshSchema, Serialize,
-)]
-pub struct AccountMap<T> {
-    pub entries: Vec<PubkeyAndEntry<T>>,
-    pub maximum_entries: u32,
-}
-
-impl<T: Default> AccountMap<T> {
-    /// Creates a new instance with the `maximum_entries` positions filled with the default value
-    pub fn new_fill_default(maximum_entries: u32) -> Self {
-        let mut v = Vec::with_capacity(maximum_entries as usize);
-        for _ in 0..maximum_entries {
-            v.push(PubkeyAndEntry {
-                pubkey: Pubkey::default(),
-                entry: T::default(),
-            });
-        }
-        AccountMap {
-            entries: v,
-            maximum_entries,
-        }
-    }
-
-    /// Creates a new empty instance
-    pub fn new(maximum_entries: u32) -> Self {
-        AccountMap {
-            entries: Vec::new(),
-            maximum_entries,
-        }
-    }
-
-    pub fn add(&mut self, address: Pubkey, value: T) -> ProgramResult {
-        if self.entries.len() == self.maximum_entries as usize {
-            return Err(LidoError::MaximumNumberOfAccountsExceeded.into());
-        }
-        if !self.entries.iter().any(|pe| pe.pubkey == address) {
-            self.entries.push(PubkeyAndEntry {
-                pubkey: address,
-                entry: value,
-            });
-        } else {
-            return Err(LidoError::DuplicatedEntry.into());
-        }
-        Ok(())
-    }
-
-    pub fn remove(&mut self, address: &Pubkey) -> Result<T, ProgramError> {
-        let idx = self
-            .entries
-            .iter()
-            .position(|pe| &pe.pubkey == address)
-            .ok_or(LidoError::InvalidAccountMember)?;
-        Ok(self.entries.swap_remove(idx).entry)
-    }
-
-    pub fn get(&self, address: &Pubkey) -> Result<&PubkeyAndEntry<T>, ProgramError> {
-        self.entries
-            .iter()
-            .find(|pe| &pe.pubkey == address)
-            .ok_or_else(|| LidoError::InvalidAccountMember.into())
-    }
-
-    pub fn get_mut(&mut self, address: &Pubkey) -> Result<&mut PubkeyAndEntry<T>, ProgramError> {
-        self.entries
-            .iter_mut()
-            .find(|pe| &pe.pubkey == address)
-            .ok_or_else(|| LidoError::InvalidAccountMember.into())
-    }
-
-    /// Return how many bytes are needed to serialize an instance holding `max_entries`.
-    ///
-    /// Assumes that the serialized size of `T` is the same as its in-memory
-    /// size.
-    pub fn required_bytes(max_entries: usize) -> usize {
-        let key_size = std::mem::size_of::<Pubkey>();
-        let value_size = std::mem::size_of::<T>();
-        let entry_size = key_size + value_size;
-
-        // 8 bytes for the length and u32 field, then the entries themselves.
-        8 + entry_size * max_entries as usize
-    }
-
-    /// Return how many entries could fit in a buffer of the given size.
-    pub fn maximum_entries(buffer_size: usize) -> usize {
-        let key_size = std::mem::size_of::<Pubkey>();
-        let value_size = std::mem::size_of::<T>();
-        let entry_size = key_size + value_size;
-
-        buffer_size.saturating_sub(8) / entry_size
-    }
 }
 
 #[cfg(test)]

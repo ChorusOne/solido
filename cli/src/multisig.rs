@@ -34,7 +34,7 @@ use crate::helpers::sign_and_send_transaction;
 use crate::util::PubkeyBase58;
 use crate::Config;
 use crate::{print_output, OutputMode};
-use lido::state::serialize_b58;
+use lido::util::serialize_b58;
 
 #[derive(Clap, Debug)]
 pub struct MultisigOpts {
