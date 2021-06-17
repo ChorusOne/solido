@@ -44,7 +44,7 @@ async fn test_successful_deposit() {
         &payer,
         &recent_blockhash,
         &recipient,
-        &lido_accounts.mint_program.pubkey(),
+        &lido_accounts.st_sol_mint.pubkey(),
         &user.pubkey(),
     )
     .await
@@ -69,7 +69,7 @@ async fn test_successful_deposit() {
                 manager: lido_accounts.manager.pubkey(),
                 user: user.pubkey(),
                 recipient: recipient.pubkey(),
-                mint_program: lido_accounts.mint_program.pubkey(),
+                st_sol_mint: lido_accounts.st_sol_mint.pubkey(),
                 reserve_account: lido_accounts.reserve_authority,
             },
             TEST_DEPOSIT_AMOUNT,

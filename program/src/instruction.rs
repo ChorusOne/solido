@@ -333,7 +333,7 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
-        pub mint_program {
+        pub st_sol_mint {
             is_signer: false,
             is_writable: false,
         },
@@ -408,7 +408,7 @@ accounts_struct! {
             is_signer: false,
             is_writable: true,
         },
-        pub mint_program {
+        pub st_sol_mint {
             is_signer: false,
             is_writable: true,
         },
@@ -797,7 +797,7 @@ accounts_struct! {
             is_signer: false,
             is_writable: true,
         },
-        pub mint_program {
+        pub st_sol_mint {
             is_signer: false,
             is_writable: true,
         },
@@ -902,7 +902,7 @@ accounts_struct! {
             is_signer: false,
             is_writable: true,
         },
-        pub mint_program {
+        pub st_sol_mint {
             is_signer: false,
             is_writable: true,
         },

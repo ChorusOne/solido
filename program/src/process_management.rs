@@ -94,8 +94,8 @@ pub fn process_change_fee_spec(
     let mut lido = deserialize_lido(program_id, accounts.lido)?;
     lido.check_manager(accounts.manager)?;
 
-    Lido::check_valid_minter_program(&lido.st_sol_mint_program, accounts.treasury_account)?;
-    Lido::check_valid_minter_program(&lido.st_sol_mint_program, accounts.developer_account)?;
+    Lido::check_valid_minter_program(&lido.st_sol_mint, accounts.treasury_account)?;
+    Lido::check_valid_minter_program(&lido.st_sol_mint, accounts.developer_account)?;
 
     lido.fee_distribution = new_fee_distribution;
     lido.fee_recipients.treasury_account = *accounts.treasury_account.key;
@@ -113,11 +113,11 @@ pub fn process_add_validator(program_id: &Pubkey, accounts_raw: &[AccountInfo]) 
     let validator_fee_st_sol_account = spl_token::state::Account::unpack_from_slice(
         &accounts.validator_fee_st_sol_account.data.borrow(),
     )?;
-    if lido.st_sol_mint_program != validator_fee_st_sol_account.mint {
+    if lido.st_sol_mint != validator_fee_st_sol_account.mint {
         msg!("Validator fee account minter should be the same as Lido minter.");
         msg!(
             "Expected {}, got {}.",
-            lido.st_sol_mint_program,
+            lido.st_sol_mint,
             validator_fee_st_sol_account.mint
         );
         return Err(LidoError::InvalidTokenMinter.into());
@@ -177,7 +177,7 @@ pub fn process_claim_validator_fee(
     token_mint_to(
         accounts.lido.key,
         accounts.spl_token.clone(),
-        accounts.mint_program.clone(),
+        accounts.st_sol_mint.clone(),
         accounts.validator_fee_st_sol_account.clone(),
         accounts.reserve_authority.clone(),
         RESERVE_AUTHORITY,
@@ -227,7 +227,7 @@ pub fn process_distribute_fees(program_id: &Pubkey, accounts_raw: &[AccountInfo]
     token_mint_to(
         accounts.lido.key,
         accounts.spl_token.clone(),
-        accounts.mint_program.clone(),
+        accounts.st_sol_mint.clone(),
         accounts.treasury_account.clone(),
         accounts.reserve_authority.clone(),
         RESERVE_AUTHORITY,
@@ -238,7 +238,7 @@ pub fn process_distribute_fees(program_id: &Pubkey, accounts_raw: &[AccountInfo]
     token_mint_to(
         accounts.lido.key,
         accounts.spl_token.clone(),
-        accounts.mint_program.clone(),
+        accounts.st_sol_mint.clone(),
         accounts.developer_account.clone(),
         accounts.reserve_authority.clone(),
         RESERVE_AUTHORITY,

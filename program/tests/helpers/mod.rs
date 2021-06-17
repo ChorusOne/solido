@@ -47,7 +47,7 @@ pub fn program_test() -> ProgramTest {
 pub struct LidoAccounts {
     pub manager: Keypair,
     pub lido: Keypair,
-    pub mint_program: Keypair,
+    pub st_sol_mint: Keypair,
     pub stake_pool_token_holder: Keypair,
     pub maintainer: Keypair,
 
@@ -67,7 +67,7 @@ impl LidoAccounts {
     pub fn new() -> Self {
         let manager = Keypair::new();
         let lido = Keypair::new();
-        let mint_program = Keypair::new();
+        let st_sol_mint = Keypair::new();
         let stake_pool_token_holder = Keypair::new();
         let maintainer = Keypair::new();
 
@@ -105,7 +105,7 @@ impl LidoAccounts {
         Self {
             manager,
             lido,
-            mint_program,
+            st_sol_mint,
             stake_pool_token_holder,
             maintainer,
             treasury_account,
@@ -142,7 +142,7 @@ impl LidoAccounts {
             banks_client,
             payer,
             recent_blockhash,
-            &self.mint_program,
+            &self.st_sol_mint,
             &self.reserve_authority,
         )
         .await?;
@@ -163,7 +163,7 @@ impl LidoAccounts {
             payer,
             recent_blockhash,
             &self.treasury_account,
-            &self.mint_program.pubkey(),
+            &self.st_sol_mint.pubkey(),
             &self.treasury_account.pubkey(),
         )
         .await
@@ -173,7 +173,7 @@ impl LidoAccounts {
             payer,
             recent_blockhash,
             &self.developer_account,
-            &self.mint_program.pubkey(),
+            &self.st_sol_mint.pubkey(),
             &self.developer_account.pubkey(),
         )
         .await
@@ -206,7 +206,7 @@ impl LidoAccounts {
                         lido: self.lido.pubkey(),
                         stake_pool: self.stake_pool_accounts.stake_pool.pubkey(),
                         manager: self.manager.pubkey(),
-                        mint_program: self.mint_program.pubkey(),
+                        st_sol_mint: self.st_sol_mint.pubkey(),
                         stake_pool_token_holder: self.stake_pool_token_holder.pubkey(),
                         fee_token: self.stake_pool_accounts.pool_fee_account.pubkey(),
                         treasury_account: self.treasury_account.pubkey(),
@@ -248,7 +248,7 @@ impl LidoAccounts {
             payer,
             recent_blockhash,
             &recipient,
-            &self.mint_program.pubkey(),
+            &self.st_sol_mint.pubkey(),
             &user.pubkey(),
         )
         .await
@@ -273,7 +273,7 @@ impl LidoAccounts {
                     manager: self.manager.pubkey(),
                     user: user.pubkey(),
                     recipient: recipient.pubkey(),
-                    mint_program: self.mint_program.pubkey(),
+                    st_sol_mint: self.st_sol_mint.pubkey(),
                     reserve_account: self.reserve_authority,
                 },
                 deposit_amount,
@@ -472,7 +472,7 @@ impl LidoAccounts {
                     lido: self.lido.pubkey(),
                     maintainer: self.maintainer.pubkey(),
                     token_holder_stake_pool: self.stake_pool_token_holder.pubkey(),
-                    mint_program: self.mint_program.pubkey(),
+                    st_sol_mint: self.st_sol_mint.pubkey(),
                     reserve_authority: self.reserve_authority,
                     treasury_account: self.treasury_account.pubkey(),
                     developer_account: self.developer_account.pubkey(),
@@ -501,7 +501,7 @@ impl LidoAccounts {
                 &id(),
                 &lido::instruction::ClaimValidatorFeeMeta {
                     lido: self.lido.pubkey(),
-                    mint_program: self.mint_program.pubkey(),
+                    st_sol_mint: self.st_sol_mint.pubkey(),
                     reserve_authority: self.reserve_authority,
                     validator_token: *validator_token,
                 },
@@ -638,7 +638,7 @@ pub async fn simple_add_validator_to_pool(
         payer,
         recent_blockhash,
         &validator_stake.validator_token_account,
-        &lido_accounts.mint_program.pubkey(),
+        &lido_accounts.st_sol_mint.pubkey(),
         &validator_stake.validator_token_account.pubkey(),
     )
     .await

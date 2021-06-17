@@ -68,8 +68,8 @@ pub fn process_initialize(
     }
 
     // Check if fee structure is valid
-    Lido::check_valid_minter_program(&accounts.mint_program.key, accounts.treasury_account)?;
-    Lido::check_valid_minter_program(&accounts.mint_program.key, accounts.developer_account)?;
+    Lido::check_valid_minter_program(&accounts.st_sol_mint.key, accounts.treasury_account)?;
+    Lido::check_valid_minter_program(&accounts.st_sol_mint.key, accounts.developer_account)?;
 
     // Bytes required for maintainers
     let bytes_for_maintainers = Maintainers::required_bytes(max_maintainers as usize);
@@ -149,7 +149,7 @@ pub fn process_initialize(
     lido.maintainers = Maintainers::new(max_maintainers);
     lido.stake_pool_account = *accounts.stake_pool.key;
     lido.manager = *accounts.manager.key;
-    lido.st_sol_mint_program = *accounts.mint_program.key;
+    lido.st_sol_mint = *accounts.st_sol_mint.key;
     lido.stake_pool_token_holder = *accounts.stake_pool_token_holder.key;
     lido.token_program_id = *accounts.spl_token.key;
     lido.sol_reserve_authority_bump_seed = reserve_bump_seed;
@@ -180,7 +180,7 @@ pub fn process_deposit(
     lido.check_lido_for_deposit(
         accounts.manager.key,
         accounts.stake_pool.key,
-        accounts.mint_program.key,
+        accounts.st_sol_mint.key,
     )?;
     lido.check_token_program_id(accounts.spl_token.key)?;
     lido.check_reserve_authority(program_id, accounts.lido.key, accounts.reserve_account)?;
@@ -217,7 +217,7 @@ pub fn process_deposit(
     token_mint_to(
         accounts.lido.key,
         accounts.spl_token.clone(),
-        accounts.mint_program.clone(),
+        accounts.st_sol_mint.clone(),
         accounts.recipient.clone(),
         accounts.reserve_account.clone(),
         RESERVE_AUTHORITY,

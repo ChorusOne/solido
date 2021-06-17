@@ -322,7 +322,7 @@ pub fn command_create_solido(
         &lido::instruction::InitializeAccountsMeta {
             lido: lido_keypair.pubkey(),
             stake_pool: stake_pool.stake_pool_address.0,
-            mint_program: st_sol_mint_keypair.pubkey(),
+            st_sol_mint: st_sol_mint_keypair.pubkey(),
             stake_pool_token_holder: stake_pool_token_holder_keypair.pubkey(),
             fee_token: stake_pool.fee_address.0,
             manager,
@@ -549,7 +549,7 @@ impl fmt::Display for ShowSolidoOutput {
         writeln!(
             f,
             "Minter:                      {}",
-            self.solido.st_sol_mint_program
+            self.solido.st_sol_mint
         )?;
         writeln!(
             f,
