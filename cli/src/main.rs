@@ -178,7 +178,7 @@ fn print_output<Output: fmt::Display + Serialize>(mode: OutputMode, output: &Out
 fn main() {
     let mut opts = Opts::parse();
     // Read from config file
-    let config_file = opts.config.map(|path| read_config(path));
+    let config_file = opts.config.map(read_config);
     let multisig_program_id = ConfigFile::get_pubkey(
         &config_file,
         opts.multisig_program_id,
