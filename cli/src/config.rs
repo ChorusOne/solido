@@ -81,7 +81,7 @@ macro_rules! cli_opt_struct {
         $name:ident {
             $(
                 // Foward the properties
-                $(#$properties:tt)?
+                $(#[$attr:meta])*
                 // Field name and type, specify default value
                 $field:ident : $type:ty $(=> $default:expr)?
             ),*
@@ -91,7 +91,7 @@ macro_rules! cli_opt_struct {
         #[derive(Debug, Clap)]
         pub struct $name {
             $(
-                $(#$properties)?
+                $(#[$attr])*
                 $field: Option<$type>,
             )*
         }
