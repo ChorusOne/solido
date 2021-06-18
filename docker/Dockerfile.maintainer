@@ -18,7 +18,8 @@ RUN cd $SOLIDOBUILDPATH \
 
 FROM debian:stable-slim@sha256:463cabea60abc361ab670570fe30549a6531cd9af4a1b8577b1c93e9b5a1d369
 
-RUN mkdir -p /solido
+RUN useradd -m -d /solido solido
+USER solido
 
 # Copy from build container
 COPY --from=build /solido-build/target/release/ /solido
