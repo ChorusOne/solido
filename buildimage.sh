@@ -8,7 +8,7 @@ SOLIPATH="/root/.local/share/solana/install/releases/1.6.8/solana-release/bin/so
 
 # 2. Build container image
 echo "Building container image $TAG"
-docker build -t $TAG .
+docker build -t $TAG -f docker/Dockerfile.dev .
 
 # 3. Clean directory for artefacts
 echo "Cleaning artefact directories"

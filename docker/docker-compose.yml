@@ -1,0 +1,7 @@
+version: '3.9'
+services:
+    solido:
+        image: 176395444877.dkr.ecr.us-east-1.amazonaws.com/chorusone/solido-maintainer:${SOLIDO_VERSION}
+        build:
+          context: ../
+          dockerfile: docker/Dockerfile.maintainer
