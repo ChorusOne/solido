@@ -14,39 +14,21 @@ pub enum LidoError {
     /// Lido account mismatch the one stored in the Lido program
     #[error("InvalidOwner")]
     InvalidOwner,
-    /// Stake pool is in an invalid state
-    #[error("WrongStakePool")]
-    InvalidStakePool,
     /// Invalid allocated amount
     #[error("InvalidAmount")]
     InvalidAmount,
     /// A required signature is missing
     #[error("SignatureMissing")]
     SignatureMissing,
-    // 5.
-    /// The token minter is different from Lido's
-    #[error("InvalidTokenMinter")]
-    InvalidTokenMinter,
     /// The reserve authority is invalid
     #[error("InvalidReserveAuthority")]
     InvalidReserveAuthority,
     /// Calculation failed due to division by zero or overflow
     #[error("CalculationFailure")]
     CalculationFailure,
-    #[error("InvalidStaker")]
-    /// Invalid manager
-    InvalidStaker,
     #[error("WrongStakeState")]
     /// Stake account does not exist or is in an invalid state
     WrongStakeState,
-    // 10.
-    /// Token program
-    #[error("InvalidTokenProgram")]
-    /// Token token program ID is different from Lido's
-    InvalidTokenProgram,
-    #[error("InvalidPoolToken")]
-    /// Owner of the Stake pool token is invalid
-    InvalidPoolToken,
     /// The sum of numerators should be equal to the denominators
     #[error("InvalidFeeAmount")]
     InvalidFeeAmount,
@@ -56,7 +38,6 @@ pub enum LidoError {
     /// The size of the account for the Solido state does not match `max_validators`.
     #[error("UnexpectedMaxValidators")]
     UnexpectedMaxValidators,
-    // 15
     /// Wrong manager trying  to alter the state
     #[error("InvalidManager")]
     InvalidManager,
@@ -72,7 +53,6 @@ pub enum LidoError {
     /// Wrong validator credits account
     #[error("InvalidValidatorCreditAccount")]
     InvalidValidatorCreditAccount,
-    // 20
     /// Validator credit account was changed
     #[error("ValidatorCreditChanged")]
     ValidatorCreditChanged,
@@ -89,7 +69,6 @@ pub enum LidoError {
     /// Validator credit account was not found
     #[error("ValidatorCreditNotFound")]
     ValidatorCreditNotFound,
-    // 25
     /// Validator has unclaimed credit, should mint the tokens before the validator removal
     #[error("ValidatorHasUnclaimedCredit")]
     ValidatorHasUnclaimedCredit,
@@ -107,7 +86,6 @@ pub enum LidoError {
     /// in the structure
     #[error("InvalidAccountMember")]
     InvalidAccountMember,
-    // 30
     /// Lido has an invalid size, calculated with the Lido's constant size plus
     /// required to hold variable structures
     #[error("InvalidAccountMember")]
@@ -120,6 +98,12 @@ pub enum LidoError {
     /// validator, does not match the provided stake account.
     #[error("InvalidStakeAccount")]
     InvalidStakeAccount,
+
+    /// We expected an SPL token account that holds stSOL,
+    /// but this was not an SPL token account,
+    /// or its mint did not match.
+    #[error("InvalidStSolAccount")]
+    InvalidStSolAccount,
 }
 impl From<LidoError> for ProgramError {
     fn from(e: LidoError) -> Self {
