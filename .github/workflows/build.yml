@@ -99,24 +99,6 @@ jobs:
         tests/test_multisig.py
         kill $validator
 
-    - name: Run Solido integration test against devnet
-      run: |
-        export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
-
-        solana config set --url https://api.devnet.solana.com
-        # Loop airdrop as devnet doesn't seem to support large drops
-        for i in {1..4}; do solana airdrop 10.0; done
-
-        NETWORK='https://api.devnet.solana.com' tests/test_solido.py
-
-    - name: Run Multisig integration test against devnet
-      run: |
-        export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
-
-        # We don't need to run keygen/setup again, the private key and state
-        # should still be there from the previous run.
-
-        NETWORK='https://api.devnet.solana.com' tests/test_multisig.py
   lint:
     runs-on: ubuntu-latest
 
