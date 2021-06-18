@@ -42,10 +42,6 @@ pub enum LidoInstruction {
         #[allow(dead_code)] // but it's not
         amount: Lamports,
     },
-    /// Deposit an activated stake account into the stake pool. Must be preceded
-    /// by [`StakeDeposit`] to create the stake account. Once that stake account
-    /// is fully active, it can be deposited to the stake pool.
-    DepositActiveStakeToPool,
     Withdraw {
         #[allow(dead_code)] // but it's not
         amount: StLamports,
@@ -56,19 +52,10 @@ pub enum LidoInstruction {
         #[allow(dead_code)] // but it's not
         new_fee_distribution: FeeDistribution,
     },
-    CreateValidatorStakeAccount,
     AddValidator,
     RemoveValidator,
     AddMaintainer,
     RemoveMaintainer,
-    IncreaseValidatorStake {
-        #[allow(dead_code)] // but it's not
-        lamports: Lamports,
-    },
-    DecreaseValidatorStake {
-        #[allow(dead_code)] // but it's not
-        lamports: Lamports,
-    },
 }
 
 macro_rules! accounts_struct_meta {
@@ -488,128 +475,6 @@ pub fn stake_deposit(
 }
 
 accounts_struct! {
-    DepositActiveStakeToPoolAccountsMeta, DepositActiveStakeToPoolAccountsInfo {
-        pub lido {
-            is_signer: false,
-            is_writable: true,
-        },
-        pub maintainer {
-            is_signer: true,
-            is_writable: false,
-        },
-        pub validator_stake_pool_stake_account {
-            is_signer: false,
-            is_writable: true,
-        },
-        // Must be set to the program-derived stake account for the given
-        // validator, with seed `stake_accounts_seed_begin`.
-        pub stake_account_begin {
-            is_signer: false,
-            is_writable: true,
-        },
-        pub deposit_authority {
-            is_signer: false,
-            is_writable: true,
-        },
-        pub stake_pool_token_holder {
-            is_signer: false,
-            is_writable: true,
-        },
-        pub stake_pool_program {
-            is_signer: false,
-            is_writable: false,
-        },
-        pub stake_pool {
-            is_signer: false,
-            is_writable: true,
-        },
-        pub stake_pool_validator_list {
-            is_signer: false,
-            is_writable: true,
-        },
-        pub stake_pool_withdraw_authority {
-            is_signer: false,
-            is_writable: false,
-        },
-        pub stake_pool_mint {
-            is_signer: false,
-            is_writable: true,
-        },
-        const sysvar_clock = sysvar::clock::id(),
-        const stake_history = stake_history::id(),
-        const system_program = system_program::id(),
-        const sysvar_rent = sysvar::rent::id(),
-        const spl_token = spl_token::id(),
-        const stake_program = stake_program::id(),
-    }
-}
-
-pub fn deposit_active_stake_to_pool(
-    program_id: &Pubkey,
-    accounts: &DepositActiveStakeToPoolAccountsMeta,
-) -> Result<Instruction, ProgramError> {
-    let init_data = LidoInstruction::DepositActiveStakeToPool;
-    let data = init_data.try_to_vec()?;
-    Ok(Instruction {
-        program_id: *program_id,
-        accounts: accounts.to_vec(),
-        data,
-    })
-}
-
-accounts_struct! {
-    StakePoolDepositAccountsMeta, StakePoolDepositAccountsInfo {
-        pub stake_pool {
-            is_signer: false,
-            is_writable: true,
-        },
-        pub validator_list_storage {
-            is_signer: false,
-            is_writable: true,
-        },
-        pub deposit_authority {
-            is_signer: true,
-            is_writable: false,
-        },
-        pub stake_pool_withdraw_authority {
-            is_signer: false,
-            is_writable: false,
-        },
-        pub deposit_stake_address {
-            is_signer: false,
-            is_writable: true,
-        },
-        pub validator_stake_account {
-            is_signer: false,
-            is_writable: true,
-        },
-        pub pool_tokens_to {
-            is_signer: false,
-            is_writable: true,
-        },
-        pub pool_mint {
-            is_signer: false,
-            is_writable: true,
-        },
-        const sysvar_clock = sysvar::clock::id(),
-        const sysvar_stake_history = sysvar::stake_history::id(),
-        const spl_token = spl_token::id(),
-        const stake_program = stake_program::id(),
-    }
-}
-
-pub fn stake_pool_deposit(
-    program_id: &Pubkey,
-    accounts: &StakePoolDepositAccountsMeta,
-) -> Result<Instruction, ProgramError> {
-    Ok(Instruction {
-        program_id: *program_id,
-        accounts: accounts.to_vec(),
-        data: StakePoolInstruction::Deposit.try_to_vec()?,
-    })
-}
-
-accounts_struct! {
     InitializeStakePoolWithAuthorityAccountsMeta,
     InitializeStakePoolWithAuthorityAccountsInfo {
         pub stake_pool {
@@ -842,61 +707,6 @@ pub fn distribute_fees(
 }
 
 accounts_struct! {
-    CreateValidatorStakeAccountMeta, CreateValidatorStakeAccountInfo {
-        pub lido {
-            is_signer: false,
-            is_writable: false,
-        },
-        pub manager {
-            is_signer: true,
-            is_writable: false,
-        },
-        pub stake_pool_program {
-            is_signer: false,
-            is_writable: false,
-        },
-        pub stake_pool {
-            is_signer: false,
-            is_writable: false,
-        },
-        // Staker is the manager of the stakepool, a derived account managed by Lido's manager.
-        pub staker {
-            is_signer: false,
-            is_writable: false,
-        },
-        pub funder {
-            is_signer: true,
-            is_writable: true,
-        },
-        pub stake_pool_stake_account {
-            is_signer: false,
-            is_writable: true,
-        },
-        pub validator_vote_account {
-            is_signer: false,
-            is_writable: false,
-        },
-        const sysvar_rent = sysvar::rent::id(),
-        const sysvar_clock = sysvar::clock::id(),
-        const sysvar_stake_history = stake_history::id(),
-        const stake_program_config = stake_program::config_id(),
-        const system_program = system_program::id(),
-        const stake_program = stake_program::id(),
-    }
-}
-
-pub fn create_validator_stake_account(
-    program_id: &Pubkey,
-    accounts: &CreateValidatorStakeAccountMeta,
-) -> Result<Instruction, ProgramError> {
-    Ok(Instruction {
-        program_id: *program_id,
-        accounts: accounts.to_vec(),
-        data: LidoInstruction::CreateValidatorStakeAccount.try_to_vec()?,
-    })
-}
-
-accounts_struct! {
     ClaimValidatorFeeMeta, ClaimValidatorFeeInfo {
         pub lido {
             is_signer: false,
@@ -982,125 +792,5 @@ pub fn remove_maintainer(
         program_id: *program_id,
         accounts: accounts.to_vec(),
         data: LidoInstruction::RemoveMaintainer.try_to_vec()?,
-    })
-}
-
-accounts_struct! {
-    IncreaseValidatorStakeMeta, IncreaseValidatorStakeInfo {
-        pub lido {
-            is_signer: false,
-            is_writable: false,
-        },
-        pub maintainer {
-            is_signer: true,
-            is_writable: false,
-        },
-        pub stake_pool_program {
-            is_signer: false,
-            is_writable: false,
-        },
-        pub stake_pool {
-            is_signer: false,
-            is_writable: false,
-        },
-        pub stake_pool_manager_authority {
-            is_signer: false,
-            is_writable: false,
-        },
-        pub stake_pool_withdraw_authority {
-            is_signer: false,
-            is_writable: false,
-        },
-        pub stake_pool_validator_list {
-            is_signer: false,
-            is_writable: true,
-        },
-        pub stake_pool_reserve_stake {
-            is_signer: false,
-            is_writable: true,
-        },
-        pub transient_stake {
-            is_signer: false,
-            is_writable: true,
-        },
-        pub validator_vote {
-            is_signer: false,
-            is_writable: false,
-        },
-        const sysvar_clock = sysvar::clock::id(),
-        const sysvar_rent = sysvar::rent::id(),
-        const stake_history = stake_history::id(),
-        const stake_program_config = stake_program::config_id(),
-        const system_program = system_program::id(),
-        const stake_program = stake_program::id(),
-    }
-}
-
-pub fn increase_validator_stake(
-    program_id: &Pubkey,
-    lamports: Lamports,
-    accounts: &IncreaseValidatorStakeMeta,
-) -> Result<Instruction, ProgramError> {
-    Ok(Instruction {
-        program_id: *program_id,
-        accounts: accounts.to_vec(),
-        data: LidoInstruction::IncreaseValidatorStake { lamports }.try_to_vec()?,
-    })
-}
-
-accounts_struct! {
-    DecreaseValidatorStakeMeta, DecreaseValidatorStakeInfo {
-        pub lido {
-            is_signer: false,
-            is_writable: false,
-        },
-        pub maintainer {
-            is_signer: true,
-            is_writable: false,
-        },
-        pub stake_pool_program {
-            is_signer: false,
-            is_writable: false,
-        },
-        pub stake_pool {
-            is_signer: false,
-            is_writable: false,
-        },
-        pub stake_pool_manager_authority {
-            is_signer: false,
-            is_writable: false,
-        },
-        pub stake_pool_withdraw_authority {
-            is_signer: false,
-            is_writable: false,
-        },
-        pub stake_pool_validator_list {
-            is_signer: false,
-            is_writable: false,
-        },
-        pub validator_stake {
-            is_signer: false,
-            is_writable: true,
-        },
-        pub transient_stake {
-            is_signer: false,
-            is_writable: true,
-        },
-        const sysvar_clock = sysvar::clock::id(),
-        const sysvar_rent = sysvar::rent::id(),
-        const system_program = system_program::id(),
-        const stake_program = stake_program::id(),
-    }
-}
-
-pub fn decrease_validator_stake(
-    program_id: &Pubkey,
-    lamports: Lamports,
-    accounts: &DecreaseValidatorStakeMeta,
-) -> Result<Instruction, ProgramError> {
-    Ok(Instruction {
-        program_id: *program_id,
-        accounts: accounts.to_vec(),
-        data: LidoInstruction::DecreaseValidatorStake { lamports }.try_to_vec()?,
     })
 }

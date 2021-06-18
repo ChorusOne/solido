@@ -156,49 +156,6 @@ validator_fee_account = create_spl_token(
     'tests/.keys/validator-token-account-key.json', st_sol_mint_account
 )
 print(f'> Validator stSol token account: {validator_fee_account}')
-print('Creating validator stake account')
-transaction_result = solido(
-    'create-validator-stake-account',
-    '--solido-program-id',
-    solido_program_id,
-    '--solido-address',
-    solido_address,
-    '--stake-pool-program-id',
-    stake_pool_program_id,
-    '--validator-vote',
-    validator_vote_account.pubkey,
-    '--multisig-address',
-    multisig_instance,
-    keypair_path=test_addrs[0].keypair_path,
-)
-transaction_address = transaction_result['transaction_address']
-# Fund the PDA so we transfer from it in the create-validator-stake-account instruction
-solana('transfer', '--allow-unfunded-recipient', multisig_pda, '10.0')
-print(f'> Approving transaction: {transaction_address}')
-multisig(
-    'approve',
-    '--multisig-address',
-    multisig_instance,
-    '--transaction-address',
-    transaction_address,
-    keypair_path=test_addrs[1].keypair_path,
-)
-print(f'> Executing transaction: {transaction_address}')
-multisig(
-    'execute-transaction',
-    '--multisig-address',
-    multisig_instance,
-    '--transaction-address',
-    transaction_address,
-    keypair_path=test_addrs[1].keypair_path,
-)
-stake_account_pda = multisig(
-    'show-transaction',
-    '--solido-program-id',
-    solido_program_id,
-    '--transaction-address',
-    transaction_address,
-)
 
 print('> Call function to add validator')
 transaction_result = solido(

@@ -16,10 +16,7 @@ use solana_sdk::{
     signer::signers::Signers,
     transaction::Transaction,
 };
-use spl_stake_pool::{
-    find_stake_program_address,
-    state::{Fee, StakePool},
-};
+use spl_stake_pool::state::{Fee, StakePool};
 
 use crate::{
     error::Error,
@@ -447,68 +444,6 @@ pub fn command_remove_maintainer(
             lido: opts.solido_address,
             manager: multisig_address,
             maintainer: opts.maintainer_address,
-        },
-    )?;
-    Ok(propose_instruction(
-        &config,
-        opts.multisig_address,
-        instruction,
-    ))
-}
-
-#[derive(Clap, Debug)]
-pub struct CreateValidatorStakeAccountOpts {
-    /// Address of the Solido program.
-    #[clap(long, value_name = "address")]
-    pub solido_program_id: Pubkey,
-    /// Account that stores the data for this Solido instance.
-    #[clap(long, value_name = "address")]
-    pub solido_address: Pubkey,
-
-    /// Stake pool program id
-    #[clap(long, value_name = "address")]
-    stake_pool_program_id: Pubkey,
-    /// Address of the validator vote account.
-    #[clap(long, value_name = "address")]
-    pub validator_vote: Pubkey,
-
-    /// Multisig instance.
-    #[clap(long, value_name = "address")]
-    pub multisig_address: Pubkey,
-}
-
-/// Command to add a validator to Solido.
-pub fn command_create_validator_stake_account(
-    config: Config,
-    opts: CreateValidatorStakeAccountOpts,
-) -> Result<ProposeInstructionOutput, Error> {
-    let solido = get_solido(&config.rpc, &opts.solido_address)?;
-
-    let (stake_pool_authority, _) = lido::find_authority_program_address(
-        &opts.solido_program_id,
-        &opts.solido_address,
-        STAKE_POOL_AUTHORITY,
-    );
-
-    let (stake_pool_stake_account, _) = find_stake_program_address(
-        &opts.stake_pool_program_id,
-        &opts.validator_vote,
-        &solido.stake_pool_account,
-    );
-
-    let (multisig_address, _) =
-        get_multisig_program_address(&config.multisig_program_id, &opts.multisig_address);
-    let instruction = lido::instruction::create_validator_stake_account(
-        &opts.solido_program_id,
-        &lido::instruction::CreateValidatorStakeAccountMeta {
-            lido: opts.solido_address,
-            manager: multisig_address,
-            stake_pool_program: opts.stake_pool_program_id,
-            stake_pool: solido.stake_pool_account,
-            staker: stake_pool_authority,
-            funder: multisig_address,
-            stake_pool_stake_account,
-            validator_vote_account: opts.validator_vote,
         },
     )?;
     Ok(propose_instruction(

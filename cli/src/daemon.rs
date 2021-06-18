@@ -61,9 +61,6 @@ struct MaintenanceMetrics {
 
     /// Number of times we performed `StakeDeposit`.
     transactions_stake_deposit: u64,
-
-    /// Number of times we performed `DepositActiveStakeToPool`.
-    transactions_deposit_active_stake_to_pool: u64,
     // TODO(#96#issuecomment-859388866): Track how much the daemon spends on transaction fees,
     // so we know how much SOL it costs to operate.
     // spent_lamports_total: u64
@@ -94,14 +91,11 @@ impl MaintenanceMetrics {
                 name: "solido_maintenance_transactions_total",
                 help: "Number of maintenance transactions executed, since launch.",
                 type_: "counter",
-                metrics: vec![
-                    Metric::singleton("operation", "StakeDeposit", self.transactions_stake_deposit),
-                    Metric::singleton(
-                        "operation",
-                        "DepositActiveStakeToPool",
-                        self.transactions_deposit_active_stake_to_pool,
-                    ),
-                ],
+                metrics: vec![Metric::singleton(
+                    "operation",
+                    "StakeDeposit",
+                    self.transactions_stake_deposit,
+                )],
             },
         )?;
         Ok(())
@@ -130,7 +124,6 @@ fn run_main_loop(config: &Config, opts: &RunMaintainerOpts, snapshot_mutex: &Sna
         polls: 0,
         errors: 0,
         transactions_stake_deposit: 0,
-        transactions_deposit_active_stake_to_pool: 0,
     };
     let mut rng = rand::thread_rng();
 
@@ -171,9 +164,6 @@ fn run_main_loop(config: &Config, opts: &RunMaintainerOpts, snapshot_mutex: &Sna
                         match something_done {
                             MaintenanceOutput::StakeDeposit { .. } => {
                                 metrics.transactions_stake_deposit += 1
-                            }
-                            MaintenanceOutput::DepositActiveStateToPool { .. } => {
-                                metrics.transactions_deposit_active_stake_to_pool += 1
                             }
                         }
                     }

@@ -19,12 +19,10 @@ use solana_sdk::signer::Signer;
 use crate::daemon::RunMaintainerOpts;
 use crate::error::Abort;
 use crate::helpers::command_add_maintainer;
-use crate::helpers::command_create_validator_stake_account;
 use crate::helpers::command_remove_maintainer;
 use crate::helpers::command_show_solido;
 use crate::helpers::AddRemoveMaintainerOpts;
 use crate::helpers::AddValidatorOpts;
-use crate::helpers::CreateValidatorStakeAccountOpts;
 use crate::helpers::ShowSolidoOpts;
 use crate::helpers::{command_add_validator, command_create_solido, CreateSolidoOpts};
 use crate::maintenance::PerformMaintenanceOpts;
@@ -122,8 +120,6 @@ FEES:
     AddMaintainer(AddRemoveMaintainerOpts),
     /// Adds a maintainer to the Solido instance
     RemoveMaintainer(AddRemoveMaintainerOpts),
-    /// Create a Validator Stake Account
-    CreateValidatorStakeAccount(CreateValidatorStakeAccountOpts),
 
     /// Show an instance of solido in detail
     ShowSolido(ShowSolidoOpts),
@@ -222,11 +218,6 @@ fn main() {
             print_output(opts.output_mode, &output);
         }
         SubCommand::Multisig(cmd_opts) => multisig::main(config, opts.output_mode, cmd_opts),
-        SubCommand::CreateValidatorStakeAccount(cmd_opts) => {
-            let output = command_create_validator_stake_account(config, cmd_opts)
-                .ok_or_abort_with("Failed to create validator stake account.");
-            print_output(opts.output_mode, &output);
-        }
         SubCommand::PerformMaintenance(cmd_opts) => {
             // For now, this does one maintenance iteration. In the future we
             // might add a daemon mode that runs continuously, and which logs

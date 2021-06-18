@@ -6,9 +6,7 @@ use spl_stake_pool::{stake_program, state::StakePool};
 use crate::{
     error::LidoError,
     instruction::{
-        stake_pool_deposit, DepositAccountsInfo, DepositActiveStakeToPoolAccountsInfo,
-        InitializeAccountsInfo, LidoInstruction, StakeDepositAccountsInfo,
-        StakePoolDepositAccountsMeta,
+        DepositAccountsInfo, InitializeAccountsInfo, LidoInstruction, StakeDepositAccountsInfo,
     },
     logic::{
         calc_total_lamports, deserialize_lido, get_reserve_available_amount, rent_exemption,
@@ -16,9 +14,8 @@ use crate::{
     },
     process_management::{
         process_add_maintainer, process_add_validator, process_change_fee_spec,
-        process_claim_validator_fee, process_create_validator_stake_account,
-        process_decrease_validator_stake, process_distribute_fees,
-        process_increase_validator_stake, process_remove_maintainer, process_remove_validator,
+        process_claim_validator_fee, process_distribute_fees, process_remove_maintainer,
+        process_remove_validator,
     },
     state::{
         FeeDistribution, FeeRecipients, Lido, Maintainers, Validator, Validators,
@@ -405,117 +402,6 @@ pub fn process_stake_deposit(
     Ok(())
 }
 
-pub fn process_deposit_active_stake_to_pool(
-    program_id: &Pubkey,
-    raw_accounts: &[AccountInfo],
-) -> ProgramResult {
-    let accounts = DepositActiveStakeToPoolAccountsInfo::try_from_slice(raw_accounts)?;
-
-    let _rent = &Rent::from_account_info(accounts.sysvar_rent)?;
-    let mut lido = deserialize_lido(program_id, accounts.lido)?;
-
-    lido.check_stake_pool(accounts.stake_pool)?;
-    lido.check_maintainer(accounts.maintainer)?;
-
-    let validator = lido
-        .validators
-        .get_mut(&accounts.validator_stake_pool_stake_account.key)?;
-
-    if validator.entry.stake_accounts_seed_begin >= validator.entry.stake_accounts_seed_end {
-        // TODO(#175) add a proper error for this.
-        panic!(
-            "Validator {} has no pending stake accounts.",
-            validator.pubkey
-        );
-    }
-
-    // A deposit to the stake pool always deposits from the begin of the range
-    // of stake accounts. The `begin` index holds the oldest stake account.
-    let (stake_addr, _stake_addr_bump_seed) = Validator::find_stake_account_address(
-        program_id,
-        accounts.lido.key,
-        &validator.pubkey,
-        validator.entry.stake_accounts_seed_begin,
-    );
-    if &stake_addr != accounts.stake_account_begin.key {
-        msg!(
-            "The derived stake address for seed {} is {}, but the instruction received {} instead.",
-            validator.entry.stake_accounts_seed_begin,
-            stake_addr,
-            accounts.stake_account_begin.key,
-        );
-        msg!("This can happen when two DepositActiveStakeToPool instructions race.");
-        return Err(LidoError::InvalidStakeAccount.into());
-    }
-
-    if &lido.stake_pool_token_holder != accounts.stake_pool_token_holder.key {
-        msg!("Invalid stake pool token");
-        return Err(LidoError::InvalidPoolToken.into());
-    }
-
-    let solido_address_bytes = accounts.lido.key.to_bytes();
-    let deposit_authority_bump_seed = [lido.deposit_authority_bump_seed];
-    let deposit_authority_seeds = &[
-        &solido_address_bytes,
-        DEPOSIT_AUTHORITY,
-        &deposit_authority_bump_seed,
-    ];
-
-    // Before we put the stake account in the pool, record how much SOL it held,
-    // because that SOL is now no longer activating, so we need to update the
-    // `Validator` instance.
-    // TODO(#176) Record SOL held by stake account  ...
-    // If rewards have been paid out before we deposited this account to
-    // the stake pool, then the `stake_accounts_balance` will now become too
-    // low. (Or rather, it started being wrong at the start of the epoch, when
-    // rewards were paid, but now we may get an underflow.)
-    // See also: https://github.com/ChorusOne/solido/issues/128#issuecomment-853842891
-    let amount_staked = Lamports(accounts.stake_account_begin.lamports());
-    validator.entry.stake_accounts_balance = (validator.entry.stake_accounts_balance
-        - amount_staked)
-        .ok_or(LidoError::CalculationFailure)?;
-
-    // We now consumed this stake account, bump the index.
-    validator.entry.stake_accounts_seed_begin += 1;
-
-    lido.serialize(&mut *accounts.lido.data.borrow_mut())?;
-
-    // The stake pool should check that the account we deposit is actually a
-    // fully active stake account, and not still activating.
-
-    invoke_signed(
-        &stake_pool_deposit(
-            &accounts.stake_pool_program.key,
-            &StakePoolDepositAccountsMeta {
-                stake_pool: *accounts.stake_pool.key,
-                validator_list_storage: *accounts.stake_pool_validator_list.key,
-                deposit_authority: *accounts.deposit_authority.key,
-                stake_pool_withdraw_authority: *accounts.stake_pool_withdraw_authority.key,
-                deposit_stake_address: *accounts.stake_account_begin.key,
-                validator_stake_account: *accounts.validator_stake_pool_stake_account.key,
-                pool_tokens_to: *accounts.stake_pool_token_holder.key,
-                pool_mint: *accounts.stake_pool_mint.key,
-            },
-        )?,
-        &[
-            accounts.stake_pool.clone(),
-            accounts.stake_pool_validator_list.clone(),
-            accounts.deposit_authority.clone(),
-            accounts.stake_pool_withdraw_authority.clone(),
-            accounts.stake_account_begin.clone(),
-            accounts.validator_stake_pool_stake_account.clone(),
-            accounts.stake_pool_token_holder.clone(),
-            accounts.stake_pool_mint.clone(),
-            accounts.spl_token.clone(),
-            accounts.stake_program.clone(),
-            accounts.stake_pool_program.clone(),
-        ],
-        &[deposit_authority_seeds],
-    )?;
-
-    Ok(())
-}
-
 // TODO(#93) Implement withdraw
 pub fn process_withdraw(
     _program_id: &Pubkey,
@@ -544,27 +430,15 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
         LidoInstruction::StakeDeposit { amount } => {
             process_stake_deposit(program_id, amount, accounts)
         }
-        LidoInstruction::DepositActiveStakeToPool => {
-            process_deposit_active_stake_to_pool(program_id, accounts)
-        }
         LidoInstruction::Withdraw { amount } => process_withdraw(program_id, amount, accounts),
         LidoInstruction::DistributeFees => process_distribute_fees(program_id, accounts),
         LidoInstruction::ClaimValidatorFees => process_claim_validator_fee(program_id, accounts),
         LidoInstruction::ChangeFeeSpec {
             new_fee_distribution,
         } => process_change_fee_spec(program_id, new_fee_distribution, accounts),
-        LidoInstruction::CreateValidatorStakeAccount => {
-            process_create_validator_stake_account(program_id, accounts)
-        }
         LidoInstruction::AddValidator => process_add_validator(program_id, accounts),
         LidoInstruction::RemoveValidator => process_remove_validator(program_id, accounts),
         LidoInstruction::AddMaintainer => process_add_maintainer(program_id, accounts),
         LidoInstruction::RemoveMaintainer => process_remove_maintainer(program_id, accounts),
-        LidoInstruction::IncreaseValidatorStake { lamports } => {
-            process_increase_validator_stake(program_id, lamports, accounts)
-        }
-        LidoInstruction::DecreaseValidatorStake { lamports } => {
-            process_decrease_validator_stake(program_id, lamports, accounts)
-        }
     }
 }

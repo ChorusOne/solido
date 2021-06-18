@@ -15,7 +15,6 @@ use clap::Clap;
 use lido::instruction::AddMaintainerMeta;
 use lido::instruction::AddValidatorMeta;
 use lido::instruction::ChangeFeeSpecMeta;
-use lido::instruction::CreateValidatorStakeAccountMeta;
 use lido::instruction::LidoInstruction;
 use lido::instruction::RemoveMaintainerMeta;
 use lido::state::FeeDistribution;
@@ -383,22 +382,6 @@ enum ParsedInstruction {
 
 #[derive(Serialize)]
 enum SolidoInstruction {
-    CreateValidatorStakeAccount {
-        #[serde(serialize_with = "serialize_b58")]
-        solido_instance: Pubkey,
-        #[serde(serialize_with = "serialize_b58")]
-        manager: Pubkey,
-        #[serde(serialize_with = "serialize_b58")]
-        stake_pool_program: Pubkey,
-        #[serde(serialize_with = "serialize_b58")]
-        stake_pool: Pubkey,
-        #[serde(serialize_with = "serialize_b58")]
-        funder: Pubkey,
-        #[serde(serialize_with = "serialize_b58")]
-        stake_pool_stake_account: Pubkey,
-        #[serde(serialize_with = "serialize_b58")]
-        validator_vote: Pubkey,
-    },
     AddValidator {
         #[serde(serialize_with = "serialize_b58")]
         solido_instance: Pubkey,
@@ -532,24 +515,6 @@ impl fmt::Display for ShowTransactionOutput {
             ParsedInstruction::SolidoInstruction(solido_instruction) => {
                 write!(f, "  This is a Solido instruction. ")?;
                 match solido_instruction {
-                    SolidoInstruction::CreateValidatorStakeAccount {
-                        solido_instance,
-                        manager,
-                        stake_pool_program,
-                        stake_pool,
-                        funder,
-                        stake_pool_stake_account,
-                        validator_vote,
-                    } => {
-                        writeln!(f, "It creates a validator stake account.")?;
-                        writeln!(f, "    Solido instance:     {}", solido_instance)?;
-                        writeln!(f, "    Manager:             {}", manager)?;
-                        writeln!(f, "    Stake pool program:  {}", stake_pool_program)?;
-                        writeln!(f, "    Stake pool instance: {}", stake_pool)?;
-                        writeln!(f, "    Funder:              {}", funder)?;
-                        writeln!(f, "    Stake account:       {}", stake_pool_stake_account)?;
-                        writeln!(f, "    Validator vote:      {}", validator_vote)?;
-                    }
                     SolidoInstruction::AddValidator {
                         solido_instance,
                         manager,
@@ -823,18 +788,6 @@ fn try_parse_solido_instruction(
                     treasury_account: accounts.treasury_account,
                     developer_account: accounts.developer_account,
                 },
-            })
-        }
-        LidoInstruction::CreateValidatorStakeAccount => {
-            let accounts = CreateValidatorStakeAccountMeta::try_from_slice(&instr.accounts)?;
-            ParsedInstruction::SolidoInstruction(SolidoInstruction::CreateValidatorStakeAccount {
-                stake_pool_stake_account: accounts.stake_pool_stake_account,
-                validator_vote: accounts.validator_vote_account,
-                solido_instance: accounts.lido,
-                manager: accounts.manager,
-                stake_pool_program: accounts.stake_pool_program,
-                stake_pool: accounts.stake_pool,
-                funder: accounts.funder,
             })
         }
         LidoInstruction::AddValidator => {

@@ -1,89 +1,20 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use solana_program::{
-    account_info::AccountInfo, entrypoint::ProgramResult, msg, program::invoke_signed,
-    program_pack::Pack, pubkey::Pubkey,
+    account_info::AccountInfo, entrypoint::ProgramResult, msg, program_pack::Pack, pubkey::Pubkey,
 };
-use spl_stake_pool::{
-    error::StakePoolError,
-    instruction::{
-        create_validator_stake_account, decrease_validator_stake, increase_validator_stake,
-    },
-    state::StakePool,
-};
+use spl_stake_pool::{error::StakePoolError, state::StakePool};
 
 use crate::{
     error::LidoError,
     instruction::{
         AddMaintainerInfo, AddValidatorInfo, ChangeFeeSpecInfo, ClaimValidatorFeeInfo,
-        CreateValidatorStakeAccountInfo, DecreaseValidatorStakeInfo, DistributeFeesInfo,
-        IncreaseValidatorStakeInfo, RemoveMaintainerInfo, RemoveValidatorInfo,
+        DistributeFeesInfo, RemoveMaintainerInfo, RemoveValidatorInfo,
     },
     logic::{deserialize_lido, token_mint_to, transfer_to},
     state::{distribute_fees, FeeDistribution, Lido, Validator},
-    token::{Lamports, StLamports, StakePoolTokenLamports},
-    FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY, STAKE_POOL_AUTHORITY,
+    token::{StLamports, StakePoolTokenLamports},
+    FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY,
 };
-
-pub fn process_create_validator_stake_account(
-    program_id: &Pubkey,
-    accounts_raw: &[AccountInfo],
-) -> ProgramResult {
-    let accounts = CreateValidatorStakeAccountInfo::try_from_slice(accounts_raw)?;
-    if accounts.stake_pool.owner != accounts.stake_pool_program.key {
-        msg!(
-            "Stake pool state is owned by {} but should be owned by {}",
-            accounts.stake_pool.owner,
-            accounts.stake_pool_program.key,
-        );
-        return Err(LidoError::InvalidOwner.into());
-    }
-
-    let lido = deserialize_lido(program_id, accounts.lido)?;
-    lido.check_manager(accounts.manager)?;
-    lido.check_stake_pool(accounts.stake_pool)?;
-    let stake_pool_authority = Pubkey::create_program_address(
-        &[
-            &accounts.lido.key.to_bytes(),
-            STAKE_POOL_AUTHORITY,
-            &[lido.stake_pool_authority_bump_seed],
-        ],
-        program_id,
-    )?;
-    if &stake_pool_authority != accounts.staker.key {
-        msg!("Wrong stake pool staker");
-        return Err(LidoError::InvalidStaker.into());
-    }
-
-    invoke_signed(
-        &create_validator_stake_account(
-            accounts.stake_pool_program.key,
-            accounts.stake_pool.key,
-            accounts.staker.key,
-            accounts.funder.key,
-            accounts.stake_pool_stake_account.key,
-            accounts.validator_vote_account.key,
-        ),
-        &[
-            accounts.stake_pool.clone(),
-            accounts.staker.clone(),
-            accounts.funder.clone(),
-            accounts.stake_pool_stake_account.clone(),
-            accounts.validator_vote_account.clone(),
-            accounts.sysvar_rent.clone(),
-            accounts.sysvar_clock.clone(),
-            accounts.sysvar_stake_history.clone(),
-            accounts.stake_program_config.clone(),
-            accounts.system_program.clone(),
-            accounts.stake_program.clone(),
-            accounts.stake_pool_program.clone(),
-        ],
-        &[&[
-            &accounts.lido.key.to_bytes(),
-            STAKE_POOL_AUTHORITY,
-            &[lido.stake_pool_authority_bump_seed],
-        ]],
-    )
-}
 
 pub fn process_change_fee_spec(
     program_id: &Pubkey,
@@ -278,96 +209,6 @@ pub fn process_remove_maintainer(
     lido.maintainers.remove(accounts.maintainer.key)?;
     lido.serialize(&mut *accounts.lido.data.borrow_mut())
         .map_err(|err| err.into())
-}
-
-/// Increases a validator's stake. This function is called by maintainers
-pub fn process_increase_validator_stake(
-    program_id: &Pubkey,
-    lamports: Lamports,
-    accounts_raw: &[AccountInfo],
-) -> ProgramResult {
-    let accounts = IncreaseValidatorStakeInfo::try_from_slice(accounts_raw)?;
-    let lido = deserialize_lido(program_id, accounts.lido)?;
-    lido.check_maintainer(accounts.maintainer)?;
-    lido.check_stake_pool(accounts.stake_pool)?;
-
-    invoke_signed(
-        &increase_validator_stake(
-            &spl_stake_pool::id(),
-            accounts.stake_pool.key,
-            accounts.stake_pool_manager_authority.key,
-            accounts.stake_pool_withdraw_authority.key,
-            accounts.stake_pool_validator_list.key,
-            accounts.stake_pool_reserve_stake.key,
-            accounts.transient_stake.key,
-            accounts.validator_vote.key,
-            lamports.0,
-        ),
-        &[
-            accounts.stake_pool_program.clone(),
-            accounts.stake_pool.clone(),
-            accounts.stake_pool_manager_authority.clone(),
-            accounts.stake_pool_withdraw_authority.clone(),
-            accounts.stake_pool_validator_list.clone(),
-            accounts.stake_pool_reserve_stake.clone(),
-            accounts.transient_stake.clone(),
-            accounts.validator_vote.clone(),
-            accounts.sysvar_clock.clone(),
-            accounts.sysvar_rent.clone(),
-            accounts.stake_history.clone(),
-            accounts.stake_program_config.clone(),
-            accounts.system_program.clone(),
-            accounts.stake_program.clone(),
-        ],
-        &[&[
-            &accounts.lido.key.to_bytes(),
-            STAKE_POOL_AUTHORITY,
-            &[lido.stake_pool_authority_bump_seed],
-        ]],
-    )
-}
-
-/// Removes a maintainer to the list of maintainers
-pub fn process_decrease_validator_stake(
-    program_id: &Pubkey,
-    lamports: Lamports,
-    accounts_raw: &[AccountInfo],
-) -> ProgramResult {
-    let accounts = DecreaseValidatorStakeInfo::try_from_slice(accounts_raw)?;
-    let lido = deserialize_lido(program_id, accounts.lido)?;
-    lido.check_maintainer(accounts.maintainer)?;
-    lido.check_stake_pool(accounts.stake_pool)?;
-
-    invoke_signed(
-        &decrease_validator_stake(
-            &spl_stake_pool::id(),
-            accounts.stake_pool.key,
-            accounts.stake_pool_manager_authority.key,
-            accounts.stake_pool_withdraw_authority.key,
-            accounts.stake_pool_validator_list.key,
-            accounts.validator_stake.key,
-            accounts.transient_stake.key,
-            lamports.0,
-        ),
-        &[
-            accounts.stake_pool_program.clone(),
-            accounts.stake_pool.clone(),
-            accounts.stake_pool_manager_authority.clone(),
-            accounts.stake_pool_withdraw_authority.clone(),
-            accounts.stake_pool_validator_list.clone(),
-            accounts.validator_stake.clone(),
-            accounts.transient_stake.clone(),
-            accounts.sysvar_clock.clone(),
-            accounts.sysvar_rent.clone(),
-            accounts.system_program.clone(),
-            accounts.stake_program.clone(),
-        ],
-        &[&[
-            &accounts.lido.key.to_bytes(),
-            STAKE_POOL_AUTHORITY,
-            &[lido.stake_pool_authority_bump_seed],
-        ]],
-    )
 }
 
 /// TODO(#186) Allow validator to change fee account

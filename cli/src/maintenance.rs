@@ -1,7 +1,6 @@
 //! Entry point for maintenance operations, such as updating the pool balance.
 
 use std::fmt;
-use std::ops::Add;
 
 use clap::Clap;
 use serde::Serialize;
@@ -16,7 +15,7 @@ use lido::util::serialize_b58;
 use lido::{
     state::{Lido, Validator},
     token::Lamports,
-    DEPOSIT_AUTHORITY, STAKE_POOL_AUTHORITY,
+    DEPOSIT_AUTHORITY,
 };
 use spl_stake_pool::stake_program::StakeState;
 use spl_stake_pool::state::{StakePool, ValidatorList};
@@ -51,12 +50,6 @@ pub enum MaintenanceOutput {
         #[serde(rename = "amount_lamports")]
         amount: Lamports,
     },
-    DepositActiveStateToPool {
-        #[serde(serialize_with = "serialize_b58")]
-        validator_vote_account: Pubkey,
-        #[serde(rename = "amount_lamports")]
-        amount: Lamports,
-    },
 }
 
 impl fmt::Display for MaintenanceOutput {
@@ -67,14 +60,6 @@ impl fmt::Display for MaintenanceOutput {
                 amount,
             } => {
                 writeln!(f, "Staked deposit.")?;
-                writeln!(f, "  Validator vote account: {}", validator_vote_account)?;
-                writeln!(f, "  Amount staked:          {}", amount)?;
-            }
-            MaintenanceOutput::DepositActiveStateToPool {
-                validator_vote_account,
-                amount,
-            } => {
-                writeln!(f, "Deposited stake to pool.")?;
                 writeln!(f, "  Validator vote account: {}", validator_vote_account)?;
                 writeln!(f, "  Amount staked:          {}", amount)?;
             }
@@ -121,40 +106,6 @@ pub struct StakeBalance {
     pub deactivating: Lamports,
 }
 
-impl StakeBalance {
-    pub fn total(&self) -> Lamports {
-        self.active
-            .add(self.inactive)
-            .expect("Should not overflow: stake parts should be less than the total.")
-            .add(self.activating)
-            .expect("Should not overflow: stake parts should be less than the total.")
-            .add(self.deactivating)
-            .expect("Should not overflow: stake parts should be less than the total.")
-    }
-
-    /// Return whether the stake account reached its maximum activation.
-    ///
-    /// Stake accounts in Solana can be partially active, and the maximum amount
-    /// of active stake it reaches is set at `delegate_stake` time. This means
-    /// that a stake account can contain both active and inactive SOL, but still
-    /// be fully active. Normally this should not happen, but in principle anybody
-    /// can deposit SOL into a stake account after calling `delegate_stake`, and
-    /// that additional SOL will not be activated. Therefore this method does not
-    /// look at `inactive` SOL, it considers the account to be fully active when
-    /// nothing is activating or deactivating.
-    pub fn is_fully_active(&self) -> bool {
-        true
-        && self.activating == Lamports(0)
-        && self.deactivating == Lamports(0)
-        // We define an empty stake account to not be fully active,
-        // because the SPL stake pool program considers such accounts
-        // to not be fully active. The case is not relevant anyway,
-        // because an empty stake account would not be rent-exempt,
-        // so it would disappear.
-        && self.active > Lamports(0)
-    }
-}
-
 fn get_validator_stake_accounts(
     rpc_client: &RpcClient,
     solido_program_id: &Pubkey,
@@ -179,8 +130,7 @@ fn get_validator_stake_accounts(
             .expect("Encountered undelegated stake account, this should not happen.");
 
         assert_eq!(
-            delegation.voter_pubkey,
-            validator.pubkey,
+            delegation.voter_pubkey, validator.pubkey,
             "Expected the stake account for validator to delegate to that validator."
         );
 
@@ -354,64 +304,6 @@ impl SolidoState {
 
         Ok(Some((instruction, task)))
     }
-
-    /// If there is active stake that can be deposited to the stake pool,
-    /// return the instruction to do so.
-    pub fn try_deposit_active_stake_to_pool(
-        &self,
-    ) -> Result<Option<(Instruction, MaintenanceOutput)>> {
-        let (deposit_authority, _bump_seed) = lido::find_authority_program_address(
-            &self.solido_program_id,
-            &self.solido_address,
-            DEPOSIT_AUTHORITY,
-        );
-
-        // The stake pool withdraw authority is the stake pool authority.
-        let (withdraw_authority, _bump_seed) = lido::find_authority_program_address(
-            &self.solido_program_id,
-            &self.solido_address,
-            STAKE_POOL_AUTHORITY,
-        );
-
-        for (validator, stake_accounts) in self
-            .solido
-            .validators
-            .entries
-            .iter()
-            .zip(self.validator_stake_accounts.iter())
-        {
-            // We only check if the first stake account can be deposited, because stake accounts
-            // can only be deposited into the pool after the accounts preceding them.
-            for (stake_account_addr, stake_balance) in stake_accounts.iter().take(1) {
-                if stake_balance.is_fully_active() {
-                    let instr = lido::instruction::deposit_active_stake_to_pool(
-                        &self.solido_program_id,
-                        &lido::instruction::DepositActiveStakeToPoolAccountsMeta {
-                            lido: self.solido_address,
-                            maintainer: self.maintainer_address,
-                            validator_stake_pool_stake_account: validator.pubkey,
-                            stake_account_begin: stake_account_addr.clone(),
-                            deposit_authority: deposit_authority,
-                            stake_pool_token_holder: self.solido.stake_pool_token_holder,
-                            stake_pool_program: self.stake_pool_program_id,
-                            stake_pool: self.solido.stake_pool_account,
-                            stake_pool_validator_list: self.stake_pool.validator_list,
-                            stake_pool_withdraw_authority: withdraw_authority,
-                            stake_pool_mint: self.stake_pool.pool_mint,
-                        },
-                    )?;
-                    return Ok(Some((
-                        instr,
-                        MaintenanceOutput::DepositActiveStateToPool {
-                            validator_vote_account: validator.pubkey,
-                            amount: stake_balance.total(),
-                        },
-                    )));
-                }
-            }
-        }
-        Ok(None)
-    }
 }
 
 pub fn try_perform_maintenance(
@@ -420,9 +312,8 @@ pub fn try_perform_maintenance(
 ) -> Result<Option<MaintenanceOutput>> {
     // Try all of these operations one by one, and select the first one that
     // produces an instruction.
-    let instruction: Option<Result<(Instruction, MaintenanceOutput)>> = None
-        .or_else(|| state.try_stake_deposit().transpose())
-        .or_else(|| state.try_deposit_active_stake_to_pool().transpose());
+    let instruction: Option<Result<(Instruction, MaintenanceOutput)>> =
+        None.or_else(|| state.try_stake_deposit().transpose());
 
     match instruction {
         Some(Ok((instr, output))) => {
