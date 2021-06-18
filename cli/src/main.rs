@@ -35,7 +35,6 @@ mod maintenance;
 mod multisig;
 mod prometheus;
 mod spl_token_utils;
-mod stake_pool_helpers;
 mod util;
 
 #[derive(Copy, Clone, Debug)]

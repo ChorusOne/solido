@@ -42,9 +42,6 @@ RUN cd $SOLIDOBUILDPATH \
 RUN cd $SOLIDORELEASEPATH/deploy \
     && sha256sum lido.so >> lido.hash \
     && sha256sum multisig.so >> multisig.hash \
-    && sha256sum spl_math.so >> spl_math.hash \
-    && sha256sum spl_stake_pool.so >> spl_stake_pool.hash \
-    && sha256sum spl_token.so >> spl_token.hash
 
 
 # Hash CLI

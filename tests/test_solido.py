@@ -51,14 +51,6 @@ print(f'> Treasury account owner:      {treasury_account_owner}')
 developer_account_owner = create_test_account('tests/.keys/developer-fee-key.json')
 print(f'> Developer fee account owner: {developer_account_owner}')
 
-
-print('\nUploading stake pool program ...')
-stake_pool_program_id = solana_program_deploy(
-    get_solido_program_path() + '/spl_stake_pool.so'
-)
-print(f'> Stake pool program id is {stake_pool_program_id}.')
-
-
 print('\nUploading Solido program ...')
 solido_program_id = solana_program_deploy(get_solido_program_path() + '/lido.so')
 print(f'> Solido program id is {solido_program_id}.')
@@ -87,8 +79,6 @@ print(f'> Created instance at {multisig_instance}.')
 print('\nCreating Solido instance ...')
 result = solido(
     'create-solido',
-    '--stake-pool-program-id',
-    stake_pool_program_id,
     '--solido-program-id',
     solido_program_id,
     '--fee-numerator',
@@ -308,8 +298,6 @@ result = solido(
     solido_address,
     '--solido-program-id',
     solido_program_id,
-    '--stake-pool-program-id',
-    stake_pool_program_id,
     keypair_path=maintainer.keypair_path,
 )
 assert result is None, f'Huh, perform-maintenance performed {result}'
@@ -327,8 +315,6 @@ result = solido(
     solido_address,
     '--solido-program-id',
     solido_program_id,
-    '--stake-pool-program-id',
-    stake_pool_program_id,
     keypair_path=maintainer.keypair_path,
 )
 expected_result = {
@@ -355,8 +341,6 @@ result = solido(
     solido_address,
     '--solido-program-id',
     solido_program_id,
-    '--stake-pool-program-id',
-    stake_pool_program_id,
     keypair_path=maintainer.keypair_path,
 )
 assert result is None, f'Huh, perform-maintenance performed {result}'
