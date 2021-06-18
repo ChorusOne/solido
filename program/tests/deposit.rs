@@ -2,11 +2,7 @@
 
 mod helpers;
 
-use helpers::{
-    id, program_test,
-    stakepool_account::{get_token_balance, transfer},
-    LidoAccounts,
-};
+use helpers::{get_token_balance, id, program_test, transfer, LidoAccounts};
 use lido::{
     instruction,
     token::{Lamports, StLamports},

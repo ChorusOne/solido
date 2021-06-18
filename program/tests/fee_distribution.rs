@@ -3,9 +3,7 @@
 mod helpers;
 
 use helpers::{
-    program_test, simple_add_validator_to_pool,
-    stakepool_account::{get_token_balance, transfer},
-    LidoAccounts, ValidatorAccounts,
+    program_test, simple_add_validator_to_pool, transfer, LidoAccounts, ValidatorAccounts,
 };
 use solana_program_test::{tokio, ProgramTestContext};
 use solana_sdk::signature::Signer;

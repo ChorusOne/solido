@@ -6,6 +6,7 @@ use lido::{
     token::Lamports,
     DEPOSIT_AUTHORITY, RESERVE_AUTHORITY,
 };
+use solana_program::system_program;
 use solana_program::{hash::Hash, program_pack::Pack, pubkey::Pubkey, system_instruction};
 use solana_program_test::*;
 use solana_sdk::{
@@ -15,12 +16,9 @@ use solana_sdk::{
     transaction::Transaction,
     transport::TransportError,
 };
-use stakepool_account::{create_mint, transfer};
-use solana_vote_program::vote_state::{VoteInit, VoteState};
 use solana_vote_program::vote_instruction;
-use solana_program::system_program;
+use solana_vote_program::vote_state::{VoteInit, VoteState};
 
-pub mod stakepool_account;
 pub const MAX_VALIDATORS: u32 = 10_000;
 pub const MAX_MAINTAINERS: u32 = 100;
 
@@ -71,7 +69,7 @@ impl ValidatorAccounts {
             &accounts.node_account,
             &accounts.vote_account,
         )
-            .await;
+        .await;
 
         create_token_account(
             banks_client,
@@ -81,8 +79,8 @@ impl ValidatorAccounts {
             st_sol_mint,
             &accounts.node_account.pubkey(),
         )
-            .await
-            .unwrap();
+        .await
+        .unwrap();
 
         accounts
     }
@@ -149,8 +147,6 @@ impl LidoAccounts {
         payer: &Keypair,
         recent_blockhash: &Hash,
     ) -> Result<(), TransportError> {
-        let reserve_lamports = Lamports(1);
-
         create_mint(
             banks_client,
             payer,
@@ -576,4 +572,66 @@ pub async fn create_vote_account(
         *recent_blockhash,
     );
     banks_client.process_transaction(transaction).await.unwrap();
+}
+
+pub async fn create_mint(
+    banks_client: &mut BanksClient,
+    payer: &Keypair,
+    recent_blockhash: &Hash,
+    pool_mint: &Keypair,
+    manager: &Pubkey,
+) -> Result<(), TransportError> {
+    let rent = banks_client.get_rent().await.unwrap();
+    let mint_rent = rent.minimum_balance(spl_token::state::Mint::LEN);
+
+    let mut transaction = Transaction::new_with_payer(
+        &[
+            system_instruction::create_account(
+                &payer.pubkey(),
+                &pool_mint.pubkey(),
+                mint_rent,
+                spl_token::state::Mint::LEN as u64,
+                &spl_token::id(),
+            ),
+            spl_token::instruction::initialize_mint(
+                &spl_token::id(),
+                &pool_mint.pubkey(),
+                &manager,
+                None,
+                0,
+            )
+            .unwrap(),
+        ],
+        Some(&payer.pubkey()),
+    );
+    transaction.sign(&[payer, pool_mint], *recent_blockhash);
+    banks_client.process_transaction(transaction).await?;
+    Ok(())
+}
+
+pub async fn transfer(
+    banks_client: &mut BanksClient,
+    payer: &Keypair,
+    recent_blockhash: &Hash,
+    recipient: &Pubkey,
+    amount: Lamports,
+) {
+    let transaction = Transaction::new_signed_with_payer(
+        &[system_instruction::transfer(
+            &payer.pubkey(),
+            recipient,
+            amount.0,
+        )],
+        Some(&payer.pubkey()),
+        &[payer],
+        *recent_blockhash,
+    );
+    banks_client.process_transaction(transaction).await.unwrap();
+}
+
+pub async fn get_token_balance(banks_client: &mut BanksClient, token: &Pubkey) -> u64 {
+    let token_account = banks_client.get_account(*token).await.unwrap().unwrap();
+    let account_info: spl_token::state::Account =
+        spl_token::state::Account::unpack_from_slice(token_account.data.as_slice()).unwrap();
+    account_info.amount
 }
