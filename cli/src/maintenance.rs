@@ -178,9 +178,11 @@ fn get_validator_stake_accounts(
             .delegation()
             .expect("Encountered undelegated stake account, this should not happen.");
 
-        // TODO(#182): Confirm that `delegation.voter_pubkey == validator.vote_account`. Unfortunately we
-        // do not store the vote account in there at the moment. Once we switch to using the vote
-        // account as key for the dictionary, we could check that here.
+        assert_eq!(
+            delegation.voter_pubkey,
+            validator.pubkey,
+            "Expected the stake account for validator to delegate to that validator."
+        );
 
         let target_epoch = clock.epoch;
         let history = Some(stake_history);
