@@ -2,6 +2,7 @@ name: build
 
 on:
   schedule:
+    # Schedule equates to 02:05
     - cron : '5 2 * * *'
     branches: [ main ]
 
@@ -38,13 +39,6 @@ jobs:
         # because we will need them later to test Solido.
         cargo build-bpf
 
-    - name: Test on-chain BPF programs
-      run: |
-        export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
-
-        # But only run the tests for Solido itself, the SPL tests are already
-        # executed upstream.
-        cargo test-bpf --manifest-path program/Cargo.toml
 
     - name: Build CLI client
       run: cargo build --bin solido
