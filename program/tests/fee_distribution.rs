@@ -4,8 +4,8 @@ mod helpers;
 
 use helpers::{
     program_test, simple_add_validator_to_pool,
-    stakepool_account::{get_token_balance, transfer, ValidatorAccounts},
-    LidoAccounts,
+    stakepool_account::{get_token_balance, transfer},
+    LidoAccounts, ValidatorAccounts,
 };
 use solana_program_test::{tokio, ProgramTestContext};
 use solana_sdk::signature::Signer;
@@ -78,15 +78,6 @@ async fn test_successful_fee_distribution() {
         EXTRA_STAKE_AMOUNT,
     )
     .await;
-
-    // Before the update, the fee account that rewards get paid into by the
-    // update, should be empty.
-    let fee_account_balance_before = get_token_balance(
-        &mut context.banks_client,
-        &lido_accounts.stake_pool_accounts.pool_fee_account.pubkey(),
-    )
-    .await;
-    assert_eq!(fee_account_balance_before, 0);
 
     // TODO(#178): Restore the remainder of this test, once we implement validator
     // balance updates, and therefore fee distribution.
