@@ -23,6 +23,7 @@ use crate::config::PerformMaintenanceOpts;
 use crate::helpers::{get_solido, sign_and_send_transaction};
 use crate::stake_account::StakeBalance;
 use crate::{error::Error, Config};
+use std::time::SystemTime;
 
 type Result<T> = std::result::Result<T, Error>;
 
@@ -56,6 +57,20 @@ impl fmt::Display for MaintenanceOutput {
 
 /// A snapshot of on-chain accounts relevant to Solido.
 pub struct SolidoState {
+    /// The time at which we finished querying the Solido state.
+    ///
+    /// This is used in metrics to assign a timestamp to metrics that we proxy
+    /// from the state and then expose to Prometheus. Because the time at which
+    /// Prometheus polls is not the time at which the data was obtained, we track
+    /// the timestamp to avoid introducing a polling delay in the reported metrics.
+    ///
+    /// There is also `clock.unix_timestamp`, which is the stake-weighted median
+    /// timestamp of the slot that we queried, rather than the time at the machine
+    /// that performed the query. However, when you run `solana-test-validator`,
+    /// that timestamp goes out of date quickly, so use the actual observed time
+    /// instead.
+    pub produced_at: SystemTime,
+
     pub solido_program_id: Pubkey,
     pub solido_address: Pubkey,
     pub solido: Lido,
@@ -153,6 +168,7 @@ impl SolidoState {
         }
 
         Ok(SolidoState {
+            produced_at: SystemTime::now(),
             solido_program_id: solido_program_id.clone(),
             solido_address: solido_address.clone(),
             solido,
@@ -253,15 +269,13 @@ impl SolidoState {
     pub fn write_prometheus<W: io::Write>(&self, out: &mut W) -> io::Result<()> {
         use crate::prometheus::{write_metric, Metric, MetricFamily};
 
-        let at = self.clock.unix_timestamp;
-
         write_metric(
             out,
             &MetricFamily {
                 name: "solido_solana_block_height",
                 help: "Solana slot that we read the Solido details from.",
                 type_: "gauge",
-                metrics: vec![Metric::new(self.clock.slot).at(at)],
+                metrics: vec![Metric::new(self.clock.slot).at(self.produced_at)],
             },
         )?;
 
@@ -270,7 +284,7 @@ impl SolidoState {
         // is to use base units, so we set `.nano()` to report them in SOL.
         let mut balance_sol_metrics = vec![Metric::new(self.get_effective_reserve().0)
             .nano()
-            .at(at)
+            .at(self.produced_at)
             .with_label("status", "reserve".to_string())];
 
         for (validator, stake_accounts) in self
@@ -285,7 +299,7 @@ impl SolidoState {
             let metric = |amount: Lamports, status: &'static str| {
                 Metric::new(amount.0)
                     .nano()
-                    .at(at)
+                    .at(self.produced_at)
                     .with_label("status", status.to_string())
                     .with_label("vote_account", validator.pubkey.to_string())
             };

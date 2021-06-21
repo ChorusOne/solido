@@ -4,8 +4,7 @@
 
 use std::io;
 use std::io::Write;
-
-use solana_program::clock::UnixTimestamp;
+use std::time::SystemTime;
 
 pub struct MetricFamily<'a> {
     /// Name of the metric, e.g. `goats_teleported_total`.
@@ -32,10 +31,7 @@ pub struct Metric<'a> {
     pub nano: bool,
 
     /// Time at which this metric was observed, when proxying metrics.
-    ///
-    /// Measured in seconds since epoch excluding leap seconds. When set to `None`,
-    /// Prometheus attributes the metric to the scrape time.
-    pub timestamp: Option<UnixTimestamp>,
+    pub timestamp: Option<SystemTime>,
 }
 
 impl<'a> Metric<'a> {
@@ -59,7 +55,7 @@ impl<'a> Metric<'a> {
     }
 
     /// Set the timestamp.
-    pub fn at(mut self, at: UnixTimestamp) -> Metric<'a> {
+    pub fn at(mut self, at: SystemTime) -> Metric<'a> {
         self.timestamp = Some(at);
         self
     }
@@ -109,9 +105,14 @@ pub fn write_metric<W: Write>(out: &mut W, family: &MetricFamily) -> io::Result<
         }
 
         if let Some(timestamp) = metric.timestamp {
-            // The timestamp we have is in seconds since epoch, but Prometheus
-            // expects milliseconds since epoch.
-            write!(out, " {}000", timestamp)?;
+            let unix_time_ms = match timestamp.duration_since(SystemTime::UNIX_EPOCH) {
+                Ok(duration) => duration.as_millis(),
+                Err(..) => panic!("Found a metric dated before UNIX_EPOCH."),
+            };
+            // Timestamps in Prometheus are milliseconds since epoch,
+            // excluding leap seconds. (Which is what you get if your system
+            // clock tracks UTC.)
+            write!(out, " {}", unix_time_ms)?;
         }
 
         writeln!(out)?;
@@ -227,14 +228,17 @@ mod test {
 
     #[test]
     fn write_metric_with_timestamp() {
+        use std::time::{Duration, SystemTime};
+
         let mut out: Vec<u8> = Vec::new();
+        let t = SystemTime::UNIX_EPOCH + Duration::from_secs(77);
         write_metric(
             &mut out,
             &MetricFamily {
                 name: "goats_teleported_total",
                 help: "Number of goats teleported since launch.",
                 type_: "counter",
-                metrics: vec![Metric::new(10).at(77)],
+                metrics: vec![Metric::new(10).at(t)],
             },
         )
         .unwrap();
@@ -244,7 +248,7 @@ mod test {
             Ok(
                 "# HELP goats_teleported_total Number of goats teleported since launch.\n\
                  # TYPE goats_teleported_total counter\n\
-                 goats_teleported_total 10 77000\n\
+                 goats_teleported_total 10 77000\n\n\
                 "
             )
         )
@@ -259,7 +263,12 @@ mod test {
                 name: "goat_weight_kg",
                 help: "Weight of the goat in kilograms.",
                 type_: "gauge",
-                metrics: vec![Metric::new(67_533_128_017).nano()],
+                metrics: vec![
+                    // One greater than 1, with no need for zero padding.
+                    Metric::new(67_533_128_017).nano(),
+                    // One smaller than 1, with the need for zero padding.
+                    Metric::new(128_017).nano(),
+                ],
             },
         )
         .unwrap();
@@ -269,6 +278,7 @@ mod test {
             Ok("# HELP goat_weight_kg Weight of the goat in kilograms.\n\
                  # TYPE goat_weight_kg gauge\n\
                  goat_weight_kg 67.533128017\n\
+                 goat_weight_kg 0.000128017\n\n\
                 ")
         )
     }

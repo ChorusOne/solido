@@ -12,7 +12,7 @@ use spl_stake_pool::stake_program::Delegation;
 ///
 /// The sum of the four fields is equal to the SOL balance of the stake account.
 /// Note that a stake account can have a portion in `inactive` and a portion in
-/// `active`, with zero being activating.
+/// `active`, with zero being activating or deactivating.
 #[derive(Copy, Clone)]
 pub struct StakeBalance {
     pub inactive: Lamports,

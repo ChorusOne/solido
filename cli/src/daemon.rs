@@ -10,7 +10,7 @@ use std::io;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread::JoinHandle;
-use std::time::Duration;
+use std::time::{Duration};
 
 use rand::Rng;
 use tiny_http::{Request, Response, Server};
@@ -72,7 +72,11 @@ impl MaintenanceMetrics {
 
 /// Snapshot of metrics and Solido state.
 struct Snapshot {
+    /// Metrics about what the daemon has done so far.
     metrics: MaintenanceMetrics,
+
+    /// The current state of on-chain accounts, and the time at which we obtained
+    /// that data.
     solido: Option<SolidoState>,
 }
 
