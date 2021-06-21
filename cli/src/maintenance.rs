@@ -453,5 +453,11 @@ mod test {
             None,
             "Should not try to stake, this is not enough for a rent-exempt stake account.",
         );
+
+        // If we add a bit more, then we can fund two stake accounts, and that
+        // should be enough to trigger a StakeDeposit.
+        state.reserve_account.lamports += minimum_stake_account_balance.0 + 1;
+
+        assert!(state.try_stake_deposit().is_some());
     }
 }
