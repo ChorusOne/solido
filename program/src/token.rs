@@ -116,4 +116,3 @@ macro_rules! impl_token {
 
 impl_token!(Lamports, "SOL");
 impl_token!(StLamports, "stSOL");
-impl_token!(StakePoolTokenLamports, "SPT");

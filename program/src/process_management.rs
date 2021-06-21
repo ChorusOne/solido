@@ -1,19 +1,17 @@
-use borsh::{BorshDeserialize, BorshSerialize};
-use solana_program::{
-    account_info::AccountInfo, entrypoint::ProgramResult, msg, program_pack::Pack, pubkey::Pubkey,
-};
-use spl_stake_pool::{error::StakePoolError, state::StakePool};
+use borsh::BorshSerialize;
+use solana_program::{account_info::AccountInfo, entrypoint::ProgramResult, msg, pubkey::Pubkey};
 
+use crate::token::Lamports;
 use crate::{
     error::LidoError,
     instruction::{
         AddMaintainerInfo, AddValidatorInfo, ChangeFeeSpecInfo, ClaimValidatorFeeInfo,
         DistributeFeesInfo, RemoveMaintainerInfo, RemoveValidatorInfo,
     },
-    logic::{deserialize_lido, token_mint_to, transfer_to},
-    state::{distribute_fees, FeeDistribution, Lido, Validator},
-    token::{StLamports, StakePoolTokenLamports},
-    FEE_MANAGER_AUTHORITY, RESERVE_AUTHORITY,
+    logic::{deserialize_lido, token_mint_to},
+    state::{distribute_fees, FeeDistribution, Validator},
+    token::StLamports,
+    RESERVE_AUTHORITY,
 };
 
 pub fn process_change_fee_spec(
@@ -25,8 +23,8 @@ pub fn process_change_fee_spec(
     let mut lido = deserialize_lido(program_id, accounts.lido)?;
     lido.check_manager(accounts.manager)?;
 
-    Lido::check_valid_minter_program(&lido.st_sol_mint, accounts.treasury_account)?;
-    Lido::check_valid_minter_program(&lido.st_sol_mint, accounts.developer_account)?;
+    lido.check_is_st_sol_account(&accounts.treasury_account)?;
+    lido.check_is_st_sol_account(&accounts.developer_account)?;
 
     lido.fee_distribution = new_fee_distribution;
     lido.fee_recipients.treasury_account = *accounts.treasury_account.key;
@@ -40,19 +38,7 @@ pub fn process_add_validator(program_id: &Pubkey, accounts_raw: &[AccountInfo]) 
     let accounts = AddValidatorInfo::try_from_slice(accounts_raw)?;
     let mut lido = deserialize_lido(program_id, accounts.lido)?;
     lido.check_manager(accounts.manager)?;
-
-    let validator_fee_st_sol_account = spl_token::state::Account::unpack_from_slice(
-        &accounts.validator_fee_st_sol_account.data.borrow(),
-    )?;
-    if lido.st_sol_mint != validator_fee_st_sol_account.mint {
-        msg!("Validator fee account minter should be the same as Lido minter.");
-        msg!(
-            "Expected {}, got {}.",
-            lido.st_sol_mint,
-            validator_fee_st_sol_account.mint
-        );
-        return Err(LidoError::InvalidTokenMinter.into());
-    }
+    lido.check_is_st_sol_account(&accounts.validator_fee_st_sol_account)?;
 
     lido.validators.add(
         *accounts.validator_vote_account.key,
@@ -124,35 +110,14 @@ pub fn process_distribute_fees(program_id: &Pubkey, accounts_raw: &[AccountInfo]
     let accounts = DistributeFeesInfo::try_from_slice(accounts_raw)?;
     let mut lido = deserialize_lido(program_id, accounts.lido)?;
     lido.check_maintainer(accounts.maintainer)?;
-    lido.check_stake_pool(accounts.stake_pool)?;
-
-    let stake_pool = StakePool::try_from_slice(&accounts.stake_pool.data.borrow())?;
-    if &stake_pool.manager_fee_account != accounts.stake_pool_fee_account.key {
-        msg!("Invalid fee account from StakePool");
-        return Err(StakePoolError::InvalidFeeAccount.into());
-    }
-    let stake_pool_fee_account = spl_token::state::Account::unpack_from_slice(
-        &accounts.stake_pool_fee_account.data.borrow(),
-    )?;
 
     let token_shares = distribute_fees(
         &lido.fee_distribution,
         lido.validators.len() as u64,
-        StakePoolTokenLamports(stake_pool_fee_account.amount),
+        // TODO(#178): Compute the rewards, and then distribute fees.
+        Lamports(0),
     )
     .ok_or(LidoError::CalculationFailure)?;
-
-    // Send all tokens to Lido token holder
-    transfer_to(
-        accounts.lido.key,
-        accounts.spl_token.clone(),
-        accounts.stake_pool_fee_account.clone(),
-        accounts.token_holder_stake_pool.clone(),
-        accounts.stake_pool_manager_fee_account.clone(),
-        FEE_MANAGER_AUTHORITY,
-        lido.fee_manager_bump_seed,
-        stake_pool_fee_account.amount,
-    )?;
 
     // Mint tokens for treasury
     token_mint_to(

@@ -17,11 +17,10 @@ use lido::{
     token::Lamports,
     DEPOSIT_AUTHORITY,
 };
-use spl_stake_pool::stake_program::StakeState;
-use spl_stake_pool::state::{StakePool, ValidatorList};
 
-use crate::helpers::{get_solido, get_stake_pool, sign_and_send_transaction};
+use crate::helpers::{get_solido, sign_and_send_transaction};
 use crate::{error::Error, Config};
+use spl_stake_pool::stake_program::StakeState;
 
 type Result<T> = std::result::Result<T, Error>;
 
@@ -34,10 +33,6 @@ pub struct PerformMaintenanceOpts {
     /// Account that stores the data for this Solido instance.
     #[clap(long)]
     pub solido_address: Pubkey,
-
-    /// Stake pool program id
-    #[clap(long)]
-    pub stake_pool_program_id: Pubkey,
 }
 
 /// A brief description of the maintenance performed. Not relevant functionally,
@@ -73,14 +68,6 @@ pub struct SolidoState {
     pub solido_program_id: Pubkey,
     pub solido_address: Pubkey,
     pub solido: Lido,
-
-    pub stake_pool_program_id: Pubkey,
-    pub stake_pool: StakePool,
-
-    #[allow(dead_code)]
-    pub validator_list_account: Account,
-    #[allow(dead_code)]
-    pub validator_list: ValidatorList,
 
     /// For each validator, in the same order as in `solido.validators`, holds
     /// the stake balance of the derived stake accounts from the begin seed until
@@ -168,18 +155,12 @@ impl SolidoState {
         config: &Config,
         solido_program_id: &Pubkey,
         solido_address: &Pubkey,
-        stake_pool_program_id: &Pubkey,
     ) -> Result<SolidoState> {
         let rpc = &config.rpc;
 
         // TODO(#183): Transactions can execute in between those reads, leading to
         // a torn state. Make a function that re-reads everything with get_multiple_accounts.
         let solido = get_solido(rpc, solido_address)?;
-        let stake_pool = get_stake_pool(rpc, &solido.stake_pool_account)?;
-
-        let validator_list_account = rpc.get_account(&stake_pool.validator_list)?;
-        let validator_list =
-            try_from_slice_unchecked::<ValidatorList>(&validator_list_account.data)?;
 
         let reserve_address = solido.get_reserve_account(solido_program_id, solido_address)?;
         let reserve_account = rpc.get_account(&reserve_address)?;
@@ -209,10 +190,6 @@ impl SolidoState {
             solido_program_id: solido_program_id.clone(),
             solido_address: solido_address.clone(),
             solido,
-            stake_pool_program_id: stake_pool_program_id.clone(),
-            stake_pool,
-            validator_list_account,
-            validator_list,
             validator_stake_accounts,
             reserve_address,
             reserve_account,
@@ -337,11 +314,6 @@ pub fn run_perform_maintenance(
     config: &Config,
     opts: &PerformMaintenanceOpts,
 ) -> Result<Option<MaintenanceOutput>> {
-    let state = SolidoState::new(
-        config,
-        &opts.solido_program_id,
-        &opts.solido_address,
-        &opts.stake_pool_program_id,
-    )?;
+    let state = SolidoState::new(config, &opts.solido_program_id, &opts.solido_address)?;
     try_perform_maintenance(config, &state)
 }

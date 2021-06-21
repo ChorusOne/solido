@@ -10,7 +10,7 @@ use solana_program::{
     system_program,
     sysvar::{self, stake_history},
 };
-use spl_stake_pool::{instruction::StakePoolInstruction, stake_program, state::Fee};
+use spl_stake_pool::stake_program;
 
 use crate::{
     error::LidoError,
@@ -312,23 +312,11 @@ accounts_struct! {
             is_signer: false,
             is_writable: true,
         },
-        pub stake_pool {
-            is_signer: false,
-            is_writable: false,
-        },
         pub manager {
             is_signer: false,
             is_writable: false,
         },
         pub st_sol_mint {
-            is_signer: false,
-            is_writable: false,
-        },
-        pub stake_pool_token_holder {
-            is_signer: false,
-            is_writable: false,
-        },
-        pub fee_token {
             is_signer: false,
             is_writable: false,
         },
@@ -374,18 +362,6 @@ accounts_struct! {
         pub lido {
             is_signer: false,
             is_writable: true,
-        },
-        pub stake_pool {
-            is_signer: false,
-            is_writable: false,
-        },
-        pub stake_pool_token_holder {
-            is_signer: false,
-            is_writable: false,
-        },
-        pub manager {
-            is_signer: false,
-            is_writable: false,
         },
         pub user {
             is_signer: true,
@@ -466,77 +442,6 @@ pub fn stake_deposit(
     amount: Lamports,
 ) -> Result<Instruction, ProgramError> {
     let init_data = LidoInstruction::StakeDeposit { amount };
-    let data = init_data.try_to_vec()?;
-    Ok(Instruction {
-        program_id: *program_id,
-        accounts: accounts.to_vec(),
-        data,
-    })
-}
-
-accounts_struct! {
-    InitializeStakePoolWithAuthorityAccountsMeta,
-    InitializeStakePoolWithAuthorityAccountsInfo {
-        pub stake_pool {
-            is_signer: false,
-            is_writable: true,
-        },
-        pub manager {
-            is_signer: false,
-            is_writable: false,
-        },
-        pub staker {
-            is_signer: false,
-            is_writable: false,
-        },
-        pub validator_list {
-            is_signer: false,
-            is_writable: true,
-        },
-        pub reserve_stake {
-            is_signer: false,
-            is_writable: false,
-        },
-        pub pool_mint {
-            is_signer: false,
-            is_writable: false,
-        },
-        pub fee_account {
-            is_signer: false,
-            is_writable: false,
-        },
-        pub sysvar_clock {
-            is_signer: false,
-            is_writable: false,
-        },
-        pub sysvar_rent {
-            is_signer: false,
-            is_writable: false,
-        },
-        pub sysvar_token {
-            is_signer: false,
-            is_writable: false,
-        },
-        pub deposit_authority {
-            is_signer: false,
-            is_writable: false,
-        },
-        // const sysvar_clock = sysvar::clock::id(),
-        // const sysvar_rent = sysvar::rent::id(),
-        // const spl_token = spl_token::id(),
-    }
-}
-
-pub fn initialize_stake_pool_with_authority(
-    program_id: &Pubkey,
-    accounts: &InitializeStakePoolWithAuthorityAccountsMeta,
-    fee: Fee,
-    max_validators: u32,
-) -> Result<Instruction, ProgramError> {
-    let init_data = StakePoolInstruction::Initialize {
-        fee,
-        max_validators,
-    };
     let data = init_data.try_to_vec()?;
     Ok(Instruction {
         program_id: *program_id,
@@ -658,10 +563,6 @@ accounts_struct! {
             is_signer: true,
             is_writable: false,
         },
-        pub token_holder_stake_pool {
-            is_signer: false,
-            is_writable: true,
-        },
         pub st_sol_mint {
             is_signer: false,
             is_writable: true,
@@ -678,19 +579,6 @@ accounts_struct! {
             is_signer: false,
             is_writable: true,
         },
-        pub stake_pool {
-            is_signer: false,
-            is_writable: false,
-        },
-        pub stake_pool_fee_account {
-            is_signer: false,
-            is_writable: true,
-        },
-        pub stake_pool_manager_fee_account {
-            is_signer: false,
-            is_writable: false,
-        },
-
         const spl_token = spl_token::id(),
     }
 }

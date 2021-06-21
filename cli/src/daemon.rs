@@ -32,10 +32,6 @@ pub struct RunMaintainerOpts {
     #[clap(long)]
     pub solido_address: Pubkey,
 
-    /// Stake pool program id
-    #[clap(long)]
-    pub stake_pool_program_id: Pubkey,
-
     /// Listen address and port for the http server that serves a /metrics endpoint.
     #[clap(long, default_value = "0.0.0.0:8923")]
     pub listen: String,
@@ -130,12 +126,7 @@ fn run_main_loop(config: &Config, opts: &RunMaintainerOpts, snapshot_mutex: &Sna
     loop {
         let mut do_wait = false;
 
-        let state_result = SolidoState::new(
-            config,
-            &opts.solido_program_id,
-            &opts.solido_address,
-            &opts.stake_pool_program_id,
-        );
+        let state_result = SolidoState::new(config, &opts.solido_program_id, &opts.solido_address);
         match &state_result {
             &Err(ref err) => {
                 println!("Failed to obtain Solido state.");

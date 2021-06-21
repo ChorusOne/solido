@@ -3,8 +3,7 @@
 mod helpers;
 
 use helpers::{
-    get_account, program_test, simple_add_validator_to_pool, stakepool_account::ValidatorAccounts,
-    LidoAccounts,
+    get_account, program_test, simple_add_validator_to_pool, LidoAccounts, ValidatorAccounts,
 };
 use lido::state::Lido;
 use lido::token::Lamports;
