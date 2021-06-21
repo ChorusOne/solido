@@ -17,7 +17,7 @@ use crate::{
         process_remove_validator,
     },
     state::{
-        FeeDistribution, FeeRecipients, Maintainers, Validator, Validators, LIDO_CONSTANT_SIZE,
+        FeeDistribution, FeeRecipients, Maintainers, Validator, Validators, LIDO_CONSTANT_SIZE,LIDO_VERSION
     },
     token::{Lamports, StLamports},
     DEPOSIT_AUTHORITY, RESERVE_AUTHORITY, VALIDATOR_STAKE_ACCOUNT,
@@ -40,6 +40,7 @@ use {
 
 /// Program state handler.
 pub fn process_initialize(
+    version: u8,
     program_id: &Pubkey,
     fee_distribution: FeeDistribution,
     max_validators: u32,
@@ -81,6 +82,7 @@ pub fn process_initialize(
         program_id,
     );
 
+    lido.lido_version = version;
     lido.maintainers = Maintainers::new(max_maintainers);
     lido.manager = *accounts.manager.key;
     lido.st_sol_mint = *accounts.st_sol_mint.key;
@@ -342,6 +344,7 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
             max_validators,
             max_maintainers,
         } => process_initialize(
+            LIDO_VERSION,
             program_id,
             fee_distribution,
             max_validators,

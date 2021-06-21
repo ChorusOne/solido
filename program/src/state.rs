@@ -17,8 +17,10 @@ use crate::util::serialize_b58;
 use crate::RESERVE_AUTHORITY;
 use crate::VALIDATOR_STAKE_ACCOUNT;
 
-/// Constant size of header size = 2 public keys, 1 u64, 2 u8
-pub const LIDO_CONSTANT_HEADER_SIZE: usize = 2 * 32 + 8 + 2;
+
+pub const LIDO_VERSION: u8 = 0;
+/// Constant size of header size = 1 version,2 public keys, 1 u64, 2 u8
+pub const LIDO_CONSTANT_HEADER_SIZE: usize = 1 + 2 * 32 + 8 + 2;
 /// Constant size of fee struct: 2 public keys + 3 u32
 pub const LIDO_CONSTANT_FEE_SIZE: usize = 2 * 32 + 3 * 4;
 /// Constant size of Lido
@@ -32,6 +34,8 @@ pub type Maintainers = AccountSet;
     Clone, Debug, Default, BorshDeserialize, BorshSerialize, BorshSchema, Eq, PartialEq, Serialize,
 )]
 pub struct Lido {
+    /// Version number for the Lido
+    pub lido_version: u8,
     /// Manager of the Lido program, able to execute administrative functions
     #[serde(serialize_with = "serialize_b58")]
     pub manager: Pubkey,
@@ -395,6 +399,7 @@ mod test_lido {
             .unwrap();
         let maintainers = Maintainers::new(1);
         let lido = Lido {
+            lido_version: 0,
             manager: Pubkey::new_unique(),
             st_sol_mint: Pubkey::new_unique(),
             st_sol_total_shares: StLamports(1000),
@@ -543,5 +548,24 @@ mod test_lido {
             get_instance_packed_len(&Validators::new_fill_default(n_validators as u32)).unwrap();
 
         assert_eq!(Validators::maximum_entries(size) as u64, n_validators);
+    }
+
+    #[test]
+    fn test_version_serialise() {
+        use solana_sdk::borsh::try_from_slice_unchecked;
+
+        for i in 0..=255 {
+            let lido = Lido {
+                lido_version: i,
+                ..Lido::default()
+            };
+            let mut res: Vec<u8> = Vec::new();
+            BorshSerialize::serialize(&lido, &mut res).unwrap();
+
+            assert_eq!(res[0], i);
+
+            let lido_recovered = try_from_slice_unchecked(&res[..]).unwrap();
+            assert_eq!(lido, lido_recovered);
+        }
     }
 }
