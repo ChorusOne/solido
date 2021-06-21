@@ -1,0 +1,6 @@
+FROM rust:slim-buster@sha256:bbf94ba964b3d9a47600d8f5e2275fc461df300300216dc9f173e42e46300f74 as base
+
+# Install base tools
+RUN apt -y update \
+    && apt -y install libssl-dev libudev-dev pkg-config zlib1g-dev llvm clang make curl python3 gcc build-essential
+
