@@ -178,9 +178,11 @@ fn get_validator_stake_accounts(
             .delegation()
             .expect("Encountered undelegated stake account, this should not happen.");
 
-        // TODO(#182): Confirm that `delegation.voter_pubkey == validator.vote_account`. Unfortunately we
-        // do not store the vote account in there at the moment. Once we switch to using the vote
-        // account as key for the dictionary, we could check that here.
+        assert_eq!(
+            delegation.voter_pubkey,
+            validator.pubkey,
+            "Expected the stake account for validator to delegate to that validator."
+        );
 
         let target_epoch = clock.epoch;
         let history = Some(stake_history);
@@ -337,9 +339,6 @@ impl SolidoState {
                 lido: self.solido_address,
                 maintainer: self.maintainer_address,
                 reserve: self.reserve_address,
-                validator_stake_pool_stake_account: validator.pubkey,
-                // TODO(ruuda): This is wrong for now, but will be removed as
-                // part of #190.
                 validator_vote_account: validator.pubkey,
                 stake_account_end,
                 deposit_authority,
@@ -349,7 +348,6 @@ impl SolidoState {
         .expect("Failed to construct StakeDeposit instruction.");
 
         let task = MaintenanceOutput::StakeDeposit {
-            // TODO(ruuda): Also here.
             validator_vote_account: validator.pubkey,
             amount: amount_to_deposit,
         };
@@ -405,7 +403,6 @@ impl SolidoState {
                     return Ok(Some((
                         instr,
                         MaintenanceOutput::DepositActiveStateToPool {
-                            // TODO(#185): This is not actually the vote account.
                             validator_vote_account: validator.pubkey,
                             amount: stake_balance.total(),
                         },

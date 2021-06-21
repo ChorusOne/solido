@@ -15,9 +15,7 @@ use solana_sdk::{
     transaction::Transaction,
     transport::TransportError,
 };
-use stakepool_account::StakePoolAccounts;
-
-use self::stakepool_account::{create_mint, transfer, ValidatorStakeAccount};
+use stakepool_account::{create_mint, transfer, StakePoolAccounts, ValidatorAccounts};
 
 pub mod stakepool_account;
 pub const MAX_VALIDATORS: u32 = 10_000;
@@ -47,7 +45,7 @@ pub fn program_test() -> ProgramTest {
 pub struct LidoAccounts {
     pub manager: Keypair,
     pub lido: Keypair,
-    pub mint_program: Keypair,
+    pub st_sol_mint: Keypair,
     pub stake_pool_token_holder: Keypair,
     pub maintainer: Keypair,
 
@@ -67,7 +65,7 @@ impl LidoAccounts {
     pub fn new() -> Self {
         let manager = Keypair::new();
         let lido = Keypair::new();
-        let mint_program = Keypair::new();
+        let st_sol_mint = Keypair::new();
         let stake_pool_token_holder = Keypair::new();
         let maintainer = Keypair::new();
 
@@ -105,7 +103,7 @@ impl LidoAccounts {
         Self {
             manager,
             lido,
-            mint_program,
+            st_sol_mint,
             stake_pool_token_holder,
             maintainer,
             treasury_account,
@@ -142,7 +140,7 @@ impl LidoAccounts {
             banks_client,
             payer,
             recent_blockhash,
-            &self.mint_program,
+            &self.st_sol_mint,
             &self.reserve_authority,
         )
         .await?;
@@ -163,7 +161,7 @@ impl LidoAccounts {
             payer,
             recent_blockhash,
             &self.treasury_account,
-            &self.mint_program.pubkey(),
+            &self.st_sol_mint.pubkey(),
             &self.treasury_account.pubkey(),
         )
         .await
@@ -173,7 +171,7 @@ impl LidoAccounts {
             payer,
             recent_blockhash,
             &self.developer_account,
-            &self.mint_program.pubkey(),
+            &self.st_sol_mint.pubkey(),
             &self.developer_account.pubkey(),
         )
         .await
@@ -206,7 +204,7 @@ impl LidoAccounts {
                         lido: self.lido.pubkey(),
                         stake_pool: self.stake_pool_accounts.stake_pool.pubkey(),
                         manager: self.manager.pubkey(),
-                        mint_program: self.mint_program.pubkey(),
+                        st_sol_mint: self.st_sol_mint.pubkey(),
                         stake_pool_token_holder: self.stake_pool_token_holder.pubkey(),
                         fee_token: self.stake_pool_accounts.pool_fee_account.pubkey(),
                         treasury_account: self.treasury_account.pubkey(),
@@ -248,7 +246,7 @@ impl LidoAccounts {
             payer,
             recent_blockhash,
             &recipient,
-            &self.mint_program.pubkey(),
+            &self.st_sol_mint.pubkey(),
             &user.pubkey(),
         )
         .await
@@ -273,7 +271,7 @@ impl LidoAccounts {
                     manager: self.manager.pubkey(),
                     user: user.pubkey(),
                     recipient: recipient.pubkey(),
-                    mint_program: self.mint_program.pubkey(),
+                    st_sol_mint: self.st_sol_mint.pubkey(),
                     reserve_account: self.reserve_authority,
                 },
                 deposit_amount,
@@ -291,7 +289,7 @@ impl LidoAccounts {
         banks_client: &mut BanksClient,
         payer: &Keypair,
         recent_blockhash: &Hash,
-        validator: &ValidatorStakeAccount,
+        validator_vote_account: &Pubkey,
         delegate_amount: Lamports,
     ) -> Pubkey {
         let lido_account = get_account(banks_client, &self.lido.pubkey()).await;
@@ -299,13 +297,13 @@ impl LidoAccounts {
 
         let validator_entry = lido
             .validators
-            .get(&validator.stake_pool_stake_account)
-            .expect("Trying to stake with a non-mebmer validator.");
+            .get(validator_vote_account)
+            .expect("Trying to stake with a non-member validator.");
 
         let (stake_account, _) = Validator::find_stake_account_address(
             &id(),
             &self.lido.pubkey(),
-            &validator.stake_pool_stake_account,
+            validator_vote_account,
             validator_entry.entry.stake_accounts_seed_end,
         );
 
@@ -315,8 +313,7 @@ impl LidoAccounts {
                 &instruction::StakeDepositAccountsMeta {
                     lido: self.lido.pubkey(),
                     maintainer: self.maintainer.pubkey(),
-                    validator_stake_pool_stake_account: validator.stake_pool_stake_account,
-                    validator_vote_account: validator.vote.pubkey(),
+                    validator_vote_account: *validator_vote_account,
                     reserve: self.reserve_authority,
                     stake_account_end: stake_account,
                     deposit_authority: self.deposit_authority,
@@ -332,90 +329,22 @@ impl LidoAccounts {
         stake_account
     }
 
-    pub async fn deposit_active_stake_to_pool(
-        &self,
-        banks_client: &mut BanksClient,
-        payer: &Keypair,
-        recent_blockhash: &Hash,
-        validator: &ValidatorStakeAccount,
-        stake_account: &Pubkey,
-    ) {
-        let mut transaction = Transaction::new_with_payer(
-            &[instruction::deposit_active_stake_to_pool(
-                &id(),
-                &instruction::DepositActiveStakeToPoolAccountsMeta {
-                    lido: self.lido.pubkey(),
-                    maintainer: self.maintainer.pubkey(),
-                    stake_account_begin: *stake_account,
-                    deposit_authority: self.deposit_authority,
-                    stake_pool_token_holder: self.stake_pool_token_holder.pubkey(),
-                    stake_pool_program: spl_stake_pool::id(),
-                    stake_pool: self.stake_pool_accounts.stake_pool.pubkey(),
-                    stake_pool_validator_list: self.stake_pool_accounts.validator_list.pubkey(),
-                    stake_pool_withdraw_authority: self.stake_pool_accounts.withdraw_authority,
-                    validator_stake_pool_stake_account: validator.stake_pool_stake_account,
-                    stake_pool_mint: self.stake_pool_accounts.pool_mint.pubkey(),
-                },
-            )
-            .unwrap()],
-            Some(&payer.pubkey()),
-        );
-        transaction.sign(&[payer, &self.maintainer], *recent_blockhash);
-        banks_client.process_transaction(transaction).await.unwrap();
-    }
-
-    async fn create_validator_stake_account(
-        &self,
-        banks_client: &mut BanksClient,
-        payer: &Keypair,
-        recent_blockhash: &Hash,
-        staker: &Pubkey,
-        stake_account: &Pubkey,
-        validator: &Pubkey,
-    ) {
-        let transaction = Transaction::new_signed_with_payer(
-            &[lido::instruction::create_validator_stake_account(
-                &id(),
-                &lido::instruction::CreateValidatorStakeAccountMeta {
-                    lido: self.lido.pubkey(),
-                    manager: self.manager.pubkey(),
-                    stake_pool_program: spl_stake_pool::id(),
-                    stake_pool: self.stake_pool_accounts.stake_pool.pubkey(),
-                    staker: *staker,
-                    funder: payer.pubkey(),
-                    stake_pool_stake_account: *stake_account,
-                    validator_vote_account: *validator,
-                },
-            )
-            .unwrap()],
-            Some(&payer.pubkey()),
-            &[payer, &self.manager],
-            *recent_blockhash,
-        );
-        banks_client.process_transaction(transaction).await.unwrap();
-    }
-
     pub async fn add_validator(
         &self,
         banks_client: &mut BanksClient,
         payer: &Keypair,
         recent_blockhash: &Hash,
-        stake: &Pubkey,
-        validator_token_account: &Pubkey,
-    ) -> Option<TransportError> {
+        validator_vote_account: &Pubkey,
+        validator_fee_st_sol_account: &Pubkey,
+    ) -> Result<(), TransportError> {
         let transaction = Transaction::new_signed_with_payer(
             &[lido::instruction::add_validator(
                 &id(),
                 &lido::instruction::AddValidatorMeta {
                     lido: self.lido.pubkey(),
                     manager: self.manager.pubkey(),
-                    stake_pool_manager_authority: self.stake_pool_authority,
-                    stake_pool_program: spl_stake_pool::id(),
-                    stake_pool: self.stake_pool_accounts.stake_pool.pubkey(),
-                    stake_pool_withdraw_authority: self.stake_pool_accounts.withdraw_authority,
-                    stake_pool_validator_list: self.stake_pool_accounts.validator_list.pubkey(),
-                    stake_account: *stake,
-                    validator_token_account: *validator_token_account,
+                    validator_vote_account: *validator_vote_account,
+                    validator_fee_st_sol_account: *validator_fee_st_sol_account,
                 },
             )
             .unwrap()],
@@ -423,7 +352,7 @@ impl LidoAccounts {
             &[payer, &self.manager],
             *recent_blockhash,
         );
-        banks_client.process_transaction(transaction).await.err()
+        banks_client.process_transaction(transaction).await
     }
 
     pub async fn remove_validator(
@@ -431,24 +360,15 @@ impl LidoAccounts {
         banks_client: &mut BanksClient,
         payer: &Keypair,
         recent_blockhash: &Hash,
-        new_authority: &Pubkey,
-        validator_stake: &Pubkey,
-        transient_stake: &Pubkey,
-    ) -> Option<TransportError> {
+        validator_vote_account: &Pubkey,
+    ) -> Result<(), TransportError> {
         let transaction = Transaction::new_signed_with_payer(
             &[lido::instruction::remove_validator(
                 &id(),
                 &lido::instruction::RemoveValidatorMeta {
                     lido: self.lido.pubkey(),
                     manager: self.manager.pubkey(),
-                    stake_pool_manager_authority: self.stake_pool_authority,
-                    stake_pool_program: spl_stake_pool::id(),
-                    stake_pool: self.stake_pool_accounts.stake_pool.pubkey(),
-                    stake_pool_withdraw_authority: self.stake_pool_accounts.withdraw_authority,
-                    new_withdraw_authority: *new_authority,
-                    stake_pool_validator_list: self.stake_pool_accounts.validator_list.pubkey(),
-                    stake_account_to_remove: *validator_stake,
-                    transient_stake: *transient_stake,
+                    validator_vote_account_to_remove: *validator_vote_account,
                 },
             )
             .unwrap()],
@@ -456,7 +376,7 @@ impl LidoAccounts {
             &[payer, &self.manager],
             *recent_blockhash,
         );
-        banks_client.process_transaction(transaction).await.err()
+        banks_client.process_transaction(transaction).await
     }
 
     pub async fn distribute_fees(
@@ -464,7 +384,7 @@ impl LidoAccounts {
         banks_client: &mut BanksClient,
         payer: &Keypair,
         recent_blockhash: &Hash,
-    ) -> Option<TransportError> {
+    ) -> Result<(), TransportError> {
         let transaction = Transaction::new_signed_with_payer(
             &[lido::instruction::distribute_fees(
                 &id(),
@@ -472,7 +392,7 @@ impl LidoAccounts {
                     lido: self.lido.pubkey(),
                     maintainer: self.maintainer.pubkey(),
                     token_holder_stake_pool: self.stake_pool_token_holder.pubkey(),
-                    mint_program: self.mint_program.pubkey(),
+                    st_sol_mint: self.st_sol_mint.pubkey(),
                     reserve_authority: self.reserve_authority,
                     treasury_account: self.treasury_account.pubkey(),
                     developer_account: self.developer_account.pubkey(),
@@ -486,7 +406,7 @@ impl LidoAccounts {
             &[payer, &self.maintainer],
             *recent_blockhash,
         );
-        banks_client.process_transaction(transaction).await.err()
+        banks_client.process_transaction(transaction).await
     }
 
     pub async fn claim_validator_fees(
@@ -494,16 +414,16 @@ impl LidoAccounts {
         banks_client: &mut BanksClient,
         payer: &Keypair,
         recent_blockhash: &Hash,
-        validator_token: &Pubkey,
+        validator_fee_st_sol_account: &Pubkey,
     ) -> Result<(), TransportError> {
         let transaction = Transaction::new_signed_with_payer(
             &[lido::instruction::claim_validator_fees(
                 &id(),
                 &lido::instruction::ClaimValidatorFeeMeta {
                     lido: self.lido.pubkey(),
-                    mint_program: self.mint_program.pubkey(),
+                    st_sol_mint: self.st_sol_mint.pubkey(),
                     reserve_authority: self.reserve_authority,
-                    validator_token: *validator_token,
+                    validator_fee_st_sol_account: *validator_fee_st_sol_account,
                 },
             )
             .unwrap()],
@@ -513,6 +433,7 @@ impl LidoAccounts {
         );
         banks_client.process_transaction(transaction).await
     }
+
     pub async fn increase_validator_stake(
         &self,
         banks_client: &mut BanksClient,
@@ -586,7 +507,7 @@ pub async fn create_token_account(
     payer: &Keypair,
     recent_blockhash: &Hash,
     account: &Keypair,
-    pool_mint: &Pubkey,
+    mint: &Pubkey,
     manager: &Pubkey,
 ) -> Result<(), TransportError> {
     let rent = banks_client.get_rent().await.unwrap();
@@ -604,7 +525,7 @@ pub async fn create_token_account(
             spl_token::instruction::initialize_account(
                 &spl_token::id(),
                 &account.pubkey(),
-                pool_mint,
+                mint,
                 manager,
             )
             .unwrap(),
@@ -620,42 +541,27 @@ pub async fn simple_add_validator_to_pool(
     payer: &Keypair,
     recent_blockhash: &Hash,
     lido_accounts: &LidoAccounts,
-) -> ValidatorStakeAccount {
-    let validator_stake =
-        ValidatorStakeAccount::new(&lido_accounts.stake_pool_accounts.stake_pool.pubkey());
-    validator_stake
-        .create_and_delegate(
-            banks_client,
-            &payer,
-            &recent_blockhash,
-            lido_accounts,
-            &lido_accounts.stake_pool_accounts.staker,
-        )
-        .await;
-
-    create_token_account(
+) -> ValidatorAccounts {
+    let accounts = ValidatorAccounts::new(
         banks_client,
         payer,
+        &lido_accounts.st_sol_mint.pubkey(),
         recent_blockhash,
-        &validator_stake.validator_token_account,
-        &lido_accounts.mint_program.pubkey(),
-        &validator_stake.validator_token_account.pubkey(),
     )
-    .await
-    .unwrap();
+    .await;
 
-    let error = lido_accounts
+    lido_accounts
         .add_validator(
             banks_client,
             &payer,
             &recent_blockhash,
-            &validator_stake.stake_pool_stake_account,
-            &validator_stake.validator_token_account.pubkey(),
+            &accounts.vote_account.pubkey(),
+            &accounts.fee_account.pubkey(),
         )
-        .await;
-    assert!(error.is_none());
+        .await
+        .unwrap();
 
-    validator_stake
+    accounts
 }
 
 pub async fn simple_add_maintainer(

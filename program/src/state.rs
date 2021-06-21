@@ -35,17 +35,22 @@ pub struct Lido {
     /// Stake pool account associated with Lido
     #[serde(serialize_with = "serialize_b58")]
     pub stake_pool_account: Pubkey,
+
     /// Manager of the Lido program, able to execute administrative functions
     #[serde(serialize_with = "serialize_b58")]
     pub manager: Pubkey,
-    /// Program in charge of minting Lido tokens
+
+    /// The SPL Token mint address for stSOL.
     #[serde(serialize_with = "serialize_b58")]
-    pub st_sol_mint_program: Pubkey,
+    pub st_sol_mint: Pubkey,
+
     /// Total Lido tokens in circulation
     pub st_sol_total_shares: StLamports,
+
     /// Holder of tokens in Lido's underlying stake pool
     #[serde(serialize_with = "serialize_b58")]
     pub stake_pool_token_holder: Pubkey,
+
     /// Token program id associated with Lido's token
     #[serde(serialize_with = "serialize_b58")]
     pub token_program_id: Pubkey,
@@ -60,9 +65,7 @@ pub struct Lido {
     pub fee_distribution: FeeDistribution,
     pub fee_recipients: FeeRecipients,
 
-    /// The set of enrolled validators.
-    ///
-    /// This map/dictionary is indexed by the validator's vote account.
+    /// Map of enrolled validators, maps their vote account to `Validator` details.
     pub validators: Validators,
 
     /// The set of maintainers.
@@ -124,7 +127,7 @@ impl Lido {
             return Err(LidoError::InvalidStakePool.into());
         }
 
-        if &self.st_sol_mint_program != st_sol_mint_key {
+        if &self.st_sol_mint != st_sol_mint_key {
             return Err(LidoError::InvalidTokenMinter.into());
         }
         Ok(())
@@ -273,12 +276,12 @@ impl Validator {
     pub fn find_stake_account_address(
         program_id: &Pubkey,
         solido_account: &Pubkey,
-        validator_stake_pool_stake_account: &Pubkey,
+        validator_vote_account: &Pubkey,
         seed: u64,
     ) -> (Pubkey, u8) {
         let seeds = [
             &solido_account.to_bytes(),
-            &validator_stake_pool_stake_account.to_bytes(),
+            &validator_vote_account.to_bytes(),
             &VALIDATOR_STAKE_ACCOUNT[..],
             &seed.to_le_bytes()[..],
         ];
@@ -420,7 +423,7 @@ mod test_lido {
         let lido = Lido {
             stake_pool_account: Pubkey::new_unique(),
             manager: Pubkey::new_unique(),
-            st_sol_mint_program: Pubkey::new_unique(),
+            st_sol_mint: Pubkey::new_unique(),
             st_sol_total_shares: StLamports(1000),
             stake_pool_token_holder: Pubkey::new_unique(),
             token_program_id: Pubkey::new_unique(),
@@ -519,7 +522,7 @@ mod test_lido {
         let err = lido.check_lido_for_deposit(
             &other_owner.pubkey(),
             &lido.stake_pool_account,
-            &lido.st_sol_mint_program,
+            &lido.st_sol_mint,
         );
 
         let expect: ProgramError = LidoError::InvalidOwner.into();
@@ -534,7 +537,7 @@ mod test_lido {
         let err = lido.check_lido_for_deposit(
             &lido.manager,
             &other_stakepool.pubkey(),
-            &lido.st_sol_mint_program,
+            &lido.st_sol_mint,
         );
 
         let expect: ProgramError = LidoError::InvalidStakePool.into();
@@ -542,7 +545,7 @@ mod test_lido {
     }
 
     #[test]
-    fn test_lido_for_deposit_wrong_mint_program() {
+    fn test_lido_for_deposit_wrong_mint() {
         let lido = Lido::default();
         let other_mint = Keypair::new();
 

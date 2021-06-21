@@ -68,8 +68,8 @@ pub fn process_initialize(
     }
 
     // Check if fee structure is valid
-    Lido::check_valid_minter_program(&accounts.mint_program.key, accounts.treasury_account)?;
-    Lido::check_valid_minter_program(&accounts.mint_program.key, accounts.developer_account)?;
+    Lido::check_valid_minter_program(&accounts.st_sol_mint.key, accounts.treasury_account)?;
+    Lido::check_valid_minter_program(&accounts.st_sol_mint.key, accounts.developer_account)?;
 
     // Bytes required for maintainers
     let bytes_for_maintainers = Maintainers::required_bytes(max_maintainers as usize);
@@ -149,7 +149,7 @@ pub fn process_initialize(
     lido.maintainers = Maintainers::new(max_maintainers);
     lido.stake_pool_account = *accounts.stake_pool.key;
     lido.manager = *accounts.manager.key;
-    lido.st_sol_mint_program = *accounts.mint_program.key;
+    lido.st_sol_mint = *accounts.st_sol_mint.key;
     lido.stake_pool_token_holder = *accounts.stake_pool_token_holder.key;
     lido.token_program_id = *accounts.spl_token.key;
     lido.sol_reserve_authority_bump_seed = reserve_bump_seed;
@@ -180,7 +180,7 @@ pub fn process_deposit(
     lido.check_lido_for_deposit(
         accounts.manager.key,
         accounts.stake_pool.key,
-        accounts.mint_program.key,
+        accounts.st_sol_mint.key,
     )?;
     lido.check_token_program_id(accounts.spl_token.key)?;
     lido.check_reserve_authority(program_id, accounts.lido.key, accounts.reserve_account)?;
@@ -217,7 +217,7 @@ pub fn process_deposit(
     token_mint_to(
         accounts.lido.key,
         accounts.spl_token.clone(),
-        accounts.mint_program.clone(),
+        accounts.st_sol_mint.clone(),
         accounts.recipient.clone(),
         accounts.reserve_account.clone(),
         RESERVE_AUTHORITY,
@@ -260,7 +260,8 @@ pub fn process_stake_deposit(
 
     let validator = lido
         .validators
-        .get_mut(&accounts.validator_stake_pool_stake_account.key)?;
+        .get_mut(&accounts.validator_vote_account.key)?;
+
     // TODO(#174) Merge into preceding stake account if possible
     let (stake_addr, stake_addr_bump_seed) = Validator::find_stake_account_address(
         program_id,
@@ -290,7 +291,7 @@ pub fn process_stake_deposit(
     let reserve_account_bump_seed = [lido.sol_reserve_authority_bump_seed];
     let stake_account_seed = validator.entry.stake_accounts_seed_end.to_le_bytes();
     let stake_account_bump_seed = [stake_addr_bump_seed];
-    let validator_address_bytes = accounts.validator_stake_pool_stake_account.key.to_bytes();
+    let validator_vote_account_bytes = accounts.validator_vote_account.key.to_bytes();
 
     let reserve_account_seeds = &[
         &solido_address_bytes,
@@ -299,7 +300,7 @@ pub fn process_stake_deposit(
     ][..];
     let stake_account_seeds = &[
         &solido_address_bytes,
-        &validator_address_bytes,
+        &validator_vote_account_bytes,
         VALIDATOR_STAKE_ACCOUNT,
         &stake_account_seed[..],
         &stake_account_bump_seed[..],

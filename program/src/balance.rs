@@ -60,7 +60,12 @@ pub fn get_target_balance(
     assert!(remainder.0 < num_active_validators);
 
     // Distribute the remainder among the first few validators, give them one
-    // Lamport each.
+    // Lamport each. This does mean that the validators early in the list are
+    // in a more beneficial position because their stake target is one Lamport
+    // higher, but to put that number into perspective, the transaction fee per
+    // signature is 10k Lamports at the time of writing. Also, there is a minimum
+    // amount we can stake, so in practice, validators will never be as close to
+    // their target that the one Lamport matters anyway.
     for target in target_balance.iter_mut() {
         if remainder == Lamports(0) {
             break;

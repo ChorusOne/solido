@@ -59,7 +59,7 @@ impl<T: Default> AccountMap<T> {
     }
 
     pub fn add(&mut self, address: Pubkey, value: T) -> ProgramResult {
-        if self.entries.len() == self.maximum_entries as usize {
+        if self.len() == self.maximum_entries as usize {
             return Err(LidoError::MaximumNumberOfAccountsExceeded.into());
         }
         if !self.entries.iter().any(|pe| pe.pubkey == address) {

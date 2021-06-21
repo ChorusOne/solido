@@ -30,8 +30,6 @@ use crate::{
     Config, OutputMode,
 };
 
-const STAKE_POOL_WITHDRAW_AUTHORITY_ID: &[u8] = b"withdraw";
-
 pub fn send_transaction(
     config: &Config,
     transaction: Transaction,
@@ -324,7 +322,7 @@ pub fn command_create_solido(
         &lido::instruction::InitializeAccountsMeta {
             lido: lido_keypair.pubkey(),
             stake_pool: stake_pool.stake_pool_address.0,
-            mint_program: st_sol_mint_keypair.pubkey(),
+            st_sol_mint: st_sol_mint_keypair.pubkey(),
             stake_pool_token_holder: stake_pool_token_holder_keypair.pubkey(),
             fee_token: stake_pool.fee_address.0,
             manager,
@@ -360,15 +358,13 @@ pub struct AddValidatorOpts {
     #[clap(long, value_name = "address")]
     pub solido_address: Pubkey,
 
-    /// Stake pool program id.
-    #[clap(long, value_name = "address")]
-    stake_pool_program_id: Pubkey,
     /// Address of the validator vote account.
     #[clap(long, value_name = "address")]
-    pub validator_vote: Pubkey,
-    /// Validator stSol token account.
+    pub validator_vote_account: Pubkey,
+
+    /// Validator stSOL token account to deposit fees into.
     #[clap(long, value_name = "address")]
-    pub validator_rewards_address: Pubkey,
+    pub validator_fee_account: Pubkey,
 
     /// Multisig instance.
     #[clap(long, value_name = "address")]
@@ -380,30 +376,6 @@ pub fn command_add_validator(
     config: Config,
     opts: AddValidatorOpts,
 ) -> Result<ProposeInstructionOutput, Error> {
-    let solido = get_solido(&config.rpc, &opts.solido_address)?;
-    let stake_pool = get_stake_pool(&config.rpc, &solido.stake_pool_account)?;
-
-    let (stake_pool_authority, _) = lido::find_authority_program_address(
-        &opts.solido_program_id,
-        &opts.solido_address,
-        STAKE_POOL_AUTHORITY,
-    );
-
-    let stake_pool_withdraw_authority = Pubkey::create_program_address(
-        &[
-            &solido.stake_pool_account.to_bytes()[..],
-            STAKE_POOL_WITHDRAW_AUTHORITY_ID,
-            &[stake_pool.withdraw_bump_seed],
-        ],
-        &opts.stake_pool_program_id,
-    )?;
-
-    let (stake_account, _) = find_stake_program_address(
-        &opts.stake_pool_program_id,
-        &opts.validator_vote,
-        &solido.stake_pool_account,
-    );
-
     let (multisig_address, _) =
         get_multisig_program_address(&config.multisig_program_id, &opts.multisig_address);
 
@@ -412,13 +384,8 @@ pub fn command_add_validator(
         &lido::instruction::AddValidatorMeta {
             lido: opts.solido_address,
             manager: multisig_address,
-            stake_pool_manager_authority: stake_pool_authority,
-            stake_pool_program: opts.stake_pool_program_id,
-            stake_pool: solido.stake_pool_account,
-            stake_pool_withdraw_authority,
-            stake_pool_validator_list: stake_pool.validator_list,
-            stake_account,
-            validator_token_account: opts.validator_rewards_address,
+            validator_vote_account: opts.validator_vote_account,
+            validator_fee_st_sol_account: opts.validator_fee_account,
         },
     )?;
     Ok(propose_instruction(
@@ -582,7 +549,7 @@ impl fmt::Display for ShowSolidoOutput {
         writeln!(
             f,
             "Minter:                      {}",
-            self.solido.st_sol_mint_program
+            self.solido.st_sol_mint
         )?;
         writeln!(
             f,
@@ -649,7 +616,7 @@ impl fmt::Display for ShowSolidoOutput {
         writeln!(
             f,
             "Validators: {} in use out of {} that the instance can support",
-            self.solido.validators.entries.len(),
+            self.solido.validators.len(),
             self.solido.validators.maximum_entries
         )?;
         for pe in self.solido.validators.entries.iter() {
@@ -662,7 +629,7 @@ impl fmt::Display for ShowSolidoOutput {
         writeln!(
             f,
             "Maintainers: {} in use out of {} that the instance can support",
-            self.solido.maintainers.entries.len(),
+            self.solido.maintainers.len(),
             self.solido.maintainers.maximum_entries
         )?;
         for pe in self.solido.maintainers.entries.iter() {
