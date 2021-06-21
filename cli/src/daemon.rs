@@ -10,7 +10,7 @@ use std::io;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread::JoinHandle;
-use std::time::{Duration};
+use std::time::Duration;
 
 use rand::Rng;
 use tiny_http::{Request, Response, Server};

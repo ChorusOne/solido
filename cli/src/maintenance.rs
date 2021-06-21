@@ -9,6 +9,7 @@ use solana_program::{
     clock::Clock, pubkey::Pubkey, rent::Rent, stake_history::StakeHistory, sysvar,
 };
 use solana_sdk::{account::Account, borsh::try_from_slice_unchecked, instruction::Instruction};
+use spl_token::state::Mint;
 
 use lido::account_map::PubkeyAndEntry;
 use lido::util::serialize_b58;
@@ -23,6 +24,8 @@ use crate::config::PerformMaintenanceOpts;
 use crate::helpers::{get_solido, sign_and_send_transaction};
 use crate::stake_account::StakeBalance;
 use crate::{error::Error, Config};
+use lido::token::StLamports;
+use solana_program::program_pack::Pack;
 use std::time::SystemTime;
 
 type Result<T> = std::result::Result<T, Error>;
@@ -79,6 +82,9 @@ pub struct SolidoState {
     /// the stake balance of the derived stake accounts from the begin seed until
     /// end seed.
     pub validator_stake_accounts: Vec<Vec<(Pubkey, StakeBalance)>>,
+
+    /// SPL token mint for stSOL, to know the current supply.
+    pub st_sol_mint: Mint,
 
     pub reserve_address: Pubkey,
     pub reserve_account: Account,
@@ -146,6 +152,9 @@ impl SolidoState {
         let reserve_address = solido.get_reserve_account(solido_program_id, solido_address)?;
         let reserve_account = rpc.get_account(&reserve_address)?;
 
+        let st_sol_mint_account = rpc.get_account(&solido.st_sol_mint)?;
+        let st_sol_mint = Mint::unpack(&st_sol_mint_account.data)?;
+
         let rent_account = rpc.get_account(&sysvar::rent::ID)?;
         let rent: Rent = bincode::deserialize(&rent_account.data)?;
 
@@ -175,6 +184,7 @@ impl SolidoState {
             validator_stake_accounts,
             reserve_address,
             reserve_account,
+            st_sol_mint,
             rent,
             clock,
             // The entity executing the maintenance transactions, is the maintainer.
@@ -287,6 +297,10 @@ impl SolidoState {
             .at(self.produced_at)
             .with_label("status", "reserve".to_string())];
 
+        // Track if there are any unclaimed (and therefore unminted) validation
+        // fees.
+        let mut unclaimed_fees = StLamports(0);
+
         for (validator, stake_accounts) in self
             .solido
             .validators
@@ -307,6 +321,9 @@ impl SolidoState {
             balance_sol_metrics.push(metric(stake_balance.activating, "activating"));
             balance_sol_metrics.push(metric(stake_balance.active, "active"));
             balance_sol_metrics.push(metric(stake_balance.deactivating, "deactivating"));
+
+            unclaimed_fees = (unclaimed_fees + validator.entry.fee_credit)
+                .expect("There shouldn't be so many fees to cause stSOL overflow.");
         }
 
         write_metric(
@@ -319,14 +336,17 @@ impl SolidoState {
             },
         )?;
 
+        let st_sol_supply = (StLamports(self.st_sol_mint.supply) + unclaimed_fees)
+            .expect("stSOL supply no longer fits in u64.");
         write_metric(
             out,
             &MetricFamily {
-                name: "solido_st_sol_supply_st_sol",
+                name: "solido_token_supply_st_sol",
                 help: "Amount of stSOL that exists.",
                 type_: "gauge",
                 metrics: vec![
-                    // TODO(ruuda): Add stSOL mint to accounts to scan.
+                    // The supply is measured in stSOL lamports (1e-9 stSOL), so set .nano().
+                    Metric::new(st_sol_supply.0).nano().at(self.produced_at),
                 ],
             },
         )?;
