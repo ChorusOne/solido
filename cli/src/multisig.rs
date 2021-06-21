@@ -856,14 +856,14 @@ pub fn propose_instruction(
 
 fn propose_upgrade(config: &Config, opts: ProposeUpgradeOpts) -> ProposeInstructionOutput {
     let (program_derived_address, _nonce) =
-        get_multisig_program_address(&config.multisig_program_id, &opts.multisig_address());
+        get_multisig_program_address(&config.multisig_program_id, opts.multisig_address());
 
     let upgrade_instruction = bpf_loader_upgradeable::upgrade(
-        &opts.program_address(),
-        &opts.buffer_address(),
+        opts.program_address(),
+        opts.buffer_address(),
         // The upgrade authority is the multisig-derived program address.
         &program_derived_address,
-        &opts.spill_address(),
+        opts.spill_address(),
     );
 
     propose_instruction(config, *opts.multisig_address(), upgrade_instruction)

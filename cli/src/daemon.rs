@@ -102,7 +102,7 @@ fn run_main_loop(config: &Config, opts: &RunMaintainerOpts, snapshot_mutex: &Sna
         let mut do_wait = false;
 
         let state_result =
-            SolidoState::new(config, &opts.solido_program_id(), &opts.solido_address());
+            SolidoState::new(config, opts.solido_program_id(), opts.solido_address());
         match &state_result {
             &Err(ref err) => {
                 println!("Failed to obtain Solido state.");
