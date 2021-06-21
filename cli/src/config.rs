@@ -244,12 +244,15 @@ cli_opt_struct! {
         // Account that stores the data for this Solido instance.
         #[clap(long, value_name = "address")]
         solido_address: Pubkey,
+
         // Address of the validator vote account.
         #[clap(long, value_name = "address")]
         validator_vote_account: Pubkey,
+
         // Validator stSol token account.
         #[clap(long, value_name = "address")]
         validator_fee_account: Pubkey,
+
         // Multisig instance.
         #[clap(long, value_name = "address")]
         multisig_address: Pubkey,
@@ -268,25 +271,6 @@ cli_opt_struct! {
         // Maintainer to add or remove.
         #[clap(long, value_name = "address")]
         maintainer_address: Pubkey,
-
-        // Multisig instance.
-        #[clap(long, value_name = "address")]
-        multisig_address: Pubkey,
-    }
-}
-
-cli_opt_struct! {
-    CreateValidatorStakeAccountOpts {
-        // Address of the Solido program.
-        #[clap(long, value_name = "address")]
-        solido_program_id: Pubkey,
-        // Account that stores the data for this Solido instance.
-        #[clap(long, value_name = "address")]
-        solido_address: Pubkey,
-
-        // Address of the validator vote account.
-        #[clap(long, value_name = "address")]
-        validator_vote: Pubkey,
 
         // Multisig instance.
         #[clap(long, value_name = "address")]
@@ -438,7 +422,7 @@ cli_opt_struct! {
 
         // Account that stores the data for this Solido instance.
         #[clap(long)]
-         solido_address: Pubkey,
+        solido_address: Pubkey,
 
         // Listen address and port for the http server that serves a /metrics endpoint.
         #[clap(long)]
