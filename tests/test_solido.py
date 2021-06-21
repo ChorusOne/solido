@@ -19,8 +19,8 @@ from util import (
     solana_program_deploy,
     create_spl_token,
     create_vote_account,
-    get_solido,
-    get_multisig,
+    solido,
+    multisig,
     solana,
     approve_and_execute,
     TestAccount,
@@ -59,12 +59,11 @@ print('\nUploading Multisig program ...')
 multisig_program_id = solana_program_deploy(get_solido_program_path() + '/multisig.so')
 print(f'> Multisig program id is {multisig_program_id}.')
 
-multisig = get_multisig(multisig_program_id)
-solido = get_solido(multisig_program_id)
-
 print('\nCreating new multisig ...')
 multisig_data = multisig(
     'create-multisig',
+    '--multisig-program-id',
+    multisig_program_id,
     '--threshold',
     '2',
     '--owner',
@@ -77,6 +76,8 @@ print(f'> Created instance at {multisig_instance}.')
 print('\nCreating Solido instance ...')
 result = solido(
     'create-solido',
+    '--multisig-program-id',
+    multisig_program_id,
     '--solido-program-id',
     solido_program_id,
     '--fee-numerator',
@@ -148,6 +149,8 @@ print(f'> Validator stSol token account: {validator_fee_account}')
 print('> Call function to add validator')
 transaction_result = solido(
     'add-validator',
+    '--multisig-program-id',
+    multisig_program_id,
     '--solido-program-id',
     solido_program_id,
     '--solido-address',
@@ -163,6 +166,8 @@ transaction_result = solido(
 transaction_address = transaction_result['transaction_address']
 transaction_status = multisig(
     'show-transaction',
+    '--multisig-program-id',
+    multisig_program_id,
     '--solido-program-id',
     solido_program_id,
     '--transaction-address',
@@ -176,10 +181,16 @@ assert (
     == 1
 )
 approve_and_execute(
-    multisig, multisig_instance, transaction_address, test_addrs[0].keypair_path
+    multisig,
+    multisig_program_id,
+    multisig_instance,
+    transaction_address,
+    test_addrs[0].keypair_path,
 )
 transaction_status = multisig(
     'show-transaction',
+    '--multisig-program-id',
+    multisig_program_id,
     '--solido-program-id',
     solido_program_id,
     '--transaction-address',
@@ -220,6 +231,8 @@ print(f'> Adding maintainer {maintainer}')
 
 transaction_result = solido(
     'add-maintainer',
+    '--multisig-program-id',
+    multisig_program_id,
     '--solido-program-id',
     solido_program_id,
     '--solido-address',
@@ -232,7 +245,11 @@ transaction_result = solido(
 )
 transaction_address = transaction_result['transaction_address']
 approve_and_execute(
-    multisig, multisig_instance, transaction_address, test_addrs[1].keypair_path
+    multisig,
+    multisig_program_id,
+    multisig_instance,
+    transaction_address,
+    test_addrs[1].keypair_path,
 )
 
 solido_instance = solido(
@@ -250,6 +267,8 @@ assert solido_instance['solido']['maintainers']['entries'][0] == {
 print(f'> Removing maintainer {maintainer}')
 transaction_result = solido(
     'remove-maintainer',
+    '--multisig-program-id',
+    multisig_program_id,
     '--solido-program-id',
     solido_program_id,
     '--solido-address',
@@ -262,7 +281,11 @@ transaction_result = solido(
 )
 transaction_address = transaction_result['transaction_address']
 approve_and_execute(
-    multisig, multisig_instance, transaction_address, test_addrs[0].keypair_path
+    multisig,
+    multisig_program_id,
+    multisig_instance,
+    transaction_address,
+    test_addrs[0].keypair_path,
 )
 solido_instance = solido(
     'show-solido',
@@ -277,6 +300,8 @@ assert len(solido_instance['solido']['maintainers']['entries']) == 0
 print(f'> Adding maintainer {maintainer} again')
 transaction_result = solido(
     'add-maintainer',
+    '--multisig-program-id',
+    multisig_program_id,
     '--solido-program-id',
     solido_program_id,
     '--solido-address',
@@ -289,7 +314,11 @@ transaction_result = solido(
 )
 transaction_address = transaction_result['transaction_address']
 approve_and_execute(
-    multisig, multisig_instance, transaction_address, test_addrs[0].keypair_path
+    multisig,
+    multisig_program_id,
+    multisig_instance,
+    transaction_address,
+    test_addrs[0].keypair_path,
 )
 
 

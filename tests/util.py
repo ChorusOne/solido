@@ -64,35 +64,30 @@ def get_network() -> str:
         return network
 
 
-def get_solido(multisig_program_id: str) -> Callable[..., Any]:
-    def solido(*args: str, keypair_path: Optional[str] = None) -> Any:
-        """
-        Run 'solido' against network, return its parsed json output.
-        """
-        output = run(
-            get_solido_path(),
-            '--cluster',
-            get_network(),
-            '--output',
-            'json',
-            '--multisig-program-id',
-            multisig_program_id,
-            *([] if keypair_path is None else ['--keypair-path', keypair_path]),
-            *args,
-        )
-        if keypair_path is not None and keypair_path.startswith('usb://ledger'):
-            output = '\n'.join(output.split('\n')[2:])
-        if output == '':
-            return {}
-        else:
-            try:
-                return json.loads(output)
-            except json.JSONDecodeError:
-                print('Failed to decode output as json, output was:')
-                print(output)
-                raise
-
-    return solido
+def solido(*args: str, keypair_path: Optional[str] = None) -> Any:
+    """
+    Run 'solido' against network, return its parsed json output.
+    """
+    output = run(
+        get_solido_path(),
+        '--cluster',
+        get_network(),
+        '--output',
+        'json',
+        *([] if keypair_path is None else ['--keypair-path', keypair_path]),
+        *args,
+    )
+    if keypair_path is not None and keypair_path.startswith('usb://ledger'):
+        output = '\n'.join(output.split('\n')[2:])
+    if output == '':
+        return {}
+    else:
+        try:
+            return json.loads(output)
+        except json.JSONDecodeError:
+            print('Failed to decode output as json, output was:')
+            print(output)
+            raise
 
 
 def solana(*args: str) -> str:
@@ -215,47 +210,39 @@ def create_test_accounts(*, num_accounts: int) -> List[TestAccount]:
 
 
 # Multisig utils
-def get_multisig(multisig_program_id: str) -> Callable[..., Any]:
+def multisig(*args: str, keypair_path: Optional[str] = None) -> Any:
     """
-    Returns a function to perform multisig transactions with the provided program argument
+    Run 'solido multisig' against network, return its parsed json output.
     """
-
-    def multisig(*args: str, keypair_path: Optional[str] = None) -> Any:
-        """
-        Run 'solido multisig' against network, return its parsed json output.
-        """
-        output = run(
-            get_solido_path(),
-            '--cluster',
-            get_network(),
-            '--output',
-            'json',
-            *([] if keypair_path is None else ['--keypair-path', keypair_path]),
-            '--multisig-program-id',
-            multisig_program_id,
-            'multisig',
-            *args,
-        )
-        # Ledger prints two lines with "Waiting for your approval on Ledger...
-        # ✅ Approved
-        # These lines should be ignored
-        if keypair_path is not None and keypair_path.startswith('usb://ledger'):
-            output = '\n'.join(output.split('\n')[2:])
-        if output == '':
-            return {}
-        else:
-            try:
-                return json.loads(output)
-            except json.JSONDecodeError:
-                print('Failed to decode output as json, output was:')
-                print(output)
-                raise
-
-    return multisig
+    output = run(
+        get_solido_path(),
+        '--cluster',
+        get_network(),
+        '--output',
+        'json',
+        *([] if keypair_path is None else ['--keypair-path', keypair_path]),
+        'multisig',
+        *args,
+    )
+    # Ledger prints two lines with "Waiting for your approval on Ledger...
+    # ✅ Approved
+    # These lines should be ignored
+    if keypair_path is not None and keypair_path.startswith('usb://ledger'):
+        output = '\n'.join(output.split('\n')[2:])
+    if output == '':
+        return {}
+    else:
+        try:
+            return json.loads(output)
+        except json.JSONDecodeError:
+            print('Failed to decode output as json, output was:')
+            print(output)
+            raise
 
 
 def approve_and_execute(
     multisig_func: Callable[..., Any],
+    multisig_program_id: str,
     multisig_instance: str,
     transaction_address: str,
     keypair_path: str,
@@ -265,6 +252,8 @@ def approve_and_execute(
     """
     multisig_func(
         'approve',
+        '--multisig-program-id',
+        multisig_program_id,
         '--multisig-address',
         multisig_instance,
         '--transaction-address',
@@ -273,6 +262,8 @@ def approve_and_execute(
     )
     multisig_func(
         'execute-transaction',
+        '--multisig-program-id',
+        multisig_program_id,
         '--multisig-address',
         multisig_instance,
         '--transaction-address',

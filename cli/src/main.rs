@@ -10,7 +10,6 @@ use solana_remote_wallet::remote_keypair::generate_remote_keypair;
 use solana_remote_wallet::remote_wallet::maybe_wallet_manager;
 use solana_sdk::commitment_config::CommitmentConfig;
 use solana_sdk::derivation_path::DerivationPath;
-use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::read_keypair_file;
 use solana_sdk::signer::Signer;
 
@@ -38,10 +37,6 @@ struct Opts {
     /// The keypair to sign and pay with. [default: ~/.config/solana/id.json]
     #[clap(long)]
     keypair_path: Option<PathBuf>,
-
-    /// Address of the Multisig program.
-    #[clap(long)]
-    multisig_program_id: Option<Pubkey>,
 
     /// URL of cluster to connect to (e.g., https://api.devnet.solana.com for solana devnet)
     #[clap(long, default_value = "http://127.0.0.1:8899")]
@@ -116,8 +111,6 @@ FEES:
 
 /// Determines which network to connect to, and who pays the fees.
 pub struct Config<'a> {
-    /// Address of the Multisig program.
-    multisig_program_id: Pubkey,
     /// Program instance, so we can call RPC methods.
     rpc: RpcClient,
     /// Reference to a signer, can be a keypair or ledger device.
@@ -151,17 +144,12 @@ fn main() {
     // Read from config file
     let config_file = opts.config.map(read_config);
     let config_file = config_file.as_ref();
-    let multisig_program_id = opts
-        .multisig_program_id
-        .unwrap_or_else(|| get_option_from_config("multisig_program_id", config_file).expect("--multisig-program-id must be provided in arguments, or multisig_program_id in configuration file."));
-
     solana_logger::setup_with_default("solana=info");
 
     let payer_keypair_path = opts.keypair_path.unwrap_or_else(get_default_keypair_path);
     let signer = &*get_signer(payer_keypair_path);
 
     let config = Config {
-        multisig_program_id,
         rpc: RpcClient::new_with_commitment(opts.cluster, CommitmentConfig::confirmed()),
         signer,
         output_mode: opts.output_mode,

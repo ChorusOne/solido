@@ -125,7 +125,7 @@ pub fn command_create_solido(
     );
 
     let (manager, _nonce) =
-        get_multisig_program_address(&config.multisig_program_id, opts.multisig_address());
+        get_multisig_program_address(opts.multisig_program_id(), opts.multisig_address());
 
     let lido_size = Lido::calculate_size(*opts.max_validators(), *opts.max_maintainers());
     let lido_account_balance = config
@@ -224,7 +224,7 @@ pub fn command_add_validator(
     opts: AddValidatorOpts,
 ) -> Result<ProposeInstructionOutput, Error> {
     let (multisig_address, _) =
-        get_multisig_program_address(&config.multisig_program_id, opts.multisig_address());
+        get_multisig_program_address(opts.multisig_program_id(), opts.multisig_address());
 
     let instruction = lido::instruction::add_validator(
         opts.solido_program_id(),
@@ -237,6 +237,7 @@ pub fn command_add_validator(
     )?;
     Ok(propose_instruction(
         &config,
+        opts.multisig_program_id(),
         *opts.multisig_address(),
         instruction,
     ))
@@ -248,7 +249,7 @@ pub fn command_add_maintainer(
     opts: AddRemoveMaintainerOpts,
 ) -> Result<ProposeInstructionOutput, Error> {
     let (multisig_address, _) =
-        get_multisig_program_address(&config.multisig_program_id, opts.multisig_address());
+        get_multisig_program_address(opts.multisig_program_id(), opts.multisig_address());
     let instruction = lido::instruction::add_maintainer(
         opts.solido_program_id(),
         &lido::instruction::AddMaintainerMeta {
@@ -259,6 +260,7 @@ pub fn command_add_maintainer(
     )?;
     Ok(propose_instruction(
         &config,
+        opts.multisig_program_id(),
         *opts.multisig_address(),
         instruction,
     ))
@@ -270,7 +272,7 @@ pub fn command_remove_maintainer(
     opts: AddRemoveMaintainerOpts,
 ) -> Result<ProposeInstructionOutput, Error> {
     let (multisig_address, _) =
-        get_multisig_program_address(&config.multisig_program_id, opts.multisig_address());
+        get_multisig_program_address(opts.multisig_program_id(), opts.multisig_address());
     let instruction = lido::instruction::remove_maintainer(
         opts.solido_program_id(),
         &lido::instruction::RemoveMaintainerMeta {
@@ -281,6 +283,7 @@ pub fn command_remove_maintainer(
     )?;
     Ok(propose_instruction(
         &config,
+        opts.multisig_program_id(),
         *opts.multisig_address(),
         instruction,
     ))

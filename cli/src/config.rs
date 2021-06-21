@@ -129,7 +129,8 @@ macro_rules! cli_opt_struct {
     }
 }
 
-/// Type to represent a vector of `Pubkey`
+/// Type to represent a vector of `Pubkey`.
+// TODO(#218) Accept an array in the json config file.
 #[derive(Debug, Clone)]
 pub struct PubkeyVec(pub Vec<Pubkey>);
 /// Constructs a `PubkeyVec` from a string by splitting the string by ',' and
@@ -152,8 +153,7 @@ pub struct ConfigFile {
 }
 
 pub fn read_config(config_path: PathBuf) -> ConfigFile {
-    // let file = File::open(config_path).expect("Failed to open file.");
-    let file_content = std::fs::read(config_path).expect("Failed to open file.");
+    let file_content = std::fs::read(config_path).expect("Failed to open config file.");
     let values: Value = serde_json::from_slice(&file_content).expect("Error while reading config.");
     ConfigFile { values }
 }
@@ -224,6 +224,10 @@ cli_opt_struct! {
         #[doc="Used to compute Solido's manager. Multisig instance."]
         #[clap(long, value_name = "address")]
         multisig_address: Pubkey,
+
+        #[doc="Address of the Multisig program."]
+        #[clap(long)]
+        multisig_program_id: Pubkey,
     }
 }
 
@@ -247,6 +251,10 @@ cli_opt_struct! {
         #[doc="Multisig instance."]
         #[clap(long, value_name = "address")]
         multisig_address: Pubkey,
+
+        #[doc="Address of the Multisig program."]
+        #[clap(long)]
+        multisig_program_id: Pubkey,
     }
 }
 
@@ -266,6 +274,10 @@ cli_opt_struct! {
         #[doc="Multisig instance."]
         #[clap(long, value_name = "address")]
         multisig_address: Pubkey,
+
+        #[doc="Address of the Multisig program."]
+        #[clap(long)]
+        multisig_program_id: Pubkey,
     }
 }
 
@@ -303,6 +315,10 @@ cli_opt_struct! {
         #[doc="The public keys of the multisig owners, who can sign transactions."]
         #[clap(long = "owner")]
         owners: PubkeyVec,
+
+        #[doc="Address of the Multisig program."]
+        #[clap(long)]
+        multisig_program_id: Pubkey,
     }
 }
 
@@ -339,6 +355,10 @@ ProposeUpgradeOpts {
         #[doc="Account that will receive leftover funds from the buffer account."]
         #[clap(long, value_name = "address")]
         spill_address: Pubkey,
+
+        #[doc="Address of the Multisig program."]
+        #[clap(long)]
+        multisig_program_id: Pubkey,
     }
 }
 
@@ -347,6 +367,10 @@ ShowMultisigOpts {
         #[doc="The multisig account to display."]
         #[clap(long, value_name = "address")]
         multisig_address: Pubkey,
+
+        #[doc="Address of the Multisig program."]
+        #[clap(long)]
+        multisig_program_id: Pubkey,
     }
 }
 
@@ -359,6 +383,10 @@ cli_opt_struct! {
         #[doc="The transaction to display."]
         #[clap(long, value_name = "address")]
         solido_program_id: Pubkey,
+
+        #[doc="Address of the Multisig program."]
+        #[clap(long)]
+        multisig_program_id: Pubkey,
     }
 }
 
@@ -372,6 +400,10 @@ cli_opt_struct! {
         #[doc="The transaction to approve."]
         #[clap(long, value_name = "address")]
         transaction_address: Pubkey,
+
+        #[doc="Address of the Multisig program."]
+        #[clap(long)]
+        multisig_program_id: Pubkey,
     }
 }
 
@@ -385,6 +417,10 @@ cli_opt_struct! {
         #[doc="The transaction to execute."]
         #[clap(long, value_name = "address")]
         transaction_address: Pubkey,
+
+        #[doc="Address of the Multisig program."]
+        #[clap(long)]
+        multisig_program_id: Pubkey,
     }
 }
 
@@ -403,6 +439,10 @@ cli_opt_struct! {
         #[doc="The public keys of the multisig owners, who can sign transactions."]
         #[clap(long = "owner")]
         owners: PubkeyVec,
+
+        #[doc="Address of the Multisig program."]
+        #[clap(long)]
+        multisig_program_id: Pubkey,
     }
 }
 
@@ -416,7 +456,7 @@ cli_opt_struct! {
         #[clap(long)]
         solido_address: Pubkey,
 
-        #[doc="Listen address and port for the http server that serves a /metrics endpoint."]
+        #[doc="Listen address and port for the http server that serves a /metrics endpoint. Defaults to 0.0.0:8923"]
         #[clap(long)]
         listen: String => "0.0.0.0:8923".to_owned(),
 
@@ -424,7 +464,7 @@ cli_opt_struct! {
         // of a few minutes should be plenty fast for a production deployment, but
         // for testing you can reduce this value to make the daemon more responsive,
         // to eliminate some waiting time.
-        #[doc="Maximum time to wait after there was no maintenance to perform, before checking again."]
+        #[doc="Maximum time to wait in seconds after there was no maintenance to perform, before checking again. Defaults to 120s"]
         #[clap(long)]
         max_poll_interval_seconds: u64 => 120,
     }
@@ -435,6 +475,7 @@ impl From<&ProposeChangeMultisigOpts> for CreateMultisigOpts {
         CreateMultisigOpts {
             threshold: opts.threshold,
             owners: opts.owners.clone(),
+            multisig_program_id: opts.multisig_program_id,
         }
     }
 }
