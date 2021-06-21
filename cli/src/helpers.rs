@@ -119,7 +119,7 @@ pub fn command_create_solido(
     let lido_keypair = Keypair::new();
 
     let (reserve_authority, _) = lido::find_authority_program_address(
-        &opts.solido_program_id(),
+        opts.solido_program_id(),
         &lido_keypair.pubkey(),
         RESERVE_AUTHORITY,
     );

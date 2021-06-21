@@ -150,9 +150,10 @@ fn main() {
 
     // Read from config file
     let config_file = opts.config.map(read_config);
+    let config_file = config_file.as_ref();
     let multisig_program_id = opts
         .multisig_program_id
-        .unwrap_or_else(|| get_option_from_config("multisig_program_id", &config_file).expect("--multisig-program-id must be provided in arguments, or multisig_program_id in configuration file."));
+        .unwrap_or_else(|| get_option_from_config("multisig_program_id", config_file).expect("--multisig-program-id must be provided in arguments, or multisig_program_id in configuration file."));
 
     solana_logger::setup_with_default("solana=info");
 
@@ -167,7 +168,7 @@ fn main() {
     };
     let output_mode = opts.output_mode;
 
-    merge_with_config(&mut opts.subcommand, &config_file);
+    merge_with_config(&mut opts.subcommand, config_file);
     match opts.subcommand {
         SubCommand::CreateSolido(cmd_opts) => {
             let output = command_create_solido(config, cmd_opts)
@@ -216,7 +217,7 @@ fn main() {
     }
 }
 
-fn merge_with_config(subcommand: &mut SubCommand, config_file: &Option<ConfigFile>) {
+fn merge_with_config(subcommand: &mut SubCommand, config_file: Option<&ConfigFile>) {
     match subcommand {
         SubCommand::CreateSolido(opts) => opts.merge_with_config(config_file),
         SubCommand::AddValidator(opts) => opts.merge_with_config(config_file),

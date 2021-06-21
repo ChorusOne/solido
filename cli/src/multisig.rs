@@ -47,7 +47,7 @@ pub struct MultisigOpts {
 }
 
 impl MultisigOpts {
-    pub fn merge_with_config(&mut self, config_file: &Option<ConfigFile>) {
+    pub fn merge_with_config(&mut self, config_file: Option<&ConfigFile>) {
         match &mut self.subcommand {
             SubCommand::CreateMultisig(opts) => opts.merge_with_config(config_file),
             SubCommand::ShowMultisig(opts) => opts.merge_with_config(config_file),
