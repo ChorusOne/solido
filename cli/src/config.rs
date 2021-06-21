@@ -99,19 +99,16 @@ macro_rules! cli_opt_struct {
             pub fn merge_with_config(&mut self, config_file: Option<&ConfigFile>) {
                 let mut failed = false;
                 $(
+                    let from_cli = self.$field.take();
                     let str_field = stringify!($field);
-                    // Sets the field with the argument or the config field.
-                    self.$field = self.$field.take().or(get_option_from_config(str_field, config_file));
+                    let from_config = get_option_from_config(str_field, config_file);
+
                     #[allow(unused_mut, unused_assignments)]
-                    let mut is_optional = false;
-                    $(
-                        // If a default value was passed and the field is None, sets the default value.
-                        self.$field = self.$field.take().or(Some($default));
-                        is_optional = true;
-                    )?
-                    // If field is still none, prints an error, this will fail in the end of the function.
-                    // If the value has a default, let it be None
-                    if !is_optional && self.$field.is_none() {
+                    let mut default = None;
+                    $(default = Some($default);)?
+                    // Sets the field with the argument or the config field.
+                    self.$field = from_cli.or(from_config).or(default);
+                    if self.$field.is_none() {
                         failed = true;
                         eprintln!("Expected --{} to be provided on the command line, or set in config file with key {}.", str_field.replace("_", "-"), str_field);
                     }
