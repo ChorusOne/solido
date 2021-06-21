@@ -616,7 +616,7 @@ impl fmt::Display for ShowSolidoOutput {
         writeln!(
             f,
             "Validators: {} in use out of {} that the instance can support",
-            self.solido.validators.entries.len(),
+            self.solido.validators.len(),
             self.solido.validators.maximum_entries
         )?;
         for pe in self.solido.validators.entries.iter() {
@@ -629,7 +629,7 @@ impl fmt::Display for ShowSolidoOutput {
         writeln!(
             f,
             "Maintainers: {} in use out of {} that the instance can support",
-            self.solido.maintainers.entries.len(),
+            self.solido.maintainers.len(),
             self.solido.maintainers.maximum_entries
         )?;
         for pe in self.solido.maintainers.entries.iter() {

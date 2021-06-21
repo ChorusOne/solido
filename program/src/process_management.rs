@@ -206,7 +206,7 @@ pub fn process_distribute_fees(program_id: &Pubkey, accounts_raw: &[AccountInfo]
 
     let token_shares = distribute_fees(
         &lido.fee_distribution,
-        lido.validators.entries.len() as u64,
+        lido.validators.len() as u64,
         StakePoolTokenLamports(stake_pool_fee_account.amount),
     )
     .ok_or(LidoError::CalculationFailure)?;

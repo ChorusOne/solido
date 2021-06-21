@@ -28,7 +28,7 @@ async fn test_successful_remove_validator() {
 
     let lido = get_account(&mut banks_client, &lido_accounts.lido.pubkey()).await;
     let lido = try_from_slice_unchecked::<Lido>(lido.data.as_slice()).unwrap();
-    assert_eq!(lido.validators.entries.len(), 1);
+    assert_eq!(lido.validators.len(), 1);
 
     let new_authority = Pubkey::new_unique();
     lido_accounts
@@ -44,7 +44,7 @@ async fn test_successful_remove_validator() {
 
     let lido = get_account(&mut banks_client, &lido_accounts.lido.pubkey()).await;
     let lido = try_from_slice_unchecked::<Lido>(lido.data.as_slice()).unwrap();
-    assert_eq!(lido.validators.entries.len(), 0);
+    assert_eq!(lido.validators.len(), 0);
 }
 
 // TODO(#179) Add Test for Remove Validator with Unclaimed Rewards
