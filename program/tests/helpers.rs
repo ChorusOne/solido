@@ -34,13 +34,7 @@ pub async fn get_account(banks_client: &mut BanksClient, pubkey: &Pubkey) -> Acc
 }
 
 pub fn program_test() -> ProgramTest {
-    let mut program = ProgramTest::new("lido", id(), processor!(processor::process));
-    program.add_program(
-        "spl_stake_pool",
-        spl_stake_pool::id(),
-        processor!(spl_stake_pool::processor::Processor::process),
-    );
-    program
+    ProgramTest::new("lido", id(), processor!(processor::process))
 }
 
 pub struct ValidatorAccounts {

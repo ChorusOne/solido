@@ -347,7 +347,6 @@ mod test_lido {
     use super::*;
     use solana_program::program_error::ProgramError;
     use solana_sdk::signature::{Keypair, Signer};
-    use spl_stake_pool::borsh::get_instance_packed_len;
 
     #[test]
     fn test_account_map_required_bytes_relates_to_maximum_entries() {
