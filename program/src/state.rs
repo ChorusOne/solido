@@ -1,6 +1,6 @@
 //! State transition types
 
-use serde::{Serialize, Serializer};
+use serde::Serialize;
 use std::ops::Sub;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
@@ -10,26 +10,24 @@ use solana_program::{
     program_pack::Pack, pubkey::Pubkey,
 };
 
+use crate::account_map::{AccountMap, AccountSet, PubkeyAndEntry};
 use crate::error::LidoError;
-use crate::token::{Lamports, Rational, StLamports, StakePoolTokenLamports};
+use crate::token::{Lamports, Rational, StLamports};
+use crate::util::serialize_b58;
 use crate::RESERVE_AUTHORITY;
 use crate::VALIDATOR_STAKE_ACCOUNT;
 
+
 pub const LIDO_VERSION: u8 = 0;
-/// Constant size of header size = 1 version, 5 public keys, 1 u64, 4 u8
-pub const LIDO_CONSTANT_HEADER_SIZE: usize = 1 + 5 * 32 + 8 + 4;
+/// Constant size of header size = 1 version,2 public keys, 1 u64, 2 u8
+pub const LIDO_CONSTANT_HEADER_SIZE: usize = 1 + 2 * 32 + 8 + 2;
 /// Constant size of fee struct: 2 public keys + 3 u32
 pub const LIDO_CONSTANT_FEE_SIZE: usize = 2 * 32 + 3 * 4;
 /// Constant size of Lido
 pub const LIDO_CONSTANT_SIZE: usize = LIDO_CONSTANT_HEADER_SIZE + LIDO_CONSTANT_FEE_SIZE;
 
-/// Function to use when serializing a public key, to print it using base58
-pub fn serialize_b58<S>(x: &Pubkey, s: S) -> Result<S::Ok, S::Error>
-where
-    S: Serializer,
-{
-    s.serialize_str(&x.to_string())
-}
+pub type Validators = AccountMap<Validator>;
+pub type Maintainers = AccountSet;
 
 #[repr(C)]
 #[derive(
@@ -38,35 +36,34 @@ where
 pub struct Lido {
     /// Version number for the Lido
     pub lido_version: u8,
-    /// Stake pool account associated with Lido
-    #[serde(serialize_with = "serialize_b58")]
-    pub stake_pool_account: Pubkey,
     /// Manager of the Lido program, able to execute administrative functions
     #[serde(serialize_with = "serialize_b58")]
     pub manager: Pubkey,
-    /// Program in charge of minting Lido tokens
+
+    /// The SPL Token mint address for stSOL.
     #[serde(serialize_with = "serialize_b58")]
-    pub st_sol_mint_program: Pubkey,
+    pub st_sol_mint: Pubkey,
+
     /// Total Lido tokens in circulation
     pub st_sol_total_shares: StLamports,
-    /// Holder of tokens in Lido's underlying stake pool
-    #[serde(serialize_with = "serialize_b58")]
-    pub stake_pool_token_holder: Pubkey,
-    /// Token program id associated with Lido's token
-    #[serde(serialize_with = "serialize_b58")]
-    pub token_program_id: Pubkey,
 
     /// Bump seeds for signing messages on behalf of the authority
     pub sol_reserve_authority_bump_seed: u8,
     pub deposit_authority_bump_seed: u8,
-    pub stake_pool_authority_bump_seed: u8,
-    pub fee_manager_bump_seed: u8,
 
     /// Fees
     pub fee_distribution: FeeDistribution,
     pub fee_recipients: FeeRecipients,
 
+    /// Map of enrolled validators, maps their vote account to `Validator` details.
     pub validators: Validators,
+
+    /// The set of maintainers.
+    ///
+    /// Maintainers are granted low security risk privileges. Maintainers are
+    /// expected to run the maintenance daemon, that invokes the maintenance
+    /// operations. These are gated on the signer being present in this set.
+    /// In the future we plan to make maintenance operations callable by anybody.
     pub maintainers: Maintainers,
 }
 
@@ -99,60 +96,49 @@ impl Lido {
     }
 
     pub fn is_initialized(&self) -> ProgramResult {
-        if self.stake_pool_account != Pubkey::default() {
-            msg!("Provided lido already in use");
+        if self.manager != Pubkey::default() {
+            msg!("Provided Solido instance already in use.");
             Err(LidoError::AlreadyInUse.into())
         } else {
             Ok(())
         }
     }
 
-    pub fn check_lido_for_deposit(
-        &self,
-        manager_key: &Pubkey,
-        stakepool_key: &Pubkey,
-        st_sol_mint_key: &Pubkey,
-    ) -> ProgramResult {
-        if &self.manager != manager_key {
-            return Err(LidoError::InvalidOwner.into());
-        }
-        if &self.stake_pool_account != stakepool_key {
-            return Err(LidoError::InvalidStakePool.into());
-        }
-
-        if &self.st_sol_mint_program != st_sol_mint_key {
-            return Err(LidoError::InvalidTokenMinter.into());
+    /// Confirm that the given account is Solido's stSOL mint.
+    pub fn check_mint_is_st_sol_mint(&self, mint_account_info: &AccountInfo) -> ProgramResult {
+        if &self.st_sol_mint != mint_account_info.key {
+            msg!(
+                "Expected to find our stSOL mint ({}), but got {} instead.",
+                self.st_sol_mint,
+                mint_account_info.key
+            );
+            return Err(LidoError::InvalidStSolAccount.into());
         }
         Ok(())
     }
 
-    pub fn check_token_program_id(&self, token_program_id: &Pubkey) -> ProgramResult {
-        if token_program_id != &self.token_program_id {
-            return Err(LidoError::InvalidTokenProgram.into());
-        }
-        Ok(())
-    }
+    /// Confirm that the given account is an SPL token account with our stSOL mint as mint.
+    pub fn check_is_st_sol_account(&self, token_account_info: &AccountInfo) -> ProgramResult {
+        let token_account =
+            match spl_token::state::Account::unpack_from_slice(&token_account_info.data.borrow()) {
+                Ok(account) => account,
+                Err(..) => {
+                    msg!(
+                        "Expected an SPL token account at {}.",
+                        token_account_info.key
+                    );
+                    return Err(LidoError::InvalidStSolAccount.into());
+                }
+            };
 
-    /// Checks if the token is minted by the `minter_program`
-    pub fn check_valid_minter_program(
-        minter_program: &Pubkey,
-        token_account_info: &AccountInfo,
-    ) -> ProgramResult {
-        if &spl_token::state::Account::unpack_from_slice(&token_account_info.data.borrow())
-            .map_err(|_| LidoError::InvalidFeeRecipient)?
-            .mint
-            != minter_program
-        {
+        if token_account.mint != self.st_sol_mint {
+            msg!(
+                "Expected mint of {} to be our stSOL mint ({}), but found {}.",
+                token_account_info.key,
+                self.st_sol_mint,
+                token_account.mint,
+            );
             return Err(LidoError::InvalidFeeRecipient.into());
-        }
-        Ok(())
-    }
-
-    /// Checks if the passed manager is the same as the one stored in the state
-    pub fn check_stake_pool(&self, stake_pool: &AccountInfo) -> ProgramResult {
-        if &self.stake_pool_account != stake_pool.key {
-            msg!("Invalid stake pool");
-            return Err(LidoError::InvalidStakePool.into());
         }
         Ok(())
     }
@@ -217,8 +203,6 @@ impl Lido {
     }
 }
 
-pub type Validators = AccountMap<Validator>;
-
 #[repr(C)]
 #[derive(
     Clone, Debug, Default, Eq, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema, Serialize,
@@ -271,12 +255,12 @@ impl Validator {
     pub fn find_stake_account_address(
         program_id: &Pubkey,
         solido_account: &Pubkey,
-        validator_stake_pool_stake_account: &Pubkey,
+        validator_vote_account: &Pubkey,
         seed: u64,
     ) -> (Pubkey, u8) {
         let seeds = [
             &solido_account.to_bytes(),
-            &validator_stake_pool_stake_account.to_bytes(),
+            &validator_vote_account.to_bytes(),
             &VALIDATOR_STAKE_ACCOUNT[..],
             &seed.to_le_bytes()[..],
         ];
@@ -336,9 +320,9 @@ pub struct Fees {
 pub fn distribute_fees(
     fee_distribution: &FeeDistribution,
     num_validators: u64,
-    amount_spt: StakePoolTokenLamports,
+    reward: Lamports,
 ) -> Option<Fees> {
-    let amount = StLamports(amount_spt.0);
+    let amount = StLamports(reward.0);
     let treasury_amount = (amount * fee_distribution.treasury_fraction())?;
 
     // The actual amount that goes to validation can be a tiny bit lower
@@ -362,119 +346,11 @@ pub fn distribute_fees(
     Some(result)
 }
 
-/// Maintainers are granted low security risk privileges, they can call
-/// `IncreaseValidatorStake` and `DecreaseValidatorStake`. Maintainers are set
-/// by the manager
-pub type Maintainers = AccountMap<()>;
-
-#[derive(
-    Clone, Default, Debug, Eq, PartialEq, BorshSerialize, BorshDeserialize, BorshSchema, Serialize,
-)]
-pub struct PubkeyAndEntry<T> {
-    #[serde(serialize_with = "serialize_b58")]
-    pub pubkey: Pubkey,
-    pub entry: T,
-}
-
-#[derive(
-    Clone, Default, Debug, Eq, PartialEq, BorshSerialize, BorshDeserialize, BorshSchema, Serialize,
-)]
-pub struct AccountMap<T> {
-    pub entries: Vec<PubkeyAndEntry<T>>,
-    pub maximum_entries: u32,
-}
-
-impl<T: Default> AccountMap<T> {
-    /// Creates a new instance with the `maximum_entries` positions filled with the default value
-    pub fn new_fill_default(maximum_entries: u32) -> Self {
-        let mut v = Vec::with_capacity(maximum_entries as usize);
-        for _ in 0..maximum_entries {
-            v.push(PubkeyAndEntry {
-                pubkey: Pubkey::default(),
-                entry: T::default(),
-            });
-        }
-        AccountMap {
-            entries: v,
-            maximum_entries,
-        }
-    }
-
-    /// Creates a new empty instance
-    pub fn new(maximum_entries: u32) -> Self {
-        AccountMap {
-            entries: Vec::new(),
-            maximum_entries,
-        }
-    }
-
-    pub fn add(&mut self, address: Pubkey, value: T) -> ProgramResult {
-        if self.entries.len() == self.maximum_entries as usize {
-            return Err(LidoError::MaximumNumberOfAccountsExceeded.into());
-        }
-        if !self.entries.iter().any(|pe| pe.pubkey == address) {
-            self.entries.push(PubkeyAndEntry {
-                pubkey: address,
-                entry: value,
-            });
-        } else {
-            return Err(LidoError::DuplicatedEntry.into());
-        }
-        Ok(())
-    }
-
-    pub fn remove(&mut self, address: &Pubkey) -> Result<T, ProgramError> {
-        let idx = self
-            .entries
-            .iter()
-            .position(|pe| &pe.pubkey == address)
-            .ok_or(LidoError::InvalidAccountMember)?;
-        Ok(self.entries.swap_remove(idx).entry)
-    }
-
-    pub fn get(&self, address: &Pubkey) -> Result<&PubkeyAndEntry<T>, ProgramError> {
-        self.entries
-            .iter()
-            .find(|pe| &pe.pubkey == address)
-            .ok_or_else(|| LidoError::InvalidAccountMember.into())
-    }
-
-    pub fn get_mut(&mut self, address: &Pubkey) -> Result<&mut PubkeyAndEntry<T>, ProgramError> {
-        self.entries
-            .iter_mut()
-            .find(|pe| &pe.pubkey == address)
-            .ok_or_else(|| LidoError::InvalidAccountMember.into())
-    }
-
-    /// Return how many bytes are needed to serialize an instance holding `max_entries`.
-    ///
-    /// Assumes that the serialized size of `T` is the same as its in-memory
-    /// size.
-    pub fn required_bytes(max_entries: usize) -> usize {
-        let key_size = std::mem::size_of::<Pubkey>();
-        let value_size = std::mem::size_of::<T>();
-        let entry_size = key_size + value_size;
-
-        // 8 bytes for the length and u32 field, then the entries themselves.
-        8 + entry_size * max_entries as usize
-    }
-
-    /// Return how many entries could fit in a buffer of the given size.
-    pub fn maximum_entries(buffer_size: usize) -> usize {
-        let key_size = std::mem::size_of::<Pubkey>();
-        let value_size = std::mem::size_of::<T>();
-        let entry_size = key_size + value_size;
-
-        buffer_size.saturating_sub(8) / entry_size
-    }
-}
-
 #[cfg(test)]
 mod test_lido {
     use super::*;
     use solana_program::program_error::ProgramError;
     use solana_sdk::signature::{Keypair, Signer};
-    use spl_stake_pool::borsh::get_instance_packed_len;
 
     #[test]
     fn test_account_map_required_bytes_relates_to_maximum_entries() {
@@ -524,16 +400,11 @@ mod test_lido {
         let maintainers = Maintainers::new(1);
         let lido = Lido {
             lido_version: 0,
-            stake_pool_account: Pubkey::new_unique(),
             manager: Pubkey::new_unique(),
-            st_sol_mint_program: Pubkey::new_unique(),
+            st_sol_mint: Pubkey::new_unique(),
             st_sol_total_shares: StLamports(1000),
-            stake_pool_token_holder: Pubkey::new_unique(),
-            token_program_id: Pubkey::new_unique(),
             sol_reserve_authority_bump_seed: 1,
             deposit_authority_bump_seed: 2,
-            stake_pool_authority_bump_seed: 3,
-            fee_manager_bump_seed: 4,
             fee_distribution: FeeDistribution {
                 treasury_fee: 2,
                 validation_fee: 3,
@@ -601,66 +472,35 @@ mod test_lido {
     }
 
     #[test]
-    fn test_lido_correct_program_id() {
-        let lido = Lido::default();
+    fn test_lido_for_deposit_wrong_mint() {
+        let mut lido = Lido::default();
+        lido.st_sol_mint = Keypair::new().pubkey();
 
-        assert!(lido.check_token_program_id(&lido.token_program_id).is_ok());
-    }
-
-    #[test]
-    fn test_lido_wrong_program_id() {
-        let lido = Lido::default();
-        let prog_id = Keypair::new();
-
-        let err = lido.check_token_program_id(&prog_id.pubkey());
-        let expect: ProgramError = LidoError::InvalidTokenProgram.into();
-        assert_eq!(expect, err.err().unwrap());
-    }
-
-    #[test]
-    fn test_lido_for_deposit_wrong_owner() {
-        let lido = Lido::default();
-        let other_owner = Keypair::new();
-
-        let err = lido.check_lido_for_deposit(
-            &other_owner.pubkey(),
-            &lido.stake_pool_account,
-            &lido.st_sol_mint_program,
-        );
-
-        let expect: ProgramError = LidoError::InvalidOwner.into();
-        assert_eq!(err.err(), Some(expect));
-    }
-
-    #[test]
-    fn test_lido_for_deposit_wrong_stakepool() {
-        let lido = Lido::default();
-        let other_stakepool = Keypair::new();
-
-        let err = lido.check_lido_for_deposit(
-            &lido.manager,
-            &other_stakepool.pubkey(),
-            &lido.st_sol_mint_program,
-        );
-
-        let expect: ProgramError = LidoError::InvalidStakePool.into();
-        assert_eq!(expect, err.err().unwrap());
-    }
-
-    #[test]
-    fn test_lido_for_deposit_wrong_mint_program() {
-        let lido = Lido::default();
         let other_mint = Keypair::new();
-
-        let err = lido.check_lido_for_deposit(
-            &lido.manager,
-            &lido.stake_pool_account,
-            &other_mint.pubkey(),
+        let pubkey = other_mint.pubkey();
+        let mut lamports = 100;
+        let mut data = [0_u8];
+        let is_signer = false;
+        let is_writable = false;
+        let owner = spl_token::id();
+        let executable = false;
+        let rent_epoch = 1;
+        let fake_mint_account = AccountInfo::new(
+            &pubkey,
+            is_signer,
+            is_writable,
+            &mut lamports,
+            &mut data,
+            &owner,
+            executable,
+            rent_epoch,
         );
+        let result = lido.check_mint_is_st_sol_mint(&fake_mint_account);
 
-        let expect: ProgramError = LidoError::InvalidTokenMinter.into();
-        assert_eq!(expect, err.err().unwrap());
+        let expected_error: ProgramError = LidoError::InvalidStSolAccount.into();
+        assert_eq!(result, Err(expected_error));
     }
+
     #[test]
     fn test_fee_distribution() {
         let spec = FeeDistribution {
@@ -675,7 +515,7 @@ mod test_lido {
                 developer_amount: StLamports(100),
             },
             // Test no rounding errors
-            distribute_fees(&spec, 1, StakePoolTokenLamports(600)).unwrap()
+            distribute_fees(&spec, 1, Lamports(600)).unwrap()
         );
 
         assert_eq!(
@@ -685,7 +525,7 @@ mod test_lido {
                 developer_amount: StLamports(168),
             },
             // Test rounding errors going to manager
-            distribute_fees(&spec, 4, StakePoolTokenLamports(1_000)).unwrap()
+            distribute_fees(&spec, 4, Lamports(1_000)).unwrap()
         );
         let spec_coprime = FeeDistribution {
             treasury_fee: 17,
@@ -698,7 +538,7 @@ mod test_lido {
                 reward_per_validator: StLamports(389),
                 developer_amount: StLamports(323),
             },
-            distribute_fees(&spec_coprime, 1, StakePoolTokenLamports(1_000)).unwrap()
+            distribute_fees(&spec_coprime, 1, Lamports(1_000)).unwrap()
         );
     }
     #[test]

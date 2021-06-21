@@ -17,6 +17,7 @@ use rand::Rng;
 use solana_sdk::pubkey::Pubkey;
 use tiny_http::{Request, Response, Server};
 
+use crate::error::AsPrettyError;
 use crate::maintenance::{try_perform_maintenance, MaintenanceOutput, SolidoState};
 use crate::prometheus::{write_metric, Metric, MetricFamily};
 use crate::Config;
@@ -30,10 +31,6 @@ pub struct RunMaintainerOpts {
     /// Account that stores the data for this Solido instance.
     #[clap(long)]
     pub solido_address: Pubkey,
-
-    /// Stake pool program id
-    #[clap(long)]
-    pub stake_pool_program_id: Pubkey,
 
     /// Listen address and port for the http server that serves a /metrics endpoint.
     #[clap(long, default_value = "0.0.0.0:8923")]
@@ -60,9 +57,6 @@ struct MaintenanceMetrics {
 
     /// Number of times we performed `StakeDeposit`.
     transactions_stake_deposit: u64,
-
-    /// Number of times we performed `DepositActiveStakeToPool`.
-    transactions_deposit_active_stake_to_pool: u64,
     // TODO(#96#issuecomment-859388866): Track how much the daemon spends on transaction fees,
     // so we know how much SOL it costs to operate.
     // spent_lamports_total: u64
@@ -93,14 +87,11 @@ impl MaintenanceMetrics {
                 name: "solido_maintenance_transactions_total",
                 help: "Number of maintenance transactions executed, since launch.",
                 type_: "counter",
-                metrics: vec![
-                    Metric::singleton("operation", "StakeDeposit", self.transactions_stake_deposit),
-                    Metric::singleton(
-                        "operation",
-                        "DepositActiveStakeToPool",
-                        self.transactions_deposit_active_stake_to_pool,
-                    ),
-                ],
+                metrics: vec![Metric::singleton(
+                    "operation",
+                    "StakeDeposit",
+                    self.transactions_stake_deposit,
+                )],
             },
         )?;
         Ok(())
@@ -129,22 +120,17 @@ fn run_main_loop(config: &Config, opts: &RunMaintainerOpts, snapshot_mutex: &Sna
         polls: 0,
         errors: 0,
         transactions_stake_deposit: 0,
-        transactions_deposit_active_stake_to_pool: 0,
     };
     let mut rng = rand::thread_rng();
 
     loop {
         let mut do_wait = false;
 
-        let state_result = SolidoState::new(
-            config,
-            &opts.solido_program_id,
-            &opts.solido_address,
-            &opts.stake_pool_program_id,
-        );
+        let state_result = SolidoState::new(config, &opts.solido_program_id, &opts.solido_address);
         match &state_result {
             &Err(ref err) => {
-                println!("Failed to obtain Solido state: {:?}", err);
+                println!("Failed to obtain Solido state.");
+                err.print_pretty();
                 metrics.errors += 1;
 
                 // If the error was caused by a connectivity problem, we shouldn't
@@ -155,7 +141,8 @@ fn run_main_loop(config: &Config, opts: &RunMaintainerOpts, snapshot_mutex: &Sna
             &Ok(ref state) => {
                 match try_perform_maintenance(config, &state) {
                     Err(err) => {
-                        println!("Error in maintenance: {:?}", err);
+                        println!("Error in maintenance.");
+                        err.print_pretty();
                         metrics.errors += 1;
                         do_wait = true;
                     }
@@ -168,9 +155,6 @@ fn run_main_loop(config: &Config, opts: &RunMaintainerOpts, snapshot_mutex: &Sna
                         match something_done {
                             MaintenanceOutput::StakeDeposit { .. } => {
                                 metrics.transactions_stake_deposit += 1
-                            }
-                            MaintenanceOutput::DepositActiveStateToPool { .. } => {
-                                metrics.transactions_deposit_active_stake_to_pool += 1
                             }
                         }
                     }

@@ -2,11 +2,7 @@
 
 mod helpers;
 
-use helpers::{
-    id, program_test,
-    stakepool_account::{get_token_balance, transfer},
-    LidoAccounts,
-};
+use helpers::{get_token_balance, id, program_test, transfer, LidoAccounts};
 use lido::{
     instruction,
     token::{Lamports, StLamports},
@@ -44,7 +40,7 @@ async fn test_successful_deposit() {
         &payer,
         &recent_blockhash,
         &recipient,
-        &lido_accounts.mint_program.pubkey(),
+        &lido_accounts.st_sol_mint.pubkey(),
         &user.pubkey(),
     )
     .await
@@ -64,12 +60,9 @@ async fn test_successful_deposit() {
             &id(),
             &instruction::DepositAccountsMeta {
                 lido: lido_accounts.lido.pubkey(),
-                stake_pool: lido_accounts.stake_pool_accounts.stake_pool.pubkey(),
-                stake_pool_token_holder: lido_accounts.stake_pool_token_holder.pubkey(),
-                manager: lido_accounts.manager.pubkey(),
                 user: user.pubkey(),
                 recipient: recipient.pubkey(),
-                mint_program: lido_accounts.mint_program.pubkey(),
+                st_sol_mint: lido_accounts.st_sol_mint.pubkey(),
                 reserve_account: lido_accounts.reserve_authority,
             },
             TEST_DEPOSIT_AMOUNT,

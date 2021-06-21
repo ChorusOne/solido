@@ -1,12 +1,10 @@
+extern crate spl_stake_pool;
+
 use std::fmt;
 use std::path::PathBuf;
 use std::str::FromStr;
 
 use clap::Clap;
-use helpers::AddRemoveMaintainerOpts;
-use helpers::AddValidatorOpts;
-use helpers::CreateValidatorStakeAccountOpts;
-use helpers::ShowSolidoOpts;
 use serde::Serialize;
 use solana_client::rpc_client::RpcClient;
 use solana_remote_wallet::locator::Locator;
@@ -19,27 +17,25 @@ use solana_sdk::signature::read_keypair_file;
 use solana_sdk::signer::Signer;
 
 use crate::daemon::RunMaintainerOpts;
+use crate::error::Abort;
 use crate::helpers::command_add_maintainer;
-use crate::helpers::command_create_validator_stake_account;
 use crate::helpers::command_remove_maintainer;
 use crate::helpers::command_show_solido;
+use crate::helpers::AddRemoveMaintainerOpts;
+use crate::helpers::AddValidatorOpts;
+use crate::helpers::ShowSolidoOpts;
 use crate::helpers::{command_add_validator, command_create_solido, CreateSolidoOpts};
 use crate::maintenance::PerformMaintenanceOpts;
 use crate::multisig::MultisigOpts;
 
-extern crate lazy_static;
-extern crate spl_stake_pool;
-
 mod daemon;
+mod error;
 mod helpers;
 mod maintenance;
 mod multisig;
 mod prometheus;
 mod spl_token_utils;
-mod stake_pool_helpers;
 mod util;
-
-type Error = Box<dyn std::error::Error>;
 
 #[derive(Copy, Clone, Debug)]
 pub enum OutputMode {
@@ -123,8 +119,6 @@ FEES:
     AddMaintainer(AddRemoveMaintainerOpts),
     /// Adds a maintainer to the Solido instance
     RemoveMaintainer(AddRemoveMaintainerOpts),
-    /// Create a Validator Stake Account
-    CreateValidatorStakeAccount(CreateValidatorStakeAccountOpts),
 
     /// Show an instance of solido in detail
     ShowSolido(ShowSolidoOpts),
@@ -218,23 +212,18 @@ fn main() {
     };
     match opts.subcommand {
         SubCommand::CreateSolido(cmd_opts) => {
-            let output =
-                command_create_solido(config, cmd_opts).expect("Failed to create Solido instance.");
+            let output = command_create_solido(config, cmd_opts)
+                .ok_or_abort_with("Failed to create Solido instance.");
             print_output(opts.output_mode, &output);
         }
         SubCommand::Multisig(cmd_opts) => multisig::main(config, opts.output_mode, cmd_opts),
-        SubCommand::CreateValidatorStakeAccount(cmd_opts) => {
-            let output = command_create_validator_stake_account(config, cmd_opts)
-                .expect("Failed to create validator stake account");
-            print_output(opts.output_mode, &output);
-        }
         SubCommand::PerformMaintenance(cmd_opts) => {
             // For now, this does one maintenance iteration. In the future we
             // might add a daemon mode that runs continuously, and which logs
             // to stdout and exposes Prometheus metrics (also to monitor Solido,
             // not just the maintenance itself).
             let output = maintenance::run_perform_maintenance(&config, &cmd_opts)
-                .expect("Failed to perform maintenance.");
+                .ok_or_abort_with("Failed to perform maintenance.");
             match (opts.output_mode, output) {
                 (OutputMode::Text, None) => {
                     println!("Nothing done, there was no maintenance to perform.")
@@ -247,21 +236,23 @@ fn main() {
             daemon::main(&config, &cmd_opts);
         }
         SubCommand::AddValidator(cmd_opts) => {
-            let output = command_add_validator(config, cmd_opts).expect("Failed to add validator");
+            let output = command_add_validator(config, cmd_opts)
+                .ok_or_abort_with("Failed to add validator.");
             print_output(opts.output_mode, &output);
         }
         SubCommand::AddMaintainer(cmd_opts) => {
-            let output =
-                command_add_maintainer(config, cmd_opts).expect("Failed to add maintainer");
+            let output = command_add_maintainer(config, cmd_opts)
+                .ok_or_abort_with("Failed to add maintainer.");
             print_output(opts.output_mode, &output);
         }
         SubCommand::RemoveMaintainer(cmd_opts) => {
-            let output =
-                command_remove_maintainer(config, cmd_opts).expect("Failed to remove maintainer");
+            let output = command_remove_maintainer(config, cmd_opts)
+                .ok_or_abort_with("Failed to remove maintainer.");
             print_output(opts.output_mode, &output);
         }
         SubCommand::ShowSolido(cmd_opts) => {
-            let output = command_show_solido(config, cmd_opts).expect("Failed to show Solido data");
+            let output = command_show_solido(config, cmd_opts)
+                .ok_or_abort_with("Failed to show Solido data.");
             print_output(opts.output_mode, &output);
         }
     }

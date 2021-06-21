@@ -40,15 +40,39 @@ def run(*args: str) -> str:
     return result.stdout
 
 
+def get_solido_program_path() -> str:
+    solido_program_path = os.getenv('SOLCONPATH')
+    if solido_program_path is None:
+        return 'target/deploy'
+    else:
+        return solido_program_path
+
+
+def get_solido_path() -> str:
+    solido_path = os.getenv('SOLPATH')
+    if solido_path is None:
+        return 'target/debug/solido'
+    else:
+        return solido_path
+
+
+def get_network() -> str:
+    network = os.getenv('NETWORK')
+    if network is None:
+        return 'http://127.0.0.1:8899'
+    else:
+        return network
+
+
 def get_solido(multisig_program_id: str) -> Callable[..., Any]:
     def solido(*args: str, keypair_path: Optional[str] = None) -> Any:
         """
-        Run 'solido' against localhost, return its parsed json output.
+        Run 'solido' against network, return its parsed json output.
         """
         output = run(
-            'target/debug/solido',
+            get_solido_path(),
             '--cluster',
-            'http://127.0.0.1:8899',
+            get_network(),
             '--output',
             'json',
             '--multisig-program-id',
@@ -73,16 +97,16 @@ def get_solido(multisig_program_id: str) -> Callable[..., Any]:
 
 def solana(*args: str) -> str:
     """
-    Run 'solana' against localhost.
+    Run 'solana' against network.
     """
-    return run('solana', '--url', 'localhost', *args)
+    return run('solana', '--url', get_network(), *args)
 
 
 def spl_token(*args: str) -> str:
     """
-    Run 'spl_token' against localhost.
+    Run 'spl_token' against network.
     """
-    return run('spl-token', '--url', 'localhost', *args)
+    return run('spl-token', '--url', get_network(), *args)
 
 
 def solana_program_deploy(fname: str) -> str:
@@ -198,12 +222,12 @@ def get_multisig(multisig_program_id: str) -> Callable[..., Any]:
 
     def multisig(*args: str, keypair_path: Optional[str] = None) -> Any:
         """
-        Run 'solido multisig' against localhost, return its parsed json output.
+        Run 'solido multisig' against network, return its parsed json output.
         """
         output = run(
-            'target/debug/solido',
+            get_solido_path(),
             '--cluster',
-            'http://127.0.0.1:8899',
+            get_network(),
             '--output',
             'json',
             *([] if keypair_path is None else ['--keypair-path', keypair_path]),

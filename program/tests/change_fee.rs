@@ -3,7 +3,7 @@
 mod helpers;
 
 use crate::helpers::create_token_account;
-use helpers::{get_account, id, program_test, stakepool_account::create_mint, LidoAccounts};
+use helpers::{create_mint, get_account, id, program_test, LidoAccounts};
 use lido::{
     error::LidoError,
     instruction,
@@ -64,7 +64,7 @@ async fn test_successful_change_fee() {
             &payer,
             &recent_blockhash,
             &k,
-            &lido_accounts.mint_program.pubkey(),
+            &lido_accounts.st_sol_mint.pubkey(),
             &payer.pubkey(),
         )
         .await
@@ -111,12 +111,12 @@ async fn test_change_fee_wrong_minter() {
     let fee_recipient_keys = [Keypair::new(), Keypair::new()];
     let mut rng = thread_rng();
     let n: usize = rng.gen_range(0..fee_recipient_keys.len());
-    let wrong_mint_program = Keypair::new();
+    let wrong_mint = Keypair::new();
     create_mint(
         &mut banks_client,
         &payer,
         &recent_blockhash,
-        &wrong_mint_program,
+        &wrong_mint,
         &payer.pubkey(),
     )
     .await
@@ -125,9 +125,9 @@ async fn test_change_fee_wrong_minter() {
     for (i, k) in fee_recipient_keys.iter().enumerate() {
         let minter;
         if i == n {
-            minter = wrong_mint_program.pubkey();
+            minter = wrong_mint.pubkey();
         } else {
-            minter = lido_accounts.mint_program.pubkey();
+            minter = lido_accounts.st_sol_mint.pubkey();
         }
         create_token_account(
             &mut banks_client,
