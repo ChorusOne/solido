@@ -29,6 +29,7 @@ jobs:
           # Install with Pip instead of Apt because Ubuntu ships ancient versions.
           # TODO: Pin the exact version with Nix instead, to make it easier to use
           # the same version locally.
+          sudo apt update
           sudo apt-get install -y python3-pip
           sudo pip3 install black==21.6b0
 
@@ -56,6 +57,7 @@ jobs:
 
     - name: Build on-chain BPF programs
       run: |
+        sudo apt update
         sudo apt-get install -y libudev-dev
         sh -c "$(curl -sSfL https://release.solana.com/v1.6.7/install)"
         export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
@@ -137,6 +139,7 @@ jobs:
     - name: Install linters
       run: |
         # TODO: Pin the exact version with Nix.
+        sudo apt update
         sudo apt-get install -y python3-pip libudev-dev
         # Install with Pip instead of Apt because Ubuntu ships ancient versions.
         # TODO: Pin the exact version with Nix instead, to make it easier to use
