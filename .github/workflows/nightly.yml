@@ -3,8 +3,7 @@ name: build
 on:
   schedule:
     # Schedule equates to 02:05
-    - cron : '5 2 * * *'
-    branches: [ main ]
+    - cron: '5 2 * * *'  
 
 env:
   CARGO_TERM_COLOR: always
