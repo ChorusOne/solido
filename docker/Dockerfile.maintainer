@@ -25,3 +25,5 @@ RUN chown -R solido:solido $SOLIDOPATH
 USER solido
 
 WORKDIR $SOLIDOPATH
+
+ENTRYPOINT ["/bin/bash", "/solido/entrypoint.sh"]
