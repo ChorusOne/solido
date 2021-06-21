@@ -7,6 +7,7 @@ useful when testing the maintenance daemon locally.
 
 import os
 from util import (
+    TestAccount,
     create_test_account,
     solana_program_deploy,
     create_spl_token,
@@ -14,6 +15,7 @@ from util import (
     get_network,
     solido,
     multisig,
+    solana,
 )
 
 print('\nUploading Solido program ...')
@@ -80,24 +82,6 @@ st_sol_mint_account = result['st_sol_mint_address']
 print(f'> Created instance at {solido_address}')
 
 
-print('\nAdding a validator ...')
-validator_fee_st_sol_account_owner = create_test_account(
-    'tests/.keys/validator-token-account-key.json'
-)
-validator_fee_st_sol_account = create_spl_token(
-    validator_fee_st_sol_account_owner.keypair_path,
-    st_sol_mint_account,
-)
-print(f'> Validator token account owner: {validator_fee_st_sol_account_owner}')
-print(f'> Validator stSOL token account: {validator_fee_st_sol_account}')
-
-validator = create_test_account('tests/.keys/validator-account-key.json')
-validator_vote_account = create_vote_account(
-    'tests/.keys/validator-vote-account-key.json', validator.keypair_path
-)
-print(f'> Validator vote account: {validator_vote_account}')
-
-
 def approve_and_execute(transaction_address: str) -> None:
     multisig(
         'approve',
@@ -121,25 +105,46 @@ def approve_and_execute(transaction_address: str) -> None:
     )
 
 
-print('Adding validator ...')
-transaction_result = solido(
-    'add-validator',
-    '--multisig-program-id',
-    multisig_program_id,
-    '--solido-program-id',
-    solido_program_id,
-    '--solido-address',
-    solido_address,
-    '--validator-vote-account',
-    validator_vote_account.pubkey,
-    '--validator-fee-account',
-    validator_fee_st_sol_account,
-    '--multisig-address',
-    multisig_instance,
-    keypair_path=maintainer.keypair_path,
-)
-approve_and_execute(transaction_result['transaction_address'])
+def add_validator(index: int) -> TestAccount:
+    print(f'\nCreating validator {index} ...')
+    validator_fee_st_sol_account_owner = create_test_account(
+        f'tests/.keys/validator-{index}-token-account-key.json'
+    )
+    validator_fee_st_sol_account = create_spl_token(
+        validator_fee_st_sol_account_owner.keypair_path,
+        st_sol_mint_account,
+    )
+    print(f'> Validator token account owner: {validator_fee_st_sol_account_owner}')
+    print(f'> Validator stSOL token account: {validator_fee_st_sol_account}')
 
+    validator = create_test_account(f'tests/.keys/validator-{index}-account-key.json')
+    validator_vote_account = create_vote_account(
+        f'tests/.keys/validator-{index}-vote-account-key.json', validator.keypair_path
+    )
+    print(f'> Validator vote account:        {validator_vote_account}')
+
+    print('Adding validator ...')
+    transaction_result = solido(
+        'add-validator',
+        '--multisig-program-id',
+        multisig_program_id,
+        '--solido-program-id',
+        solido_program_id,
+        '--solido-address',
+        solido_address,
+        '--validator-vote-account',
+        validator_vote_account.pubkey,
+        '--validator-fee-account',
+        validator_fee_st_sol_account,
+        '--multisig-address',
+        multisig_instance,
+        keypair_path=maintainer.keypair_path,
+    )
+    approve_and_execute(transaction_result['transaction_address'])
+    return validator_vote_account
+
+
+validators = [add_validator(i) for i in range(3)]
 
 print('Adding maintainer ...')
 transaction_result = solido(
@@ -167,10 +172,13 @@ solido_instance = solido(
     solido_address,
 )
 print('\nDetails:')
-print(f'  Solido address:          {solido_address}')
-print(f'  Reserve address:         {solido_instance["reserve_authority"]}')
-print(f'  Validator vote account:  {validator_vote_account.pubkey}')
-print(f'  Maintainer address:      {maintainer.pubkey}')
+print(f'  Solido address:           {solido_address}')
+print(f'  Reserve address:          {solido_instance["reserve_authority"]}')
+print(f'  Maintainer address:       {maintainer.pubkey}')
+
+for i, vote_account in enumerate(validators):
+    print(f'  Validator {i} vote account: {vote_account.pubkey}')
+
 
 print('\nMaintenance command line:')
 print(
