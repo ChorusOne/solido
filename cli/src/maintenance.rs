@@ -210,12 +210,6 @@ impl SolidoState {
         let minimum_stake_account_balance =
             Lamports(self.rent.minimum_balance(std::mem::size_of::<StakeState>()));
 
-        // If there is not enough reserve to create a new stake account, we
-        // can't stake the deposit, even if there is some balance.
-        if reserve_balance < minimum_stake_account_balance {
-            return None;
-        }
-
         // If there is enough reserve, we can make a deposit. To keep the pool
         // balanced, find the validator furthest below its target balance, and
         // deposit to that validator.
@@ -252,6 +246,12 @@ impl SolidoState {
         // Top up the validator to at most its target. If that means we don't use the full
         // reserve, a future maintenance run will stake the remainder with the next validator.
         let amount_to_deposit = amount_below_target.min(reserve_balance);
+
+        // If the amount to deposit would not make the stake account rent-exempt,
+        // then we cannot deposit it at this point.
+        if amount_to_deposit < minimum_stake_account_balance {
+            return None;
+        }
 
         let instruction = lido::instruction::stake_deposit(
             &self.solido_program_id,
