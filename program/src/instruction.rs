@@ -29,7 +29,9 @@ pub enum LidoInstruction {
         #[allow(dead_code)] // but it's not
         max_maintainers: u32,
     },
-    /// Deposit with amount
+    /// Deposit a given amount of SOL.
+    ///
+    /// This can be called by anybody.
     Deposit {
         #[allow(dead_code)] // but it's not
         amount: Lamports,
@@ -42,6 +44,10 @@ pub enum LidoInstruction {
         #[allow(dead_code)] // but it's not
         amount: Lamports,
     },
+    /// Update the exchange rate, at the beginning of the epoch.
+    ///
+    /// This can be called by anybody.
+    UpdateExchangeRate,
     Withdraw {
         #[allow(dead_code)] // but it's not
         amount: StLamports,
@@ -445,6 +451,37 @@ pub fn stake_deposit(
 ) -> Result<Instruction, ProgramError> {
     let init_data = LidoInstruction::StakeDeposit { amount };
     let data = init_data.try_to_vec()?;
+    Ok(Instruction {
+        program_id: *program_id,
+        accounts: accounts.to_vec(),
+        data,
+    })
+}
+
+accounts_struct! {
+    UpdateExchangeRateAccountsMeta, UpdateExchangeRateAccountsInfo {
+        pub lido {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub reserve {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub st_sol_mint {
+            is_signer: false,
+            is_writable: false,
+        },
+        const sysvar_clock = sysvar::clock::id(),
+        const sysvar_rent = sysvar::rent::id(),
+    }
+}
+
+pub fn update_exchange_rate(
+    program_id: &Pubkey,
+    accounts: &UpdateExchangeRateAccountsMeta,
+) -> Result<Instruction, ProgramError> {
+    let data = LidoInstruction::UpdateExchangeRate.try_to_vec()?;
     Ok(Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
