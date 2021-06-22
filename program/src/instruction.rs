@@ -480,13 +480,14 @@ accounts_struct! {
 pub fn update_exchange_rate(
     program_id: &Pubkey,
     accounts: &UpdateExchangeRateAccountsMeta,
-) -> Result<Instruction, ProgramError> {
-    let data = LidoInstruction::UpdateExchangeRate.try_to_vec()?;
-    Ok(Instruction {
+) -> Instruction {
+    // There is no reason why `try_to_vec` should fail here.
+    let data = LidoInstruction::UpdateExchangeRate.try_to_vec().unwrap();
+    Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
         data,
-    })
+    }
 }
 
 // Changes the Fee spec
