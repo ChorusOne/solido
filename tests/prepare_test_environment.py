@@ -11,10 +11,9 @@ from util import (
     solana_program_deploy,
     create_spl_token,
     create_vote_account,
-    get_solido,
-    get_multisig,
     get_network,
-    solana,
+    solido,
+    multisig,
 )
 
 print('\nUploading Solido program ...')
@@ -25,9 +24,6 @@ print('\nUploading Multisig program ...')
 multisig_program_id = solana_program_deploy('target/deploy/multisig.so')
 print(f'> Multisig program id is {multisig_program_id}')
 
-multisig = get_multisig(multisig_program_id)
-solido = get_solido(multisig_program_id)
-
 os.makedirs('tests/.keys', exist_ok=True)
 maintainer = create_test_account('tests/.keys/maintainer.json')
 owner = create_test_account('tests/.keys/owner.json')
@@ -35,6 +31,8 @@ owner = create_test_account('tests/.keys/owner.json')
 print('\nCreating new multisig ...')
 multisig_data = multisig(
     'create-multisig',
+    '--multisig-program-id',
+    multisig_program_id,
     '--threshold',
     '1',
     '--owner',
@@ -47,6 +45,8 @@ print(f'> Created instance at {multisig_instance}')
 print('\nCreating Solido instance ...')
 result = solido(
     'create-solido',
+    '--multisig-program-id',
+    multisig_program_id,
     '--solido-program-id',
     solido_program_id,
     '--fee-numerator',
@@ -101,6 +101,8 @@ print(f'> Validator vote account: {validator_vote_account}')
 def approve_and_execute(transaction_address: str) -> None:
     multisig(
         'approve',
+        '--multisig-program-id',
+        multisig_program_id,
         '--multisig-address',
         multisig_instance,
         '--transaction-address',
@@ -109,6 +111,8 @@ def approve_and_execute(transaction_address: str) -> None:
     )
     multisig(
         'execute-transaction',
+        '--multisig-program-id',
+        multisig_program_id,
         '--multisig-address',
         multisig_instance,
         '--transaction-address',
@@ -120,6 +124,8 @@ def approve_and_execute(transaction_address: str) -> None:
 print('Adding validator ...')
 transaction_result = solido(
     'add-validator',
+    '--multisig-program-id',
+    multisig_program_id,
     '--solido-program-id',
     solido_program_id,
     '--solido-address',
@@ -138,6 +144,8 @@ approve_and_execute(transaction_result['transaction_address'])
 print('Adding maintainer ...')
 transaction_result = solido(
     'add-maintainer',
+    '--multisig-program-id',
+    multisig_program_id,
     '--solido-program-id',
     solido_program_id,
     '--solido-address',
@@ -174,8 +182,6 @@ print(
             maintainer.keypair_path,
             '--cluster',
             get_network(),
-            '--multisig-program-id',
-            multisig_program_id,
             'run-maintainer',
             '--solido-program-id',
             solido_program_id,

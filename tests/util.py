@@ -238,35 +238,3 @@ def multisig(*args: str, keypair_path: Optional[str] = None) -> Any:
             print('Failed to decode output as json, output was:')
             print(output)
             raise
-
-
-def approve_and_execute(
-    multisig_func: Callable[..., Any],
-    multisig_program_id: str,
-    multisig_instance: str,
-    transaction_address: str,
-    keypair_path: str,
-) -> None:
-    """
-    Helper to approve and execute a transaction with a single key
-    """
-    multisig_func(
-        'approve',
-        '--multisig-program-id',
-        multisig_program_id,
-        '--multisig-address',
-        multisig_instance,
-        '--transaction-address',
-        transaction_address,
-        keypair_path=keypair_path,
-    )
-    multisig_func(
-        'execute-transaction',
-        '--multisig-program-id',
-        multisig_program_id,
-        '--multisig-address',
-        multisig_instance,
-        '--transaction-address',
-        transaction_address,
-        keypair_path=keypair_path,
-    )
