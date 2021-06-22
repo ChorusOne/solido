@@ -4,6 +4,7 @@ use solana_program::{account_info::AccountInfo, entrypoint::ProgramResult, msg, 
 use spl_stake_pool::stake_program;
 
 use crate::token::Lamports;
+use crate::DEPOSIT_AUTHORITY;
 use crate::{
     error::LidoError,
     instruction::{
@@ -15,7 +16,6 @@ use crate::{
     token::StLamports,
     RESERVE_AUTHORITY,
 };
-use crate::{DEPOSIT_AUTHORITY, VALIDATOR_STAKE_ACCOUNT};
 
 pub fn process_change_fee_spec(
     program_id: &Pubkey,
@@ -231,7 +231,7 @@ pub fn process_merge_stake(program_id: &Pubkey, accounts_raw: &[AccountInfo]) ->
         return Err(LidoError::InvalidStakeAccount.into());
     }
 
-    let merge_ix = stake_program::merge(&from_stake, &to_stake, &accounts.deposit_authority.key);
+    let merge_ix = stake_program::merge(&to_stake, &from_stake, &accounts.deposit_authority.key);
     invoke_signed(
         &merge_ix,
         &[

@@ -728,7 +728,7 @@ accounts_struct! {
     MergeStakeMeta, MergeStakeInfo {
         pub lido {
             is_signer: false,
-            is_writable: false,
+            is_writable: true,
         },
         pub maintainer {
             is_signer: true,
@@ -743,7 +743,7 @@ accounts_struct! {
             is_writable: true,
         },
         pub to_stake {
-            is_signer: true,
+            is_signer: false,
             is_writable: true,
         },
         pub deposit_authority {
