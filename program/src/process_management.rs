@@ -1,17 +1,21 @@
+use borsh::BorshSerialize;
+use solana_program::program::invoke_signed;
 use solana_program::{account_info::AccountInfo, entrypoint::ProgramResult, msg, pubkey::Pubkey};
+use spl_stake_pool::stake_program;
 
 use crate::token::Lamports;
 use crate::{
     error::LidoError,
     instruction::{
         AddMaintainerInfo, AddValidatorInfo, ChangeFeeSpecInfo, ClaimValidatorFeeInfo,
-        DistributeFeesInfo, RemoveMaintainerInfo, RemoveValidatorInfo,
+        DistributeFeesInfo, MergeStakeInfo, RemoveMaintainerInfo, RemoveValidatorInfo,
     },
     logic::{deserialize_lido, token_mint_to},
     state::{distribute_fees, FeeDistribution, Validator},
     token::StLamports,
     RESERVE_AUTHORITY,
 };
+use crate::{DEPOSIT_AUTHORITY, VALIDATOR_STAKE_ACCOUNT};
 
 pub fn process_change_fee_spec(
     program_id: &Pubkey,
@@ -181,4 +185,70 @@ pub fn _process_change_validator_fee_account(
     _accounts: &[AccountInfo],
 ) -> ProgramResult {
     unimplemented!()
+}
+
+/// Merge two stake accounts, they should both be fully active. It will merge
+/// `from_stake` to `to_stake`. Bumps `begin` to `begin+1` if the operation was
+/// successful.
+pub fn process_merge_stake(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> ProgramResult {
+    let accounts = MergeStakeInfo::try_from_slice(accounts_raw)?;
+    let mut lido = deserialize_lido(program_id, accounts.lido)?;
+    let mut validator = lido
+        .validators
+        .entries
+        .iter_mut()
+        .find(|v| &v.pubkey == accounts.validator_vote_account.key)
+        .ok_or(LidoError::ValidatorNotFound)?;
+
+    let (from_stake, _) = Validator::find_stake_account_address(
+        program_id,
+        accounts.lido.key,
+        accounts.validator_vote_account.key,
+        validator.entry.stake_accounts_seed_begin,
+    );
+    if &from_stake != accounts.from_stake.key {
+        msg!(
+            "Calculated from_stake {} for seed {} is different from received {}.",
+            from_stake,
+            validator.entry.stake_accounts_seed_begin,
+            accounts.from_stake.key
+        );
+        return Err(LidoError::InvalidStakeAccount.into());
+    }
+    let (to_stake, _) = Validator::find_stake_account_address(
+        program_id,
+        accounts.lido.key,
+        accounts.validator_vote_account.key,
+        validator.entry.stake_accounts_seed_begin + 1,
+    );
+    if &to_stake != accounts.to_stake.key {
+        msg!(
+            "Calculated to_stake {} for seed {} is different from received {}.",
+            to_stake,
+            validator.entry.stake_accounts_seed_end,
+            accounts.to_stake.key
+        );
+        return Err(LidoError::InvalidStakeAccount.into());
+    }
+
+    let merge_ix = stake_program::merge(&from_stake, &to_stake, &accounts.deposit_authority.key);
+    invoke_signed(
+        &merge_ix,
+        &[
+            accounts.from_stake.clone(),
+            accounts.to_stake.clone(),
+            accounts.sysvar_clock.clone(),
+            accounts.stake_history.clone(),
+            accounts.deposit_authority.clone(),
+            accounts.stake_program.clone(),
+        ],
+        &[&[
+            &accounts.lido.key.to_bytes(),
+            DEPOSIT_AUTHORITY,
+            &[lido.deposit_authority_bump_seed],
+        ]],
+    )?;
+    validator.entry.stake_accounts_seed_begin += 1;
+    lido.serialize(&mut *accounts.lido.data.borrow_mut())?;
+    Ok(())
 }

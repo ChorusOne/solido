@@ -62,6 +62,7 @@ pub enum LidoInstruction {
     RemoveValidator,
     AddMaintainer,
     RemoveMaintainer,
+    MergeStake,
 }
 
 macro_rules! accounts_struct_meta {
@@ -720,5 +721,48 @@ pub fn remove_maintainer(
         program_id: *program_id,
         accounts: accounts.to_vec(),
         data: LidoInstruction::RemoveMaintainer.try_to_vec()?,
+    })
+}
+
+accounts_struct! {
+    MergeStakeMeta, MergeStakeInfo {
+        pub lido {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub maintainer {
+            is_signer: true,
+            is_writable: false,
+        },
+        pub validator_vote_account {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub from_stake {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub to_stake {
+            is_signer: true,
+            is_writable: true,
+        },
+        pub deposit_authority {
+            is_signer: false,
+            is_writable: false,
+        },
+        const sysvar_clock = sysvar::clock::id(),
+        const stake_history = stake_history::id(),
+        const stake_program = stake_program::id(),
+    }
+}
+
+pub fn merge_stake(
+    program_id: &Pubkey,
+    accounts: &MergeStakeMeta,
+) -> Result<Instruction, ProgramError> {
+    Ok(Instruction {
+        program_id: *program_id,
+        accounts: accounts.to_vec(),
+        data: LidoInstruction::MergeStake.try_to_vec()?,
     })
 }
