@@ -7,10 +7,7 @@ use crate::{
     instruction::{
         DepositAccountsInfo, InitializeAccountsInfo, LidoInstruction, StakeDepositAccountsInfo,
     },
-    logic::{
-        check_rent_exempt, deserialize_lido, get_reserve_available_amount,
-        token_mint_to,
-    },
+    logic::{check_rent_exempt, deserialize_lido, get_reserve_available_amount, token_mint_to},
     process_management::{
         process_add_maintainer, process_add_validator, process_change_fee_spec,
         process_claim_validator_fee, process_distribute_fees, process_remove_maintainer,

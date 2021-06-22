@@ -19,12 +19,11 @@ use crate::VALIDATOR_STAKE_ACCOUNT;
 use spl_stake_pool::solana_program::clock::Epoch;
 
 pub const LIDO_VERSION: u8 = 0;
-/// Constant size of header size = 1 version,2 public keys, 1 u64, 2 u8
-pub const LIDO_CONSTANT_HEADER_SIZE: usize = 1 + 2 * 32 + 8 + 2;
-/// Constant size of fee struct: 2 public keys + 3 u32
-pub const LIDO_CONSTANT_FEE_SIZE: usize = 2 * 32 + 3 * 4;
-/// Constant size of Lido
-pub const LIDO_CONSTANT_SIZE: usize = LIDO_CONSTANT_HEADER_SIZE + LIDO_CONSTANT_FEE_SIZE;
+
+/// Size of a serialized `Lido` struct excluding validators and maintainers.
+///
+/// To update this, run the tests and replace the value here with the test output.
+pub const LIDO_CONSTANT_SIZE: usize = 166;
 
 pub type Validators = AccountMap<Validator>;
 pub type Maintainers = AccountSet;
@@ -95,7 +94,7 @@ pub type Maintainers = AccountSet;
 /// 5. Etc.
 #[repr(C)]
 #[derive(
-  Clone, Debug, Default, BorshDeserialize, BorshSerialize, BorshSchema, Eq, PartialEq, Serialize,
+    Clone, Debug, Default, BorshDeserialize, BorshSerialize, BorshSchema, Eq, PartialEq, Serialize,
 )]
 pub struct ExchangeRate {
     /// The epoch in which we last called `UpdateExchangeRate`.
@@ -114,7 +113,7 @@ impl ExchangeRate {
     pub fn exchange_sol(&self, amount: Lamports) -> Option<StLamports> {
         // The exchange rate starts out at 1:1, if there are no deposits yet.
         if self.sol_balance == Lamports(0) {
-            return Some(StLamports(amount.0))
+            return Some(StLamports(amount.0));
         }
 
         let rate = Rational {
@@ -135,6 +134,7 @@ impl ExchangeRate {
 pub struct Lido {
     /// Version number for the Lido
     pub lido_version: u8,
+
     /// Manager of the Lido program, able to execute administrative functions
     #[serde(serialize_with = "serialize_b58")]
     pub manager: Pubkey,
@@ -484,6 +484,24 @@ mod test_lido {
     }
 
     #[test]
+    fn test_lido_constant_size() {
+        // The minimal size of the struct is its size without any validators and
+        // maintainers.
+        let minimal = Lido::default();
+        let mut data = Vec::new();
+        BorshSerialize::serialize(&minimal, &mut data).unwrap();
+
+        let num_entries = 0;
+        let size_validators = Validators::required_bytes(num_entries);
+        let size_maintainers = Maintainers::required_bytes(num_entries);
+
+        assert_eq!(
+            data.len() - size_validators - size_maintainers,
+            LIDO_CONSTANT_SIZE
+        );
+    }
+
+    #[test]
     fn test_lido_serialization_roundtrips() {
         use solana_sdk::borsh::try_from_slice_unchecked;
 
@@ -496,7 +514,11 @@ mod test_lido {
             lido_version: 0,
             manager: Pubkey::new_unique(),
             st_sol_mint: Pubkey::new_unique(),
-            st_sol_total_shares: StLamports(1000),
+            exchange_rate: ExchangeRate {
+                computed_in_epoch: 11,
+                sol_balance: Lamports(13),
+                st_sol_supply: StLamports(17),
+            },
             sol_reserve_authority_bump_seed: 1,
             deposit_authority_bump_seed: 2,
             fee_distribution: FeeDistribution {
@@ -526,43 +548,20 @@ mod test_lido {
     }
 
     #[test]
-    fn test_pool_tokens_when_total_lamports_is_zero() {
-        let lido = Lido::default();
-
-        let pool_tokens_for_deposit = lido.calc_pool_tokens_for_deposit(Lamports(123), Lamports(0));
-
-        assert_eq!(pool_tokens_for_deposit, Some(StLamports(123)));
+    fn test_exchange_when_sol_balance_is_zero() {
+        let rate = ExchangeRate::default();
+        assert_eq!(rate.exchange_sol(Lamports(123)), Some(StLamports(123)));
     }
 
     #[test]
-    fn test_pool_tokens_when_st_sol_total_shares_is_default() {
-        let lido = Lido::default();
-
-        let pool_tokens_for_deposit =
-            lido.calc_pool_tokens_for_deposit(Lamports(200), Lamports(100));
-
-        assert_eq!(pool_tokens_for_deposit, Some(StLamports(0)));
-    }
-
-    #[test]
-    fn test_pool_tokens_when_st_sol_total_shares_is_increased() {
-        let mut lido = Lido::default();
-        lido.st_sol_total_shares = StLamports(120);
-
-        let pool_tokens_for_deposit =
-            lido.calc_pool_tokens_for_deposit(Lamports(200), Lamports(40));
-
-        assert_eq!(pool_tokens_for_deposit, Some(StLamports(600)));
-    }
-
-    #[test]
-    fn test_pool_tokens_when_stake_lamports_is_zero() {
-        let mut lido = Lido::default();
-        lido.st_sol_total_shares = StLamports(120);
-
-        let pool_tokens_for_deposit = lido.calc_pool_tokens_for_deposit(Lamports(0), Lamports(40));
-
-        assert_eq!(pool_tokens_for_deposit, Some(StLamports(0)));
+    fn test_exchange_when_rate_is_one_to_two() {
+        let rate = ExchangeRate {
+            computed_in_epoch: 0,
+            sol_balance: Lamports(2),
+            st_sol_supply: StLamports(1),
+        };
+        // If every stSOL is worth 1 SOL, I should get half my SOL amount in stSOL.
+        assert_eq!(rate.exchange_sol(Lamports(44)), Some(StLamports(22)));
     }
 
     #[test]

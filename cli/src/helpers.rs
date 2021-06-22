@@ -308,9 +308,21 @@ impl fmt::Display for ShowSolidoOutput {
         )?;
 
         writeln!(f, "\nExchange rate:")?;
-        writeln!(f, "  Computed in epoch: {}", self.solido.exchange_rate.computed_in_epoch)?;
-        writeln!(f, "  SOL balance:       {}", self.solido.exchange_rate.sol_balance)?;
-        writeln!(f, "  stSOL supply:      {}", self.solido.exchange_rate.st_sol_supply)?;
+        writeln!(
+            f,
+            "  Computed in epoch: {}",
+            self.solido.exchange_rate.computed_in_epoch
+        )?;
+        writeln!(
+            f,
+            "  SOL balance:       {}",
+            self.solido.exchange_rate.sol_balance
+        )?;
+        writeln!(
+            f,
+            "  stSOL supply:      {}",
+            self.solido.exchange_rate.st_sol_supply
+        )?;
 
         writeln!(f, "\nAuthorities (public key, bump seed):")?;
         writeln!(
