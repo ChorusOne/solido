@@ -2,7 +2,6 @@
 
 use std::fmt;
 
-use clap::Clap;
 use serde::Serialize;
 use solana_client::rpc_client::RpcClient;
 use solana_program::{
@@ -18,22 +17,12 @@ use lido::{
     DEPOSIT_AUTHORITY,
 };
 
+use crate::config::PerformMaintenanceOpts;
 use crate::helpers::{get_solido, sign_and_send_transaction};
 use crate::{error::Error, Config};
 use spl_stake_pool::stake_program::StakeState;
 
 type Result<T> = std::result::Result<T, Error>;
-
-#[derive(Clap, Debug)]
-pub struct PerformMaintenanceOpts {
-    /// Address of the Solido program.
-    #[clap(long)]
-    pub solido_program_id: Pubkey,
-
-    /// Account that stores the data for this Solido instance.
-    #[clap(long)]
-    pub solido_address: Pubkey,
-}
 
 /// A brief description of the maintenance performed. Not relevant functionally,
 /// but helpful for automated testing, and just for info.
@@ -314,6 +303,6 @@ pub fn run_perform_maintenance(
     config: &Config,
     opts: &PerformMaintenanceOpts,
 ) -> Result<Option<MaintenanceOutput>> {
-    let state = SolidoState::new(config, &opts.solido_program_id, &opts.solido_address)?;
+    let state = SolidoState::new(config, opts.solido_program_id(), opts.solido_address())?;
     try_perform_maintenance(config, &state)
 }
