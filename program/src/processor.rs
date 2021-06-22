@@ -8,7 +8,7 @@ use crate::{
         DepositAccountsInfo, InitializeAccountsInfo, LidoInstruction, StakeDepositAccountsInfo,
     },
     logic::{
-        calc_total_lamports, check_rent_exempt, deserialize_lido, get_reserve_available_amount,
+        check_rent_exempt, deserialize_lido, get_reserve_available_amount,
         token_mint_to,
     },
     process_management::{
@@ -110,14 +110,11 @@ pub fn process_deposit(
         return Err(ProgramError::InvalidArgument);
     }
 
-    let mut lido = deserialize_lido(program_id, accounts.lido)?;
+    let lido = deserialize_lido(program_id, accounts.lido)?;
 
     lido.check_is_st_sol_account(&accounts.recipient)?;
     lido.check_reserve_authority(program_id, accounts.lido.key, accounts.reserve_account)?;
 
-    let rent = &Rent::from_account_info(accounts.sysvar_rent)?;
-
-    let total_lamports = calc_total_lamports(&lido, accounts.reserve_account, rent)?;
     invoke(
         &system_instruction::transfer(accounts.user.key, accounts.reserve_account.key, amount.0),
         &[
@@ -128,7 +125,8 @@ pub fn process_deposit(
     )?;
 
     let st_sol_amount = lido
-        .calc_pool_tokens_for_deposit(amount, total_lamports)
+        .exchange_rate
+        .exchange_sol(amount)
         .ok_or(LidoError::CalculationFailure)?;
 
     token_mint_to(
@@ -141,12 +139,8 @@ pub fn process_deposit(
         lido.sol_reserve_authority_bump_seed,
         st_sol_amount,
     )?;
-    let total_st_sol =
-        (lido.st_sol_total_shares + st_sol_amount).ok_or(LidoError::CalculationFailure)?;
 
-    lido.st_sol_total_shares = total_st_sol;
-
-    lido.save(accounts.lido)
+    Ok(())
 }
 
 pub fn process_stake_deposit(
