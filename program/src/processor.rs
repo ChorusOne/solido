@@ -17,7 +17,8 @@ use crate::{
         process_remove_validator,
     },
     state::{
-        FeeDistribution, FeeRecipients, Maintainers, Validator, Validators, LIDO_CONSTANT_SIZE,LIDO_VERSION
+        FeeDistribution, FeeRecipients, Maintainers, Validator, Validators, LIDO_CONSTANT_SIZE,
+        LIDO_VERSION,
     },
     token::{Lamports, StLamports},
     DEPOSIT_AUTHORITY, RESERVE_AUTHORITY, VALIDATOR_STAKE_ACCOUNT,
