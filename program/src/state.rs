@@ -16,7 +16,6 @@ use crate::token::{Lamports, Rational, StLamports};
 use crate::util::serialize_b58;
 use crate::RESERVE_AUTHORITY;
 use crate::VALIDATOR_STAKE_ACCOUNT;
-use solana_program::clock::Slot;
 use spl_stake_pool::solana_program::clock::Epoch;
 
 pub const LIDO_VERSION: u8 = 0;
@@ -96,9 +95,9 @@ pub type Maintainers = AccountSet;
 /// 5. Etc.
 #[repr(C)]
 #[derive(
-  Clone, Debug, Default, BorshDeserialize, BorshSerialize, Eq, PartialEq, Serialize,
+  Clone, Debug, Default, BorshDeserialize, BorshSerialize, BorshSchema, Eq, PartialEq, Serialize,
 )]
-struct ExchangeRate {
+pub struct ExchangeRate {
     /// The epoch in which we last called `UpdateExchangeRate`.
     pub computed_in_epoch: Epoch,
 
@@ -109,6 +108,24 @@ struct ExchangeRate {
     /// bookkeeping, so excluding the validation rewards paid at the start of
     /// epoch `computed_in_epoch`.
     pub sol_balance: Lamports,
+}
+
+impl ExchangeRate {
+    pub fn exchange_sol(&self, amount: Lamports) -> Option<StLamports> {
+        // The exchange rate starts out at 1:1, if there are no deposits yet.
+        if self.sol_balance == Lamports(0) {
+            return Some(StLamports(amount.0))
+        }
+
+        let rate = Rational {
+            numerator: self.st_sol_supply.0,
+            denominator: self.sol_balance.0,
+        };
+        // The result is in Lamports, because the type system considers Rational
+        // dimensionless, but in this case `rate` has dimensions stSOL/SOL, so
+        // we need to re-wrap the result in the right type.
+        (amount * rate).map(|x| StLamports(x.0))
+    }
 }
 
 #[repr(C)]
@@ -161,20 +178,6 @@ impl Lido {
             ..Default::default()
         };
         get_instance_packed_len(&lido_instance).unwrap()
-    }
-    pub fn calc_pool_tokens_for_deposit(
-        &self,
-        stake_lamports: Lamports,
-        total_lamports: Lamports,
-    ) -> Option<StLamports> {
-        if total_lamports == Lamports(0) {
-            return Some(StLamports(stake_lamports.0));
-        }
-        let ratio = Rational {
-            numerator: self.st_sol_total_shares.0,
-            denominator: total_lamports.0,
-        };
-        StLamports(stake_lamports.0) * ratio
     }
 
     pub fn is_initialized(&self) -> ProgramResult {
