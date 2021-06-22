@@ -555,6 +555,26 @@ impl Context {
         .await
     }
 
+    pub async fn try_update_exchange_rate(&mut self) -> transport::Result<()> {
+        send_transaction(
+            &mut self.context,
+            &[instruction::update_exchange_rate(
+                &id(),
+                &instruction::UpdateExchangeRateAccountsMeta {
+                    lido: self.solido.pubkey(),
+                    reserve: self.reserve_address,
+                    st_sol_mint: self.st_sol_mint,
+                },
+            )],
+            vec![],
+        )
+            .await
+    }
+
+    pub async fn update_exchange_rate(&mut self) {
+        self.try_update_exchange_rate().await.expect("Failed to update exchange rate.");
+    }
+
     pub async fn try_get_account(&mut self, address: Pubkey) -> Option<Account> {
         self.context
             .banks_client
