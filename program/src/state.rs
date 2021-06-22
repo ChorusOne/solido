@@ -16,6 +16,8 @@ use crate::token::{Lamports, Rational, StLamports};
 use crate::util::serialize_b58;
 use crate::RESERVE_AUTHORITY;
 use crate::VALIDATOR_STAKE_ACCOUNT;
+use solana_program::clock::Slot;
+use spl_stake_pool::solana_program::clock::Epoch;
 
 pub const LIDO_VERSION: u8 = 0;
 /// Constant size of header size = 1 version,2 public keys, 1 u64, 2 u8
@@ -27,6 +29,87 @@ pub const LIDO_CONSTANT_SIZE: usize = LIDO_CONSTANT_HEADER_SIZE + LIDO_CONSTANT_
 
 pub type Validators = AccountMap<Validator>;
 pub type Maintainers = AccountSet;
+
+/// The exchange rate used for deposits and rewards distribution.
+///
+/// The exchange rate of SOL to stSOL is determined by the SOL balance of
+/// Solido, and the total stSOL supply: every stSOL represents a share of
+/// ownership of the SOL pool.
+///
+/// Deposits do not change the exchange rate: we mint new stSOL proportional to
+/// the amount deposited, to keep the exchange rate constant. However, rewards
+/// *do* change the exchange rate. This is how rewards get distributed to stSOL
+/// holders without any transactions: their stSOL will be worth more SOL.
+///
+/// Let's call an increase of the SOL balance that mints a proportional amount
+/// of stSOL a *deposit*, and an increase of the SOL balance that does not mint
+/// any stSOL a *donation*. The ordering of donations relative to one another is
+/// not relevant, and the order of deposits relative to one another is not
+/// relevant either. But the order of deposits relative to donations is: if you
+/// deposit before a donation, you get more stSOL than when you deposit after.
+/// If you deposit before, you benefit from the reward, if you deposit after,
+/// you do not. In formal terms, *deposit and and donate do not commute*.
+///
+/// This presents a problem if we want to do rewards distribution in multiple
+/// steps (one step per validator). Reward distribution is a combination of a
+/// donation (the observed rewards minus fees), and a deposit (the fees, which
+/// get paid as stSOL). Because deposit and donate do not commute, different
+/// orders of observing validator rewards would lead to different outcomes. We
+/// don't want that.
+///
+/// To resolve this, we use a fixed exchange rate, and update it once per epoch.
+/// This means that a donation no longer changes the exchange rate (not
+/// instantly at least). That means that we can observe validator rewards in any
+/// order we like. A different way of thinking about this, is that by fixing
+/// the exchange rate for the duration of the epoch, all the different ways of
+/// ordering donations and deposits have the same outcome, so every sequence of
+/// deposits and donations is equivalent to one where they all happen
+/// simultaneously at the start of the epoch. Time within an epoch ceases to
+/// exist, the only thing relevant is the epoch.
+///
+/// When we update the exchange rate, we set the values to the balance that we
+/// inferred by tracking all changes. This does not include any external
+/// modifications (validation rewards paid into stake accounts) that were not
+/// yet observed at the time of the update.
+///
+/// When we observe the actual validator balance in `UpdateValidatorBalance`,
+/// the difference between the tracked balance and the observed balance, is the
+/// reward. We split this reward into a fee part, and a donation part, and
+/// update the tracked balances accordingly. This does not by itself change the
+/// exchange rate, but the new values will be used in the next exchange rate
+/// update.
+///
+/// `UpdateValidatorBalance` is blocked in a given epoch, until we update the
+/// exchange rate in that epoch. Validation rewards are distributed at the start
+/// of the epoch. This means that in epoch `i`:
+///
+/// 1. `UpdateExchangeRate` updates the exchange rate to what it was at the end
+///    of epoch `i - 1`.
+/// 2. `UpdateValidatorBalance` runs for every validator, and observes the
+///    rewards. Deposits (including those for fees) in epoch `i` therefore use
+///    the exchange rate at the end of epoch `i - 1`, so deposits in epoch `i`
+///    do not benefit from rewards received in epoch `i`.
+/// 3. Epoch `i + 1` starts, and validation rewards are paid into stake accounts.
+/// 4. `UpdateExchangeRate` updates the exchange rate to what it was at the end
+///    of epoch `i`. Everybody who deposited in epoch `i` (users, as well as fee
+///    recipients) now benefit from the validation rewards received in epoch `i`.
+/// 5. Etc.
+#[repr(C)]
+#[derive(
+  Clone, Debug, Default, BorshDeserialize, BorshSerialize, Eq, PartialEq, Serialize,
+)]
+struct ExchangeRate {
+    /// The epoch in which we last called `UpdateExchangeRate`.
+    pub computed_in_epoch: Epoch,
+
+    /// The amount of stSOL that existed at that time.
+    pub st_sol_supply: StLamports,
+
+    /// The amount of SOL we managed at that time, according to our internal
+    /// bookkeeping, so excluding the validation rewards paid at the start of
+    /// epoch `computed_in_epoch`.
+    pub sol_balance: Lamports,
+}
 
 #[repr(C)]
 #[derive(
@@ -43,8 +126,8 @@ pub struct Lido {
     #[serde(serialize_with = "serialize_b58")]
     pub st_sol_mint: Pubkey,
 
-    /// Total Lido tokens in circulation
-    pub st_sol_total_shares: StLamports,
+    /// Exchange rate to use when depositing.
+    pub exchange_rate: ExchangeRate,
 
     /// Bump seeds for signing messages on behalf of the authority
     pub sol_reserve_authority_bump_seed: u8,
