@@ -181,51 +181,51 @@ impl FromStr for OutputMode {
 
 cli_opt_struct! {
     CreateSolidoOpts {
-        #[doc="Address of the Solido program."]
+        /// Address of the Solido program
         #[clap(long, value_name = "address")]
         solido_program_id: Pubkey,
 
-        #[doc="Numerator of the fee fraction."]
+        /// Numerator of the fee fraction.
         #[clap(long, value_name = "int")]
         fee_numerator: u64,
 
-        #[doc="Denominator of the fee fraction."]
+        ///Denominator of the fee fraction.
         #[clap(long, value_name = "int")]
         fee_denominator: u64,
 
-        #[doc="The maximum number of validators that this Solido instance will support."]
+        /// The maximum number of validators that this Solido instance will support.
         #[clap(long, value_name = "int")]
         max_validators: u32,
 
-        #[doc="The maximum number of maintainers that this Solido instance will support."]
+        /// The maximum number of maintainers that this Solido instance will support.
         #[clap(long, value_name = "int")]
         max_maintainers: u32,
 
-        #[doc="Fees are divided proportionally to the sum of all specified fees,
-        for instance, if all the fees are the same value, they will be divided
-        equally.  Treasury fee share."]
+        /// Fees are divided proportionally to the sum of all specified fees,
+        /// for instance, if all the fees are the same value, they will be divided
+        /// equally.  Treasury fee share.
 
         #[clap(long, value_name = "int")]
         treasury_fee: u32,
-        #[doc="Validation fee share, to be divided equally among validators."]
+        /// Validation fee share, to be divided equally among validators.
         #[clap(long, value_name = "int")]
         validation_fee: u32,
-        #[doc="Developer fee share."]
+        /// Developer fee share.
         #[clap(long, value_name = "int")]
         developer_fee: u32,
 
-        #[doc="Account who will own the stSOL SPL token account that receives treasury fees."]
+        /// Account who will own the stSOL SPL token account that receives treasury fees.
         #[clap(long, value_name = "address")]
         treasury_account_owner: Pubkey,
-        #[doc="Account who will own the stSOL SPL token account that receives the developer fees."]
+        /// Account who will own the stSOL SPL token account that receives the developer fees.
         #[clap(long, value_name = "address")]
         developer_account_owner: Pubkey,
 
-        #[doc="Used to compute Solido's manager. Multisig instance."]
+        /// Used to compute Solido's manager. Multisig instance.
         #[clap(long, value_name = "address")]
         multisig_address: Pubkey,
 
-        #[doc="Address of the Multisig program."]
+        /// Address of the Multisig program.
         #[clap(long)]
         multisig_program_id: Pubkey,
     }
@@ -233,26 +233,26 @@ cli_opt_struct! {
 
 cli_opt_struct! {
     AddValidatorOpts {
-        #[doc="Address of the Solido program."]
+        /// Address of the Solido program.
         #[clap(long, value_name = "address")]
         solido_program_id: Pubkey,
-        #[doc="Account that stores the data for this Solido instance."]
+        /// Account that stores the data for this Solido instance.
         #[clap(long, value_name = "address")]
         solido_address: Pubkey,
 
-        #[doc="Address of the validator vote account."]
+        /// Address of the validator vote account.
         #[clap(long, value_name = "address")]
         validator_vote_account: Pubkey,
 
-        #[doc="Validator stSol token account."]
+        /// Validator stSol token account.
         #[clap(long, value_name = "address")]
         validator_fee_account: Pubkey,
 
-        #[doc="Multisig instance."]
+        /// Multisig instance.
         #[clap(long, value_name = "address")]
         multisig_address: Pubkey,
 
-        #[doc="Address of the Multisig program."]
+        /// Address of the Multisig program.
         #[clap(long)]
         multisig_program_id: Pubkey,
     }
@@ -260,22 +260,22 @@ cli_opt_struct! {
 
 cli_opt_struct! {
     AddRemoveMaintainerOpts {
-        #[doc="Address of the Solido program."]
+        /// Address of the Solido program.
         #[clap(long, value_name = "address")]
         solido_program_id: Pubkey,
-        #[doc="Account that stores the data for this Solido instance."]
+        /// Account that stores the data for this Solido instance.
         #[clap(long, value_name = "address")]
         solido_address: Pubkey,
 
-        #[doc="Maintainer to add or remove."]
+        /// Maintainer to add or remove.
         #[clap(long, value_name = "address")]
         maintainer_address: Pubkey,
 
-        #[doc="Multisig instance."]
+        /// Multisig instance.
         #[clap(long, value_name = "address")]
         multisig_address: Pubkey,
 
-        #[doc="Address of the Multisig program."]
+        /// Address of the Multisig program.
         #[clap(long)]
         multisig_program_id: Pubkey,
     }
@@ -283,10 +283,10 @@ cli_opt_struct! {
 
 cli_opt_struct! {
      ShowSolidoOpts {
-        #[doc="The solido instance to show"]
+        /// The solido instance to show
         #[clap(long, value_name = "address")]
         solido_address: Pubkey,
-        #[doc="Address of the Solido program."]
+        /// Address of the Solido program.
         #[clap(long, value_name = "address")]
         solido_program_id: Pubkey,
     }
@@ -294,11 +294,11 @@ cli_opt_struct! {
 
 cli_opt_struct! {
     PerformMaintenanceOpts {
-        #[doc="Address of the Solido program."]
+        /// Address of the Solido program.
         #[clap(long, value_name = "address")]
         solido_program_id: Pubkey,
 
-        #[doc="Account that stores the data for this Solido instance."]
+        /// Account that stores the data for this Solido instance.
         #[clap(long, value_name = "address")]
         solido_address: Pubkey,
     }
@@ -308,15 +308,15 @@ cli_opt_struct! {
 
 cli_opt_struct! {
     CreateMultisigOpts {
-        #[doc="How many signatures are needed to approve a transaction."]
+        /// How many signatures are needed to approve a transaction.
         #[clap(long)]
         threshold: u64,
 
-        #[doc="The public keys of the multisig owners, who can sign transactions."]
+        /// The public keys of the multisig owners, who can sign transactions.
         #[clap(long = "owner")]
         owners: PubkeyVec,
 
-        #[doc="Address of the Multisig program."]
+        /// Address of the Multisig program.
         #[clap(long)]
         multisig_program_id: Pubkey,
     }
@@ -340,23 +340,23 @@ impl CreateMultisigOpts {
 
 cli_opt_struct! {
 ProposeUpgradeOpts {
-        #[doc="The multisig account whose owners should vote for this proposal."]
+        /// The multisig account whose owners should vote for this proposal.
         #[clap(long, value_name = "address")]
         multisig_address: Pubkey,
 
-        #[doc="The program id of the program to upgrade."]
+        /// The program id of the program to upgrade.
         #[clap(long, value_name = "address")]
         program_address: Pubkey,
 
-        #[doc="The address that holds the new program data."]
+        /// The address that holds the new program data.
         #[clap(long, value_name = "address")]
         buffer_address: Pubkey,
 
-        #[doc="Account that will receive leftover funds from the buffer account."]
+        /// Account that will receive leftover funds from the buffer account.
         #[clap(long, value_name = "address")]
         spill_address: Pubkey,
 
-        #[doc="Address of the Multisig program."]
+        /// Address of the Multisig program.
         #[clap(long)]
         multisig_program_id: Pubkey,
     }
@@ -364,11 +364,11 @@ ProposeUpgradeOpts {
 
 cli_opt_struct! {
 ShowMultisigOpts {
-        #[doc="The multisig account to display."]
+        /// The multisig account to display.
         #[clap(long, value_name = "address")]
         multisig_address: Pubkey,
 
-        #[doc="Address of the Multisig program."]
+        /// Address of the Multisig program.
         #[clap(long)]
         multisig_program_id: Pubkey,
     }
@@ -376,15 +376,15 @@ ShowMultisigOpts {
 
 cli_opt_struct! {
     ShowTransactionOpts {
-        #[doc="The transaction to display."]
+        /// The transaction to display.
         #[clap(long, value_name = "address")]
         transaction_address: Pubkey,
 
-        #[doc="The transaction to display."]
+        /// The transaction to display.
         #[clap(long, value_name = "address")]
         solido_program_id: Pubkey,
 
-        #[doc="Address of the Multisig program."]
+        /// Address of the Multisig program.
         #[clap(long)]
         multisig_program_id: Pubkey,
     }
@@ -393,15 +393,15 @@ cli_opt_struct! {
 cli_opt_struct! {
     ApproveOpts {
         // TODO: Can be omitted, we can obtain it from the transaction account.
-        #[doc="The multisig account whose owners should vote for this proposal."]
+        /// The multisig account whose owners should vote for this proposal.
         #[clap(long, value_name = "address")]
         multisig_address: Pubkey,
 
-        #[doc="The transaction to approve."]
+        /// The transaction to approve.
         #[clap(long, value_name = "address")]
         transaction_address: Pubkey,
 
-        #[doc="Address of the Multisig program."]
+        /// Address of the Multisig program.
         #[clap(long)]
         multisig_program_id: Pubkey,
     }
@@ -410,15 +410,15 @@ cli_opt_struct! {
 cli_opt_struct! {
     ExecuteTransactionOpts {
         // TODO: Can be omitted, we can obtain it from the transaction account.
-        #[doc="The multisig account whose owners approved this transaction."]
+        /// The multisig account whose owners approved this transaction.
         #[clap(long, value_name = "address")]
         multisig_address: Pubkey,
 
-        #[doc="The transaction to execute."]
+        /// The transaction to execute.
         #[clap(long, value_name = "address")]
         transaction_address: Pubkey,
 
-        #[doc="Address of the Multisig program."]
+        /// Address of the Multisig program.
         #[clap(long)]
         multisig_program_id: Pubkey,
     }
@@ -426,21 +426,21 @@ cli_opt_struct! {
 
 cli_opt_struct! {
     ProposeChangeMultisigOpts {
-        #[doc="The multisig account to modify."]
+        /// The multisig account to modify.
         #[clap(long)]
         multisig_address: Pubkey,
 
         // The fields below are the same as for `CreateMultisigOpts`, but we can't
         // just embed a `CreateMultisigOpts`, because Clap does not support that.
-        #[doc="How many signatures are needed to approve a transaction."]
+        /// How many signatures are needed to approve a transaction.
         #[clap(long)]
         threshold: u64,
 
-        #[doc="The public keys of the multisig owners, who can sign transactions."]
+        /// The public keys of the multisig owners, who can sign transactions.
         #[clap(long = "owner")]
         owners: PubkeyVec,
 
-        #[doc="Address of the Multisig program."]
+        /// Address of the Multisig program.
         #[clap(long)]
         multisig_program_id: Pubkey,
     }
@@ -448,23 +448,22 @@ cli_opt_struct! {
 
 cli_opt_struct! {
     RunMaintainerOpts {
-        #[doc="Address of the Solido program."]
+        /// Address of the Solido program.
         #[clap(long)]
         solido_program_id: Pubkey,
 
-        #[doc="Account that stores the data for this Solido instance."]
+        /// Account that stores the data for this Solido instance.
         #[clap(long)]
         solido_address: Pubkey,
 
-        #[doc="Listen address and port for the http server that serves a /metrics endpoint. Defaults to 0.0.0:8923"]
-        #[clap(long)]
+        /// Listen address and port for the http server that serves a /metrics endpoint. Defaults to 0.0.0.0:8923.
         listen: String => "0.0.0.0:8923".to_owned(),
 
         // The expected wait time is half the max poll interval. A max poll interval
         // of a few minutes should be plenty fast for a production deployment, but
         // for testing you can reduce this value to make the daemon more responsive,
         // to eliminate some waiting time.
-        #[doc="Maximum time to wait in seconds after there was no maintenance to perform, before checking again. Defaults to 120s"]
+        /// Maximum time to wait in seconds after there was no maintenance to perform, before checking again. Defaults to 120s
         #[clap(long)]
         max_poll_interval_seconds: u64 => 120,
     }
