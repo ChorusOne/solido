@@ -6,17 +6,17 @@ use std::ops::Sub;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use solana_program::borsh::get_instance_packed_len;
 use solana_program::{
-    account_info::AccountInfo, entrypoint::ProgramResult, msg, program_error::ProgramError,
-    program_pack::Pack, pubkey::Pubkey,
+    account_info::AccountInfo, clock::Epoch, entrypoint::ProgramResult, msg,
+    program_error::ProgramError, program_pack::Pack, pubkey::Pubkey, rent::Rent,
 };
 
 use crate::account_map::{AccountMap, AccountSet, PubkeyAndEntry};
 use crate::error::LidoError;
+use crate::logic::get_reserve_available_balance;
 use crate::token::{Lamports, Rational, StLamports};
 use crate::util::serialize_b58;
 use crate::RESERVE_AUTHORITY;
 use crate::VALIDATOR_STAKE_ACCOUNT;
-use spl_stake_pool::solana_program::clock::Epoch;
 
 pub const LIDO_VERSION: u8 = 0;
 
@@ -294,6 +294,34 @@ impl Lido {
         // ProgramTest matches the name of the crate.
         BorshSerialize::serialize(self, &mut *account.data.borrow_mut())?;
         Ok(())
+    }
+
+    /// Compute the total amount of SOL managed by this instance.
+    ///
+    /// This includes staked as well as non-staked SOL. It excludes SOL in the
+    /// reserve that effectively locked because it is needed to keep the reserve
+    /// rent-exempt.
+    ///
+    /// The computation is based on the amount of SOL per validator that we track
+    /// ourselves, so if there are any unobserved rewards in the stake accounts,
+    /// these will not be included.
+    pub fn get_sol_balance(
+        &self,
+        rent: &Rent,
+        reserve: &AccountInfo,
+    ) -> Result<Lamports, LidoError> {
+        let effective_reserve_balance = get_reserve_available_balance(rent, reserve)?;
+
+        // The remaining SOL managed is all in stake accounts.
+        let validator_balance: Option<Lamports> = self
+            .validators
+            .iter_entries()
+            .map(|v| v.stake_accounts_balance)
+            .sum();
+
+        validator_balance
+            .and_then(|s| s + effective_reserve_balance)
+            .ok_or(LidoError::CalculationFailure)
     }
 }
 
@@ -592,6 +620,60 @@ mod test_lido {
 
         let expected_error: ProgramError = LidoError::InvalidStSolAccount.into();
         assert_eq!(result, Err(expected_error));
+    }
+
+    #[test]
+    fn test_get_sol_balance() {
+        use std::cell::RefCell;
+        use std::rc::Rc;
+
+        let rent = &Rent::default();
+        let mut lido = Lido::default();
+        let key = Pubkey::default();
+        let mut amount = rent.minimum_balance(0);
+        let mut reserve_account =
+            AccountInfo::new(&key, true, true, &mut amount, &mut [], &key, false, 0);
+
+        assert_eq!(
+            lido.get_sol_balance(&rent, &reserve_account),
+            Ok(Lamports(0))
+        );
+
+        let mut new_amount = rent.minimum_balance(0) + 10;
+        reserve_account.lamports = Rc::new(RefCell::new(&mut new_amount));
+
+        assert_eq!(
+            lido.get_sol_balance(&rent, &reserve_account),
+            Ok(Lamports(10))
+        );
+
+        lido.validators.maximum_entries = 1;
+        lido.validators
+            .add(Pubkey::new_unique(), Validator::new(Pubkey::new_unique()))
+            .unwrap();
+        lido.validators.entries[0].entry.stake_accounts_balance = Lamports(37);
+        assert_eq!(
+            lido.get_sol_balance(&rent, &reserve_account),
+            Ok(Lamports(10 + 37))
+        );
+
+        lido.validators.entries[0].entry.stake_accounts_balance = Lamports(u64::MAX);
+
+        assert_eq!(
+            lido.get_sol_balance(&rent, &reserve_account),
+            Err(LidoError::CalculationFailure)
+        );
+
+        let mut new_amount = u64::MAX;
+        reserve_account.lamports = Rc::new(RefCell::new(&mut new_amount));
+        // The amount here is more than the rent exemption that gets discounted
+        // from the reserve, causing an overflow.
+        lido.validators.entries[0].entry.stake_accounts_balance = Lamports(5_000_000);
+
+        assert_eq!(
+            lido.get_sol_balance(&rent, &reserve_account),
+            Err(LidoError::CalculationFailure)
+        );
     }
 
     #[test]

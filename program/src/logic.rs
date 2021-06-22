@@ -19,40 +19,23 @@ pub(crate) fn check_rent_exempt(
     }
     Ok(())
 }
-
-/// Gets the amount of lamports in reserve. The rent is subtracted from the total amount.
-/// Fails if the reserve's balance minus rent is < 0.
-pub fn get_reserve_available_amount(
+/// Subtract the minimum rent-exempt balance from the given reserve balance.
+///
+/// The rent-exempt amount can never be transferred, or the account would
+/// disappear, so we should not treat it as part of Solido's managed SOL.
+pub fn get_reserve_available_balance(
+    rent: &Rent,
     reserve_account: &AccountInfo,
-    sysvar_rent: &Rent,
 ) -> Result<Lamports, LidoError> {
-    reserve_account
-        .lamports()
-        .checked_sub(sysvar_rent.minimum_balance(0))
-        .map(Lamports)
-        .ok_or(LidoError::ReserveIsNotRentExempt)
-}
-
-/// Calculates the sum of lamports available in the reserve and the stake pool
-/// Discounts the rent payed
-pub fn calc_total_lamports(
-    lido: &Lido,
-    reserve_account: &AccountInfo,
-    sysvar_rent: &Rent,
-) -> Result<Lamports, LidoError> {
-    // There are three places where we store SOL: the reserve account, the stake
-    // pool, and stake accounts with activating stake.
-    let reserve_balance = get_reserve_available_amount(reserve_account, sysvar_rent)?;
-    let activating_balance: Option<Lamports> = lido
-        .validators
-        .entries
-        .iter()
-        .map(|pe| pe.entry.stake_accounts_balance)
-        .sum();
-
-    activating_balance
-        .and_then(|s| s + reserve_balance)
-        .ok_or(LidoError::CalculationFailure)
+    let minimum_balance = Lamports(rent.minimum_balance(0));
+    match Lamports(reserve_account.lamports()) - minimum_balance {
+        Some(balance) => Ok(balance),
+        None => {
+            msg!("The reserve account is not rent-exempt.");
+            msg!("Please ensure it holds at least {}.", minimum_balance);
+            return Err(LidoError::ReserveIsNotRentExempt);
+        }
+    }
 }
 
 /// Issue a spl_token `MintTo` instruction.
@@ -98,60 +81,7 @@ pub fn deserialize_lido(program_id: &Pubkey, lido: &AccountInfo) -> Result<Lido,
 
 #[cfg(test)]
 mod test {
-    use std::{cell::RefCell, rc::Rc};
-
     use super::*;
-    use crate::state::{Lido, Validator};
-
-    #[test]
-    fn test_calc_total_lamports() {
-        let rent = &Rent::default();
-        let mut lido = Lido::default();
-        let key = Pubkey::default();
-        let mut amount = rent.minimum_balance(0);
-        let mut reserve_account =
-            AccountInfo::new(&key, true, true, &mut amount, &mut [], &key, false, 0);
-
-        assert_eq!(
-            calc_total_lamports(&lido, &reserve_account, rent).unwrap(),
-            Lamports(0)
-        );
-
-        let mut new_amount = rent.minimum_balance(0) + 10;
-        reserve_account.lamports = Rc::new(RefCell::new(&mut new_amount));
-        assert_eq!(
-            calc_total_lamports(&lido, &reserve_account, rent).unwrap(),
-            Lamports(10)
-        );
-
-        lido.validators.maximum_entries = 1;
-        lido.validators
-            .add(Pubkey::new_unique(), Validator::new(Pubkey::new_unique()))
-            .unwrap();
-        lido.validators.entries[0].entry.stake_accounts_balance = Lamports(37);
-        assert_eq!(
-            calc_total_lamports(&lido, &reserve_account, rent).unwrap(),
-            Lamports(10 + 37)
-        );
-
-        lido.validators.entries[0].entry.stake_accounts_balance = Lamports(u64::MAX);
-
-        assert_eq!(
-            calc_total_lamports(&lido, &reserve_account, rent),
-            Err(LidoError::CalculationFailure)
-        );
-
-        let mut new_amount = u64::MAX;
-        reserve_account.lamports = Rc::new(RefCell::new(&mut new_amount));
-        // The amount here is more than the rent exemption that gets discounted
-        // from the reserve, causing an overflow.
-        lido.validators.entries[0].entry.stake_accounts_balance = Lamports(5_000_000);
-
-        assert_eq!(
-            calc_total_lamports(&lido, &reserve_account, rent),
-            Err(LidoError::CalculationFailure)
-        );
-    }
 
     #[test]
     fn test_account_not_rent_exempt() {
