@@ -161,7 +161,6 @@ impl Context {
         let solido_size = Lido::calculate_size(max_validators, max_maintainers);
         let rent = result.context.banks_client.get_rent().await.unwrap();
         let rent_solido = rent.minimum_balance(solido_size);
-        println!("Computed solido size is {}", solido_size);
 
         let rent_reserve = rent.minimum_balance(0);
         result.fund(&reserve_address, Lamports(rent_reserve)).await;

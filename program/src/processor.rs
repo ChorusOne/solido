@@ -25,7 +25,7 @@ use crate::{
 };
 
 use {
-    borsh::{BorshDeserialize, BorshSerialize},
+    borsh::BorshDeserialize,
     solana_program::{
         account_info::AccountInfo,
         entrypoint::ProgramResult,
@@ -95,14 +95,7 @@ pub fn process_initialize(
     lido.check_is_st_sol_account(&accounts.treasury_account)?;
     lido.check_is_st_sol_account(&accounts.developer_account)?;
 
-    // For some reason, calling lido.serialize(&mut *accounts.lido.data.borrow_mut())
-    // stopped working; it leaves the data with size zero. As a workaround, write
-    // it to an intermediate buffer instead, and copy the buffer to the account
-    // data. ¯\_(ツ)_/¯
-    let mut buf = Vec::new();
-    lido.serialize(&mut buf)?;
-    accounts.lido.data.borrow_mut()[..buf.len()].copy_from_slice(&buf[..]);
-    Ok(())
+    lido.save(accounts.lido)
 }
 
 pub fn process_deposit(
@@ -153,8 +146,7 @@ pub fn process_deposit(
 
     lido.st_sol_total_shares = total_st_sol;
 
-    lido.serialize(&mut *accounts.lido.data.borrow_mut())
-        .map_err(|e| e.into())
+    lido.save(accounts.lido)
 }
 
 pub fn process_stake_deposit(
@@ -328,9 +320,7 @@ pub fn process_stake_deposit(
     // We now consumed this stake account, bump the index.
     validator.entry.stake_accounts_seed_end += 1;
 
-    lido.serialize(&mut *accounts.lido.data.borrow_mut())?;
-
-    Ok(())
+    lido.save(accounts.lido)
 }
 
 // TODO(#93) Implement withdraw

@@ -200,6 +200,19 @@ impl Lido {
         }
         Ok(reserve_id)
     }
+
+    pub fn save(&self, account: &AccountInfo) -> ProgramResult {
+        // For some reason, calling self.serialize(&mut *account.data.borrow_mut())
+        // stopped working; it leaves the data with size zero. As a workaround
+        // serialize to an intermediate buffer first, and then overwrite the
+        // data in the account. ¯\_(ツ)_/¯
+        // Also, we don't use Vec::with_capacity here, because the account may
+        // be so large that the program goes out of memory.
+        let mut buf = Vec::new();
+        BorshSerialize::serialize(self, &mut buf)?;
+        account.data.borrow_mut()[..buf.len()].copy_from_slice(&buf[..]);
+        Ok(())
+    }
 }
 
 #[repr(C)]

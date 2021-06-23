@@ -1,4 +1,3 @@
-use borsh::BorshSerialize;
 use solana_program::{account_info::AccountInfo, entrypoint::ProgramResult, msg, pubkey::Pubkey};
 
 use crate::token::Lamports;
@@ -30,8 +29,7 @@ pub fn process_change_fee_spec(
     lido.fee_recipients.treasury_account = *accounts.treasury_account.key;
     lido.fee_recipients.developer_account = *accounts.developer_account.key;
 
-    lido.serialize(&mut *accounts.lido.data.borrow_mut())
-        .map_err(|e| e.into())
+    lido.save(accounts.lido)
 }
 
 pub fn process_add_validator(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> ProgramResult {
@@ -44,8 +42,8 @@ pub fn process_add_validator(program_id: &Pubkey, accounts_raw: &[AccountInfo]) 
         *accounts.validator_vote_account.key,
         Validator::new(*accounts.validator_fee_st_sol_account.key),
     )?;
-    lido.serialize(&mut *accounts.lido.data.borrow_mut())
-        .map_err(|err| err.into())
+
+    lido.save(accounts.lido)
 }
 
 /// Removes a validator from the stake pool, notice that the validator might not
@@ -73,8 +71,7 @@ pub fn process_remove_validator(
         return Err(LidoError::ValidatorHasUnclaimedCredit.into());
     }
 
-    lido.serialize(&mut *accounts.lido.data.borrow_mut())
-        .map_err(|err| err.into())
+    lido.save(accounts.lido)
 }
 
 pub fn process_claim_validator_fee(
@@ -102,8 +99,8 @@ pub fn process_claim_validator_fee(
         pubkey_entry.entry.fee_credit,
     )?;
     pubkey_entry.entry.fee_credit = StLamports(0);
-    lido.serialize(&mut *accounts.lido.data.borrow_mut())
-        .map_err(|err| err.into())
+
+    lido.save(accounts.lido)
 }
 
 pub fn process_distribute_fees(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> ProgramResult {
@@ -147,8 +144,8 @@ pub fn process_distribute_fees(program_id: &Pubkey, accounts_raw: &[AccountInfo]
         pe.entry.fee_credit = (pe.entry.fee_credit + token_shares.reward_per_validator)
             .ok_or(LidoError::CalculationFailure)?;
     }
-    lido.serialize(&mut *accounts.lido.data.borrow_mut())
-        .map_err(|err| err.into())
+
+    lido.save(accounts.lido)
 }
 
 /// Adds a maintainer to the list of maintainers
@@ -158,8 +155,8 @@ pub fn process_add_maintainer(program_id: &Pubkey, accounts_raw: &[AccountInfo])
     lido.check_manager(accounts.manager)?;
 
     lido.maintainers.add(*accounts.maintainer.key, ())?;
-    lido.serialize(&mut *accounts.lido.data.borrow_mut())
-        .map_err(|err| err.into())
+
+    lido.save(accounts.lido)
 }
 
 /// Removes a maintainer from the list of maintainers
@@ -172,8 +169,8 @@ pub fn process_remove_maintainer(
     lido.check_manager(accounts.manager)?;
 
     lido.maintainers.remove(accounts.maintainer.key)?;
-    lido.serialize(&mut *accounts.lido.data.borrow_mut())
-        .map_err(|err| err.into())
+
+    lido.save(accounts.lido)
 }
 
 /// TODO(#186) Allow validator to change fee account
