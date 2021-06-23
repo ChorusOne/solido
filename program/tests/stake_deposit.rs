@@ -5,43 +5,27 @@ mod helpers;
 use helpers::{
     get_account, program_test, simple_add_validator_to_pool, LidoAccounts, ValidatorAccounts,
 };
-use lido::state::Lido;
 use lido::token::Lamports;
-use solana_program::{borsh::try_from_slice_unchecked, hash::Hash};
-use solana_program_test::{tokio, BanksClient};
-use solana_sdk::signature::{Keypair, Signer};
+use solana_program_test::{tokio, ProgramTestContext};
+use solana_sdk::signature::Signer;
 
-async fn setup() -> (BanksClient, Keypair, Hash, LidoAccounts, ValidatorAccounts) {
-    let (mut banks_client, payer, recent_blockhash) = program_test().start().await;
+async fn setup() -> (ProgramTestContext, LidoAccounts, ValidatorAccounts) {
+    let mut context = program_test().start_with_context().await;
     let mut lido_accounts = LidoAccounts::new();
-    lido_accounts
-        .initialize_lido(&mut banks_client, &payer, &recent_blockhash)
-        .await
-        .unwrap();
+    lido_accounts.initialize_lido(&mut context).await;
+    let validator = simple_add_validator_to_pool(&mut context, &lido_accounts).await;
 
-    let validator =
-        simple_add_validator_to_pool(&mut banks_client, &payer, &recent_blockhash, &lido_accounts)
-            .await;
-
-    (
-        banks_client,
-        payer,
-        recent_blockhash,
-        lido_accounts,
-        validator,
-    )
+    (context, lido_accounts, validator)
 }
 pub const TEST_DEPOSIT_AMOUNT: Lamports = Lamports(100_000_000_000);
 pub const TEST_STAKE_DEPOSIT_AMOUNT: Lamports = Lamports(10_000_000_000);
 
 #[tokio::test]
 async fn test_successful_stake_deposit() {
-    let (mut banks_client, payer, recent_blockhash, lido_accounts, validator_accounts) =
-        setup().await;
+    let (mut context, lido_accounts, validator_accounts) = setup().await;
 
     // Sanity check before we start: the validator should have zero balance in zero stake accounts.
-    let solido_account = get_account(&mut banks_client, &lido_accounts.lido.pubkey()).await;
-    let solido_before = try_from_slice_unchecked::<Lido>(solido_account.data.as_slice()).unwrap();
+    let solido_before = lido_accounts.get_solido(&mut context).await;
     let validator_before = &solido_before.validators.entries[0].entry;
     assert_eq!(validator_before.stake_accounts_balance, Lamports(0));
     assert_eq!(validator_before.stake_accounts_seed_begin, 0);
@@ -49,19 +33,12 @@ async fn test_successful_stake_deposit() {
 
     // Now we make a deposit, and then delegate part of it.
     lido_accounts
-        .deposit(
-            &mut banks_client,
-            &payer,
-            &recent_blockhash,
-            TEST_DEPOSIT_AMOUNT,
-        )
+        .deposit(&mut context, TEST_DEPOSIT_AMOUNT)
         .await;
 
     let stake_account = lido_accounts
         .stake_deposit(
-            &mut banks_client,
-            &payer,
-            &recent_blockhash,
+            &mut context,
             &validator_accounts.vote_account.pubkey(),
             TEST_STAKE_DEPOSIT_AMOUNT,
         )
@@ -70,7 +47,7 @@ async fn test_successful_stake_deposit() {
     // The amount that we staked, should now be in the stake account.
     assert_eq!(
         Lamports(
-            get_account(&mut banks_client, &stake_account)
+            get_account(&mut context.banks_client, &stake_account)
                 .await
                 .lamports
         ),
@@ -79,8 +56,7 @@ async fn test_successful_stake_deposit() {
 
     // We should also have recorded in the Solido state that this validator now
     // has balance in a stake account.
-    let solido_account = get_account(&mut banks_client, &lido_accounts.lido.pubkey()).await;
-    let solido_after = try_from_slice_unchecked::<Lido>(solido_account.data.as_slice()).unwrap();
+    let solido_after = lido_accounts.get_solido(&mut context).await;
 
     let validator_after = &solido_after.validators.entries[0].entry;
     assert_eq!(

@@ -6,14 +6,16 @@ use lido::{
     token::Lamports,
     DEPOSIT_AUTHORITY, RESERVE_AUTHORITY,
 };
+use solana_program::instruction::Instruction;
 use solana_program::system_program;
-use solana_program::{hash::Hash, program_pack::Pack, pubkey::Pubkey, system_instruction};
+use solana_program::{program_pack::Pack, pubkey::Pubkey, system_instruction};
 use solana_program_test::*;
 use solana_sdk::{
     account::Account,
     borsh::try_from_slice_unchecked,
     signature::{Keypair, Signer},
     transaction::Transaction,
+    transport,
     transport::TransportError,
 };
 use solana_vote_program::vote_instruction;
@@ -37,6 +39,37 @@ pub fn program_test() -> ProgramTest {
     ProgramTest::new("lido", id(), processor!(processor::process))
 }
 
+/// Sign and send a transaction with a fresh block hash.
+///
+/// The payer always signs, but additional signers can be passed as well.
+///
+/// After this, `self.last_blockhash` will contain the block hash used for
+/// this transaction.
+async fn send_transaction(
+    context: &mut ProgramTestContext,
+    instructions: &[Instruction],
+    additional_signers: Vec<&Keypair>,
+) -> transport::Result<()> {
+    // Before we send the transaction, get a new block hash, to ensure that
+    // if you call `send_transaction` twice with the same payload, we actually
+    // send two transactions, instead of the second one silently being ignored.
+    context.last_blockhash = context
+        .banks_client
+        .get_new_blockhash(&context.last_blockhash)
+        .await
+        .unwrap()
+        .0;
+
+    let mut transaction = Transaction::new_with_payer(instructions, Some(&context.payer.pubkey()));
+
+    // Sign with the payer, and additional signers if any.
+    let mut signers = additional_signers;
+    signers.push(&context.payer);
+    transaction.sign(&signers, context.last_blockhash);
+
+    context.banks_client.process_transaction(transaction).await
+}
+
 pub struct ValidatorAccounts {
     pub node_account: Keypair,
     pub vote_account: Keypair,
@@ -44,37 +77,22 @@ pub struct ValidatorAccounts {
 }
 
 impl ValidatorAccounts {
-    pub async fn new(
-        banks_client: &mut BanksClient,
-        payer: &Keypair,
-        st_sol_mint: &Pubkey,
-        recent_blockhash: &Hash,
-    ) -> Self {
+    pub async fn new(context: &mut ProgramTestContext, st_sol_mint: &Pubkey) -> Self {
         let accounts = ValidatorAccounts {
             node_account: Keypair::new(),
             vote_account: Keypair::new(),
             fee_account: Keypair::new(),
         };
 
-        create_vote_account(
-            banks_client,
-            &payer,
-            &recent_blockhash,
-            &accounts.node_account,
-            &accounts.vote_account,
-        )
-        .await;
+        create_vote_account(context, &accounts.node_account, &accounts.vote_account).await;
 
         create_token_account(
-            banks_client,
-            payer,
-            recent_blockhash,
+            context,
             &accounts.fee_account,
             st_sol_mint,
             &accounts.node_account.pubkey(),
         )
-        .await
-        .unwrap();
+        .await;
 
         accounts
     }
@@ -135,55 +153,38 @@ impl LidoAccounts {
         }
     }
 
-    pub async fn initialize_lido(
-        &mut self,
-        banks_client: &mut BanksClient,
-        payer: &Keypair,
-        recent_blockhash: &Hash,
-    ) -> Result<(), TransportError> {
-        create_mint(
-            banks_client,
-            payer,
-            recent_blockhash,
-            &self.st_sol_mint,
-            &self.reserve_authority,
-        )
-        .await?;
+    pub async fn initialize_lido(&mut self, context: &mut ProgramTestContext) {
+        create_mint(context, &self.st_sol_mint, &self.reserve_authority).await;
 
         create_token_account(
-            banks_client,
-            payer,
-            recent_blockhash,
+            context,
             &self.treasury_account,
             &self.st_sol_mint.pubkey(),
             &self.treasury_account.pubkey(),
         )
-        .await
-        .unwrap();
+        .await;
         create_token_account(
-            banks_client,
-            payer,
-            recent_blockhash,
+            context,
             &self.developer_account,
             &self.st_sol_mint.pubkey(),
             &self.developer_account.pubkey(),
         )
-        .await
-        .unwrap();
+        .await;
 
         let lido_size = Lido::calculate_size(MAX_VALIDATORS, MAX_MAINTAINERS);
-        let rent = banks_client.get_rent().await.unwrap();
+        let rent = context.banks_client.get_rent().await.unwrap();
         let rent_lido = rent.minimum_balance(lido_size);
         let rent_reserve = rent.minimum_balance(0);
-        let mut transaction = Transaction::new_with_payer(
+        send_transaction(
+            context,
             &[
                 system_instruction::transfer(
-                    &payer.pubkey(),
+                    &context.payer.pubkey(),
                     &self.reserve_authority,
                     rent_reserve,
                 ),
                 system_instruction::create_account(
-                    &payer.pubkey(),
+                    &context.payer.pubkey(),
                     &self.lido.pubkey(),
                     rent_lido,
                     lido_size as u64,
@@ -205,54 +206,45 @@ impl LidoAccounts {
                 )
                 .unwrap(),
             ],
-            Some(&payer.pubkey()),
-        );
-        transaction.sign(&[payer, &self.lido], *recent_blockhash);
-        banks_client.process_transaction(transaction).await?;
+            vec![&self.lido],
+        )
+        .await
+        .expect("Failed to initialize Solido instance.");
 
         // Add a maintainer
-        simple_add_maintainer(
-            banks_client,
-            payer,
-            recent_blockhash,
-            &self.maintainer.pubkey(),
-            self,
-        )
-        .await?;
-        Ok(())
+        simple_add_maintainer(context, &self.maintainer.pubkey(), self).await;
     }
 
+    pub async fn get_solido(&self, context: &mut ProgramTestContext) -> Lido {
+        let lido_account = get_account(&mut context.banks_client, &self.lido.pubkey()).await;
+        // This returns a Result because it can cause an IO error, but that should
+        // not happen in the test environment. (And if it does, then the test just
+        // fails.)
+        try_from_slice_unchecked::<Lido>(lido_account.data.as_slice()).unwrap()
+    }
+
+    /// Create a new stSOL account, deposit the given amount, and return the stSOL account.
     pub async fn deposit(
         &self,
-        banks_client: &mut BanksClient,
-        payer: &Keypair,
-        recent_blockhash: &Hash,
+        context: &mut ProgramTestContext,
         deposit_amount: Lamports,
     ) -> Keypair {
         let user = Keypair::new();
         let recipient = Keypair::new();
 
         create_token_account(
-            banks_client,
-            payer,
-            recent_blockhash,
+            context,
             &recipient,
             &self.st_sol_mint.pubkey(),
             &user.pubkey(),
         )
-        .await
-        .unwrap();
-
-        transfer(
-            banks_client,
-            payer,
-            recent_blockhash,
-            &user.pubkey(),
-            deposit_amount,
-        )
         .await;
 
-        let mut transaction = Transaction::new_with_payer(
+        // Fund the user account, so the user can deposit that into Solido.
+        transfer(context, &user.pubkey(), deposit_amount).await;
+
+        send_transaction(
+            context,
             &[instruction::deposit(
                 &id(),
                 &instruction::DepositAccountsMeta {
@@ -265,22 +257,21 @@ impl LidoAccounts {
                 deposit_amount,
             )
             .unwrap()],
-            Some(&payer.pubkey()),
-        );
-        transaction.sign(&[&payer, &user], *recent_blockhash);
-        banks_client.process_transaction(transaction).await.unwrap();
+            vec![&user],
+        )
+        .await
+        .expect("Failed to call Deposit on Solido instance.");
+
         recipient
     }
 
     pub async fn stake_deposit(
         &self,
-        banks_client: &mut BanksClient,
-        payer: &Keypair,
-        recent_blockhash: &Hash,
+        context: &mut ProgramTestContext,
         validator_vote_account: &Pubkey,
         delegate_amount: Lamports,
     ) -> Pubkey {
-        let lido_account = get_account(banks_client, &self.lido.pubkey()).await;
+        let lido_account = get_account(&mut context.banks_client, &self.lido.pubkey()).await;
         let lido = try_from_slice_unchecked::<Lido>(lido_account.data.as_slice()).unwrap();
 
         let validator_entry = lido
@@ -295,7 +286,8 @@ impl LidoAccounts {
             validator_entry.entry.stake_accounts_seed_end,
         );
 
-        let mut transaction = Transaction::new_with_payer(
+        send_transaction(
+            context,
             &[instruction::stake_deposit(
                 &id(),
                 &instruction::StakeDepositAccountsMeta {
@@ -309,23 +301,22 @@ impl LidoAccounts {
                 delegate_amount,
             )
             .unwrap()],
-            Some(&payer.pubkey()),
-        );
-        transaction.sign(&[payer, &self.maintainer], *recent_blockhash);
-        banks_client.process_transaction(transaction).await.unwrap();
+            vec![&self.maintainer],
+        )
+        .await
+        .unwrap();
 
         stake_account
     }
 
     pub async fn add_validator(
         &self,
-        banks_client: &mut BanksClient,
-        payer: &Keypair,
-        recent_blockhash: &Hash,
+        context: &mut ProgramTestContext,
         validator_vote_account: &Pubkey,
         validator_fee_st_sol_account: &Pubkey,
-    ) -> Result<(), TransportError> {
-        let transaction = Transaction::new_signed_with_payer(
+    ) {
+        send_transaction(
+            context,
             &[lido::instruction::add_validator(
                 &id(),
                 &lido::instruction::AddValidatorMeta {
@@ -336,21 +327,19 @@ impl LidoAccounts {
                 },
             )
             .unwrap()],
-            Some(&payer.pubkey()),
-            &[payer, &self.manager],
-            *recent_blockhash,
-        );
-        banks_client.process_transaction(transaction).await
+            vec![&self.manager],
+        )
+        .await
+        .expect("Failed to add validator to Solido instance.")
     }
 
     pub async fn remove_validator(
         &self,
-        banks_client: &mut BanksClient,
-        payer: &Keypair,
-        recent_blockhash: &Hash,
+        context: &mut ProgramTestContext,
         validator_vote_account: &Pubkey,
-    ) -> Result<(), TransportError> {
-        let transaction = Transaction::new_signed_with_payer(
+    ) {
+        send_transaction(
+            context,
             &[lido::instruction::remove_validator(
                 &id(),
                 &lido::instruction::RemoveValidatorMeta {
@@ -360,20 +349,18 @@ impl LidoAccounts {
                 },
             )
             .unwrap()],
-            Some(&payer.pubkey()),
-            &[payer, &self.manager],
-            *recent_blockhash,
-        );
-        banks_client.process_transaction(transaction).await
+            vec![&self.manager],
+        )
+        .await
+        .expect("Failed to remove validator from Solido instance.")
     }
 
     pub async fn distribute_fees(
         &self,
-        banks_client: &mut BanksClient,
-        payer: &Keypair,
-        recent_blockhash: &Hash,
+        context: &mut ProgramTestContext,
     ) -> Result<(), TransportError> {
-        let transaction = Transaction::new_signed_with_payer(
+        send_transaction(
+            context,
             &[lido::instruction::distribute_fees(
                 &id(),
                 &lido::instruction::DistributeFeesMeta {
@@ -386,21 +373,18 @@ impl LidoAccounts {
                 },
             )
             .unwrap()],
-            Some(&payer.pubkey()),
-            &[payer, &self.maintainer],
-            *recent_blockhash,
-        );
-        banks_client.process_transaction(transaction).await
+            vec![&self.maintainer],
+        )
+        .await
     }
 
     pub async fn claim_validator_fees(
         &self,
-        banks_client: &mut BanksClient,
-        payer: &Keypair,
-        recent_blockhash: &Hash,
+        context: &mut ProgramTestContext,
         validator_fee_st_sol_account: &Pubkey,
     ) -> Result<(), TransportError> {
-        let transaction = Transaction::new_signed_with_payer(
+        send_transaction(
+            context,
             &[lido::instruction::claim_validator_fees(
                 &id(),
                 &lido::instruction::ClaimValidatorFeeMeta {
@@ -411,29 +395,26 @@ impl LidoAccounts {
                 },
             )
             .unwrap()],
-            Some(&payer.pubkey()),
-            &[payer],
-            *recent_blockhash,
-        );
-        banks_client.process_transaction(transaction).await
+            vec![],
+        )
+        .await
     }
 }
 
 pub async fn create_token_account(
-    banks_client: &mut BanksClient,
-    payer: &Keypair,
-    recent_blockhash: &Hash,
+    context: &mut ProgramTestContext,
     account: &Keypair,
     mint: &Pubkey,
     manager: &Pubkey,
-) -> Result<(), TransportError> {
-    let rent = banks_client.get_rent().await.unwrap();
+) {
+    let rent = context.banks_client.get_rent().await.unwrap();
     let account_rent = rent.minimum_balance(spl_token::state::Account::LEN);
 
-    let mut transaction = Transaction::new_with_payer(
+    send_transaction(
+        context,
         &[
             system_instruction::create_account(
-                &payer.pubkey(),
+                &context.payer.pubkey(),
                 &account.pubkey(),
                 account_rent,
                 spl_token::state::Account::LEN as u64,
@@ -447,48 +428,36 @@ pub async fn create_token_account(
             )
             .unwrap(),
         ],
-        Some(&payer.pubkey()),
-    );
-    transaction.sign(&[payer, account], *recent_blockhash);
-    banks_client.process_transaction(transaction).await
+        vec![account],
+    )
+    .await
+    .expect("Failed to create token account.")
 }
 
 pub async fn simple_add_validator_to_pool(
-    banks_client: &mut BanksClient,
-    payer: &Keypair,
-    recent_blockhash: &Hash,
+    context: &mut ProgramTestContext,
     lido_accounts: &LidoAccounts,
 ) -> ValidatorAccounts {
-    let accounts = ValidatorAccounts::new(
-        banks_client,
-        payer,
-        &lido_accounts.st_sol_mint.pubkey(),
-        recent_blockhash,
-    )
-    .await;
+    let accounts = ValidatorAccounts::new(context, &lido_accounts.st_sol_mint.pubkey()).await;
 
     lido_accounts
         .add_validator(
-            banks_client,
-            &payer,
-            &recent_blockhash,
+            context,
             &accounts.vote_account.pubkey(),
             &accounts.fee_account.pubkey(),
         )
-        .await
-        .unwrap();
+        .await;
 
     accounts
 }
 
 pub async fn simple_add_maintainer(
-    banks_client: &mut BanksClient,
-    payer: &Keypair,
-    recent_blockhash: &Hash,
+    context: &mut ProgramTestContext,
     maintainer: &Pubkey,
     lido_accounts: &LidoAccounts,
-) -> Result<(), TransportError> {
-    let transaction = Transaction::new_signed_with_payer(
+) {
+    send_transaction(
+        context,
         &[lido::instruction::add_maintainer(
             &id(),
             &lido::instruction::AddMaintainerMeta {
@@ -498,22 +467,19 @@ pub async fn simple_add_maintainer(
             },
         )
         .unwrap()],
-        Some(&payer.pubkey()),
-        &[payer, &lido_accounts.manager],
-        *recent_blockhash,
-    );
-    banks_client.process_transaction(transaction).await?;
-    Ok(())
+        vec![&lido_accounts.manager],
+    )
+    .await
+    .expect("Failed to add maintainer.")
 }
 
 pub async fn simple_remove_maintainer(
-    banks_client: &mut BanksClient,
-    payer: &Keypair,
-    recent_blockhash: &Hash,
+    context: &mut ProgramTestContext,
     lido_accounts: &LidoAccounts,
     maintainer: &Pubkey,
 ) -> Result<(), TransportError> {
-    let transaction = Transaction::new_signed_with_payer(
+    send_transaction(
+        context,
         &[lido::instruction::remove_maintainer(
             &id(),
             &lido::instruction::RemoveMaintainerMeta {
@@ -523,33 +489,31 @@ pub async fn simple_remove_maintainer(
             },
         )
         .unwrap()],
-        Some(&payer.pubkey()),
-        &[payer, &lido_accounts.manager],
-        *recent_blockhash,
-    );
-    banks_client.process_transaction(transaction).await?;
-    Ok(())
+        vec![&lido_accounts.manager],
+    )
+    .await
 }
 
 pub async fn create_vote_account(
-    banks_client: &mut BanksClient,
-    payer: &Keypair,
-    recent_blockhash: &Hash,
+    context: &mut ProgramTestContext,
     validator: &Keypair,
     vote: &Keypair,
 ) {
-    let rent = banks_client.get_rent().await.unwrap();
+    let rent = context.banks_client.get_rent().await.unwrap();
     let rent_voter = rent.minimum_balance(VoteState::size_of());
 
+    let initial_balance = Lamports(42);
+    let size_bytes = 0;
+
     let mut instructions = vec![system_instruction::create_account(
-        &payer.pubkey(),
+        &context.payer.pubkey(),
         &validator.pubkey(),
-        42,
-        0,
+        initial_balance.0,
+        size_bytes,
         &system_program::id(),
     )];
     instructions.append(&mut vote_instruction::create_account(
-        &payer.pubkey(),
+        &context.payer.pubkey(),
         &vote.pubkey(),
         &VoteInit {
             node_pubkey: validator.pubkey(),
@@ -558,30 +522,20 @@ pub async fn create_vote_account(
         },
         rent_voter,
     ));
-
-    let transaction = Transaction::new_signed_with_payer(
-        &instructions,
-        Some(&payer.pubkey()),
-        &[validator, vote, payer],
-        *recent_blockhash,
-    );
-    banks_client.process_transaction(transaction).await.unwrap();
+    send_transaction(context, &instructions, vec![validator, vote])
+        .await
+        .expect("Failed to create vote account.")
 }
 
-pub async fn create_mint(
-    banks_client: &mut BanksClient,
-    payer: &Keypair,
-    recent_blockhash: &Hash,
-    pool_mint: &Keypair,
-    manager: &Pubkey,
-) -> Result<(), TransportError> {
-    let rent = banks_client.get_rent().await.unwrap();
+pub async fn create_mint(context: &mut ProgramTestContext, pool_mint: &Keypair, manager: &Pubkey) {
+    let rent = context.banks_client.get_rent().await.unwrap();
     let mint_rent = rent.minimum_balance(spl_token::state::Mint::LEN);
 
-    let mut transaction = Transaction::new_with_payer(
+    send_transaction(
+        context,
         &[
             system_instruction::create_account(
-                &payer.pubkey(),
+                &context.payer.pubkey(),
                 &pool_mint.pubkey(),
                 mint_rent,
                 spl_token::state::Mint::LEN as u64,
@@ -596,31 +550,24 @@ pub async fn create_mint(
             )
             .unwrap(),
         ],
-        Some(&payer.pubkey()),
-    );
-    transaction.sign(&[payer, pool_mint], *recent_blockhash);
-    banks_client.process_transaction(transaction).await?;
-    Ok(())
+        vec![pool_mint],
+    )
+    .await
+    .expect("Failed to create SPL token mint.")
 }
 
-pub async fn transfer(
-    banks_client: &mut BanksClient,
-    payer: &Keypair,
-    recent_blockhash: &Hash,
-    recipient: &Pubkey,
-    amount: Lamports,
-) {
-    let transaction = Transaction::new_signed_with_payer(
+pub async fn transfer(context: &mut ProgramTestContext, recipient: &Pubkey, amount: Lamports) {
+    send_transaction(
+        context,
         &[system_instruction::transfer(
-            &payer.pubkey(),
+            &context.payer.pubkey(),
             recipient,
             amount.0,
         )],
-        Some(&payer.pubkey()),
-        &[payer],
-        *recent_blockhash,
-    );
-    banks_client.process_transaction(transaction).await.unwrap();
+        vec![],
+    )
+    .await
+    .unwrap_or_else(|_| panic!("Failed to transfer {} to {}.", amount, recipient))
 }
 
 pub async fn get_token_balance(banks_client: &mut BanksClient, token: &Pubkey) -> u64 {

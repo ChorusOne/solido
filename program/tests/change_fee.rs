@@ -3,44 +3,31 @@
 mod helpers;
 
 use crate::helpers::create_token_account;
-use helpers::{create_mint, get_account, id, program_test, LidoAccounts};
-use lido::{
-    error::LidoError,
-    instruction,
-    state::{FeeDistribution, Lido},
-};
+use helpers::{create_mint, id, program_test, LidoAccounts};
+use lido::{error::LidoError, instruction, state::FeeDistribution};
 use rand::{thread_rng, Rng};
-use solana_program::{borsh::try_from_slice_unchecked, hash::Hash, instruction::InstructionError};
-use solana_program_test::{tokio, BanksClient};
+use solana_program::instruction::InstructionError;
+use solana_program_test::{tokio, ProgramTestContext};
 use solana_sdk::{
     signature::{Keypair, Signer},
     transaction::{Transaction, TransactionError},
     transport::TransportError,
 };
 
-async fn setup() -> (BanksClient, Keypair, Hash, LidoAccounts) {
-    let (mut banks_client, payer, recent_blockhash) = program_test().start().await;
+async fn setup() -> (ProgramTestContext, LidoAccounts) {
+    let mut context = program_test().start_with_context().await;
     let mut lido_accounts = LidoAccounts::new();
-    lido_accounts
-        .initialize_lido(&mut banks_client, &payer, &recent_blockhash)
-        .await
-        .unwrap();
+    lido_accounts.initialize_lido(&mut context).await;
 
-    (banks_client, payer, recent_blockhash, lido_accounts)
+    (context, lido_accounts)
 }
 pub const TEST_DEPOSIT_AMOUNT: u64 = 1000;
 
 #[tokio::test]
 async fn test_successful_change_fee() {
-    let (mut banks_client, payer, recent_blockhash, lido_accounts) = setup().await;
+    let (mut context, lido_accounts) = setup().await;
 
-    let lido = try_from_slice_unchecked::<Lido>(
-        get_account(&mut banks_client, &lido_accounts.lido.pubkey())
-            .await
-            .data
-            .as_slice(),
-    )
-    .unwrap();
+    let lido = lido_accounts.get_solido(&mut context).await;
     assert_eq!(lido.fee_distribution, lido_accounts.fee_distribution);
     assert_eq!(
         lido.fee_recipients.treasury_account,
@@ -59,16 +46,14 @@ async fn test_successful_change_fee() {
 
     let fee_recipient_keys = [Keypair::new(), Keypair::new(), Keypair::new()];
     for k in fee_recipient_keys.iter() {
+        let manager = context.payer.pubkey();
         create_token_account(
-            &mut banks_client,
-            &payer,
-            &recent_blockhash,
+            &mut context,
             &k,
             &lido_accounts.st_sol_mint.pubkey(),
-            &payer.pubkey(),
+            &manager,
         )
-        .await
-        .expect("Failed to create token account");
+        .await;
     }
 
     let mut transaction = Transaction::new_with_payer(
@@ -83,18 +68,19 @@ async fn test_successful_change_fee() {
             },
         )
         .unwrap()],
-        Some(&payer.pubkey()),
+        Some(&context.payer.pubkey()),
     );
-    transaction.sign(&[&payer, &lido_accounts.manager], recent_blockhash);
-    banks_client.process_transaction(transaction).await.unwrap();
+    transaction.sign(
+        &[&context.payer, &lido_accounts.manager],
+        context.last_blockhash,
+    );
+    context
+        .banks_client
+        .process_transaction(transaction)
+        .await
+        .unwrap();
 
-    let lido = try_from_slice_unchecked::<Lido>(
-        get_account(&mut banks_client, &lido_accounts.lido.pubkey())
-            .await
-            .data
-            .as_slice(),
-    )
-    .unwrap();
+    let lido = lido_accounts.get_solido(&mut context).await;
     assert_eq!(lido.fee_distribution, new_fee);
     assert_eq!(
         lido.fee_recipients.treasury_account,
@@ -107,20 +93,13 @@ async fn test_successful_change_fee() {
 }
 #[tokio::test]
 async fn test_change_fee_wrong_minter() {
-    let (mut banks_client, payer, recent_blockhash, lido_accounts) = setup().await;
+    let (mut context, lido_accounts) = setup().await;
     let fee_recipient_keys = [Keypair::new(), Keypair::new()];
     let mut rng = thread_rng();
     let n: usize = rng.gen_range(0..fee_recipient_keys.len());
     let wrong_mint = Keypair::new();
-    create_mint(
-        &mut banks_client,
-        &payer,
-        &recent_blockhash,
-        &wrong_mint,
-        &payer.pubkey(),
-    )
-    .await
-    .unwrap();
+    let manager = context.payer.pubkey();
+    create_mint(&mut context, &wrong_mint, &manager).await;
 
     for (i, k) in fee_recipient_keys.iter().enumerate() {
         let minter;
@@ -129,16 +108,8 @@ async fn test_change_fee_wrong_minter() {
         } else {
             minter = lido_accounts.st_sol_mint.pubkey();
         }
-        create_token_account(
-            &mut banks_client,
-            &payer,
-            &recent_blockhash,
-            &k,
-            &minter,
-            &payer.pubkey(),
-        )
-        .await
-        .expect("Failed to create token account");
+        let manager = context.payer.pubkey();
+        create_token_account(&mut context, &k, &minter, &manager).await;
     }
 
     let mut transaction = Transaction::new_with_payer(
@@ -153,10 +124,14 @@ async fn test_change_fee_wrong_minter() {
             },
         )
         .unwrap()],
-        Some(&payer.pubkey()),
+        Some(&context.payer.pubkey()),
     );
-    transaction.sign(&[&payer, &lido_accounts.manager], recent_blockhash);
-    let err = banks_client
+    transaction.sign(
+        &[&context.payer, &lido_accounts.manager],
+        context.last_blockhash,
+    );
+    let err = context
+        .banks_client
         .process_transaction(transaction)
         .await
         .err()

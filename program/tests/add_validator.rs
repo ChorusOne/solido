@@ -2,33 +2,24 @@
 
 mod helpers;
 
-use helpers::{get_account, program_test, simple_add_validator_to_pool, LidoAccounts};
-use lido::state::Lido;
-use solana_program::{borsh::try_from_slice_unchecked, hash::Hash};
-use solana_program_test::{tokio, BanksClient};
-use solana_sdk::signature::{Keypair, Signer};
+use helpers::{program_test, simple_add_validator_to_pool, LidoAccounts};
+use solana_program_test::{tokio, ProgramTestContext};
+use solana_sdk::signature::Signer;
 
-async fn setup() -> (BanksClient, Keypair, Hash, LidoAccounts) {
-    let (mut banks_client, payer, last_blockhash) = program_test().start().await;
+async fn setup() -> (ProgramTestContext, LidoAccounts) {
+    let mut context = program_test().start_with_context().await;
     let mut lido_accounts = LidoAccounts::new();
-    lido_accounts
-        .initialize_lido(&mut banks_client, &payer, &last_blockhash)
-        .await
-        .unwrap();
-    (banks_client, payer, last_blockhash, lido_accounts)
+    lido_accounts.initialize_lido(&mut context).await;
+    (context, lido_accounts)
 }
 
 #[tokio::test]
 async fn test_successful_add_validator() {
-    let (mut banks_client, payer, last_blockhash, lido_accounts) = setup().await;
+    let (mut context, lido_accounts) = setup().await;
 
-    let accounts =
-        simple_add_validator_to_pool(&mut banks_client, &payer, &last_blockhash, &lido_accounts)
-            .await;
+    let accounts = simple_add_validator_to_pool(&mut context, &lido_accounts).await;
 
-    let lido_account = get_account(&mut banks_client, &lido_accounts.lido.pubkey()).await;
-    let lido = try_from_slice_unchecked::<Lido>(lido_account.data.as_slice()).unwrap();
-
+    let lido = lido_accounts.get_solido(&mut context).await;
     let has_stake_account = lido.validators.get(&accounts.vote_account.pubkey()).is_ok();
 
     // Validator is inside the credit structure
