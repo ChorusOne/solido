@@ -193,6 +193,7 @@ pub fn _process_change_validator_fee_account(
 pub fn process_merge_stake(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> ProgramResult {
     let accounts = MergeStakeInfo::try_from_slice(accounts_raw)?;
     let mut lido = deserialize_lido(program_id, accounts.lido)?;
+    // Get validator.
     let mut validator = lido
         .validators
         .entries
@@ -200,12 +201,14 @@ pub fn process_merge_stake(program_id: &Pubkey, accounts_raw: &[AccountInfo]) ->
         .find(|v| &v.pubkey == accounts.validator_vote_account.key)
         .ok_or(LidoError::ValidatorNotFound)?;
 
+    // Recalculate the `from_stake`.
     let (from_stake, _) = Validator::find_stake_account_address(
         program_id,
         accounts.lido.key,
         accounts.validator_vote_account.key,
         validator.entry.stake_accounts_seed_begin,
     );
+    // Compare with the stake passed in `accounts`.
     if &from_stake != accounts.from_stake.key {
         msg!(
             "Calculated from_stake {} for seed {} is different from received {}.",
@@ -230,7 +233,8 @@ pub fn process_merge_stake(program_id: &Pubkey, accounts_raw: &[AccountInfo]) ->
         );
         return Err(LidoError::InvalidStakeAccount.into());
     }
-
+    // Merge `from_stake` to `to_stake`, at the end of the instruction,
+    // `from_stake` ceases to exist.
     let merge_ix = stake_program::merge(&to_stake, &from_stake, &accounts.deposit_authority.key);
     invoke_signed(
         &merge_ix,
@@ -248,6 +252,7 @@ pub fn process_merge_stake(program_id: &Pubkey, accounts_raw: &[AccountInfo]) ->
             &[lido.deposit_authority_bump_seed],
         ]],
     )?;
+    // Bump the validator's stake_accounts_seed_begin.
     validator.entry.stake_accounts_seed_begin += 1;
     lido.serialize(&mut *accounts.lido.data.borrow_mut())?;
     Ok(())
