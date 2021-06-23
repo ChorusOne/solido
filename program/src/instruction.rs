@@ -752,13 +752,10 @@ accounts_struct! {
     }
 }
 
-pub fn merge_stake(
-    program_id: &Pubkey,
-    accounts: &MergeStakeMeta,
-) -> Result<Instruction, ProgramError> {
-    Ok(Instruction {
+pub fn merge_stake(program_id: &Pubkey, accounts: &MergeStakeMeta) -> Instruction {
+    Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
-        data: LidoInstruction::MergeStake.try_to_vec()?,
-    })
+        data: LidoInstruction::MergeStake.try_to_vec().unwrap(), // This should never fail.
+    }
 }

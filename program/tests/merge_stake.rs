@@ -5,11 +5,11 @@ mod helpers;
 use helpers::{
     get_account, program_test, simple_add_validator_to_pool, LidoAccounts, ValidatorAccounts,
 };
-use solana_program::borsh::try_from_slice_unchecked;
+use solana_program::{borsh::try_from_slice_unchecked, instruction::InstructionError};
 use solana_program_test::{tokio, ProgramTestContext};
-use solana_sdk::signature::Signer;
+use solana_sdk::{signature::Signer, transaction::TransactionError, transport::TransportError};
 
-use lido::{state::Lido, token::Lamports};
+use lido::{error::LidoError, state::Lido, token::Lamports};
 use spl_stake_pool::stake_program;
 
 async fn setup() -> (ProgramTestContext, LidoAccounts, Vec<ValidatorAccounts>) {
@@ -93,7 +93,8 @@ async fn test_successful_merge_stake() {
             &validator_account.vote_account.pubkey(),
             0,
         )
-        .await;
+        .await
+        .unwrap();
 
     let account = context
         .banks_client
@@ -143,4 +144,53 @@ async fn test_successful_merge_stake() {
         validator_after.entry.stake_accounts_seed_begin,
         validator_before.entry.stake_accounts_seed_begin + 1,
     );
+}
+
+#[tokio::test]
+async fn test_merge_validator_with_one_stake() {
+    let (mut context, lido_accounts, validators) = setup().await;
+
+    lido_accounts
+        .deposit(
+            &mut context.banks_client,
+            &context.payer,
+            &context.last_blockhash,
+            TEST_DEPOSIT_AMOUNT,
+        )
+        .await;
+
+    // Delegate the deposit.
+    let validator_account = &validators[0];
+    lido_accounts
+        .stake_deposit(
+            &mut context.banks_client,
+            &context.payer,
+            &context.last_blockhash,
+            &validator_account.vote_account.pubkey(),
+            Lamports(10_000_000_000),
+        )
+        .await;
+    match lido_accounts
+        .merge_stake(
+            &mut context.banks_client,
+            &context.payer,
+            &context.last_blockhash,
+            &validator_account.vote_account.pubkey(),
+            0,
+        )
+        .await
+        .err()
+        .unwrap()
+    {
+        TransportError::TransactionError(TransactionError::InstructionError(
+            _,
+            InstructionError::Custom(error_index),
+        )) => {
+            let program_error = LidoError::InvalidStakeAccount as u32;
+            assert_eq!(error_index, program_error);
+        }
+        _ => {
+            panic!("Wrong error occurs while merging stake accounts on a validator with a single stake account.")
+        }
+    }
 }

@@ -199,7 +199,7 @@ pub fn process_merge_stake(program_id: &Pubkey, accounts_raw: &[AccountInfo]) ->
         .validators
         .get_mut(accounts.validator_vote_account.key)?;
     // Check that there are at least two accounts to merge
-    if validator.entry.stake_accounts_seed_begin == validator.entry.stake_accounts_seed_end {
+    if validator.entry.stake_accounts_seed_begin + 1 >= validator.entry.stake_accounts_seed_end {
         msg!("Attempting to merge accounts in a validator that has a single stake account.");
         return Err(LidoError::InvalidStakeAccount.into());
     }
