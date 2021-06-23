@@ -15,9 +15,12 @@ use solana_sdk::transaction::Transaction;
 use solana_sdk::transport;
 use solana_vote_program::vote_instruction;
 use solana_vote_program::vote_state::{VoteInit, VoteState};
+use solana_program::instruction::InstructionError;
+use solana_sdk::transaction::TransactionError;
+use solana_sdk::transport::TransportError;
 
 use lido::error::LidoError;
-use lido::state::{FeeDistribution, Lido, Validator};
+use lido::state::{FeeDistribution, Lido, Validator, FeeRecipients};
 use lido::token::{Lamports, StLamports};
 use lido::{instruction, DEPOSIT_AUTHORITY, RESERVE_AUTHORITY};
 
@@ -60,10 +63,6 @@ pub async fn send_transaction(
     instructions: &[Instruction],
     additional_signers: Vec<&Keypair>,
 ) -> transport::Result<()> {
-    use solana_program::instruction::InstructionError;
-    use solana_sdk::transaction::TransactionError;
-    use solana_sdk::transport::TransportError;
-
     // Before we send the transaction, get a new block hash, to ensure that
     // if you call `send_transaction` twice with the same payload, we actually
     // send two transactions, instead of the second one silently being ignored.
@@ -533,6 +532,28 @@ impl Context {
             .expect("Failed to call StakeDeposit on Solido instance.")
     }
 
+    pub async fn try_change_fee_distribution(
+        &mut self,
+        new_fee_distribution: &FeeDistribution,
+        new_fee_recipients: &FeeRecipients,
+    ) -> transport::Result<()> {
+        send_transaction(
+            &mut self.context,
+            &[instruction::change_fee_distribution(
+                &id(),
+                new_fee_distribution.clone(),
+                &instruction::ChangeFeeSpecMeta {
+                    lido: self.solido.pubkey(),
+                    manager: self.manager.pubkey(),
+                    treasury_account: new_fee_recipients.treasury_account,
+                    developer_account: new_fee_recipients.developer_account,
+                },
+            ).unwrap()],
+            vec![&self.manager],
+        )
+            .await
+    }
+
     pub async fn try_get_account(&mut self, address: Pubkey) -> Option<Account> {
         self.context
             .banks_client
@@ -592,24 +613,27 @@ impl Context {
 #[macro_export]
 macro_rules! assert_solido_error {
     ($result:expr, $error:expr) => {
-        use solana_program::instruction::InstructionError;
-        use solana_sdk::transaction::TransactionError;
-        use solana_sdk::transport::TransportError;
-        match $result {
-            Err(TransportError::TransactionError(TransactionError::InstructionError(
-                _,
-                InstructionError::Custom(error_code),
-            ))) => assert_eq!(
-                error_code,
-                $error as u32,
-                "Expected custom error with code for {}, got different code.",
-                stringify!($error)
-            ),
-            unexpected => panic!(
-                "Expected {} error, not {:?}",
-                stringify!($error),
-                unexpected
-            ),
+        // Open a scope so the imports don't clash.
+        {
+            use solana_program::instruction::InstructionError;
+            use solana_sdk::transaction::TransactionError;
+            use solana_sdk::transport::TransportError;
+            match $result {
+                Err(TransportError::TransactionError(TransactionError::InstructionError(
+                    _,
+                    InstructionError::Custom(error_code),
+                ))) => assert_eq!(
+                    error_code,
+                    $error as u32,
+                    "Expected custom error with code for {}, got different code.",
+                    stringify!($error)
+                ),
+                unexpected => panic!(
+                    "Expected {} error, not {:?}",
+                    stringify!($error),
+                    unexpected
+                ),
+            }
         }
     };
 }
