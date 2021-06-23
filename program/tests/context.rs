@@ -4,6 +4,7 @@ use num_traits::cast::FromPrimitive;
 use solana_program::borsh::try_from_slice_unchecked;
 use solana_program::instruction::Instruction;
 use solana_program::program_pack::Pack;
+use solana_program::rent::Rent;
 use solana_program::system_instruction;
 use solana_program::system_program;
 use solana_program_test::{processor, ProgramTest, ProgramTestBanksClientExt, ProgramTestContext};
@@ -15,10 +16,10 @@ use solana_sdk::transport;
 use solana_vote_program::vote_instruction;
 use solana_vote_program::vote_state::{VoteInit, VoteState};
 
+use lido::{DEPOSIT_AUTHORITY, instruction, RESERVE_AUTHORITY};
 use lido::error::LidoError;
 use lido::state::{FeeDistribution, Lido, Validator};
-use lido::token::Lamports;
-use lido::{instruction, DEPOSIT_AUTHORITY, RESERVE_AUTHORITY};
+use lido::token::{Lamports, StLamports};
 
 // This id is only used throughout these tests.
 solana_program::declare_id!("3kEkdGe68DuTKg6FhVrLPZ3Wm8EcUPCPjhCeu8WrGDoc");
@@ -535,7 +536,7 @@ impl Context {
             .expect("Failed to get account, why does this happen in tests?")
     }
 
-    pub async fn try_get_balance(&mut self, address: &Pubkey) -> Option<Lamports> {
+    pub async fn try_get_sol_balance(&mut self, address: &Pubkey) -> Option<Lamports> {
         self.context
             .banks_client
             .get_balance(*address)
@@ -550,10 +551,20 @@ impl Context {
             .unwrap_or_else(|| panic!("Account {} does not exist.", address))
     }
 
-    pub async fn get_balance(&mut self, address: &Pubkey) -> Lamports {
-        self.try_get_balance(address)
+    pub async fn get_sol_balance(&mut self, address: &Pubkey) -> Lamports {
+        self.try_get_sol_balance(address)
             .await
             .unwrap_or_else(|| panic!("Account {} does not exist.", address))
+    }
+
+    pub async fn get_st_sol_balance(&mut self, address: &Pubkey) -> StLamports {
+        let token_account = self.get_account(address).await;
+        let account_info: spl_token::state::Account =
+            spl_token::state::Account::unpack_from_slice(token_account.data.as_slice()).unwrap();
+
+        assert_eq!(account_info.mint, self.st_sol_mint);
+
+        StLamports(account_info.amount)
     }
 
     pub async fn get_solido(&mut self) -> Lido {
@@ -562,6 +573,10 @@ impl Context {
         // not happen in the test environment. (And if it does, then the test just
         // fails.)
         try_from_slice_unchecked::<Lido>(lido_account.data.as_slice()).unwrap()
+    }
+
+    pub async fn get_rent(&mut self) -> Rent {
+        self.context.banks_client.get_rent().await.expect("Failed to get rent.")
     }
 }
 

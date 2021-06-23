@@ -30,7 +30,7 @@ async fn test_successful_stake_deposit() {
         .await;
 
     // The amount that we staked, should now be in the stake account.
-    assert_eq!(context.get_balance(&stake_account).await, TEST_STAKE_DEPOSIT_AMOUNT);
+    assert_eq!(context.get_sol_balance(&stake_account).await, TEST_STAKE_DEPOSIT_AMOUNT);
 
     // We should also have recorded in the Solido state that this validator now
     // has balance in a stake account.
