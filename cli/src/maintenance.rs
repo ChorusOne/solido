@@ -455,6 +455,11 @@ impl SolidoState {
 
         Ok(())
     }
+    /// If there are stake accounts that can be merged, return the instruction
+    /// to do so. The instruction merges a maximum of two stake accounts.
+    pub fn try_stake_merge(&self) -> Result<Option<(Instruction, MaintenanceOutput)>> {
+        todo!()
+    }
 }
 
 pub fn try_perform_maintenance(

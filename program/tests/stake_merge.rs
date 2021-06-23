@@ -106,15 +106,11 @@ async fn test_successful_merge_stake() {
     let stake_account_after =
         try_from_slice_unchecked::<stake_program::StakeState>(&account.data).unwrap();
     if let stake_program::StakeState::Stake(meta, stake) = stake_account_after {
-        let sum = stake_accounts_before.iter().fold(0, |acc, (meta, stake)| {
-            acc + meta.rent_exempt_reserve + stake.delegation.stake
-        });
+        let sum = 20_000_000_000 - meta.rent_exempt_reserve;
         assert_eq!(
-            stake.delegation.stake,
-            sum - meta.rent_exempt_reserve,
+            stake.delegation.stake, sum,
             "Delegated stake should be {}, it is {} instead.",
-            sum - meta.rent_exempt_reserve,
-            stake.delegation.stake
+            sum, stake.delegation.stake
         );
     } else {
         assert!(false, "Stake state should have been StakeState::Stake.");
@@ -122,6 +118,17 @@ async fn test_successful_merge_stake() {
 
     let solido_account = get_account(&mut context.banks_client, &lido_accounts.lido.pubkey()).await;
     let solido_after = try_from_slice_unchecked::<Lido>(solido_account.data.as_slice()).unwrap();
+    assert_eq!(
+        solido_after
+            .validators
+            .entries
+            .iter()
+            .find(|pke| pke.pubkey == validator_account.vote_account.pubkey())
+            .unwrap()
+            .entry
+            .stake_accounts_balance,
+        Lamports(20_000_000_000)
+    );
 
     let validator_before = solido_before
         .validators
