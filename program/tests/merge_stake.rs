@@ -86,7 +86,7 @@ async fn test_successful_merge_stake() {
     let solido_before = try_from_slice_unchecked::<Lido>(solido_account.data.as_slice()).unwrap();
 
     lido_accounts
-        .stake_merge(
+        .merge_stake(
             &mut context.banks_client,
             &context.payer,
             &context.last_blockhash,
@@ -121,9 +121,7 @@ async fn test_successful_merge_stake() {
     assert_eq!(
         solido_after
             .validators
-            .entries
-            .iter()
-            .find(|pke| pke.pubkey == validator_account.vote_account.pubkey())
+            .get(&validator_account.vote_account.pubkey())
             .unwrap()
             .entry
             .stake_accounts_balance,
@@ -132,15 +130,11 @@ async fn test_successful_merge_stake() {
 
     let validator_before = solido_before
         .validators
-        .entries
-        .iter()
-        .find(|val| val.pubkey == validator_account.vote_account.pubkey())
+        .get(&validator_account.vote_account.pubkey())
         .unwrap();
     let validator_after = solido_after
         .validators
-        .entries
-        .iter()
-        .find(|val| val.pubkey == validator_account.vote_account.pubkey())
+        .get(&validator_account.vote_account.pubkey())
         .unwrap();
     assert_eq!(
         validator_after.entry.stake_accounts_seed_begin,

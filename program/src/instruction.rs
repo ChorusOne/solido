@@ -730,10 +730,6 @@ accounts_struct! {
             is_signer: false,
             is_writable: true,
         },
-        pub maintainer {
-            is_signer: true,
-            is_writable: false,
-        },
         pub validator_vote_account {
             is_signer: false,
             is_writable: false,

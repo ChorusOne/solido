@@ -111,9 +111,6 @@ pub enum LidoError {
     /// The exchange rate has already been updated this epoch.
     #[error("ExchangeRateAlreadyUpToDate")]
     ExchangeRateAlreadyUpToDate,
-    /// The requested validator was not found.
-    #[error("ValidatorNotFound")]
-    ValidatorNotFound,
 }
 impl From<LidoError> for ProgramError {
     fn from(e: LidoError) -> Self {
