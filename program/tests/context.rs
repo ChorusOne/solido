@@ -16,7 +16,7 @@ use solana_vote_program::vote_instruction;
 use solana_vote_program::vote_state::{VoteInit, VoteState};
 
 use lido::error::LidoError;
-use lido::state::{FeeDistribution, Lido};
+use lido::state::{FeeDistribution, Lido, Validator};
 use lido::token::Lamports;
 use lido::{instruction, DEPOSIT_AUTHORITY, RESERVE_AUTHORITY};
 
@@ -128,7 +128,11 @@ impl Context {
             &id(),
         );
 
-        let program_test = ProgramTest::new("solido", id(), processor!(lido::processor::process));
+        // Note: this name *must* match the name of the crate that contains the
+        // program. If it does not, then it will still partially work, but we get
+        // weird errors about resizing accounts.
+        let program_crate_name = "lido";
+        let program_test = ProgramTest::new(program_crate_name, id(), processor!(lido::processor::process));
 
         let mut result = Self {
             context: program_test.start_with_context().await,
@@ -433,6 +437,96 @@ impl Context {
         .await
     }
 
+    /// Create a new account, deposit from it, and return the resulting stSOL account.
+    pub async fn deposit(&mut self, amount: Lamports) -> Pubkey {
+        // Create a new user who is going to do the deposit. The user's account
+        // will hold the SOL to deposit, and it will also be the owner of the
+        // stSOL account that holds the proceeds.
+        let user = Keypair::new();
+        let recipient = self.create_st_sol_account(&user.pubkey()).await;
+
+        // Fund the user account, so the user can deposit that into Solido.
+        self.fund(&user.pubkey(), amount).await;
+
+        send_transaction(
+            &mut self.context,
+            &[instruction::deposit(
+                &id(),
+                &instruction::DepositAccountsMeta {
+                    lido: self.solido.pubkey(),
+                    user: user.pubkey(),
+                    recipient: recipient,
+                    st_sol_mint: self.st_sol_mint,
+                    reserve_account: self.reserve_address,
+                },
+                amount,
+            )
+                .unwrap()],
+            vec![&user],
+        )
+            .await
+            .expect("Failed to call Deposit on Solido instance.");
+
+        recipient
+    }
+
+    /// Stake the given amount to the given validator, return the resulting stake account.
+    pub async fn try_stake_deposit(
+        &mut self,
+        validator_vote_account: &Pubkey,
+        amount: Lamports,
+    ) -> transport::Result<Pubkey> {
+        let solido = self.get_solido().await;
+
+        let validator_entry = solido
+            .validators
+            .get(validator_vote_account)
+            .expect("Trying to stake with a non-member validator.");
+
+        let (stake_account, _) = Validator::find_stake_account_address(
+            &id(),
+            &self.solido.pubkey(),
+            validator_vote_account,
+            validator_entry.entry.stake_accounts_seed_end,
+        );
+
+        let maintainer = self.maintainer.as_ref().expect("Must have maintainer to call StakeDeposit.");
+
+        send_transaction(
+            &mut self.context,
+            &[
+                instruction::stake_deposit(
+                    &id(),
+                    &instruction::StakeDepositAccountsMeta {
+                        lido: self.solido.pubkey(),
+                        maintainer: maintainer.pubkey(),
+                        validator_vote_account: *validator_vote_account,
+                        reserve: self.reserve_address,
+                        stake_account_end: stake_account,
+                        deposit_authority: self.deposit_authority,
+                    },
+                    amount,
+                )
+                .unwrap()
+            ],
+            vec![maintainer],
+        )
+            .await?;
+
+        Ok(stake_account)
+    }
+
+    /// Stake the given amount to the given validator, return the resulting stake account.
+    pub async fn stake_deposit(
+        &mut self,
+        validator_vote_account: &Pubkey,
+        amount: Lamports,
+    ) -> Pubkey {
+        self.try_stake_deposit(validator_vote_account, amount)
+            .await
+            .expect("Failed to call StakeDeposit on Solido instance.")
+    }
+
     pub async fn try_get_account(&mut self, address: &Pubkey) -> Option<Account> {
         self.context
             .banks_client
@@ -441,8 +535,23 @@ impl Context {
             .expect("Failed to get account, why does this happen in tests?")
     }
 
+    pub async fn try_get_balance(&mut self, address: &Pubkey) -> Option<Lamports> {
+        self.context
+            .banks_client
+            .get_balance(*address)
+            .await
+            .ok()
+            .map(Lamports)
+    }
+
     pub async fn get_account(&mut self, address: &Pubkey) -> Account {
         self.try_get_account(address)
+            .await
+            .unwrap_or_else(|| panic!("Account {} does not exist.", address))
+    }
+
+    pub async fn get_balance(&mut self, address: &Pubkey) -> Lamports {
+        self.try_get_balance(address)
             .await
             .unwrap_or_else(|| panic!("Account {} does not exist.", address))
     }
