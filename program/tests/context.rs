@@ -149,16 +149,15 @@ impl Context {
             deposit_authority,
         };
 
-        let reserve_address = result.reserve_address;
-        result.st_sol_mint = result.create_mint(&reserve_address).await;
+        result.st_sol_mint = result.create_mint(result.reserve_address).await;
 
         let treasury_owner = Keypair::new();
         result.treasury_st_sol_account =
-            result.create_st_sol_account(&treasury_owner.pubkey()).await;
+            result.create_st_sol_account(treasury_owner.pubkey()).await;
 
         let developer_owner = Keypair::new();
         result.developer_st_sol_account = result
-            .create_st_sol_account(&developer_owner.pubkey())
+            .create_st_sol_account(developer_owner.pubkey())
             .await;
 
         let max_validators = 10_000;
@@ -168,7 +167,7 @@ impl Context {
         let rent_solido = rent.minimum_balance(solido_size);
 
         let rent_reserve = rent.minimum_balance(0);
-        result.fund(&reserve_address, Lamports(rent_reserve)).await;
+        result.fund(result.reserve_address, Lamports(rent_reserve)).await;
 
         let payer = result.context.payer.pubkey();
         send_transaction(
@@ -220,7 +219,7 @@ impl Context {
     }
 
     /// Initialize a new SPL token mint, return its instance address.
-    pub async fn create_mint(&mut self, mint_authority: &Pubkey) -> Pubkey {
+    pub async fn create_mint(&mut self, mint_authority: Pubkey) -> Pubkey {
         let mint = Keypair::new();
 
         let rent = self.context.banks_client.get_rent().await.unwrap();
@@ -240,7 +239,7 @@ impl Context {
                 spl_token::instruction::initialize_mint(
                     &spl_token::id(),
                     &mint.pubkey(),
-                    mint_authority,
+                    &mint_authority,
                     None,
                     0,
                 )
@@ -255,7 +254,7 @@ impl Context {
     }
 
     /// Create a new SPL token account holding stSOL, return its address.
-    pub async fn create_st_sol_account(&mut self, owner: &Pubkey) -> Pubkey {
+    pub async fn create_st_sol_account(&mut self, owner: Pubkey) -> Pubkey {
         let rent = self.context.banks_client.get_rent().await.unwrap();
         let account_rent = rent.minimum_balance(spl_token::state::Account::LEN);
         let account = Keypair::new();
@@ -275,7 +274,7 @@ impl Context {
                     &spl_token::id(),
                     &account.pubkey(),
                     &self.st_sol_mint,
-                    owner,
+                    &owner,
                 )
                 .unwrap(),
             ],
@@ -327,18 +326,18 @@ impl Context {
     }
 
     /// Make `amount` appear in the recipient's account by transferring it from the context's funder.
-    pub async fn fund(&mut self, recipient: &Pubkey, amount: Lamports) {
+    pub async fn fund(&mut self, recipient: Pubkey, amount: Lamports) {
         let payer = self.context.payer.pubkey();
         send_transaction(
             &mut self.context,
-            &[system_instruction::transfer(&payer, recipient, amount.0)],
+            &[system_instruction::transfer(&payer, &recipient, amount.0)],
             vec![],
         )
         .await
         .unwrap_or_else(|_| panic!("Failed to transfer {} to {}.", amount, recipient))
     }
 
-    pub async fn try_add_maintainer(&mut self, maintainer: &Pubkey) -> transport::Result<()> {
+    pub async fn try_add_maintainer(&mut self, maintainer: Pubkey) -> transport::Result<()> {
         send_transaction(
             &mut self.context,
             &[lido::instruction::add_maintainer(
@@ -346,7 +345,7 @@ impl Context {
                 &lido::instruction::AddMaintainerMeta {
                     lido: self.solido.pubkey(),
                     manager: self.manager.pubkey(),
-                    maintainer: *maintainer,
+                    maintainer: maintainer,
                 },
             )
             .unwrap()],
@@ -358,13 +357,13 @@ impl Context {
     /// Create a new key pair and add it as maintainer.
     pub async fn add_maintainer(&mut self) -> Keypair {
         let maintainer = Keypair::new();
-        self.try_add_maintainer(&maintainer.pubkey())
+        self.try_add_maintainer(maintainer.pubkey())
             .await
             .expect("Failed to add maintainer.");
         maintainer
     }
 
-    pub async fn try_remove_maintainer(&mut self, maintainer: &Pubkey) -> transport::Result<()> {
+    pub async fn try_remove_maintainer(&mut self, maintainer: Pubkey) -> transport::Result<()> {
         send_transaction(
             &mut self.context,
             &[lido::instruction::remove_maintainer(
@@ -372,7 +371,7 @@ impl Context {
                 &lido::instruction::RemoveMaintainerMeta {
                     lido: self.solido.pubkey(),
                     manager: self.manager.pubkey(),
-                    maintainer: *maintainer,
+                    maintainer: maintainer,
                 },
             )
             .unwrap()],
@@ -405,7 +404,7 @@ impl Context {
     /// Create a new key pair and add it as maintainer.
     pub async fn add_validator(&mut self) -> ValidatorAccounts {
         let node_account = Keypair::new();
-        let fee_account = self.create_st_sol_account(&node_account.pubkey()).await;
+        let fee_account = self.create_st_sol_account(node_account.pubkey()).await;
         let vote_account = self.create_vote_account(&node_account).await;
 
         let accounts = ValidatorAccounts {
@@ -421,7 +420,7 @@ impl Context {
         accounts
     }
 
-    pub async fn try_remove_validator(&mut self, vote_account: &Pubkey) -> transport::Result<()> {
+    pub async fn try_remove_validator(&mut self, vote_account: Pubkey) -> transport::Result<()> {
         send_transaction(
             &mut self.context,
             &[lido::instruction::remove_validator(
@@ -429,7 +428,7 @@ impl Context {
                 &lido::instruction::RemoveValidatorMeta {
                     lido: self.solido.pubkey(),
                     manager: self.manager.pubkey(),
-                    validator_vote_account_to_remove: *vote_account,
+                    validator_vote_account_to_remove: vote_account,
                 },
             )
             .unwrap()],
@@ -444,10 +443,10 @@ impl Context {
         // will hold the SOL to deposit, and it will also be the owner of the
         // stSOL account that holds the proceeds.
         let user = Keypair::new();
-        let recipient = self.create_st_sol_account(&user.pubkey()).await;
+        let recipient = self.create_st_sol_account(user.pubkey()).await;
 
         // Fund the user account, so the user can deposit that into Solido.
-        self.fund(&user.pubkey(), amount).await;
+        self.fund(user.pubkey(), amount).await;
 
         send_transaction(
             &mut self.context,
@@ -474,20 +473,20 @@ impl Context {
     /// Stake the given amount to the given validator, return the resulting stake account.
     pub async fn try_stake_deposit(
         &mut self,
-        validator_vote_account: &Pubkey,
+        validator_vote_account: Pubkey,
         amount: Lamports,
     ) -> transport::Result<Pubkey> {
         let solido = self.get_solido().await;
 
         let validator_entry = solido
             .validators
-            .get(validator_vote_account)
+            .get(&validator_vote_account)
             .expect("Trying to stake with a non-member validator.");
 
         let (stake_account, _) = Validator::find_stake_account_address(
             &id(),
             &self.solido.pubkey(),
-            validator_vote_account,
+            &validator_vote_account,
             validator_entry.entry.stake_accounts_seed_end,
         );
 
@@ -501,7 +500,7 @@ impl Context {
                     &instruction::StakeDepositAccountsMeta {
                         lido: self.solido.pubkey(),
                         maintainer: maintainer.pubkey(),
-                        validator_vote_account: *validator_vote_account,
+                        validator_vote_account: validator_vote_account,
                         reserve: self.reserve_address,
                         stake_account_end: stake_account,
                         deposit_authority: self.deposit_authority,
@@ -520,7 +519,7 @@ impl Context {
     /// Stake the given amount to the given validator, return the resulting stake account.
     pub async fn stake_deposit(
         &mut self,
-        validator_vote_account: &Pubkey,
+        validator_vote_account: Pubkey,
         amount: Lamports,
     ) -> Pubkey {
         self.try_stake_deposit(validator_vote_account, amount)
@@ -528,36 +527,36 @@ impl Context {
             .expect("Failed to call StakeDeposit on Solido instance.")
     }
 
-    pub async fn try_get_account(&mut self, address: &Pubkey) -> Option<Account> {
+    pub async fn try_get_account(&mut self, address: Pubkey) -> Option<Account> {
         self.context
             .banks_client
-            .get_account(*address)
+            .get_account(address)
             .await
             .expect("Failed to get account, why does this happen in tests?")
     }
 
-    pub async fn try_get_sol_balance(&mut self, address: &Pubkey) -> Option<Lamports> {
+    pub async fn try_get_sol_balance(&mut self, address: Pubkey) -> Option<Lamports> {
         self.context
             .banks_client
-            .get_balance(*address)
+            .get_balance(address)
             .await
             .ok()
             .map(Lamports)
     }
 
-    pub async fn get_account(&mut self, address: &Pubkey) -> Account {
+    pub async fn get_account(&mut self, address: Pubkey) -> Account {
         self.try_get_account(address)
             .await
             .unwrap_or_else(|| panic!("Account {} does not exist.", address))
     }
 
-    pub async fn get_sol_balance(&mut self, address: &Pubkey) -> Lamports {
+    pub async fn get_sol_balance(&mut self, address: Pubkey) -> Lamports {
         self.try_get_sol_balance(address)
             .await
             .unwrap_or_else(|| panic!("Account {} does not exist.", address))
     }
 
-    pub async fn get_st_sol_balance(&mut self, address: &Pubkey) -> StLamports {
+    pub async fn get_st_sol_balance(&mut self, address: Pubkey) -> StLamports {
         let token_account = self.get_account(address).await;
         let account_info: spl_token::state::Account =
             spl_token::state::Account::unpack_from_slice(token_account.data.as_slice()).unwrap();
@@ -568,7 +567,7 @@ impl Context {
     }
 
     pub async fn get_solido(&mut self) -> Lido {
-        let lido_account = self.get_account(&self.solido.pubkey()).await;
+        let lido_account = self.get_account(self.solido.pubkey()).await;
         // This returns a Result because it can cause an IO error, but that should
         // not happen in the test environment. (And if it does, then the test just
         // fails.)

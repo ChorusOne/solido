@@ -41,7 +41,7 @@ async fn test_remove_validator_without_unclaimed_credits() {
     assert_eq!(solido.validators.entries[0].entry.fee_credit, StLamports(0));
 
     context
-        .try_remove_validator(&vote_account)
+        .try_remove_validator(vote_account)
         .await
         .expect("Failed to remove validator.");
 

@@ -17,7 +17,7 @@ async fn test_successful_add_remove_maintainer() {
     let maintainer = Keypair::new();
 
     context
-        .try_add_maintainer(&maintainer.pubkey())
+        .try_add_maintainer(maintainer.pubkey())
         .await
         .expect("Failed to add maintainer.");
 
@@ -26,11 +26,11 @@ async fn test_successful_add_remove_maintainer() {
     assert_eq!(solido.maintainers.entries[0].pubkey, maintainer.pubkey());
 
     // Adding the maintainer a second time should fail.
-    let result = context.try_add_maintainer(&maintainer.pubkey()).await;
+    let result = context.try_add_maintainer(maintainer.pubkey()).await;
     assert_solido_error!(result, LidoError::DuplicatedEntry);
 
     context
-        .try_remove_maintainer(&maintainer.pubkey())
+        .try_remove_maintainer(maintainer.pubkey())
         .await
         .expect("Failed to remove maintainer.");
 
