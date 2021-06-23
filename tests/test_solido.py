@@ -15,16 +15,15 @@ import os
 import json
 
 from util import (
-    create_test_account,
-    solana_program_deploy,
+    TestAccount,
     create_spl_token,
+    create_test_account,
     create_vote_account,
-    solido,
+    get_solido_program_path,
     multisig,
     solana,
-    approve_and_execute,
-    TestAccount,
-    get_solido_program_path,
+    solana_program_deploy,
+    solido,
 )
 
 # We start by generating an account that we will need later. We put the tests
@@ -72,6 +71,36 @@ multisig_data = multisig(
 multisig_instance = multisig_data['multisig_address']
 multisig_pda = multisig_data['multisig_program_derived_address']
 print(f'> Created instance at {multisig_instance}.')
+
+
+def approve_and_execute(
+    transaction_to_approve: str,
+    signer: TestAccount,
+) -> None:
+    """
+    Helper to approve and execute a transaction with a single key.
+    """
+    multisig(
+        'approve',
+        '--multisig-program-id',
+        multisig_program_id,
+        '--multisig-address',
+        multisig_instance,
+        '--transaction-address',
+        transaction_to_approve,
+        keypair_path=signer.keypair_path,
+    )
+    multisig(
+        'execute-transaction',
+        '--multisig-program-id',
+        multisig_program_id,
+        '--multisig-address',
+        multisig_instance,
+        '--transaction-address',
+        transaction_to_approve,
+        keypair_path=signer.keypair_path,
+    )
+
 
 print('\nCreating Solido instance ...')
 result = solido(
@@ -180,13 +209,9 @@ assert (
     )
     == 1
 )
-approve_and_execute(
-    multisig,
-    multisig_program_id,
-    multisig_instance,
-    transaction_address,
-    test_addrs[0].keypair_path,
-)
+
+
+approve_and_execute(transaction_address, test_addrs[0])
 transaction_status = multisig(
     'show-transaction',
     '--multisig-program-id',
@@ -244,13 +269,7 @@ transaction_result = solido(
     keypair_path=test_addrs[0].keypair_path,
 )
 transaction_address = transaction_result['transaction_address']
-approve_and_execute(
-    multisig,
-    multisig_program_id,
-    multisig_instance,
-    transaction_address,
-    test_addrs[1].keypair_path,
-)
+approve_and_execute(transaction_address, test_addrs[1])
 
 solido_instance = solido(
     'show-solido',
@@ -280,13 +299,7 @@ transaction_result = solido(
     keypair_path=test_addrs[1].keypair_path,
 )
 transaction_address = transaction_result['transaction_address']
-approve_and_execute(
-    multisig,
-    multisig_program_id,
-    multisig_instance,
-    transaction_address,
-    test_addrs[0].keypair_path,
-)
+approve_and_execute(transaction_address, test_addrs[0])
 solido_instance = solido(
     'show-solido',
     '--solido-program-id',
@@ -313,13 +326,7 @@ transaction_result = solido(
     keypair_path=test_addrs[1].keypair_path,
 )
 transaction_address = transaction_result['transaction_address']
-approve_and_execute(
-    multisig,
-    multisig_program_id,
-    multisig_instance,
-    transaction_address,
-    test_addrs[0].keypair_path,
-)
+approve_and_execute(transaction_address, test_addrs[0])
 
 
 print('\nRunning maintenance (should be no-op) ...')
