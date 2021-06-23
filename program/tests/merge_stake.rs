@@ -41,6 +41,7 @@ async fn setup() -> (ProgramTestContext, LidoAccounts, Vec<ValidatorAccounts>) {
 const NUMBER_VALIDATORS: u64 = 4;
 const TEST_DEPOSIT_AMOUNT: Lamports = Lamports(100_000_000_000);
 
+// TODO(#226): We test only merging inactive stake accounts, test also other combinations.
 #[tokio::test]
 async fn test_successful_merge_stake() {
     let (mut context, lido_accounts, validators) = setup().await;
