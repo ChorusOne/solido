@@ -1,4 +1,5 @@
 use borsh::BorshSerialize;
+use solana_program::borsh::try_from_slice_unchecked;
 use solana_program::program::invoke_signed;
 use solana_program::{account_info::AccountInfo, entrypoint::ProgramResult, msg, pubkey::Pubkey};
 use spl_stake_pool::stake_program;
@@ -237,6 +238,9 @@ pub fn process_merge_stake(program_id: &Pubkey, accounts_raw: &[AccountInfo]) ->
     // Merge `from_stake` to `to_stake`, at the end of the instruction,
     // `from_stake` ceases to exist.
     let merge_ix = stake_program::merge(&to_stake, &from_stake, &accounts.deposit_authority.key);
+    let to_stake_before =
+        try_from_slice_unchecked::<stake_program::StakeState>(&accounts.from_stake.data.borrow())?;
+    let from_stake_amount = accounts.from_stake.lamports();
     invoke_signed(
         &merge_ix,
         &[
@@ -253,6 +257,25 @@ pub fn process_merge_stake(program_id: &Pubkey, accounts_raw: &[AccountInfo]) ->
             &[lido.deposit_authority_bump_seed],
         ]],
     )?;
+    let to_stake_after =
+        try_from_slice_unchecked::<stake_program::StakeState>(&accounts.to_stake.data.borrow())?;
+
+    if let (
+        stake_program::StakeState::Stake(_meta_before, stake_before),
+        stake_program::StakeState::Stake(_meta_after, stake_after),
+    ) = (to_stake_before, to_stake_after)
+    {
+        // Sanity check to see if merge worked as intended.
+        let sum_stakes = (Lamports(stake_before.delegation.stake) + Lamports(from_stake_amount))
+            .expect("Summing lamports shouldn't overflow.");
+        if Lamports(stake_after.delegation.stake) != sum_stakes {
+            msg!("Something went wrong when merging the stakes, total amount in stake {} should be from_stake's Lamports ({}) + to_stake's Lamports ({}) = {}, is {} instead", &to_stake, Lamports(from_stake_amount), Lamports(stake_before.delegation.stake), sum_stakes, Lamports(stake_after.delegation.stake));
+            return Err(LidoError::CalculationFailure.into());
+        }
+    } else {
+        msg!("Stake account is of type other than `Stake`.");
+        return Err(LidoError::InvalidStakeAccount.into());
+    }
     // Bump the validator's stake_accounts_seed_begin.
     validator.entry.stake_accounts_seed_begin += 1;
     lido.serialize(&mut *accounts.lido.data.borrow_mut())?;
