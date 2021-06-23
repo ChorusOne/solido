@@ -71,7 +71,6 @@ pub fn process_initialize(
         treasury_account: *accounts.treasury_account.key,
         developer_account: *accounts.developer_account.key,
     };
-    lido.validators = Validators::new(max_validators);
 
     let (_, reserve_bump_seed) = Pubkey::find_program_address(
         &[&accounts.lido.key.to_bytes(), RESERVE_AUTHORITY],
@@ -85,6 +84,7 @@ pub fn process_initialize(
 
     lido.lido_version = version;
     lido.maintainers = Maintainers::new(max_maintainers);
+    lido.validators = Validators::new(max_validators);
     lido.manager = *accounts.manager.key;
     lido.st_sol_mint = *accounts.st_sol_mint.key;
     lido.sol_reserve_authority_bump_seed = reserve_bump_seed;
@@ -95,8 +95,14 @@ pub fn process_initialize(
     lido.check_is_st_sol_account(&accounts.treasury_account)?;
     lido.check_is_st_sol_account(&accounts.developer_account)?;
 
-    lido.serialize(&mut *accounts.lido.data.borrow_mut())
-        .map_err(|e| e.into())
+    // For some reason, calling lido.serialize(&mut *accounts.lido.data.borrow_mut())
+    // stopped working; it leaves the data with size zero. As a workaround, write
+    // it to an intermediate buffer instead, and copy the buffer to the account
+    // data. ¯\_(ツ)_/¯
+    let mut buf = Vec::new();
+    lido.serialize(&mut buf)?;
+    accounts.lido.data.borrow_mut()[..buf.len()].copy_from_slice(&buf[..]);
+    Ok(())
 }
 
 pub fn process_deposit(

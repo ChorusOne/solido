@@ -1,44 +1,45 @@
 #![cfg(feature = "test-bpf")]
 
-mod helpers;
+mod context;
 
-use helpers::{program_test, simple_add_maintainer, simple_remove_maintainer, LidoAccounts};
-use solana_program_test::{tokio, ProgramTestContext};
+use context::Context;
+use lido::error::LidoError;
+use solana_program_test::tokio;
 use solana_sdk::signature::{Keypair, Signer};
-
-async fn setup() -> (ProgramTestContext, LidoAccounts) {
-    let mut context = program_test().start_with_context().await;
-    let mut lido_accounts = LidoAccounts::new();
-    lido_accounts.initialize_lido(&mut context).await;
-    (context, lido_accounts)
-}
 
 #[tokio::test]
 async fn test_successful_add_remove_maintainer() {
-    let (mut context, lido_accounts) = setup().await;
+    let mut context = Context::new_empty().await;
+
+    let solido = context.get_solido().await;
+    assert_eq!(solido.maintainers.len(), 0);
 
     let maintainer = Keypair::new();
-    simple_add_maintainer(&mut context, &maintainer.pubkey(), &lido_accounts).await;
 
-    let lido = lido_accounts.get_solido(&mut context).await;
-
-    let has_maintainer = lido
-        .maintainers
-        .entries
-        .iter()
-        .any(|pe| pe.pubkey == maintainer.pubkey());
-    assert!(has_maintainer);
-
-    simple_remove_maintainer(&mut context, &lido_accounts, &maintainer.pubkey())
+    context
+        .try_add_maintainer(&maintainer.pubkey())
         .await
-        .unwrap();
+        .expect("Failed to add maintainer.");
 
-    let lido = lido_accounts.get_solido(&mut context).await;
+    let solido = context.get_solido().await;
+    assert_eq!(solido.maintainers.len(), 1);
+    assert_eq!(solido.maintainers.entries[0].pubkey, maintainer.pubkey());
 
-    let has_maintainer = lido
+    // Adding the maintainer a second time should fail.
+    let result = context.try_add_maintainer(&maintainer.pubkey()).await;
+    assert_solido_error!(result, LidoError::DuplicatedEntry);
+
+    context
+        .try_remove_maintainer(&maintainer.pubkey())
+        .await
+        .expect("Failed to remove maintainer.");
+
+    let solido = context.get_solido().await;
+    let has_maintainer = solido
         .maintainers
         .entries
         .iter()
         .any(|pe| pe.pubkey == maintainer.pubkey());
     assert!(!has_maintainer);
+    assert_eq!(solido.maintainers.len(), 0);
 }
