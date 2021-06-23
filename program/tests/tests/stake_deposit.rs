@@ -23,14 +23,15 @@ async fn test_successful_stake_deposit() {
     // Now we make a deposit, and then delegate part of it.
     context.deposit(TEST_DEPOSIT_AMOUNT).await;
 
-    let stake_account = context.stake_deposit(
-            validator.vote_account,
-            TEST_STAKE_DEPOSIT_AMOUNT,
-        )
+    let stake_account = context
+        .stake_deposit(validator.vote_account, TEST_STAKE_DEPOSIT_AMOUNT)
         .await;
 
     // The amount that we staked, should now be in the stake account.
-    assert_eq!(context.get_sol_balance(stake_account).await, TEST_STAKE_DEPOSIT_AMOUNT);
+    assert_eq!(
+        context.get_sol_balance(stake_account).await,
+        TEST_STAKE_DEPOSIT_AMOUNT
+    );
 
     // We should also have recorded in the Solido state that this validator now
     // has balance in a stake account.

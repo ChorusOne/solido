@@ -16,10 +16,10 @@ use solana_sdk::transport;
 use solana_vote_program::vote_instruction;
 use solana_vote_program::vote_state::{VoteInit, VoteState};
 
-use lido::{DEPOSIT_AUTHORITY, instruction, RESERVE_AUTHORITY};
 use lido::error::LidoError;
 use lido::state::{FeeDistribution, Lido, Validator};
 use lido::token::{Lamports, StLamports};
+use lido::{instruction, DEPOSIT_AUTHORITY, RESERVE_AUTHORITY};
 
 // This id is only used throughout these tests.
 solana_program::declare_id!("3kEkdGe68DuTKg6FhVrLPZ3Wm8EcUPCPjhCeu8WrGDoc");
@@ -133,7 +133,11 @@ impl Context {
         // program. If it does not, then it will still partially work, but we get
         // weird errors about resizing accounts.
         let program_crate_name = "lido";
-        let program_test = ProgramTest::new(program_crate_name, id(), processor!(lido::processor::process));
+        let program_test = ProgramTest::new(
+            program_crate_name,
+            id(),
+            processor!(lido::processor::process),
+        );
 
         let mut result = Self {
             context: program_test.start_with_context().await,
@@ -156,9 +160,8 @@ impl Context {
             result.create_st_sol_account(treasury_owner.pubkey()).await;
 
         let developer_owner = Keypair::new();
-        result.developer_st_sol_account = result
-            .create_st_sol_account(developer_owner.pubkey())
-            .await;
+        result.developer_st_sol_account =
+            result.create_st_sol_account(developer_owner.pubkey()).await;
 
         let max_validators = 10_000;
         let max_maintainers = 1000;
@@ -167,7 +170,9 @@ impl Context {
         let rent_solido = rent.minimum_balance(solido_size);
 
         let rent_reserve = rent.minimum_balance(0);
-        result.fund(result.reserve_address, Lamports(rent_reserve)).await;
+        result
+            .fund(result.reserve_address, Lamports(rent_reserve))
+            .await;
 
         let payer = result.context.payer.pubkey();
         send_transaction(
@@ -461,11 +466,11 @@ impl Context {
                 },
                 amount,
             )
-                .unwrap()],
+            .unwrap()],
             vec![&user],
         )
-            .await
-            .expect("Failed to call Deposit on Solido instance.");
+        .await
+        .expect("Failed to call Deposit on Solido instance.");
 
         recipient
     }
@@ -490,28 +495,29 @@ impl Context {
             validator_entry.entry.stake_accounts_seed_end,
         );
 
-        let maintainer = self.maintainer.as_ref().expect("Must have maintainer to call StakeDeposit.");
+        let maintainer = self
+            .maintainer
+            .as_ref()
+            .expect("Must have maintainer to call StakeDeposit.");
 
         send_transaction(
             &mut self.context,
-            &[
-                instruction::stake_deposit(
-                    &id(),
-                    &instruction::StakeDepositAccountsMeta {
-                        lido: self.solido.pubkey(),
-                        maintainer: maintainer.pubkey(),
-                        validator_vote_account: validator_vote_account,
-                        reserve: self.reserve_address,
-                        stake_account_end: stake_account,
-                        deposit_authority: self.deposit_authority,
-                    },
-                    amount,
-                )
-                .unwrap()
-            ],
+            &[instruction::stake_deposit(
+                &id(),
+                &instruction::StakeDepositAccountsMeta {
+                    lido: self.solido.pubkey(),
+                    maintainer: maintainer.pubkey(),
+                    validator_vote_account: validator_vote_account,
+                    reserve: self.reserve_address,
+                    stake_account_end: stake_account,
+                    deposit_authority: self.deposit_authority,
+                },
+                amount,
+            )
+            .unwrap()],
             vec![maintainer],
         )
-            .await?;
+        .await?;
 
         Ok(stake_account)
     }
@@ -575,7 +581,11 @@ impl Context {
     }
 
     pub async fn get_rent(&mut self) -> Rent {
-        self.context.banks_client.get_rent().await.expect("Failed to get rent.")
+        self.context
+            .banks_client
+            .get_rent()
+            .await
+            .expect("Failed to get rent.")
     }
 }
 

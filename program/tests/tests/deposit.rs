@@ -15,7 +15,10 @@ async fn test_successful_deposit() {
 
     let reserve_balance = context.get_sol_balance(context.reserve_address).await;
     let rent = context.get_rent().await;
-    assert_eq!(Some(reserve_balance), TEST_DEPOSIT_AMOUNT + Lamports(rent.minimum_balance(0)));
+    assert_eq!(
+        Some(reserve_balance),
+        TEST_DEPOSIT_AMOUNT + Lamports(rent.minimum_balance(0))
+    );
 
     // In general, the received stSOL need not be equal to the deposited SOL,
     // but initially, the exchange rate is 1, so this holds.
