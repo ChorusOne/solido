@@ -2,11 +2,11 @@
 
 use solana_program_test::tokio;
 
-use context::Context;
+use crate::assert_solido_error;
+use crate::context::Context;
+
 use lido::error::LidoError;
 use lido::token::StLamports;
-
-mod context;
 
 #[tokio::test]
 async fn test_successful_add_validator() {

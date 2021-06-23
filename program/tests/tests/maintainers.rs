@@ -1,8 +1,8 @@
 #![cfg(feature = "test-bpf")]
 
-mod context;
+use crate::assert_solido_error;
+use crate::context::Context;
 
-use context::Context;
 use lido::error::LidoError;
 use solana_program_test::tokio;
 use solana_sdk::signature::{Keypair, Signer};
