@@ -65,19 +65,19 @@ impl StakeBalance {
     }
     /// Returns `true` if the stake account is active, `false` otherwise.
     pub fn is_active(&self) -> bool {
-        return self.active > Lamports(0)
+        self.active > Lamports(0)
             && self.activating == Lamports(0)
-            && self.deactivating == Lamports(0);
+            && self.deactivating == Lamports(0)
     }
     /// Returns `true` if the stake account is inactive, `false` otherwise.
     pub fn is_inactive(&self) -> bool {
-        return self.active == Lamports(0)
+        self.active == Lamports(0)
             && self.activating == Lamports(0)
-            && self.deactivating == Lamports(0);
+            && self.deactivating == Lamports(0)
     }
     /// Returns `true` if the stake account is activating, `false` otherwise.
     pub fn is_activating(&self) -> bool {
-        return self.active == Lamports(0) && self.activating > Lamports(0);
+        self.active == Lamports(0) && self.activating > Lamports(0)
     }
 }
 
