@@ -32,7 +32,7 @@ type Result<T> = std::result::Result<T, Error>;
 
 /// A brief description of the maintenance performed. Not relevant functionally,
 /// but helpful for automated testing, and just for info.
-#[derive(Serialize)]
+#[derive(Debug, Eq, PartialEq, Serialize)]
 pub enum MaintenanceOutput {
     StakeDeposit {
         #[serde(serialize_with = "serialize_b58")]
@@ -205,16 +205,10 @@ impl SolidoState {
     }
 
     /// If there is a deposit that can be staked, return the instruction to do so.
-    pub fn try_stake_deposit(&self) -> Result<Option<(Instruction, MaintenanceOutput)>> {
+    pub fn try_stake_deposit(&self) -> Option<(Instruction, MaintenanceOutput)> {
         let reserve_balance = self.get_effective_reserve();
         let minimum_stake_account_balance =
             Lamports(self.rent.minimum_balance(std::mem::size_of::<StakeState>()));
-
-        // If there is not enough reserve to create a new stake account, we
-        // can't stake the deposit, even if there is some balance.
-        if reserve_balance < minimum_stake_account_balance {
-            return Ok(None);
-        }
 
         // If there is enough reserve, we can make a deposit. To keep the pool
         // balanced, find the validator furthest below its target balance, and
@@ -253,6 +247,12 @@ impl SolidoState {
         // reserve, a future maintenance run will stake the remainder with the next validator.
         let amount_to_deposit = amount_below_target.min(reserve_balance);
 
+        // If the amount to deposit would not make the stake account rent-exempt,
+        // then we cannot deposit it at this point.
+        if amount_to_deposit < minimum_stake_account_balance {
+            return None;
+        }
+
         let instruction = lido::instruction::stake_deposit(
             &self.solido_program_id,
             &lido::instruction::StakeDepositAccountsMeta {
@@ -272,7 +272,7 @@ impl SolidoState {
             amount: amount_to_deposit,
         };
 
-        Ok(Some((instruction, task)))
+        Some((instruction, task))
     }
 
     /// Write metrics about the current Solido instance in Prometheus format.
@@ -361,19 +361,18 @@ pub fn try_perform_maintenance(
 ) -> Result<Option<MaintenanceOutput>> {
     // Try all of these operations one by one, and select the first one that
     // produces an instruction.
-    let instruction: Option<Result<(Instruction, MaintenanceOutput)>> =
-        None.or_else(|| state.try_stake_deposit().transpose());
+    let instruction: Option<(Instruction, MaintenanceOutput)> =
+        None.or_else(|| state.try_stake_deposit());
 
-    match instruction {
-        Some(Ok((instr, output))) => {
-            // For maintenance operations, the maintainer is the only signer,
-            // and that should be sufficient.
-            sign_and_send_transaction(config, &[instr], &[config.signer])?;
-            Ok(Some(output))
-        }
-        Some(Err(err)) => Err(err),
-        None => Ok(None),
-    }
+    let (instr, description) = match instruction {
+        Some(x) => x,
+        None => return Ok(None),
+    };
+
+    // For maintenance operations, the maintainer is the only signer,
+    // and that should be sufficient.
+    sign_and_send_transaction(config, &[instr], &[config.signer])?;
+    Ok(Some(description))
 }
 
 /// Inspect the on-chain Solido state, and if there is maintenance that can be
@@ -388,4 +387,77 @@ pub fn run_perform_maintenance(
 ) -> Result<Option<MaintenanceOutput>> {
     let state = SolidoState::new(config, opts.solido_program_id(), opts.solido_address())?;
     try_perform_maintenance(config, &state)
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    /// Produce a new state with `default` Solido instance in it, and random pubkeys.
+    fn new_empty_solido() -> SolidoState {
+        let mut state = SolidoState {
+            produced_at: SystemTime::UNIX_EPOCH,
+            solido_program_id: Pubkey::new_unique(),
+            solido_address: Pubkey::new_unique(),
+            solido: Lido::default(),
+            validator_stake_accounts: vec![],
+            st_sol_mint: Mint::default(),
+            reserve_address: Pubkey::new_unique(),
+            reserve_account: Account::default(),
+            rent: Rent::default(),
+            clock: Clock::default(),
+            maintainer_address: Pubkey::new_unique(),
+        };
+
+        // The reserve should be rent-exempt.
+        state.reserve_account.lamports = state.rent.minimum_balance(0);
+
+        state
+    }
+
+    /// This is a regression test. In the past we checked for the minimum stake
+    /// balance before capping it at the amount below target, which meant that
+    /// if there was enough in the reserve, but the amount below target was less
+    /// than that of a minimum stake account, we would still try to deposit it,
+    /// which would fail.
+    #[test]
+    fn stake_deposit_does_not_stake_less_than_the_minimum() {
+        let mut state = new_empty_solido();
+
+        let minimum_stake_account_balance = Lamports(
+            state
+                .rent
+                .minimum_balance(std::mem::size_of::<StakeState>()),
+        );
+
+        // Add two validators, both without any stake account yet.
+        state.solido.validators.maximum_entries = 2;
+        state
+            .solido
+            .validators
+            .add(Pubkey::new_unique(), Validator::new(Pubkey::new_unique()))
+            .unwrap();
+        state
+            .solido
+            .validators
+            .add(Pubkey::new_unique(), Validator::new(Pubkey::new_unique()))
+            .unwrap();
+
+        // Put enough SOL in the reserve that we *could* stake it, if it had to
+        // go into a single stake account, but that it's too little to stake if
+        // we need to split it over two accounts.
+        state.reserve_account.lamports += minimum_stake_account_balance.0 + 1;
+
+        assert_eq!(
+            state.try_stake_deposit(),
+            None,
+            "Should not try to stake, this is not enough for a rent-exempt stake account.",
+        );
+
+        // If we add a bit more, then we can fund two stake accounts, and that
+        // should be enough to trigger a StakeDeposit.
+        state.reserve_account.lamports += minimum_stake_account_balance.0 + 1;
+
+        assert!(state.try_stake_deposit().is_some());
+    }
 }
