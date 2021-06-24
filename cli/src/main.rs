@@ -210,8 +210,9 @@ fn merge_with_config(subcommand: &mut SubCommand, config_file: Option<&ConfigFil
     match subcommand {
         SubCommand::CreateSolido(opts) => opts.merge_with_config(config_file),
         SubCommand::AddValidator(opts) => opts.merge_with_config(config_file),
-        SubCommand::AddMaintainer(opts) => opts.merge_with_config(config_file),
-        SubCommand::RemoveMaintainer(opts) => opts.merge_with_config(config_file),
+        SubCommand::AddMaintainer(opts) | SubCommand::RemoveMaintainer(opts) => {
+            opts.merge_with_config(config_file)
+        }
         SubCommand::ShowSolido(opts) => opts.merge_with_config(config_file),
         SubCommand::PerformMaintenance(opts) => opts.merge_with_config(config_file),
         SubCommand::Multisig(opts) => opts.merge_with_config(config_file),

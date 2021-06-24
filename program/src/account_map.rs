@@ -58,6 +58,10 @@ impl<T: Default> AccountMap<T> {
         self.entries.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
     pub fn add(&mut self, address: Pubkey, value: T) -> ProgramResult {
         if self.len() == self.maximum_entries as usize {
             return Err(LidoError::MaximumNumberOfAccountsExceeded.into());

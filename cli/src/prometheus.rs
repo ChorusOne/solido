@@ -61,6 +61,7 @@ impl<'a> Metric<'a> {
     }
 
     /// Set the suffix.
+    #[allow(dead_code)] // We will need this once we use histograms.
     pub fn with_suffix(mut self, suffix: &'a str) -> Metric<'a> {
         self.suffix = suffix;
         self
@@ -83,7 +84,7 @@ pub fn write_metric<W: Write>(out: &mut W, family: &MetricFamily) -> io::Result<
         // not exactly what Prometheus wants, but it is identical for
         // all of the values that we use it with; this is not a general
         // Prometheus formatter, just a quick one for our use.
-        if metric.labels.len() > 0 {
+        if !metric.labels.is_empty() {
             write!(out, "{{")?;
             let mut separator = "";
             for (key, value) in metric.labels.iter() {

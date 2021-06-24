@@ -178,8 +178,8 @@ impl SolidoState {
 
         Ok(SolidoState {
             produced_at: SystemTime::now(),
-            solido_program_id: solido_program_id.clone(),
-            solido_address: solido_address.clone(),
+            solido_program_id: *solido_program_id,
+            solido_address: *solido_address,
             solido,
             validator_stake_accounts,
             reserve_address,

@@ -131,7 +131,7 @@ jobs:
 
     - name: Run Clippy
       run: |
-        cargo clippy -- -W clippy::pedantic
+        cargo clippy -- --warn clippy::pedantic --deny warnings
 
     - name: Typecheck Python
       run: |

@@ -104,8 +104,8 @@ fn run_main_loop(config: &Config, opts: &RunMaintainerOpts, snapshot_mutex: &Sna
 
         let state_result =
             SolidoState::new(config, opts.solido_program_id(), opts.solido_address());
-        match &state_result {
-            &Err(ref err) => {
+        match state_result {
+            Err(ref err) => {
                 println!("Failed to obtain Solido state.");
                 err.print_pretty();
                 metrics.errors += 1;
@@ -115,7 +115,7 @@ fn run_main_loop(config: &Config, opts: &RunMaintainerOpts, snapshot_mutex: &Sna
                 // exponential backoff with jitter, but let's not go there right now.
                 do_wait = true;
             }
-            &Ok(ref state) => {
+            Ok(ref state) => {
                 match try_perform_maintenance(config, &state) {
                     Err(err) => {
                         println!("Error in maintenance.");
@@ -190,11 +190,11 @@ fn serve_request(request: Request, snapshot_mutex: &SnapshotMutex) -> Result<(),
         is_ok = is_ok && solido.write_prometheus(&mut out).is_ok();
     }
 
-    return if is_ok {
+    if is_ok {
         request.respond(Response::from_data(out))
     } else {
         request.respond(Response::from_string("error").with_status_code(500))
-    };
+    }
 }
 
 /// Spawn threads that run the http server.
