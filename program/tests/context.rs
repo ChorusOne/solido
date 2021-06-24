@@ -8,7 +8,7 @@ use solana_program::program_pack::Pack;
 use solana_program::rent::Rent;
 use solana_program::system_instruction;
 use solana_program::system_program;
-use solana_program_test::{processor, ProgramTest, ProgramTestBanksClientExt, ProgramTestContext};
+use solana_program_test::{processor, ProgramTest, ProgramTestContext};
 use solana_sdk::account::Account;
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::{Keypair, Signer};
@@ -30,6 +30,10 @@ solana_program::declare_id!("3kEkdGe68DuTKg6FhVrLPZ3Wm8EcUPCPjhCeu8WrGDoc");
 pub struct Context {
     /// Inner test context that contains the banks client and recent block hash.
     pub context: ProgramTestContext,
+
+    /// A nonce to make similar transactions distinct, incremented after every
+    /// `send_transaction`.
+    pub nonce: u64,
 
     // Key pairs for the accounts in the Solido instance.
     pub solido: Keypair,
@@ -56,24 +60,32 @@ pub struct ValidatorAccounts {
 ///
 /// The payer always signs, but additional signers can be passed as well.
 ///
-/// After this, `self.last_blockhash` will contain the block hash used for
-/// this transaction.
+/// Takes a nonce to ensure that sending the same instruction twice will result
+/// in distinct transactions. This function increments the nonce after using it.
 pub async fn send_transaction(
     context: &mut ProgramTestContext,
+    nonce: &mut u64,
     instructions: &[Instruction],
     additional_signers: Vec<&Keypair>,
 ) -> transport::Result<()> {
-    // Before we send the transaction, get a new block hash, to ensure that
-    // if you call `send_transaction` twice with the same payload, we actually
-    // send two transactions, instead of the second one silently being ignored.
-    context.last_blockhash = context
-        .banks_client
-        .get_new_blockhash(&context.last_blockhash)
-        .await
-        .unwrap()
-        .0;
+    let mut instructions_mut = instructions.to_vec();
 
-    let mut transaction = Transaction::new_with_payer(instructions, Some(&context.payer.pubkey()));
+    // If we try to send exactly the same transaction twice, the second one will
+    // not be considered distinct by the runtime, and it will not execute, but
+    // instead immediately complete successfully. This is undesirable in tests,
+    // sometimes we do want to repeat a transaction, e.g. update the exchange
+    // rate twice in the same epoch, and confirm that the second one is rejected.
+    // Normally the way to do this in Solana is to wait for a new recent block
+    // hash. If the block hash is different, the transactions will be distinct.
+    // Unfortunately, `get_new_blockhash` interacts badly with `warp_to_slot`.
+    // See also https://github.com/solana-labs/solana/issues/18201. To work
+    // around this, instead of changing the block hash, add a memo instruction
+    // with a nonce to every transaction, to make the transactions distinct.
+    let memo = spl_memo::build_memo(&format!("nonce={}", *nonce).as_bytes(), &[]);
+    instructions_mut.push(memo);
+    *nonce += 1;
+
+    let mut transaction = Transaction::new_with_payer(&instructions_mut, Some(&context.payer.pubkey()));
 
     // Sign with the payer, and additional signers if any.
     let mut signers = additional_signers;
@@ -140,6 +152,7 @@ impl Context {
 
         let mut result = Self {
             context: program_test.start_with_context().await,
+            nonce: 0,
             manager,
             solido,
             st_sol_mint: Pubkey::default(),
@@ -176,6 +189,7 @@ impl Context {
         let payer = result.context.payer.pubkey();
         send_transaction(
             &mut result.context,
+            &mut result.nonce,
             &[
                 system_instruction::create_account(
                     &payer,
@@ -232,6 +246,7 @@ impl Context {
         let payer = self.context.payer.pubkey();
         send_transaction(
             &mut self.context,
+            &mut self.nonce,
             &[
                 system_instruction::create_account(
                     &payer,
@@ -266,6 +281,7 @@ impl Context {
         let payer = self.context.payer.pubkey();
         send_transaction(
             &mut self.context,
+            &mut self.nonce,
             &[
                 system_instruction::create_account(
                     &payer,
@@ -320,6 +336,7 @@ impl Context {
         ));
         send_transaction(
             &mut self.context,
+            &mut self.nonce,
             &instructions,
             vec![node_key, &vote_account],
         )
@@ -334,6 +351,7 @@ impl Context {
         let payer = self.context.payer.pubkey();
         send_transaction(
             &mut self.context,
+            &mut self.nonce,
             &[system_instruction::transfer(&payer, &recipient, amount.0)],
             vec![],
         )
@@ -344,6 +362,7 @@ impl Context {
     pub async fn try_add_maintainer(&mut self, maintainer: Pubkey) -> transport::Result<()> {
         send_transaction(
             &mut self.context,
+            &mut self.nonce,
             &[lido::instruction::add_maintainer(
                 &id(),
                 &lido::instruction::AddMaintainerMeta {
@@ -370,6 +389,7 @@ impl Context {
     pub async fn try_remove_maintainer(&mut self, maintainer: Pubkey) -> transport::Result<()> {
         send_transaction(
             &mut self.context,
+            &mut self.nonce,
             &[lido::instruction::remove_maintainer(
                 &id(),
                 &lido::instruction::RemoveMaintainerMeta {
@@ -390,6 +410,7 @@ impl Context {
     ) -> transport::Result<()> {
         send_transaction(
             &mut self.context,
+            &mut self.nonce,
             &[lido::instruction::add_validator(
                 &id(),
                 &lido::instruction::AddValidatorMeta {
@@ -427,6 +448,7 @@ impl Context {
     pub async fn try_remove_validator(&mut self, vote_account: Pubkey) -> transport::Result<()> {
         send_transaction(
             &mut self.context,
+            &mut self.nonce,
             &[lido::instruction::remove_validator(
                 &id(),
                 &lido::instruction::RemoveValidatorMeta {
@@ -454,6 +476,7 @@ impl Context {
 
         send_transaction(
             &mut self.context,
+            &mut self.nonce,
             &[instruction::deposit(
                 &id(),
                 &instruction::DepositAccountsMeta {
@@ -501,6 +524,7 @@ impl Context {
 
         send_transaction(
             &mut self.context,
+            &mut self.nonce,
             &[instruction::stake_deposit(
                 &id(),
                 &instruction::StakeDepositAccountsMeta {
@@ -539,6 +563,7 @@ impl Context {
     ) -> transport::Result<()> {
         send_transaction(
             &mut self.context,
+            &mut self.nonce,
             &[instruction::change_fee_distribution(
                 &id(),
                 new_fee_distribution.clone(),
@@ -558,6 +583,7 @@ impl Context {
     pub async fn try_update_exchange_rate(&mut self) -> transport::Result<()> {
         send_transaction(
             &mut self.context,
+            &mut self.nonce,
             &[instruction::update_exchange_rate(
                 &id(),
                 &instruction::UpdateExchangeRateAccountsMeta {
