@@ -21,13 +21,13 @@ use lido::{
 use spl_stake_pool::stake_program::StakeState;
 
 use crate::config::PerformMaintenanceOpts;
+use crate::error::MaintenanceError;
 use crate::helpers::{get_solido, sign_and_send_transaction};
 use crate::stake_account::StakeBalance;
 use crate::{error::Error, Config};
 use lido::token::StLamports;
 use solana_program::program_pack::Pack;
 use std::time::SystemTime;
-use crate::error::MaintenanceError;
 
 type Result<T> = std::result::Result<T, Error>;
 
@@ -333,15 +333,13 @@ impl SolidoState {
                 name: "solido_maintainer_balance_sol",
                 help: "Balance of the maintainer account, in SOL.",
                 type_: "gauge",
-                metrics: vec![
-                    Metric::new(self.maintainer_account.lamports)
-                        // Enable 1e-9 factor: the metric is in SOL, but the value in lamports.
-                        .nano()
-                        .at(self.produced_at)
-                        // Include the maintainer address, to prevent any confusion
-                        // about which account this is monitoring.
-                        .with_label("maintainer_address", self.maintainer_address.to_string())
-                ]
+                metrics: vec![Metric::new(self.maintainer_account.lamports)
+                    // Enable 1e-9 factor: the metric is in SOL, but the value in lamports.
+                    .nano()
+                    .at(self.produced_at)
+                    // Include the maintainer address, to prevent any confusion
+                    // about which account this is monitoring.
+                    .with_label("maintainer_address", self.maintainer_address.to_string())],
             },
         )?;
 
@@ -455,7 +453,6 @@ pub fn try_perform_maintenance(
     config: &Config,
     state: &SolidoState,
 ) -> Result<Option<MaintenanceOutput>> {
-
     // To prevent the maintenance transactions failing with mysterious errors
     // that are difficult to debug, before we do any maintenance, do a sanity
     // check to ensure that the maintainer has at least some SOL to pay the
@@ -466,9 +463,9 @@ pub fn try_perform_maintenance(
             message: format!(
                 "Balance of the maintainer account {} is less than {}. \
                 Please fund the maintainer account.",
-                state.maintainer_address,
-                minimum_maintainer_balance,
-        )}));
+                state.maintainer_address, minimum_maintainer_balance,
+            ),
+        }));
     }
 
     // Try all of these operations one by one, and select the first one that

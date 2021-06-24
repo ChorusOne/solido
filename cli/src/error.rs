@@ -28,7 +28,7 @@ pub trait AsPrettyError {
 pub type Error = Box<dyn AsPrettyError + 'static>;
 
 pub struct MaintenanceError {
-    pub message: String
+    pub message: String,
 }
 
 impl AsPrettyError for MaintenanceError {
