@@ -261,11 +261,19 @@ impl SolidoState {
 
         // Top up the validator to at most its target. If that means we don't use the full
         // reserve, a future maintenance run will stake the remainder with the next validator.
-        let amount_to_deposit = amount_below_target.min(reserve_balance);
+        let mut amount_to_deposit = amount_below_target.min(reserve_balance);
 
-        // If the amount to deposit would not make the stake account rent-exempt
-        // and mergeable, then we cannot deposit it at this point.
-        if amount_to_deposit < MINIMUM_STAKE_ACCOUNT_BALANCE {
+        // However, if the amount needed to bring the validator to its target is
+        // less than the minimum stake account balance, then we would have to wait
+        // until there is `MINIMUM_STAKE_ACCOUNT_BALANCE * num_validators` in the
+        // reserve (assuming they are currently balanced) before we stake anything,
+        // which would be wasteful. In this case, we rather overshoot the target
+        // temporarily, and future deposits will restore the balance.
+        amount_to_deposit = amount_to_deposit.max(MINIMUM_STAKE_ACCOUNT_BALANCE);
+
+        // The minimum stake account balance might be more than what's in the
+        // reserve. If so, we cannot stake.
+        if amount_to_deposit > reserve_balance {
             return None;
         }
 
@@ -529,9 +537,40 @@ mod test {
     /// balance before capping it at the amount below target, which meant that
     /// if there was enough in the reserve, but the amount below target was less
     /// than that of a minimum stake account, we would still try to deposit it,
-    /// which would fail.
+    /// which would fail. Later though we changed it to stake the minimum stake
+    /// amount if possible, even if it leaves validators unbalanced.
     #[test]
     fn stake_deposit_does_not_stake_less_than_the_minimum() {
+        let mut state = new_empty_solido();
+
+        // Add a validators, without any stake accounts yet.
+        state.solido.validators.maximum_entries = 1;
+        state
+            .solido
+            .validators
+            .add(Pubkey::new_unique(), Validator::new(Pubkey::new_unique()))
+            .unwrap();
+
+        // Put some SOL in the reserve, but not enough to stake.
+        state.reserve_account.lamports += MINIMUM_STAKE_ACCOUNT_BALANCE.0 - 1;
+
+        assert_eq!(
+            state.try_stake_deposit(),
+            None,
+            "Should not try to stake, this is not enough for a stake account.",
+        );
+
+        // If we add a bit more, then we can fund two stake accounts, and that
+        // should be enough to trigger a StakeDeposit.
+        state.reserve_account.lamports += 1;
+
+        assert!(state.try_stake_deposit().is_some());
+    }
+
+    #[test]
+    fn stake_deposit_splits_evenly_if_possible() {
+        use std::ops::Add;
+
         let mut state = new_empty_solido();
 
         // Add two validators, both without any stake account yet.
@@ -547,21 +586,36 @@ mod test {
             .add(Pubkey::new_unique(), Validator::new(Pubkey::new_unique()))
             .unwrap();
 
-        // Put enough SOL in the reserve that we *could* stake it, if it had to
-        // go into a single stake account, but that it's too little to stake if
-        // we need to split it over two accounts.
-        state.reserve_account.lamports += MINIMUM_STAKE_ACCOUNT_BALANCE.0 + 1;
+        // Put enough SOL in the reserve that we can stake half of the deposit
+        // with each of the validators, and still be above the minimum stake
+        // balance.
+        state.reserve_account.lamports += 4 * MINIMUM_STAKE_ACCOUNT_BALANCE.0;
 
+        // The first attempt should stake with the first validator.
         assert_eq!(
-            state.try_stake_deposit(),
-            None,
-            "Should not try to stake, this is not enough for a rent-exempt stake account.",
+            state.try_stake_deposit().unwrap().1,
+            MaintenanceOutput::StakeDeposit {
+                validator_vote_account: state.solido.validators.entries[0].pubkey,
+                amount: (MINIMUM_STAKE_ACCOUNT_BALANCE * 2).unwrap(),
+            }
         );
 
-        // If we add a bit more, then we can fund two stake accounts, and that
-        // should be enough to trigger a StakeDeposit.
-        state.reserve_account.lamports += MINIMUM_STAKE_ACCOUNT_BALANCE.0 + 1;
+        // Pretend that the amount was actually staked.
+        state.reserve_account.lamports -= 2 * MINIMUM_STAKE_ACCOUNT_BALANCE.0;
+        let validator = &mut state.solido.validators.entries[0].entry;
+        validator.stake_accounts_balance = validator
+            .stake_accounts_balance
+            .add((MINIMUM_STAKE_ACCOUNT_BALANCE * 2).unwrap())
+            .unwrap();
 
-        assert!(state.try_stake_deposit().is_some());
+        // The second attempt should stake with the second validator, and the amount
+        // should be the same as before.
+        assert_eq!(
+            state.try_stake_deposit().unwrap().1,
+            MaintenanceOutput::StakeDeposit {
+                validator_vote_account: state.solido.validators.entries[1].pubkey,
+                amount: (MINIMUM_STAKE_ACCOUNT_BALANCE * 2).unwrap(),
+            }
+        );
     }
 }
