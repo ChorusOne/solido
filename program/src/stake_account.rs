@@ -3,9 +3,9 @@
 use std::iter::Sum;
 use std::ops::Add;
 
-use lido::token::Lamports;
-use solana_sdk::clock::Clock;
-use solana_sdk::stake_history::StakeHistory;
+use crate::token::Lamports;
+use solana_program::clock::Clock;
+use solana_program::stake_history::StakeHistory;
 use spl_stake_pool::stake_program::Delegation;
 
 /// The balance of a stake account, split into the four states that stake can be in.
@@ -62,6 +62,22 @@ impl StakeBalance {
             active: Lamports(active_lamports),
             deactivating: Lamports(deactivating_lamports),
         }
+    }
+    /// Returns `true` if the stake account is active, `false` otherwise.
+    pub fn is_active(&self) -> bool {
+        return self.active > Lamports(0)
+            && self.activating == Lamports(0)
+            && self.deactivating == Lamports(0);
+    }
+    /// Returns `true` if the stake account is inactive, `false` otherwise.
+    pub fn is_inactive(&self) -> bool {
+        return self.active == Lamports(0)
+            && self.activating == Lamports(0)
+            && self.deactivating == Lamports(0);
+    }
+    /// Returns `true` if the stake account is activating, `false` otherwise.
+    pub fn is_activating(&self) -> bool {
+        return self.active == Lamports(0) && self.activating > Lamports(0);
     }
 }
 

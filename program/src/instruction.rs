@@ -747,6 +747,9 @@ accounts_struct! {
             is_signer: false,
             is_writable: true,
         },
+        // This instruction doesn’t reference the authority directly, but it
+        // invokes one a `StakeMerge` instruction that needs the deposit
+        // authority to sign.
         pub stake_authority {
             is_signer: false,
             is_writable: false,

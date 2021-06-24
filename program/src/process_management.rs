@@ -1,5 +1,4 @@
 use borsh::BorshSerialize;
-use solana_program::borsh::try_from_slice_unchecked;
 use solana_program::program::invoke_signed;
 use solana_program::{account_info::AccountInfo, entrypoint::ProgramResult, msg, pubkey::Pubkey};
 use spl_stake_pool::stake_program;
@@ -188,11 +187,14 @@ pub fn _process_change_validator_fee_account(
     unimplemented!()
 }
 
-/// Merge two stake accounts, they should both be fully active. It will merge
-/// `from_stake` to `to_stake`.
-/// If `merge_begin` is true, merges the validator's stake determined by the
-/// begin to begin + 1, and  bumps `begin` to `begin+1` if the operation was
-/// successful. Otherwise merges
+/// Merge two stake accounts.
+/// `from_seed` can be the validator's `stake_accounts_seed_begin` and in that
+/// case `to_seed` should be `stake_accounts_seed_begin + 1`, or `from_seed` can
+/// be the validator's `stake_accounts_seed_end` and in that case `to_seed`
+/// should be `stake_accounts_seed_end -1`.
+/// Validator stakes should both be fully active or both inactive when merging
+/// stakes from the beginning, or both activating when merging stakes from the
+/// end.
 pub fn process_merge_stake(
     program_id: &Pubkey,
     from_seed: u64,
@@ -207,7 +209,7 @@ pub fn process_merge_stake(
         .get_mut(accounts.validator_vote_account.key)?;
     // Check that there are at least two accounts to merge
     if validator.entry.stake_accounts_seed_begin + 1 >= validator.entry.stake_accounts_seed_end {
-        msg!("Attempting to merge accounts in a validator that has a single stake account.");
+        msg!("Attempting to merge accounts in a validator that has fewer than two stake accounts.");
         return Err(LidoError::InvalidStakeAccount.into());
     }
 
@@ -215,14 +217,19 @@ pub fn process_merge_stake(
     if from_seed == validator.entry.stake_accounts_seed_begin
         && to_seed == validator.entry.stake_accounts_seed_begin + 1
     {
+        // The stake accounts we try to merge are at the beginning, so the begin
+        // account will go away.
         validator.entry.stake_accounts_seed_begin += 1;
-        // Check if merging from the end.
-    } else if from_seed == validator.entry.stake_accounts_seed_end
-        && to_seed == validator.entry.stake_accounts_seed_end - 1
+    } else if from_seed == validator.entry.stake_accounts_seed_end - 1
+        && to_seed == validator.entry.stake_accounts_seed_end - 2
     {
+        // The stake accounts we try to merge are at the end, so the account
+        // with seed `end - 1` will go away.
         validator.entry.stake_accounts_seed_end -= 1;
-        // Avoid merging stakes in between.
     } else {
+        // The accounts to merge are not at the beginning or the end, we refuse
+        // to merge them, as it would create a hole in the list of stake
+        // accounts.
         msg!("Attempting to merge stakes defined by {} and {}. Only stake that are in the bounder indexes can be merged. ({} and {}, or {} and {})", from_seed, to_seed, validator.entry.stake_accounts_seed_begin, validator.entry.stake_accounts_seed_begin+1, validator.entry.stake_accounts_seed_end, validator.entry.stake_accounts_seed_end-1);
         return Err(LidoError::WrongStakeState.into());
     }
@@ -254,7 +261,7 @@ pub fn process_merge_stake(
         msg!(
             "Calculated to_stake {} for seed {} is different from received {}.",
             to_stake,
-            validator.entry.stake_accounts_seed_end,
+            to_seed,
             accounts.to_stake.key
         );
         return Err(LidoError::InvalidStakeAccount.into());
@@ -262,9 +269,10 @@ pub fn process_merge_stake(
     // Merge `from_stake` to `to_stake`, at the end of the instruction,
     // `from_stake` ceases to exist.
     let merge_ix = stake_program::merge(&to_stake, &from_stake, &accounts.stake_authority.key);
-    let to_stake_before =
-        try_from_slice_unchecked::<stake_program::StakeState>(&accounts.from_stake.data.borrow())?;
-    let from_stake_amount = accounts.from_stake.lamports();
+    let lamports_from_stake_before = accounts.from_stake.lamports();
+    let lamports_to_stake_before = accounts.to_stake.lamports();
+    let sum_stakes = (Lamports(lamports_from_stake_before) + Lamports(lamports_to_stake_before))
+        .expect("Summing lamports shouldn't overflow.");
     invoke_signed(
         &merge_ix,
         &[
@@ -281,24 +289,9 @@ pub fn process_merge_stake(
             &[lido.stake_authority_bump_seed],
         ]],
     )?;
-    let to_stake_after =
-        try_from_slice_unchecked::<stake_program::StakeState>(&accounts.to_stake.data.borrow())?;
-
-    if let (
-        stake_program::StakeState::Stake(_meta_before, stake_before),
-        stake_program::StakeState::Stake(_meta_after, stake_after),
-    ) = (to_stake_before, to_stake_after)
-    {
-        // Sanity check to see if merge worked as intended.
-        let sum_stakes = (Lamports(stake_before.delegation.stake) + Lamports(from_stake_amount))
-            .expect("Summing lamports shouldn't overflow.");
-        if Lamports(stake_after.delegation.stake) != sum_stakes {
-            msg!("Something went wrong when merging the stakes, total amount in stake {} should be from_stake's Lamports ({}) + to_stake's Lamports ({}) = {}, is {} instead", &to_stake, Lamports(from_stake_amount), Lamports(stake_before.delegation.stake), sum_stakes, Lamports(stake_after.delegation.stake));
-            return Err(LidoError::CalculationFailure.into());
-        }
-    } else {
-        msg!("Stake account is of type other than `Stake`.");
-        return Err(LidoError::InvalidStakeAccount.into());
+    if Lamports(accounts.to_stake.lamports()) != sum_stakes {
+        msg!("Something went wrong when merging the stakes, total amount in stake {} should be from_stake's Lamports ({}) + to_stake's Lamports ({}) = {}, is {} instead", accounts.to_stake.key, Lamports(lamports_from_stake_before), Lamports(lamports_to_stake_before), sum_stakes, Lamports(accounts.to_stake.lamports()));
+        return Err(LidoError::CalculationFailure.into());
     }
     lido.serialize(&mut *accounts.lido.data.borrow_mut())?;
     Ok(())

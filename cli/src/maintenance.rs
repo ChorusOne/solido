@@ -3,6 +3,7 @@
 use std::fmt;
 use std::io;
 
+use lido::stake_account::StakeBalance;
 use serde::Serialize;
 use solana_client::rpc_client::RpcClient;
 use solana_program::{
@@ -23,7 +24,6 @@ use spl_stake_pool::stake_program::StakeState;
 use crate::config::PerformMaintenanceOpts;
 use crate::error::MaintenanceError;
 use crate::helpers::{get_solido, sign_and_send_transaction};
-use crate::stake_account::StakeBalance;
 use crate::{error::Error, Config};
 use lido::token::StLamports;
 use solana_program::program_pack::Pack;

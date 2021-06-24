@@ -22,7 +22,7 @@ use solana_vote_program::vote_state::{VoteInit, VoteState};
 use lido::error::LidoError;
 use lido::state::{FeeDistribution, FeeRecipients, Lido, Validator};
 use lido::token::{Lamports, StLamports};
-use lido::{instruction, DEPOSIT_AUTHORITY, RESERVE_AUTHORITY};
+use lido::{instruction, RESERVE_AUTHORITY, STAKE_AUTHORITY};
 
 // This id is only used throughout these tests.
 solana_program::declare_id!("3kEkdGe68DuTKg6FhVrLPZ3Wm8EcUPCPjhCeu8WrGDoc");
@@ -47,7 +47,7 @@ pub struct Context {
     pub fee_distribution: FeeDistribution,
 
     pub reserve_address: Pubkey,
-    pub deposit_authority: Pubkey,
+    pub stake_authority: Pubkey,
 }
 
 pub struct ValidatorAccounts {
@@ -155,8 +155,8 @@ impl Context {
             &id(),
         );
 
-        let (deposit_authority, _) = Pubkey::find_program_address(
-            &[&solido.pubkey().to_bytes()[..], DEPOSIT_AUTHORITY],
+        let (stake_authority, _) = Pubkey::find_program_address(
+            &[&solido.pubkey().to_bytes()[..], STAKE_AUTHORITY],
             &id(),
         );
 
@@ -182,7 +182,7 @@ impl Context {
             developer_st_sol_account: Pubkey::default(),
             fee_distribution,
             reserve_address,
-            deposit_authority,
+            stake_authority,
         };
 
         result.st_sol_mint = result.create_mint(result.reserve_address).await;
@@ -585,7 +585,7 @@ impl Context {
                     validator_vote_account: validator_vote_account,
                     reserve: self.reserve_address,
                     stake_account_end: stake_account,
-                    deposit_authority: self.deposit_authority,
+                    stake_authority: self.stake_authority,
                 },
                 amount,
             )
@@ -649,10 +649,66 @@ impl Context {
         .await
     }
 
+    /// Stake the given amount to the given validator, return the resulting stake account.
+    pub async fn try_merge_stake(
+        &mut self,
+        validator_vote_account: Pubkey,
+        from_seed: u64,
+        to_seed: u64,
+    ) -> transport::Result<()> {
+        let (from_stake_account, _) = Validator::find_stake_account_address(
+            &id(),
+            &self.solido.pubkey(),
+            &validator_vote_account,
+            from_seed,
+        );
+
+        let (to_stake_account, _) = Validator::find_stake_account_address(
+            &id(),
+            &self.solido.pubkey(),
+            &validator_vote_account,
+            to_seed,
+        );
+
+        send_transaction(
+            &mut self.context,
+            &mut self.nonce,
+            &[instruction::merge_stake(
+                &id(),
+                from_seed,
+                to_seed,
+                &instruction::MergeStakeMeta {
+                    lido: self.solido.pubkey(),
+                    validator_vote_account: validator_vote_account,
+                    stake_authority: self.stake_authority,
+                    from_stake: from_stake_account,
+                    to_stake: to_stake_account,
+                },
+            )],
+            vec![],
+        )
+        .await
+    }
+
     pub async fn update_exchange_rate(&mut self) {
         self.try_update_exchange_rate()
             .await
             .expect("Failed to update exchange rate.");
+        .await?;
+
+        Ok(())
+    }
+
+    /// Stake the given amount to the given validator, return the resulting stake account.
+    pub async fn merge_stake(
+        &mut self,
+        validator_vote_account: Pubkey,
+        from_seed: u64,
+        to_seed: u64,
+    ) {
+        self.try_merge_stake(validator_vote_account, from_seed, to_seed)
+            .await
+            .expect("Failed to call MergeStake on Solido instance.")
     }
 
     pub async fn try_get_account(&mut self, address: Pubkey) -> Option<Account> {
