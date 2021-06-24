@@ -113,8 +113,8 @@ impl fmt::Display for CreateSolidoOutput {
 }
 
 pub fn command_create_solido(
-    config: Config,
-    opts: CreateSolidoOpts,
+    config: &Config,
+    opts: &CreateSolidoOpts,
 ) -> Result<CreateSolidoOutput, Error> {
     let lido_keypair = Keypair::new();
 
@@ -220,8 +220,8 @@ pub fn command_create_solido(
 
 /// Command to add a validator to Solido.
 pub fn command_add_validator(
-    config: Config,
-    opts: AddValidatorOpts,
+    config: &Config,
+    opts: &AddValidatorOpts,
 ) -> Result<ProposeInstructionOutput, Error> {
     let (multisig_address, _) =
         get_multisig_program_address(opts.multisig_program_id(), opts.multisig_address());
@@ -245,8 +245,8 @@ pub fn command_add_validator(
 
 /// Command to add a validator to Solido.
 pub fn command_add_maintainer(
-    config: Config,
-    opts: AddRemoveMaintainerOpts,
+    config: &Config,
+    opts: &AddRemoveMaintainerOpts,
 ) -> Result<ProposeInstructionOutput, Error> {
     let (multisig_address, _) =
         get_multisig_program_address(opts.multisig_program_id(), opts.multisig_address());
@@ -268,8 +268,8 @@ pub fn command_add_maintainer(
 
 /// Command to add a validator to Solido.
 pub fn command_remove_maintainer(
-    config: Config,
-    opts: AddRemoveMaintainerOpts,
+    config: &Config,
+    opts: &AddRemoveMaintainerOpts,
 ) -> Result<ProposeInstructionOutput, Error> {
     let (multisig_address, _) =
         get_multisig_program_address(opts.multisig_program_id(), opts.multisig_address());
@@ -359,7 +359,7 @@ impl fmt::Display for ShowSolidoOutput {
             self.solido.validators.len(),
             self.solido.validators.maximum_entries
         )?;
-        for pe in self.solido.validators.entries.iter() {
+        for pe in &self.solido.validators.entries {
             writeln!(
                 f,
                 "  - stake account: {}, rewards address: {}, credit: {}",
@@ -372,7 +372,7 @@ impl fmt::Display for ShowSolidoOutput {
             self.solido.maintainers.len(),
             self.solido.maintainers.maximum_entries
         )?;
-        for pe in self.solido.maintainers.entries.iter() {
+        for pe in &self.solido.maintainers.entries {
             writeln!(f, "  - {}", pe.pubkey)?;
         }
         Ok(())
@@ -380,8 +380,8 @@ impl fmt::Display for ShowSolidoOutput {
 }
 
 pub fn command_show_solido(
-    config: Config,
-    opts: ShowSolidoOpts,
+    config: &Config,
+    opts: &ShowSolidoOpts,
 ) -> Result<ShowSolidoOutput, Error> {
     let lido = get_solido(&config.rpc, opts.solido_address())?;
     let reserve_authority = Pubkey::create_program_address(

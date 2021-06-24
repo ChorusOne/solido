@@ -236,14 +236,14 @@ impl SolidoState {
             );
         let validator = &self.solido.validators.entries[validator_index];
 
-        let (stake_account_end, _bump_seed) = Validator::find_stake_account_address(
+        let (stake_account_end, _bump_seed_end) = Validator::find_stake_account_address(
             &self.solido_program_id,
             &self.solido_address,
             &validator.pubkey,
             validator.entry.stake_accounts_seed_end,
         );
 
-        let (deposit_authority, _bump_seed) = lido::find_authority_program_address(
+        let (deposit_authority, _bump_seed_authority) = lido::find_authority_program_address(
             &self.solido_program_id,
             &self.solido_address,
             DEPOSIT_AUTHORITY,

@@ -84,30 +84,30 @@ enum SubCommand {
     ExecuteTransaction(ExecuteTransactionOpts),
 }
 
-pub fn main(config: Config, output_mode: OutputMode, multisig_opts: MultisigOpts) {
+pub fn main(config: &Config, output_mode: OutputMode, multisig_opts: MultisigOpts) {
     match multisig_opts.subcommand {
         SubCommand::CreateMultisig(cmd_opts) => {
-            let output = create_multisig(&config, cmd_opts);
+            let output = create_multisig(&config, &cmd_opts);
             print_output(output_mode, &output);
         }
         SubCommand::ShowMultisig(cmd_opts) => {
-            let output = show_multisig(&config, cmd_opts);
+            let output = show_multisig(&config, &cmd_opts);
             print_output(output_mode, &output);
         }
         SubCommand::ShowTransaction(cmd_opts) => {
-            let output = show_transaction(&config, cmd_opts);
+            let output = show_transaction(&config, &cmd_opts);
             print_output(output_mode, &output);
         }
         SubCommand::ProposeUpgrade(cmd_opts) => {
-            let output = propose_upgrade(&config, cmd_opts);
+            let output = propose_upgrade(&config, &cmd_opts);
             print_output(output_mode, &output);
         }
         SubCommand::ProposeChangeMultisig(cmd_opts) => {
-            let output = propose_change_multisig(&config, cmd_opts);
+            let output = propose_change_multisig(&config, &cmd_opts);
             print_output(output_mode, &output);
         }
-        SubCommand::Approve(cmd_opts) => approve(&config, cmd_opts),
-        SubCommand::ExecuteTransaction(cmd_opts) => execute_transaction(&config, cmd_opts),
+        SubCommand::Approve(cmd_opts) => approve(&config, &cmd_opts),
+        SubCommand::ExecuteTransaction(cmd_opts) => execute_transaction(&config, &cmd_opts),
     }
 }
 
@@ -138,7 +138,7 @@ impl fmt::Display for CreateMultisigOutput {
     }
 }
 
-fn create_multisig(config: &Config, opts: CreateMultisigOpts) -> CreateMultisigOutput {
+fn create_multisig(config: &Config, opts: &CreateMultisigOpts) -> CreateMultisigOutput {
     // Enforce a few basic sanity checks.
     opts.validate_or_exit();
 
@@ -232,7 +232,7 @@ impl fmt::Display for ShowMultisigOutput {
     }
 }
 
-fn show_multisig(config: &Config, opts: ShowMultisigOpts) -> ShowMultisigOutput {
+fn show_multisig(config: &Config, opts: &ShowMultisigOpts) -> ShowMultisigOutput {
     let multisig: multisig::Multisig = get_account(&config.rpc, opts.multisig_address())
         .ok_or_abort_with("Failed to read multisig state from account.");
 
@@ -498,10 +498,10 @@ fn changed_fee(
 ) -> fmt::Result {
     let before = format!("{}/{}", current_param, current_sum);
     let after = format!("{}/{}", new_param, new_sum);
-    if before != after {
-        writeln!(f, "   {}: {:>5} -> {:>5}", param_name, before, after)?;
-    } else {
+    if before == after {
         writeln!(f, "   {}:          {:>5}", param_name, after)?;
+    } else {
+        writeln!(f, "   {}: {:>5} -> {:>5}", param_name, before, after)?;
     }
     Ok(())
 }
@@ -565,15 +565,15 @@ fn changed_addr(
     new_addr: &Pubkey,
     param_name: &str,
 ) -> fmt::Result {
-    if current_addr != new_addr {
-        writeln!(f, "   {}: {} -> {}", param_name, new_addr, current_addr,)?;
-    } else {
+    if current_addr == new_addr {
         writeln!(f, "   {}: {}", param_name, new_addr)?;
+    } else {
+        writeln!(f, "   {}: {} -> {}", param_name, new_addr, current_addr,)?;
     }
     Ok(())
 }
 
-fn show_transaction(config: &Config, opts: ShowTransactionOpts) -> ShowTransactionOutput {
+fn show_transaction(config: &Config, opts: &ShowTransactionOpts) -> ShowTransactionOutput {
     let transaction: multisig::Transaction = get_account(&config.rpc, opts.transaction_address())
         .ok_or_abort_with("Failed to read transaction data from account.");
 
@@ -855,7 +855,7 @@ pub fn propose_instruction(
     }
 }
 
-fn propose_upgrade(config: &Config, opts: ProposeUpgradeOpts) -> ProposeInstructionOutput {
+fn propose_upgrade(config: &Config, opts: &ProposeUpgradeOpts) -> ProposeInstructionOutput {
     let (program_derived_address, _nonce) =
         get_multisig_program_address(opts.multisig_program_id(), opts.multisig_address());
 
@@ -877,11 +877,11 @@ fn propose_upgrade(config: &Config, opts: ProposeUpgradeOpts) -> ProposeInstruct
 
 fn propose_change_multisig(
     config: &Config,
-    opts: ProposeChangeMultisigOpts,
+    opts: &ProposeChangeMultisigOpts,
 ) -> ProposeInstructionOutput {
     // Check that the new settings make sense. This check is shared between a
     // new multisig or altering an existing one.
-    CreateMultisigOpts::from(&opts).validate_or_exit();
+    CreateMultisigOpts::from(opts).validate_or_exit();
 
     let (program_derived_address, _nonce) =
         get_multisig_program_address(opts.multisig_program_id(), opts.multisig_address());
@@ -910,7 +910,7 @@ fn propose_change_multisig(
     )
 }
 
-fn approve(config: &Config, opts: ApproveOpts) {
+fn approve(config: &Config, opts: &ApproveOpts) {
     let approve_accounts = multisig_accounts::Approve {
         multisig: *opts.multisig_address(),
         transaction: *opts.transaction_address(),
@@ -967,7 +967,7 @@ impl anchor_lang::ToAccountMetas for TransactionAccounts {
     }
 }
 
-fn execute_transaction(config: &Config, opts: ExecuteTransactionOpts) {
+fn execute_transaction(config: &Config, opts: &ExecuteTransactionOpts) {
     let (program_derived_address, _nonce) =
         get_multisig_program_address(opts.multisig_program_id(), opts.multisig_address());
 

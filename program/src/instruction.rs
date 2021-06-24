@@ -157,6 +157,7 @@ macro_rules! accounts_struct {
         }
 
         impl $NameAccountMeta {
+            #[must_use]
             pub fn to_vec(&self) -> Vec<AccountMeta> {
                 vec![
                     $(

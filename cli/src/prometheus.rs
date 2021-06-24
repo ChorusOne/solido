@@ -1,6 +1,6 @@
 //! Utilities for formatting Prometheus metrics.
 //!
-//! See also https://prometheus.io/docs/instrumenting/exposition_formats/#text-based-format.
+//! See also <https://prometheus.io/docs/instrumenting/exposition_formats/#text-based-format>.
 
 use std::io;
 use std::io::Write;
@@ -76,7 +76,7 @@ impl<'a> Metric<'a> {
 pub fn write_metric<W: Write>(out: &mut W, family: &MetricFamily) -> io::Result<()> {
     writeln!(out, "# HELP {} {}", family.name, family.help)?;
     writeln!(out, "# TYPE {} {}", family.name, family.type_)?;
-    for metric in family.metrics.iter() {
+    for metric in &family.metrics {
         write!(out, "{}{}", family.name, metric.suffix)?;
 
         // If there are labels, write the key-value pairs between {}.
@@ -87,7 +87,7 @@ pub fn write_metric<W: Write>(out: &mut W, family: &MetricFamily) -> io::Result<
         if !metric.labels.is_empty() {
             write!(out, "{{")?;
             let mut separator = "";
-            for (key, value) in metric.labels.iter() {
+            for (key, value) in &metric.labels {
                 write!(out, "{}{}={:?}", separator, key, value)?;
                 separator = ",";
             }
