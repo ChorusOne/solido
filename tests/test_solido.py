@@ -365,6 +365,7 @@ expected_result = {
         'amount_lamports': int(10.0e9),
     }
 }
+del result['StakeDeposit']['stake_account']  # This one we can't easily predict, don't compare it.
 assert result == expected_result, f'\nExpected: {expected_result}\nActual:   {result}'
 print(f'> Staked deposit with {validator_vote_account}.')
 
