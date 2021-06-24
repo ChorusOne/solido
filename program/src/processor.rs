@@ -25,7 +25,7 @@ use crate::{
 };
 
 use {
-    borsh::{BorshDeserialize, BorshSerialize},
+    borsh::BorshDeserialize,
     solana_program::{
         account_info::AccountInfo,
         entrypoint::ProgramResult,
@@ -71,7 +71,6 @@ pub fn process_initialize(
         treasury_account: *accounts.treasury_account.key,
         developer_account: *accounts.developer_account.key,
     };
-    lido.validators = Validators::new(max_validators);
 
     let (_, reserve_bump_seed) = Pubkey::find_program_address(
         &[&accounts.lido.key.to_bytes(), RESERVE_AUTHORITY],
@@ -85,6 +84,7 @@ pub fn process_initialize(
 
     lido.lido_version = version;
     lido.maintainers = Maintainers::new(max_maintainers);
+    lido.validators = Validators::new(max_validators);
     lido.manager = *accounts.manager.key;
     lido.st_sol_mint = *accounts.st_sol_mint.key;
     lido.sol_reserve_authority_bump_seed = reserve_bump_seed;
@@ -95,8 +95,7 @@ pub fn process_initialize(
     lido.check_is_st_sol_account(&accounts.treasury_account)?;
     lido.check_is_st_sol_account(&accounts.developer_account)?;
 
-    lido.serialize(&mut *accounts.lido.data.borrow_mut())
-        .map_err(|e| e.into())
+    lido.save(accounts.lido)
 }
 
 pub fn process_deposit(
@@ -147,8 +146,7 @@ pub fn process_deposit(
 
     lido.st_sol_total_shares = total_st_sol;
 
-    lido.serialize(&mut *accounts.lido.data.borrow_mut())
-        .map_err(|e| e.into())
+    lido.save(accounts.lido)
 }
 
 pub fn process_stake_deposit(
@@ -322,9 +320,7 @@ pub fn process_stake_deposit(
     // We now consumed this stake account, bump the index.
     validator.entry.stake_accounts_seed_end += 1;
 
-    lido.serialize(&mut *accounts.lido.data.borrow_mut())?;
-
-    Ok(())
+    lido.save(accounts.lido)
 }
 
 // TODO(#93) Implement withdraw
