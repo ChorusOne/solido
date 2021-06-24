@@ -171,6 +171,9 @@ solido_instance = solido(
     solido_address,
 )
 print('\nDetails:')
+print(f'  Multisig program id:      {multisig_program_id}')
+print(f'  Multisig address:         {multisig_instance}')
+print(f'  Solido program id:        {solido_program_id}')
 print(f'  Solido address:           {solido_address}')
 print(f'  Reserve address:          {solido_instance["reserve_authority"]}')
 print(f'  Maintainer address:       {maintainer.pubkey}')
