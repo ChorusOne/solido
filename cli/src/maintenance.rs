@@ -319,6 +319,25 @@ impl SolidoState {
             },
         )?;
 
+        // Include the maintainer balance, so maintainers can alert on it getting too low.
+        write_metric(
+            out,
+            &MetricFamily {
+                name: "solido_maintainer_balance_sol",
+                help: "Balance of the maintainer account, in SOL.",
+                type_: "gauge",
+                metrics: vec![
+                    Metric::new(self.maintainer_account.lamports)
+                        // Enable 1e-9 factor: the metric is in SOL, but the value in lamports.
+                        .nano()
+                        .at(self.produced_at)
+                        // Include the maintainer address, to prevent any confusion
+                        // about which account this is monitoring.
+                        .with_label("maintainer_address", self.maintainer_address.to_string())
+                ]
+            },
+        )?;
+
         // Gather the different components that make up Solido's SOL balance.
         // The values are stored in Lamports (1e-9 SOL), but Prometheus convention
         // is to use base units, so we set `.nano()` to report them in SOL.
