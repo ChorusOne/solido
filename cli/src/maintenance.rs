@@ -16,7 +16,7 @@ use lido::util::serialize_b58;
 use lido::{
     state::{Lido, Validator},
     token::Lamports,
-    DEPOSIT_AUTHORITY,
+    DEPOSIT_AUTHORITY, MINIMUM_STAKE_ACCOUNT_BALANCE,
 };
 use spl_stake_pool::stake_program::StakeState;
 
@@ -207,8 +207,6 @@ impl SolidoState {
     /// If there is a deposit that can be staked, return the instruction to do so.
     pub fn try_stake_deposit(&self) -> Option<(Instruction, MaintenanceOutput)> {
         let reserve_balance = self.get_effective_reserve();
-        let minimum_stake_account_balance =
-            Lamports(self.rent.minimum_balance(std::mem::size_of::<StakeState>()));
 
         // If there is enough reserve, we can make a deposit. To keep the pool
         // balanced, find the validator furthest below its target balance, and
@@ -247,9 +245,9 @@ impl SolidoState {
         // reserve, a future maintenance run will stake the remainder with the next validator.
         let amount_to_deposit = amount_below_target.min(reserve_balance);
 
-        // If the amount to deposit would not make the stake account rent-exempt,
-        // then we cannot deposit it at this point.
-        if amount_to_deposit < minimum_stake_account_balance {
+        // If the amount to deposit would not make the stake account rent-exempt
+        // and mergeable, then we cannot deposit it at this point.
+        if amount_to_deposit < MINIMUM_STAKE_ACCOUNT_BALANCE {
             return None;
         }
 
@@ -424,12 +422,6 @@ mod test {
     fn stake_deposit_does_not_stake_less_than_the_minimum() {
         let mut state = new_empty_solido();
 
-        let minimum_stake_account_balance = Lamports(
-            state
-                .rent
-                .minimum_balance(std::mem::size_of::<StakeState>()),
-        );
-
         // Add two validators, both without any stake account yet.
         state.solido.validators.maximum_entries = 2;
         state
@@ -446,7 +438,7 @@ mod test {
         // Put enough SOL in the reserve that we *could* stake it, if it had to
         // go into a single stake account, but that it's too little to stake if
         // we need to split it over two accounts.
-        state.reserve_account.lamports += minimum_stake_account_balance.0 + 1;
+        state.reserve_account.lamports += MINIMUM_STAKE_ACCOUNT_BALANCE.0 + 1;
 
         assert_eq!(
             state.try_stake_deposit(),
@@ -456,7 +448,7 @@ mod test {
 
         // If we add a bit more, then we can fund two stake accounts, and that
         // should be enough to trigger a StakeDeposit.
-        state.reserve_account.lamports += minimum_stake_account_balance.0 + 1;
+        state.reserve_account.lamports += MINIMUM_STAKE_ACCOUNT_BALANCE.0 + 1;
 
         assert!(state.try_stake_deposit().is_some());
     }

@@ -21,7 +21,7 @@ use crate::{
         LIDO_VERSION,
     },
     token::{Lamports, StLamports},
-    DEPOSIT_AUTHORITY, RESERVE_AUTHORITY, VALIDATOR_STAKE_ACCOUNT,
+    DEPOSIT_AUTHORITY, MINIMUM_STAKE_ACCOUNT_BALANCE, RESERVE_AUTHORITY, VALIDATOR_STAKE_ACCOUNT,
 };
 
 use {
@@ -160,13 +160,11 @@ pub fn process_stake_deposit(
     let mut lido = deserialize_lido(program_id, accounts.lido)?;
     lido.check_maintainer(accounts.maintainer)?;
 
-    let minimum_stake_balance =
-        Lamports(rent.minimum_balance(std::mem::size_of::<stake_program::StakeState>()));
-    if amount < minimum_stake_balance {
-        msg!("Trying to stake less than the minimum balance of a stake account.");
+    if amount < MINIMUM_STAKE_ACCOUNT_BALANCE {
+        msg!("Trying to stake less than the minimum stake account balance.");
         msg!(
             "Need as least {} but got {}.",
-            minimum_stake_balance,
+            MINIMUM_STAKE_ACCOUNT_BALANCE,
             amount
         );
         return Err(LidoError::InvalidAmount.into());
