@@ -260,7 +260,7 @@ impl Validator {
         let seeds = [
             &solido_account.to_bytes(),
             &validator_vote_account.to_bytes(),
-            &VALIDATOR_STAKE_ACCOUNT[..],
+            VALIDATOR_STAKE_ACCOUNT,
             &seed.to_le_bytes()[..],
         ];
         Pubkey::find_program_address(&seeds, program_id)

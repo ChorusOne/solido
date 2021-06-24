@@ -47,14 +47,14 @@ impl MaintenanceMetrics {
                 help:
                     "Number of times we checked if there is maintenance to perform, since launch.",
                 type_: "counter",
-                metrics: vec![Metric::simple(self.polls)],
+                metrics: vec![Metric::new(self.polls)],
             },
         )?;
         write_metric(out, &MetricFamily {
             name: "solido_maintenance_errors_total",
             help: "Number of times we encountered an error while trying to perform maintenance, since launch.",
             type_: "counter",
-            metrics: vec![Metric::simple(self.errors)]
+            metrics: vec![Metric::new(self.errors)]
         })?;
         write_metric(
             out,
@@ -62,11 +62,8 @@ impl MaintenanceMetrics {
                 name: "solido_maintenance_transactions_total",
                 help: "Number of maintenance transactions executed, since launch.",
                 type_: "counter",
-                metrics: vec![Metric::singleton(
-                    "operation",
-                    "StakeDeposit",
-                    self.transactions_stake_deposit,
-                )],
+                metrics: vec![Metric::new(self.transactions_stake_deposit)
+                    .with_label("operation", "StakeDeposit".to_string())],
             },
         )?;
         Ok(())
@@ -75,7 +72,11 @@ impl MaintenanceMetrics {
 
 /// Snapshot of metrics and Solido state.
 struct Snapshot {
+    /// Metrics about what the daemon has done so far.
     metrics: MaintenanceMetrics,
+
+    /// The current state of on-chain accounts, and the time at which we obtained
+    /// that data.
     solido: Option<SolidoState>,
 }
 
@@ -103,8 +104,8 @@ fn run_main_loop(config: &Config, opts: &RunMaintainerOpts, snapshot_mutex: &Sna
 
         let state_result =
             SolidoState::new(config, opts.solido_program_id(), opts.solido_address());
-        match &state_result {
-            &Err(ref err) => {
+        match state_result {
+            Err(ref err) => {
                 println!("Failed to obtain Solido state.");
                 err.print_pretty();
                 metrics.errors += 1;
@@ -114,7 +115,7 @@ fn run_main_loop(config: &Config, opts: &RunMaintainerOpts, snapshot_mutex: &Sna
                 // exponential backoff with jitter, but let's not go there right now.
                 do_wait = true;
             }
-            &Ok(ref state) => {
+            Ok(ref state) => {
                 match try_perform_maintenance(config, &state) {
                     Err(err) => {
                         println!("Error in maintenance.");
@@ -183,13 +184,17 @@ fn serve_request(request: Request, snapshot_mutex: &SnapshotMutex) -> Result<(),
     // We don't even look at the request, for now we always serve the metrics.
 
     let mut out: Vec<u8> = Vec::new();
-    let is_ok = snapshot.metrics.write_prometheus(&mut out).is_ok();
+    let mut is_ok = snapshot.metrics.write_prometheus(&mut out).is_ok();
 
-    return if is_ok {
+    if let Some(ref solido) = snapshot.solido {
+        is_ok = is_ok && solido.write_prometheus(&mut out).is_ok();
+    }
+
+    if is_ok {
         request.respond(Response::from_data(out))
     } else {
         request.respond(Response::from_string("error").with_status_code(500))
-    };
+    }
 }
 
 /// Spawn threads that run the http server.

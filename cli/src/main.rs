@@ -29,6 +29,7 @@ mod maintenance;
 mod multisig;
 mod prometheus;
 mod spl_token_utils;
+mod stake_account;
 mod util;
 
 /// Solido -- Interact with Lido for Solana.
@@ -159,11 +160,11 @@ fn main() {
     merge_with_config(&mut opts.subcommand, config_file);
     match opts.subcommand {
         SubCommand::CreateSolido(cmd_opts) => {
-            let output = command_create_solido(config, cmd_opts)
+            let output = command_create_solido(&config, &cmd_opts)
                 .ok_or_abort_with("Failed to create Solido instance.");
             print_output(output_mode, &output);
         }
-        SubCommand::Multisig(cmd_opts) => multisig::main(config, output_mode, cmd_opts),
+        SubCommand::Multisig(cmd_opts) => multisig::main(&config, output_mode, cmd_opts),
         SubCommand::PerformMaintenance(cmd_opts) => {
             // For now, this does one maintenance iteration. In the future we
             // might add a daemon mode that runs continuously, and which logs
@@ -183,22 +184,22 @@ fn main() {
             daemon::main(&config, &cmd_opts);
         }
         SubCommand::AddValidator(cmd_opts) => {
-            let output = command_add_validator(config, cmd_opts)
+            let output = command_add_validator(&config, &cmd_opts)
                 .ok_or_abort_with("Failed to add validator.");
             print_output(output_mode, &output);
         }
         SubCommand::AddMaintainer(cmd_opts) => {
-            let output = command_add_maintainer(config, cmd_opts)
+            let output = command_add_maintainer(&config, &cmd_opts)
                 .ok_or_abort_with("Failed to add maintainer.");
             print_output(output_mode, &output);
         }
         SubCommand::RemoveMaintainer(cmd_opts) => {
-            let output = command_remove_maintainer(config, cmd_opts)
+            let output = command_remove_maintainer(&config, &cmd_opts)
                 .ok_or_abort_with("Failed to remove maintainer.");
             print_output(output_mode, &output);
         }
         SubCommand::ShowSolido(cmd_opts) => {
-            let output = command_show_solido(config, cmd_opts)
+            let output = command_show_solido(&config, &cmd_opts)
                 .ok_or_abort_with("Failed to show Solido data.");
             print_output(output_mode, &output);
         }
@@ -209,8 +210,9 @@ fn merge_with_config(subcommand: &mut SubCommand, config_file: Option<&ConfigFil
     match subcommand {
         SubCommand::CreateSolido(opts) => opts.merge_with_config(config_file),
         SubCommand::AddValidator(opts) => opts.merge_with_config(config_file),
-        SubCommand::AddMaintainer(opts) => opts.merge_with_config(config_file),
-        SubCommand::RemoveMaintainer(opts) => opts.merge_with_config(config_file),
+        SubCommand::AddMaintainer(opts) | SubCommand::RemoveMaintainer(opts) => {
+            opts.merge_with_config(config_file)
+        }
         SubCommand::ShowSolido(opts) => opts.merge_with_config(config_file),
         SubCommand::PerformMaintenance(opts) => opts.merge_with_config(config_file),
         SubCommand::Multisig(opts) => opts.merge_with_config(config_file),
