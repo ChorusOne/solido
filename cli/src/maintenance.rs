@@ -27,6 +27,7 @@ use crate::{error::Error, Config};
 use lido::token::StLamports;
 use solana_program::program_pack::Pack;
 use std::time::SystemTime;
+use crate::error::MaintenanceError;
 
 type Result<T> = std::result::Result<T, Error>;
 
@@ -98,6 +99,9 @@ pub struct SolidoState {
     /// Public key of the maintainer executing the maintenance.
     /// Must be a member of `solido.maintainers`.
     pub maintainer_address: Pubkey,
+
+    /// Current state of the maintainer account.
+    pub maintainer_account: Account,
 }
 
 fn get_validator_stake_accounts(
@@ -180,6 +184,12 @@ impl SolidoState {
             )?);
         }
 
+        // The entity executing the maintenance transactions, is the maintainer.
+        // We don't verify here if it is part of the maintainer set, the on-chain
+        // program does that anyway.
+        let maintainer_address = config.signer.pubkey();
+        let maintainer_account = rpc.get_account(&maintainer_address)?;
+
         Ok(SolidoState {
             produced_at: SystemTime::now(),
             solido_program_id: *solido_program_id,
@@ -191,10 +201,8 @@ impl SolidoState {
             st_sol_mint,
             rent,
             clock,
-            // The entity executing the maintenance transactions, is the maintainer.
-            // We don't verify here if it is part of the maintainer set, the on-chain
-            // program does that anyway.
-            maintainer_address: config.signer.pubkey(),
+            maintainer_address,
+            maintainer_account,
         })
     }
 
@@ -421,6 +429,22 @@ pub fn try_perform_maintenance(
     config: &Config,
     state: &SolidoState,
 ) -> Result<Option<MaintenanceOutput>> {
+
+    // To prevent the maintenance transactions failing with mysterious errors
+    // that are difficult to debug, before we do any maintenance, do a sanity
+    // check to ensure that the maintainer has at least some SOL to pay the
+    // transaction fees.
+    let minimum_maintainer_balance = Lamports(100_000_000);
+    if Lamports(state.maintainer_account.lamports) < minimum_maintainer_balance {
+        return Err(Box::new(MaintenanceError {
+            message: format!(
+                "Balance of the maintainer account {} is less than {}. \
+                Please fund the maintainer account.",
+                state.maintainer_address,
+                minimum_maintainer_balance,
+        )}));
+    }
+
     // Try all of these operations one by one, and select the first one that
     // produces an instruction.
     let instruction: Option<(Instruction, MaintenanceOutput)> = None
