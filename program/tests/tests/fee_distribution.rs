@@ -20,7 +20,9 @@ async fn test_successful_fee_distribution() {
 
     context.deposit(TEST_DEPOSIT_AMOUNT).await;
 
-    let stake_account = context.stake_deposit(validators[0].vote_account, TEST_DEPOSIT_AMOUNT).await;
+    let stake_account = context
+        .stake_deposit(validators[0].vote_account, TEST_DEPOSIT_AMOUNT)
+        .await;
 
     // Make `EXTRA_STAKE_AMOUNT` appear in the stake account, to simulate
     // validation rewards being paid out.

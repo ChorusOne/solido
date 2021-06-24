@@ -3,6 +3,7 @@
 use num_traits::cast::FromPrimitive;
 use solana_program::borsh::try_from_slice_unchecked;
 use solana_program::instruction::Instruction;
+use solana_program::instruction::InstructionError;
 use solana_program::program_pack::Pack;
 use solana_program::rent::Rent;
 use solana_program::system_instruction;
@@ -12,15 +13,14 @@ use solana_sdk::account::Account;
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::{Keypair, Signer};
 use solana_sdk::transaction::Transaction;
+use solana_sdk::transaction::TransactionError;
 use solana_sdk::transport;
+use solana_sdk::transport::TransportError;
 use solana_vote_program::vote_instruction;
 use solana_vote_program::vote_state::{VoteInit, VoteState};
-use solana_program::instruction::InstructionError;
-use solana_sdk::transaction::TransactionError;
-use solana_sdk::transport::TransportError;
 
 use lido::error::LidoError;
-use lido::state::{FeeDistribution, Lido, Validator, FeeRecipients};
+use lido::state::{FeeDistribution, FeeRecipients, Lido, Validator};
 use lido::token::{Lamports, StLamports};
 use lido::{instruction, DEPOSIT_AUTHORITY, RESERVE_AUTHORITY};
 
@@ -548,10 +548,11 @@ impl Context {
                     treasury_account: new_fee_recipients.treasury_account,
                     developer_account: new_fee_recipients.developer_account,
                 },
-            ).unwrap()],
+            )
+            .unwrap()],
             vec![&self.manager],
         )
-            .await
+        .await
     }
 
     pub async fn try_get_account(&mut self, address: Pubkey) -> Option<Account> {
