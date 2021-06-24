@@ -15,7 +15,6 @@ from util import (
     get_network,
     solido,
     multisig,
-    solana,
 )
 
 print('\nUploading Solido program ...')
@@ -28,7 +27,7 @@ print(f'> Multisig program id is {multisig_program_id}')
 
 os.makedirs('tests/.keys', exist_ok=True)
 maintainer = create_test_account('tests/.keys/maintainer.json')
-owner = create_test_account('tests/.keys/owner.json')
+st_sol_accounts_owner = create_test_account('tests/.keys/st-sol-accounts-owner.json')
 
 print('\nCreating new multisig ...')
 multisig_data = multisig(
@@ -66,9 +65,9 @@ result = solido(
     '--developer-fee',
     '2',
     '--treasury-account-owner',
-    owner.pubkey,
+    st_sol_accounts_owner.pubkey,
     '--developer-account-owner',
-    owner.pubkey,
+    st_sol_accounts_owner.pubkey,
     '--multisig-address',
     multisig_instance,
     keypair_path=maintainer.keypair_path,
@@ -108,7 +107,7 @@ def approve_and_execute(transaction_address: str) -> None:
 def add_validator(index: int) -> TestAccount:
     print(f'\nCreating validator {index} ...')
     validator_fee_st_sol_account_owner = create_test_account(
-        f'tests/.keys/validator-{index}-token-account-key.json'
+        f'tests/.keys/validator-{index}-fee-st-sol-account.json'
     )
     validator_fee_st_sol_account = create_spl_token(
         validator_fee_st_sol_account_owner.keypair_path,
@@ -117,9 +116,9 @@ def add_validator(index: int) -> TestAccount:
     print(f'> Validator token account owner: {validator_fee_st_sol_account_owner}')
     print(f'> Validator stSOL token account: {validator_fee_st_sol_account}')
 
-    validator = create_test_account(f'tests/.keys/validator-{index}-account-key.json')
+    validator = create_test_account(f'tests/.keys/validator-{index}-account.json')
     validator_vote_account = create_vote_account(
-        f'tests/.keys/validator-{index}-vote-account-key.json', validator.keypair_path
+        f'tests/.keys/validator-{index}-vote-account.json', validator.keypair_path
     )
     print(f'> Validator vote account:        {validator_vote_account}')
 
