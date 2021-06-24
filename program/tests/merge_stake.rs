@@ -93,6 +93,7 @@ async fn test_successful_merge_stake() {
             &context.last_blockhash,
             &validator_account.vote_account.pubkey(),
             0,
+            1,
         )
         .await
         .unwrap();
@@ -178,6 +179,7 @@ async fn test_merge_validator_with_one_stake() {
             &context.last_blockhash,
             &validator_account.vote_account.pubkey(),
             0,
+            1,
         )
         .await
         .err()
