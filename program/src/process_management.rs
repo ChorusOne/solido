@@ -5,7 +5,7 @@ use solana_program::{account_info::AccountInfo, entrypoint::ProgramResult, msg, 
 use spl_stake_pool::stake_program;
 
 use crate::token::Lamports;
-use crate::DEPOSIT_AUTHORITY;
+use crate::STAKE_AUTHORITY;
 use crate::{
     error::LidoError,
     instruction::{
@@ -261,7 +261,7 @@ pub fn process_merge_stake(
     }
     // Merge `from_stake` to `to_stake`, at the end of the instruction,
     // `from_stake` ceases to exist.
-    let merge_ix = stake_program::merge(&to_stake, &from_stake, &accounts.deposit_authority.key);
+    let merge_ix = stake_program::merge(&to_stake, &from_stake, &accounts.stake_authority.key);
     let to_stake_before =
         try_from_slice_unchecked::<stake_program::StakeState>(&accounts.from_stake.data.borrow())?;
     let from_stake_amount = accounts.from_stake.lamports();
@@ -272,13 +272,13 @@ pub fn process_merge_stake(
             accounts.to_stake.clone(),
             accounts.sysvar_clock.clone(),
             accounts.stake_history.clone(),
-            accounts.deposit_authority.clone(),
+            accounts.stake_authority.clone(),
             accounts.stake_program.clone(),
         ],
         &[&[
             &accounts.lido.key.to_bytes(),
-            DEPOSIT_AUTHORITY,
-            &[lido.deposit_authority_bump_seed],
+            STAKE_AUTHORITY,
+            &[lido.stake_authority_bump_seed],
         ]],
     )?;
     let to_stake_after =

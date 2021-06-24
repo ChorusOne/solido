@@ -16,7 +16,7 @@ use lido::util::serialize_b58;
 use lido::{
     state::{Lido, Validator},
     token::Lamports,
-    DEPOSIT_AUTHORITY, MINIMUM_STAKE_ACCOUNT_BALANCE,
+    MINIMUM_STAKE_ACCOUNT_BALANCE, STAKE_AUTHORITY,
 };
 use spl_stake_pool::stake_program::StakeState;
 
@@ -253,10 +253,10 @@ impl SolidoState {
             validator.entry.stake_accounts_seed_end,
         );
 
-        let (deposit_authority, _bump_seed_authority) = lido::find_authority_program_address(
+        let (stake_authority, _bump_seed_authority) = lido::find_authority_program_address(
             &self.solido_program_id,
             &self.solido_address,
-            DEPOSIT_AUTHORITY,
+            STAKE_AUTHORITY,
         );
 
         // Top up the validator to at most its target. If that means we don't use the full
@@ -285,7 +285,7 @@ impl SolidoState {
                 reserve: self.reserve_address,
                 validator_vote_account: validator.pubkey,
                 stake_account_end,
-                deposit_authority,
+                stake_authority,
             },
             amount_to_deposit,
         )

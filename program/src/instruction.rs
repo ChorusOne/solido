@@ -437,7 +437,7 @@ accounts_struct! {
             is_signer: false,
             is_writable: true,
         },
-        pub deposit_authority {
+        pub stake_authority {
             is_signer: false,
             is_writable: true,
         },
@@ -747,7 +747,7 @@ accounts_struct! {
             is_signer: false,
             is_writable: true,
         },
-        pub deposit_authority {
+        pub stake_authority {
             is_signer: false,
             is_writable: false,
         },

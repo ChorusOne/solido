@@ -14,11 +14,11 @@ pub mod state;
 pub mod token;
 pub mod util;
 
-/// Seed for reserve authority in SOL
+/// Seed for reserve authority in SOL.
 pub const RESERVE_AUTHORITY: &[u8] = b"reserve_authority";
 
-/// Seed for deposit authority
-pub const DEPOSIT_AUTHORITY: &[u8] = b"deposit_authority";
+/// Seed for managing the stake.
+pub const STAKE_AUTHORITY: &[u8] = b"stake_authority";
 
 /// Additional seed for validator stake accounts.
 pub const VALIDATOR_STAKE_ACCOUNT: &[u8] = b"validator_stake_account";

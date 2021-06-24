@@ -19,7 +19,7 @@ use crate::{
         LIDO_VERSION,
     },
     token::{Lamports, StLamports},
-    DEPOSIT_AUTHORITY, MINIMUM_STAKE_ACCOUNT_BALANCE, RESERVE_AUTHORITY, VALIDATOR_STAKE_ACCOUNT,
+    MINIMUM_STAKE_ACCOUNT_BALANCE, RESERVE_AUTHORITY, STAKE_AUTHORITY, VALIDATOR_STAKE_ACCOUNT,
 };
 
 use {
@@ -79,7 +79,7 @@ pub fn process_initialize(
     );
 
     let (_, deposit_bump_seed) = Pubkey::find_program_address(
-        &[&accounts.lido.key.to_bytes(), DEPOSIT_AUTHORITY],
+        &[&accounts.lido.key.to_bytes(), STAKE_AUTHORITY],
         program_id,
     );
 
@@ -89,7 +89,7 @@ pub fn process_initialize(
     lido.manager = *accounts.manager.key;
     lido.st_sol_mint = *accounts.st_sol_mint.key;
     lido.sol_reserve_authority_bump_seed = reserve_bump_seed;
-    lido.deposit_authority_bump_seed = deposit_bump_seed;
+    lido.stake_authority_bump_seed = deposit_bump_seed;
     lido.fee_distribution = fee_distribution;
 
     // Confirm that the fee recipients are actually stSOL accounts.
@@ -267,8 +267,8 @@ pub fn process_stake_deposit(
         &stake_program::initialize(
             accounts.stake_account_end.key,
             &stake_program::Authorized {
-                staker: *accounts.deposit_authority.key,
-                withdrawer: *accounts.deposit_authority.key,
+                staker: *accounts.stake_authority.key,
+                withdrawer: *accounts.stake_authority.key,
             },
             &stake_program::Lockup::default(),
         ),
@@ -281,7 +281,7 @@ pub fn process_stake_deposit(
     invoke_signed(
         &stake_program::delegate_stake(
             accounts.stake_account_end.key,
-            accounts.deposit_authority.key,
+            accounts.stake_authority.key,
             accounts.validator_vote_account.key,
         ),
         &[
@@ -290,13 +290,13 @@ pub fn process_stake_deposit(
             accounts.sysvar_clock.clone(),
             accounts.stake_history.clone(),
             accounts.stake_program_config.clone(),
-            accounts.deposit_authority.clone(),
+            accounts.stake_authority.clone(),
             accounts.stake_program.clone(),
         ],
         &[&[
             &accounts.lido.key.to_bytes(),
-            DEPOSIT_AUTHORITY,
-            &[lido.deposit_authority_bump_seed],
+            STAKE_AUTHORITY,
+            &[lido.stake_authority_bump_seed],
         ]],
     )?;
 
