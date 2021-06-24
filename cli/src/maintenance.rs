@@ -38,6 +38,10 @@ pub enum MaintenanceOutput {
     StakeDeposit {
         #[serde(serialize_with = "serialize_b58")]
         validator_vote_account: Pubkey,
+
+        #[serde(serialize_with = "serialize_b58")]
+        stake_account: Pubkey,
+
         #[serde(rename = "amount_lamports")]
         amount: Lamports,
     },
@@ -49,10 +53,12 @@ impl fmt::Display for MaintenanceOutput {
         match self {
             MaintenanceOutput::StakeDeposit {
                 validator_vote_account,
+                stake_account,
                 amount,
             } => {
                 writeln!(f, "Staked deposit.")?;
                 writeln!(f, "  Validator vote account: {}", validator_vote_account)?;
+                writeln!(f, "  Stake account:          {}", stake_account)?;
                 writeln!(f, "  Amount staked:          {}", amount)?;
             }
             MaintenanceOutput::UpdateExchangeRate => {
@@ -280,6 +286,7 @@ impl SolidoState {
         let task = MaintenanceOutput::StakeDeposit {
             validator_vote_account: validator.pubkey,
             amount: amount_to_deposit,
+            stake_account: stake_account_end,
         };
 
         Some((instruction, task))
