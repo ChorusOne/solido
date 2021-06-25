@@ -177,6 +177,7 @@ jobs:
 
       - name: Collect coverage
         run: |
+          export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
           validator=$(tests/start_test_validator.py)
 
           # Perform initial Solana setup.
