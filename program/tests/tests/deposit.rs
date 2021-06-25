@@ -5,7 +5,7 @@ use crate::context::Context;
 use lido::token::Lamports;
 use solana_program_test::tokio;
 
-pub const TEST_DEPOSIT_AMOUNT: Lamports = Lamports(1000);
+pub const TEST_DEPOSIT_AMOUNT: Lamports = Lamports(100_000_000);
 
 #[tokio::test]
 async fn test_successful_deposit() {

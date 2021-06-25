@@ -6,8 +6,8 @@ use crate::assert_solido_error;
 use crate::context::Context;
 
 use lido::error::LidoError;
-use lido::token::{StLamports, Lamports};
 use lido::state::ExchangeRate;
+use lido::token::{Lamports, StLamports};
 
 #[tokio::test]
 async fn test_update_exchange_rate() {
@@ -19,11 +19,8 @@ async fn test_update_exchange_rate() {
     let slots_per_epoch = epoch_schedule.slots_per_epoch;
 
     // Move to the next epoch, then update the exchange rate.
-    println!("Before warp 1.");
     context.context.warp_to_slot(start_slot).unwrap();
-    println!("After warp 1, before update 1.");
     context.update_exchange_rate().await;
-    println!("After update 1.");
 
     // Initially the balance is zero, and we haven't minted any stSOL.
     let solido = context.get_solido().await;
@@ -37,20 +34,22 @@ async fn test_update_exchange_rate() {
     );
 
     // If we try to update once more in this epoch, that should fail.
-    println!("Before update 2.");
     let result = context.try_update_exchange_rate().await;
-    println!("After update 2.");
     assert_solido_error!(result, LidoError::ExchangeRateAlreadyUpToDate);
 
     // Make a deposit, so something should change next epoch.
-    println!("Before deposit.");
-    context.deposit(Lamports(100)).await;
-    println!("After deposit, before warp 2.");
+    let recipient = context.deposit(Lamports(100_000_000)).await;
 
-    context.context.warp_to_slot(start_slot + 1 * slots_per_epoch).unwrap();
-    println!("After warp 2, before update 3.");
+    // This is the first deposit, so the exchange rate is 1:1, we should have
+    // gotten the same number of stSOL lamports, as we put in in SOL lamports.
+    let received_st_sol = context.get_st_sol_balance(recipient).await;
+    assert_eq!(received_st_sol, StLamports(100_000_000));
+
+    context
+        .context
+        .warp_to_slot(start_slot + 1 * slots_per_epoch)
+        .unwrap();
     context.update_exchange_rate().await;
-    println!("After update 3.");
 
     // There was one deposit, the exchange rate was 1:1, we should now have the
     // same amount of SOL and stSOL.
@@ -59,8 +58,8 @@ async fn test_update_exchange_rate() {
         solido.exchange_rate,
         ExchangeRate {
             computed_in_epoch: start_epoch + 1,
-            st_sol_supply: StLamports(100),
-            sol_balance: Lamports(100),
+            st_sol_supply: StLamports(100_000_000),
+            sol_balance: Lamports(100_000_000),
         }
     );
 }
