@@ -157,7 +157,13 @@ jobs:
       - name: cache-build-artifacts
         uses: actions/cache@v2
         with:
-          path: target
+          path: |
+            ~/.rustup/toolchains
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
           key: coverage-1.7.3-v0-${{ hashFiles('Cargo.lock') }}
           restore-keys: coverage-1.7.3-v0
 
