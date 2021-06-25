@@ -40,6 +40,7 @@ pub enum MaintenanceOutput {
         #[serde(rename = "amount_lamports")]
         amount: Lamports,
     },
+    UpdateExchangeRate,
 }
 
 impl fmt::Display for MaintenanceOutput {
@@ -52,6 +53,9 @@ impl fmt::Display for MaintenanceOutput {
                 writeln!(f, "Staked deposit.")?;
                 writeln!(f, "  Validator vote account: {}", validator_vote_account)?;
                 writeln!(f, "  Amount staked:          {}", amount)?;
+            }
+            MaintenanceOutput::UpdateExchangeRate => {
+                writeln!(f, "Updated exchange rate.")?;
             }
         }
         Ok(())
@@ -273,6 +277,26 @@ impl SolidoState {
         Some((instruction, task))
     }
 
+    /// If a new epoch started, and we haven't updated the exchange rate yet, do so.
+    pub fn try_update_exchange_rate(&self) -> Option<(Instruction, MaintenanceOutput)> {
+        if self.solido.exchange_rate.computed_in_epoch >= self.clock.epoch {
+            // The exchange rate has already been updated in this epoch, nothing to do.
+            return None;
+        }
+
+        let instruction = lido::instruction::update_exchange_rate(
+            &self.solido_program_id,
+            &lido::instruction::UpdateExchangeRateAccountsMeta {
+                lido: self.solido_address,
+                reserve: self.reserve_address,
+                st_sol_mint: self.solido.st_sol_mint,
+            }
+        );
+        let task = MaintenanceOutput::UpdateExchangeRate;
+
+        Some((instruction, task))
+    }
+
     /// Write metrics about the current Solido instance in Prometheus format.
     pub fn write_prometheus<W: io::Write>(&self, out: &mut W) -> io::Result<()> {
         use crate::prometheus::{write_metric, Metric, MetricFamily};
@@ -360,7 +384,10 @@ pub fn try_perform_maintenance(
     // Try all of these operations one by one, and select the first one that
     // produces an instruction.
     let instruction: Option<(Instruction, MaintenanceOutput)> =
-        None.or_else(|| state.try_stake_deposit());
+        None
+            .or_else(|| state.try_update_exchange_rate())
+            .or_else(|| state.try_stake_deposit());
+
 
     let (instr, description) = match instruction {
         Some(x) => x,
