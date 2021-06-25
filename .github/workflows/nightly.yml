@@ -7,7 +7,6 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  SOLANA_VERSION: 1.7.3
 
 jobs:
 
@@ -24,10 +23,10 @@ jobs:
         path: |
           target
           multisig/target
-        key: cargo-bpf-${{ env.SOLANA_VERSION }}-${{ hashFiles('Cargo.lock') }}
+        key: cargo-bpf-1.7.3-${{ hashFiles('Cargo.lock') }}
         restore-keys: |
-          cargo-bpf-${{ env.SOLANA_VERSION }}-${{ hashFiles('Cargo.lock') }}
-          cargo-bpf-${{ env.SOLANA_VERSION }}
+          cargo-bpf-1.7.3-${{ hashFiles('Cargo.lock') }}
+          cargo-bpf-1.7.3
 
     - name: Build on-chain BPF programs
       run: |
