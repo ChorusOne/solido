@@ -60,6 +60,7 @@ def merge_profdata() -> None:
         # "cargo profdata" looks up a compatible version of llvm-profdata.
         'cargo',
         'profdata',
+        '--',
         'merge',
         '-output',
         'coverage/tests.profdata',
@@ -84,6 +85,7 @@ def generate_report(executables: List[str]) -> None:
         # "cargo cov" looks up a compatible version of llvm-cov.
         'cargo',
         'cov',
+        '--',
         'show',
         # Exclude coverage for dependencies, we are only interested in our own
         # code. According to the docs, `llvm-cov show` also accepts file names
