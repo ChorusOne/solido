@@ -77,7 +77,7 @@ impl StakeBalance {
     }
     /// Returns `true` if the stake account is activating, `false` otherwise.
     pub fn is_activating(&self) -> bool {
-        self.active == Lamports(0) && self.activating > Lamports(0)
+        self.activating > Lamports(0)
     }
 }
 

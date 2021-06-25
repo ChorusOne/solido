@@ -1,4 +1,3 @@
-use borsh::BorshSerialize;
 use solana_program::program::invoke_signed;
 use solana_program::{account_info::AccountInfo, entrypoint::ProgramResult, msg, pubkey::Pubkey};
 use spl_stake_pool::stake_program;
@@ -188,10 +187,14 @@ pub fn _process_change_validator_fee_account(
 }
 
 /// Merge two stake accounts.
+/// This function can be called by anybody.
+/// After this function, the validator's list of stake accounts contains no gaps,
+/// and all fully active stake accounts precede the activating stake accounts.
+///
 /// `from_seed` can be the validator's `stake_accounts_seed_begin` and in that
 /// case `to_seed` should be `stake_accounts_seed_begin + 1`, or `from_seed` can
-/// be the validator's `stake_accounts_seed_end` and in that case `to_seed`
-/// should be `stake_accounts_seed_end -1`.
+/// be the validator's `stake_accounts_seed_end - 1` and in that case `to_seed`
+/// should be `stake_accounts_seed_end - 2`.
 /// Validator stakes should both be fully active or both inactive when merging
 /// stakes from the beginning, or both activating when merging stakes from the
 /// end.
@@ -293,6 +296,5 @@ pub fn process_merge_stake(
         msg!("Something went wrong when merging the stakes, total amount in stake {} should be from_stake's Lamports ({}) + to_stake's Lamports ({}) = {}, is {} instead", accounts.to_stake.key, Lamports(lamports_from_stake_before), Lamports(lamports_to_stake_before), sum_stakes, Lamports(accounts.to_stake.lamports()));
         return Err(LidoError::CalculationFailure.into());
     }
-    lido.serialize(&mut *accounts.lido.data.borrow_mut())?;
-    Ok(())
+    lido.save(accounts.lido)
 }

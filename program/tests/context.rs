@@ -23,6 +23,7 @@ use lido::error::LidoError;
 use lido::state::{FeeDistribution, FeeRecipients, Lido, Validator};
 use lido::token::{Lamports, StLamports};
 use lido::{instruction, RESERVE_AUTHORITY, STAKE_AUTHORITY};
+use spl_stake_pool::stake_program::{Meta, Stake, StakeState};
 
 // This id is only used throughout these tests.
 solana_program::declare_id!("3kEkdGe68DuTKg6FhVrLPZ3Wm8EcUPCPjhCeu8WrGDoc");
@@ -254,6 +255,24 @@ impl Context {
         let mut result = Context::new_with_maintainer().await;
         result.validator = Some(result.add_validator().await);
         result
+    }
+
+    /// Set up a new test context, where the Solido instance has a single maintainer, one
+    /// validator. Deposits 20 Sol and stake 2 accounts with 10 Sol each.
+    pub async fn new_with_two_stake_accounts() -> (Context, Vec<Pubkey>) {
+        let mut result = Context::new_with_maintainer().await;
+        let validator = result.add_validator().await;
+        result.deposit(Lamports(20_000_000_000)).await;
+        let mut stake_accounts = Vec::new();
+        for _ in 0..2 {
+            let stake_account = result
+                .stake_deposit(validator.vote_account, Lamports(10_000_000_000))
+                .await;
+
+            stake_accounts.push(stake_account);
+        }
+        result.validator = Some(validator);
+        (result, stake_accounts)
     }
 
     /// Initialize a new SPL token mint, return its instance address.
@@ -649,7 +668,7 @@ impl Context {
         .await
     }
 
-    /// Stake the given amount to the given validator, return the resulting stake account.
+    /// Merge two accounts of a given validator.
     pub async fn try_merge_stake(
         &mut self,
         validator_vote_account: Pubkey,
@@ -694,12 +713,9 @@ impl Context {
         self.try_update_exchange_rate()
             .await
             .expect("Failed to update exchange rate.");
-        .await?;
-
-        Ok(())
     }
 
-    /// Stake the given amount to the given validator, return the resulting stake account.
+    /// Merge two accounts of a given validator.
     pub async fn merge_stake(
         &mut self,
         validator_vote_account: Pubkey,
@@ -764,6 +780,15 @@ impl Context {
             .get_rent()
             .await
             .expect("Failed to get rent.")
+    }
+    pub async fn get_stake_state(&mut self, stake_account: Pubkey) -> (Meta, Stake) {
+        let account = self.get_account(stake_account).await;
+        let stake_state = try_from_slice_unchecked::<StakeState>(&account.data).unwrap();
+        if let StakeState::Stake(meta, stake) = stake_state {
+            (meta, stake)
+        } else {
+            panic!("Stake state should have been StakeState::Stake.");
+        }
     }
 }
 
