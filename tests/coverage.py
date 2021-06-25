@@ -83,34 +83,57 @@ def clean_old_profdata() -> None:
 
 def generate_report(executables: List[str]) -> None:
     print('Generating report ...')
-    cmd = [
+
+    # llvm-cov needs to know the executables that we instrumented.
+    object_args = []
+    for executable_path in executables:
+        object_args.extend(['-object', executable_path])
+
+    # Exclude coverage for dependencies, we are only interested in our own
+    # code. According to the docs, `llvm-cov show` also accepts file names
+    # of all source files at the end of the command, but I haven't been able
+    # to get that to work, it interprets them as object files and says:
+    # "Failed to load coverage: The file was not recognized as a valid
+    # object file".
+    ignore_regex = '-ignore-filename-regex=\\.cargo/registry|solana-program-library|rustc/'
+
+    # Export in "lcov" format for codecov.io to parse.
+    cmd_lcov = [
         # "cargo cov" looks up a compatible version of llvm-cov.
         'cargo',
         'cov',
         '--',
-        'show',
-        # Exclude coverage for dependencies, we are only interested in our own
-        # code. According to the docs, `llvm-cov show` also accepts file names
-        # of all source files at the end of the command, but I haven't been able
-        # to get that to work, it interprets them as object files and says:
-        # "Failed to load coverage: The file was not recognized as a valid
-        # object file".
-        '-ignore-filename-regex=\\.cargo/registry|solana-program-library|rustc/',
-        # Demangle symbols. This requires "rustfilt", which you can install with
-        # "cargo install rustfilt".
-        '-Xdemangler=rustfilt',
+        'export',
+        '-format=lcov',
+        ignore_regex,
         '-instr-profile=coverage/tests.profdata',
+        *object_args,
     ]
+    result_mangled = subprocess.run(cmd_lcov, check=True, capture_output=True)
 
-    for executable_path in executables:
-        cmd.extend(['-object', executable_path])
+    # The resulting file contains mangled symbols, and unlike "llvm-cov show",
+    # "llvm-cov export" does not support passing a demangler, so we need to pull
+    # it through rustfilt manually. You can install "rustfilt" with
+    # "cargo install rustfilt".
+    result = subprocess.run(['rustfilt'], check=True, capture_output=True, input=result_mangled.stdout)
 
-    # Write a text version to a single file, for codecov to load.
-    result = subprocess.run(cmd, check=True, capture_output=True)
-    with open('coverage/coverage.txt', 'wb') as f:
+    # Then write it with a magic name that codecov.io recognizes.
+    with open('coverage/lcov.info', 'wb') as f:
         f.write(result.stdout)
 
-    cmd_html = [*cmd, '-format=html', '-output-dir=coverage/report']
+    # Also generate an html report for local use.
+    cmd_html = [
+        'cargo',
+        'cov',
+        '--',
+        'show',
+        ignore_regex,
+        '-Xdemangler=rustfilt',
+        '-instr-profile=coverage/tests.profdata',
+        '-format=html',
+        '-output-dir=coverage/report',
+        *object_args,
+    ]
     subprocess.run(cmd_html, check=True)
     print(f'Check report at file://{os.getcwd()}/coverage/report/index.html.')
 
