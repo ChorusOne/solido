@@ -23,10 +23,10 @@ jobs:
         path: |
           target
           multisig/target
-        key: cargo-bpf-${{ hashFiles('Cargo.lock') }}
+        key: cargo-bpf-${{ env.SOLANA_VERSION }}-${{ hashFiles('Cargo.lock') }}
         restore-keys: |
-          cargo-bpf-${{ hashFiles('Cargo.lock') }}
-          cargo-bpf
+          cargo-bpf-${{ env.SOLANA_VERSION }}-${{ hashFiles('Cargo.lock') }}
+          cargo-bpf-${{ env.SOLANA_VERSION }}
 
     - name: Build on-chain BPF programs
       run: |

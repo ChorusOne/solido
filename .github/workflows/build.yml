@@ -8,6 +8,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  SOLANA_VERSION: 1.7.3
 
 jobs:
 
@@ -50,10 +51,10 @@ jobs:
         path: |
           target
           multisig/target
-        key: cargo-bpf-${{ hashFiles('Cargo.lock') }}
+        key: cargo-bpf-${{ env.SOLANA_VERSION }}-${{ hashFiles('Cargo.lock') }}
         restore-keys: |
-          cargo-bpf-${{ hashFiles('Cargo.lock') }}
-          cargo-bpf
+          cargo-bpf-${{ env.SOLANA_VERSION }}-${{ hashFiles('Cargo.lock') }}
+          cargo-bpf-${{ env.SOLANA_VERSION }}
 
     - name: Build on-chain BPF programs
       run: |
@@ -113,10 +114,10 @@ jobs:
       uses: actions/cache@v2
       with:
         path: target
-        key: cargo-clippy-${{ hashFiles('Cargo.lock') }}
+        key: cargo-clippy-${{ env.SOLANA_VERSION }}-${{ hashFiles('Cargo.lock') }}
         restore-keys: |
-          cargo-clippy-${{ hashFiles('Cargo.lock') }}
-          cargo-clippy
+          cargo-clippy-${{ env.SOLANA_VERSION }}-${{ hashFiles('Cargo.lock') }}
+          cargo-clippy-${{ env.SOLANA_VERSION }}
 
     - name: Install linters
       run: |
@@ -152,10 +153,10 @@ jobs:
         uses: actions/cache@v2
         with:
           path: target
-          key: cargo-tarpaulin-${{ hashFiles('Cargo.lock') }}
+          key: cargo-tarpaulin-${{ env.SOLANA_VERSION }}-${{ hashFiles('Cargo.lock') }}
           restore-keys: |
-            cargo-tarpaulin-${{ hashFiles('Cargo.lock') }}
-            cargo-tarpaulin
+            cargo-tarpaulin-${{ env.SOLANA_VERSION }}-${{ hashFiles('Cargo.lock') }}
+            cargo-tarpaulin-${{ env.SOLANA_VERSION }}
 
       - name: Generate code coverage
         run: |
