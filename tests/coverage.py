@@ -129,6 +129,7 @@ if __name__ == '__main__':
     # Also run our test script that relies on the CLI, so we can collect coverage
     # for that.
     run_test_binary('tests/test_solido.py')
+    run_test_binary('tests/test_multisig.py')
 
     merge_profdata()
     generate_report(binaries)
