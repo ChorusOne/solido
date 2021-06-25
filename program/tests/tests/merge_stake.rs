@@ -96,6 +96,10 @@ async fn test_merge_validator_with_one_stake_account() {
     let validator = context.add_validator().await;
     context.deposit(Lamports(10_000_000_000)).await;
 
+    // Try to merge stake on a validator that has 0 stakes
+    let result = context.try_merge_stake(validator.vote_account, 0, 1).await;
+    assert_solido_error!(result, LidoError::InvalidStakeAccount);
+
     context
         .stake_deposit(validator.vote_account, Lamports(10_000_000_000))
         .await;
