@@ -105,10 +105,12 @@ def generate_report(executables: List[str]) -> None:
     for executable_path in executables:
         cmd.extend(['-object', executable_path])
 
-    cmd_html = [*cmd, '-format=html', '-output-dir=coverage/report']
-    cmd_txt = [*cmd, '-format=text', '-output-dir=coverage/txt']
+    # Write a text version to a single file, for codecov to load.
+    result = subprocess.run(cmd, check=True, capture_output=True)
+    with open('coverage/coverage.txt', 'wb') as f:
+        f.write(result.stdout)
 
-    subprocess.run(cmd_txt, check=True)
+    cmd_html = [*cmd, '-format=html', '-output-dir=coverage/report']
     subprocess.run(cmd_html, check=True)
     print(f'Check report at file://{os.getcwd()}/coverage/report/index.html.')
 
