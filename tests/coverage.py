@@ -74,6 +74,8 @@ def merge_profdata() -> None:
 
 def clean_old_profdata() -> None:
     print('Deleting old coverage data ...')
+    # But create the directory if it did not yest exist, before we clean it.
+    os.makedirs('coverage', exist_ok=True)
     for fname in os.listdir('coverage'):
         if fname.endswith('.profraw'):
             os.remove(os.path.join('coverage', fname))
