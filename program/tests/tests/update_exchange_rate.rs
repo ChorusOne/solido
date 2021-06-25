@@ -37,13 +37,15 @@ async fn test_update_exchange_rate() {
     let result = context.try_update_exchange_rate().await;
     assert_solido_error!(result, LidoError::ExchangeRateAlreadyUpToDate);
 
+    const DEPOSIT_AMOUNT: u64 = 100_000_000;
+
     // Make a deposit, so something should change next epoch.
-    let recipient = context.deposit(Lamports(100_000_000)).await;
+    let recipient = context.deposit(Lamports(DEPOSIT_AMOUNT)).await;
 
     // This is the first deposit, so the exchange rate is 1:1, we should have
     // gotten the same number of stSOL lamports, as we put in in SOL lamports.
     let received_st_sol = context.get_st_sol_balance(recipient).await;
-    assert_eq!(received_st_sol, StLamports(100_000_000));
+    assert_eq!(received_st_sol, StLamports(DEPOSIT_AMOUNT));
 
     context
         .context
@@ -58,8 +60,51 @@ async fn test_update_exchange_rate() {
         solido.exchange_rate,
         ExchangeRate {
             computed_in_epoch: start_epoch + 1,
-            st_sol_supply: StLamports(100_000_000),
-            sol_balance: Lamports(100_000_000),
+            st_sol_supply: StLamports(DEPOSIT_AMOUNT),
+            sol_balance: Lamports(DEPOSIT_AMOUNT),
         }
     );
+
+    // If we make a new deposit, the new exchange rate is used, but it is still 1:1.
+    let recipient = context.deposit(Lamports(DEPOSIT_AMOUNT)).await;
+    let received_st_sol = context.get_st_sol_balance(recipient).await;
+    assert_eq!(received_st_sol, StLamports(DEPOSIT_AMOUNT));
+
+    // Now donate something to the reserve. This will affect the exchange rate,
+    // but only in the next epoch.
+    context
+        .fund(context.reserve_address, Lamports(3 * DEPOSIT_AMOUNT))
+        .await;
+
+    context
+        .context
+        .warp_to_slot(start_slot + 2 * slots_per_epoch)
+        .unwrap();
+
+    // There is now not as much SOL as stSOL, but for deposits, the rate is still
+    // 1:1. Even though we jumped to the next epoch! After all, we did not update
+    // the exchange rate yet.
+    let recipient = context.deposit(Lamports(DEPOSIT_AMOUNT)).await;
+    let received_st_sol = context.get_st_sol_balance(recipient).await;
+    assert_eq!(received_st_sol, StLamports(DEPOSIT_AMOUNT));
+
+    context.update_exchange_rate().await;
+
+    let solido = context.get_solido().await;
+    assert_eq!(
+        solido.exchange_rate,
+        ExchangeRate {
+            computed_in_epoch: start_epoch + 2,
+            // We had 3 deposits of DEPOSIT_AMOUNT, so stSOL and SOL have at
+            // least that. On top, we got a donation of 3 * DEPOSIT_AMOUNT to
+            // the reserve.
+            st_sol_supply: StLamports(3 * DEPOSIT_AMOUNT),
+            sol_balance: Lamports(6 * DEPOSIT_AMOUNT),
+        }
+    );
+
+    // After the recompute, 1 SOL = 0.5 stSOL.
+    let recipient = context.deposit(Lamports(DEPOSIT_AMOUNT)).await;
+    let received_st_sol = context.get_st_sol_balance(recipient).await;
+    assert_eq!(received_st_sol, StLamports(DEPOSIT_AMOUNT / 2));
 }
