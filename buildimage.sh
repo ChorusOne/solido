@@ -3,7 +3,7 @@
 # 1. Get last commit hash
 VERSION=$(git rev-parse --short HEAD)
 TAG="chorusone/solido:$VERSION"
-SOLIPATH="/root/.local/share/solana/install/releases/1.6.8/solana-release/bin/solido"
+SOLIPATH="/root/.local/share/solana/install/releases/1.7.3/solana-release/bin/solido"
 
 
 # 2. Build container image
