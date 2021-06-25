@@ -145,7 +145,7 @@ jobs:
         git ls-files | grep '\.py$' | xargs mypy --strict
 
   coverage:
-    runs-on:  ubuntu-latest
+    runs-on: ubuntu-latest
     continue-on-error: true
 
     steps:
@@ -158,19 +158,38 @@ jobs:
         uses: actions/cache@v2
         with:
           path: target
-          key: cargo-tarpaulin-1.7.3-${{ hashFiles('Cargo.lock') }}
-          restore-keys: |
-            cargo-tarpaulin-1.7.3
+          key: coverage-1.7.3-v0-${{ hashFiles('Cargo.lock') }}
+          restore-keys: coverage-1.7.3-v0
 
-      - name: Generate code coverage
+      - name: Install development tools
         run: |
           sudo apt update
-          sudo apt install libudev-dev
-          cargo install --version 0.16.0 cargo-tarpaulin
-          cargo tarpaulin --verbose --workspace --out Xml
+          sudo apt-get install -y libudev-dev
+          rustup component add llvm-tools-preview
+          rustup toolchain install nightly-2021-06-25
+          cargo install rustfilt cargo-binutils
+          sh -c "$(curl -sSfL https://release.solana.com/v1.7.3/install)"
+
+      - name: Build on-chain programs (without coverage)
+        run: |
+          export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
+          cargo +nightly-2021-06-25 build-bpf
+
+      - name: Collect coverage
+        run: |
+          validator=$(tests/start_test_validator.py)
+
+          # Perform initial Solana setup.
+          solana-keygen new --no-bip39-passphrase --silent
+          solana config set --url http://127.0.0.1:8899
+          solana airdrop 500.0
+
+          tests/coverage.py
+          kill $validator
+
       - name: Upload to codecov.io
         uses: codecov/codecov-action@v1
         with:
           token: ${{secrets.CODECOV_TOKEN}}
-          fail_ci_if_error:     true
+          directory: coverage/txt
 
