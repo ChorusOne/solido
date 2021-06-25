@@ -33,7 +33,7 @@ pub fn get_reserve_available_balance(
         None => {
             msg!("The reserve account is not rent-exempt.");
             msg!("Please ensure it holds at least {}.", minimum_balance);
-            return Err(LidoError::ReserveIsNotRentExempt);
+            Err(LidoError::ReserveIsNotRentExempt)
         }
     }
 }
