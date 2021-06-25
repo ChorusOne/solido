@@ -31,7 +31,7 @@ jobs:
     - name: Build on-chain BPF programs
       run: |
         sudo apt-get install -y libudev-dev
-        sh -c "$(curl -sSfL https://release.solana.com/v1.6.7/install)"
+        sh -c "$(curl -sSfL https://release.solana.com/v1.7.3/install)"
         export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
 
         # Build all BPF programs in the workspace, including the SPL stake pool,
