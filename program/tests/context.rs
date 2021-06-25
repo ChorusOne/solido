@@ -85,7 +85,27 @@ pub async fn send_transaction(
     instructions_mut.push(memo);
     *nonce += 1;
 
-    let mut transaction = Transaction::new_with_payer(&instructions_mut, Some(&context.payer.pubkey()));
+    // Change this to true to enable more verbose test output.
+    if false {
+        for (i, instruction) in instructions_mut.iter().enumerate() {
+            println!(
+                "Instruction #{} calls program {}.",
+                i, instruction.program_id
+            );
+            for (j, account) in instruction.accounts.iter().enumerate() {
+                println!(
+                    "  Account {:2}: [{}{}] {}",
+                    j,
+                    if account.is_writable { 'W' } else { '-' },
+                    if account.is_signer { 'S' } else { '-' },
+                    account.pubkey,
+                );
+            }
+        }
+    }
+
+    let mut transaction =
+        Transaction::new_with_payer(&instructions_mut, Some(&context.payer.pubkey()));
 
     // Sign with the payer, and additional signers if any.
     let mut signers = additional_signers;
@@ -348,6 +368,26 @@ impl Context {
 
     /// Make `amount` appear in the recipient's account by transferring it from the context's funder.
     pub async fn fund(&mut self, recipient: Pubkey, amount: Lamports) {
+        // Prevent test authors from shooting themselves in their feet by not
+        // allowing to leave an account non-rent-exempt, because such accounts
+        // might or might not be gone after this function returns, depending on
+        // the current epoch and slot, which is very unexpected.
+        let rent = self
+            .context
+            .banks_client
+            .get_rent()
+            .await
+            .expect("Failed to get rent.");
+        let min_balance = Lamports(rent.minimum_balance(0));
+        let current_balance = self.get_sol_balance(recipient).await;
+        if (current_balance + amount).unwrap() < min_balance {
+            panic!(
+                "You are trying to fund {} with {}, but that would not make the \
+                account rent-exempt, it needs at least {} for that.",
+                recipient, amount, min_balance,
+            )
+        }
+
         let payer = self.context.payer.pubkey();
         send_transaction(
             &mut self.context,
@@ -356,7 +396,19 @@ impl Context {
             vec![],
         )
         .await
-        .unwrap_or_else(|_| panic!("Failed to transfer {} to {}.", amount, recipient))
+        .unwrap_or_else(|_| panic!("Failed to transfer {} to {}.", amount, recipient));
+
+        // Sanity check to confirm that the account is still there. It should
+        // not have been rent-collected, because we enforced that we made it
+        // rent-exempt.
+        let balance = self.get_sol_balance(recipient).await;
+        assert!(
+            balance >= amount,
+            "Just funded {} with {} but now the balance is {}.",
+            recipient,
+            amount,
+            balance
+        );
     }
 
     pub async fn try_add_maintainer(&mut self, maintainer: Pubkey) -> transport::Result<()> {
@@ -594,11 +646,13 @@ impl Context {
             )],
             vec![],
         )
-            .await
+        .await
     }
 
     pub async fn update_exchange_rate(&mut self) {
-        self.try_update_exchange_rate().await.expect("Failed to update exchange rate.");
+        self.try_update_exchange_rate()
+            .await
+            .expect("Failed to update exchange rate.");
     }
 
     pub async fn try_get_account(&mut self, address: Pubkey) -> Option<Account> {
