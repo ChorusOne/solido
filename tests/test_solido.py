@@ -11,22 +11,20 @@ that corresponds to a sufficiently funded account.
 If TEST_LEDGER environment variable is set, it will use the ledger as a signing
 key-pair, as in `TEST_LEDGER=true ./tests/test_solido.py`
 """
-import sys
 import os
-from typing import Optional
+import json
 
 from util import (
-    create_test_account,
-    solana_program_deploy,
-    create_spl_token,
-    create_vote_account,
-    get_solido,
-    get_multisig,
-    solana,
-    approve_and_execute,
     TestAccount,
+    create_spl_token,
+    create_test_account,
+    create_vote_account,
+    get_solido_program_path,
+    multisig,
+    solana,
+    solana_program_deploy,
+    solido,
 )
-
 
 # We start by generating an account that we will need later. We put the tests
 # keys in a directory where we can .gitignore them, so they don't litter the
@@ -47,17 +45,10 @@ else:
 print(f'> {test_addrs}')
 
 treasury_account_owner = create_test_account('tests/.keys/treasury-key.json')
-print(f'> Treasury account owner:    {treasury_account_owner}')
+print(f'> Treasury account owner:      {treasury_account_owner}')
 
 developer_account_owner = create_test_account('tests/.keys/developer-fee-key.json')
 print(f'> Developer fee account owner: {developer_account_owner}')
-
-
-print('\nUploading stake pool program ...')
-stake_pool_program_id = solana_program_deploy(
-    get_solido_program_path() + '/spl_stake_pool.so')
-print(f'> Stake pool program id is {stake_pool_program_id}.')
-
 
 print('\nUploading Solido program ...')
 solido_program_id = solana_program_deploy(get_solido_program_path() + '/lido.so')
@@ -67,28 +58,55 @@ print('\nUploading Multisig program ...')
 multisig_program_id = solana_program_deploy(get_solido_program_path() + '/multisig.so')
 print(f'> Multisig program id is {multisig_program_id}.')
 
-multisig = get_multisig(multisig_program_id)
-solido = get_solido(multisig_program_id)
-
 print('\nCreating new multisig ...')
 multisig_data = multisig(
     'create-multisig',
+    '--multisig-program-id',
+    multisig_program_id,
     '--threshold',
     '2',
     '--owner',
-    test_addrs[0].pubkey,
-    '--owner',
-    test_addrs[1].pubkey,
+    ','.join(t.pubkey for t in test_addrs),
 )
 multisig_instance = multisig_data['multisig_address']
 multisig_pda = multisig_data['multisig_program_derived_address']
 print(f'> Created instance at {multisig_instance}.')
 
+
+def approve_and_execute(
+    transaction_to_approve: str,
+    signer: TestAccount,
+) -> None:
+    """
+    Helper to approve and execute a transaction with a single key.
+    """
+    multisig(
+        'approve',
+        '--multisig-program-id',
+        multisig_program_id,
+        '--multisig-address',
+        multisig_instance,
+        '--transaction-address',
+        transaction_to_approve,
+        keypair_path=signer.keypair_path,
+    )
+    multisig(
+        'execute-transaction',
+        '--multisig-program-id',
+        multisig_program_id,
+        '--multisig-address',
+        multisig_instance,
+        '--transaction-address',
+        transaction_to_approve,
+        keypair_path=signer.keypair_path,
+    )
+
+
 print('\nCreating Solido instance ...')
 result = solido(
     'create-solido',
-    '--stake-pool-program-id',
-    stake_pool_program_id,
+    '--multisig-program-id',
+    multisig_program_id,
     '--solido-program-id',
     solido_program_id,
     '--fee-numerator',
@@ -137,10 +155,10 @@ assert solido_instance['solido']['fee_distribution'] == {
 }
 
 print('\nAdding a validator ...')
-validator_token_account_owner = create_test_account(
+validator_fee_account_owner = create_test_account(
     'tests/.keys/validator-token-account-key.json'
 )
-print(f'> Validator token account owner: {validator_token_account_owner}')
+print(f'> Validator token account owner: {validator_fee_account_owner}')
 
 validator = create_test_account('tests/.keys/validator-account-key.json')
 
@@ -149,70 +167,27 @@ validator_vote_account = create_vote_account(
 )
 print(f'> Creating validator vote account {validator_vote_account}')
 
-print(f'> Creating validator token account with owner {validator_token_account_owner}')
+print(f'> Creating validator token account with owner {validator_fee_account_owner}')
 
 # Create SPL token
-validator_token_account = create_spl_token(
+validator_fee_account = create_spl_token(
     'tests/.keys/validator-token-account-key.json', st_sol_mint_account
 )
-print(f'> Validator stSol token account: {validator_token_account}')
-print('Creating validator stake account')
-transaction_result = solido(
-    'create-validator-stake-account',
-    '--solido-program-id',
-    solido_program_id,
-    '--solido-address',
-    solido_address,
-    '--stake-pool-program-id',
-    stake_pool_program_id,
-    '--validator-vote',
-    validator_vote_account.pubkey,
-    '--multisig-address',
-    multisig_instance,
-    keypair_path=test_addrs[0].keypair_path,
-)
-transaction_address = transaction_result['transaction_address']
-# Fund the PDA so we transfer from it in the create-validator-stake-account instruction
-solana('transfer', '--allow-unfunded-recipient', multisig_pda, '10.0')
-print(f'> Approving transaction: {transaction_address}')
-multisig(
-    'approve',
-    '--multisig-address',
-    multisig_instance,
-    '--transaction-address',
-    transaction_address,
-    keypair_path=test_addrs[1].keypair_path,
-)
-print(f'> Executing transaction: {transaction_address}')
-multisig(
-    'execute-transaction',
-    '--multisig-address',
-    multisig_instance,
-    '--transaction-address',
-    transaction_address,
-    keypair_path=test_addrs[1].keypair_path,
-)
-stake_account_pda = multisig(
-    'show-transaction',
-    '--solido-program-id',
-    solido_program_id,
-    '--transaction-address',
-    transaction_address,
-)
+print(f'> Validator stSol token account: {validator_fee_account}')
 
 print('> Call function to add validator')
 transaction_result = solido(
     'add-validator',
+    '--multisig-program-id',
+    multisig_program_id,
     '--solido-program-id',
     solido_program_id,
     '--solido-address',
     solido_address,
-    '--stake-pool-program-id',
-    stake_pool_program_id,
-    '--validator-vote',
+    '--validator-vote-account',
     validator_vote_account.pubkey,
-    '--validator-rewards-address',
-    validator_token_account,
+    '--validator-fee-account',
+    validator_fee_account,
     '--multisig-address',
     multisig_instance,
     keypair_path=test_addrs[1].keypair_path,
@@ -220,6 +195,10 @@ transaction_result = solido(
 transaction_address = transaction_result['transaction_address']
 transaction_status = multisig(
     'show-transaction',
+    '--multisig-program-id',
+    multisig_program_id,
+    '--solido-program-id',
+    solido_program_id,
     '--transaction-address',
     transaction_address,
 )
@@ -230,11 +209,15 @@ assert (
     )
     == 1
 )
-approve_and_execute(
-    multisig, multisig_instance, transaction_address, test_addrs[0].keypair_path
-)
+
+
+approve_and_execute(transaction_address, test_addrs[0])
 transaction_status = multisig(
     'show-transaction',
+    '--multisig-program-id',
+    multisig_program_id,
+    '--solido-program-id',
+    solido_program_id,
     '--transaction-address',
     transaction_address,
 )
@@ -256,17 +239,15 @@ solido_instance = solido(
 )
 
 assert solido_instance['solido']['validators']['entries'][0] == {
-    'pubkey': stake_account_pda['parsed_instruction']['SolidoInstruction'][
-        'CreateValidatorStakeAccount'
-    ]['stake_pool_stake_account'],
+    'pubkey': validator_vote_account.pubkey,
     'entry': {
         'fee_credit': 0,
-        'fee_address': validator_token_account,
+        'fee_address': validator_fee_account,
         'stake_accounts_seed_begin': 0,
         'stake_accounts_seed_end': 0,
         'stake_accounts_balance': 0,
     },
-}
+}, f'Unexpected validator entry, in {json.dumps(solido_instance, indent=True)}'
 
 maintainer = create_test_account('tests/.keys/maintainer-account-key.json')
 
@@ -275,6 +256,8 @@ print(f'> Adding maintainer {maintainer}')
 
 transaction_result = solido(
     'add-maintainer',
+    '--multisig-program-id',
+    multisig_program_id,
     '--solido-program-id',
     solido_program_id,
     '--solido-address',
@@ -286,9 +269,7 @@ transaction_result = solido(
     keypair_path=test_addrs[0].keypair_path,
 )
 transaction_address = transaction_result['transaction_address']
-approve_and_execute(
-    multisig, multisig_instance, transaction_address, test_addrs[1].keypair_path
-)
+approve_and_execute(transaction_address, test_addrs[1])
 
 solido_instance = solido(
     'show-solido',
@@ -305,6 +286,8 @@ assert solido_instance['solido']['maintainers']['entries'][0] == {
 print(f'> Removing maintainer {maintainer}')
 transaction_result = solido(
     'remove-maintainer',
+    '--multisig-program-id',
+    multisig_program_id,
     '--solido-program-id',
     solido_program_id,
     '--solido-address',
@@ -316,9 +299,7 @@ transaction_result = solido(
     keypair_path=test_addrs[1].keypair_path,
 )
 transaction_address = transaction_result['transaction_address']
-approve_and_execute(
-    multisig, multisig_instance, transaction_address, test_addrs[0].keypair_path
-)
+approve_and_execute(transaction_address, test_addrs[0])
 solido_instance = solido(
     'show-solido',
     '--solido-program-id',
@@ -332,6 +313,8 @@ assert len(solido_instance['solido']['maintainers']['entries']) == 0
 print(f'> Adding maintainer {maintainer} again')
 transaction_result = solido(
     'add-maintainer',
+    '--multisig-program-id',
+    multisig_program_id,
     '--solido-program-id',
     solido_program_id,
     '--solido-address',
@@ -343,9 +326,7 @@ transaction_result = solido(
     keypair_path=test_addrs[1].keypair_path,
 )
 transaction_address = transaction_result['transaction_address']
-approve_and_execute(
-    multisig, multisig_instance, transaction_address, test_addrs[0].keypair_path
-)
+approve_and_execute(transaction_address, test_addrs[0])
 
 
 print('\nRunning maintenance (should be no-op) ...')
@@ -355,8 +336,6 @@ result = solido(
     solido_address,
     '--solido-program-id',
     solido_program_id,
-    '--stake-pool-program-id',
-    stake_pool_program_id,
     keypair_path=maintainer.keypair_path,
 )
 assert result is None, f'Huh, perform-maintenance performed {result}'
@@ -374,8 +353,6 @@ result = solido(
     solido_address,
     '--solido-program-id',
     solido_program_id,
-    '--stake-pool-program-id',
-    stake_pool_program_id,
     keypair_path=maintainer.keypair_path,
 )
 expected_result = {
@@ -402,8 +379,6 @@ result = solido(
     solido_address,
     '--solido-program-id',
     solido_program_id,
-    '--stake-pool-program-id',
-    stake_pool_program_id,
     keypair_path=maintainer.keypair_path,
 )
 assert result is None, f'Huh, perform-maintenance performed {result}'

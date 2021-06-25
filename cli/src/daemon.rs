@@ -12,43 +12,14 @@ use std::sync::Mutex;
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use clap::Clap;
 use rand::Rng;
-use solana_sdk::pubkey::Pubkey;
 use tiny_http::{Request, Response, Server};
 
+use crate::config::RunMaintainerOpts;
 use crate::error::AsPrettyError;
 use crate::maintenance::{try_perform_maintenance, MaintenanceOutput, SolidoState};
 use crate::prometheus::{write_metric, Metric, MetricFamily};
 use crate::Config;
-
-#[derive(Clap, Clone, Debug)]
-pub struct RunMaintainerOpts {
-    /// Address of the Solido program.
-    #[clap(long)]
-    pub solido_program_id: Pubkey,
-
-    /// Account that stores the data for this Solido instance.
-    #[clap(long)]
-    pub solido_address: Pubkey,
-
-    /// Stake pool program id
-    #[clap(long)]
-    pub stake_pool_program_id: Pubkey,
-
-    /// Listen address and port for the http server that serves a /metrics endpoint.
-    #[clap(long, default_value = "0.0.0.0:8923")]
-    pub listen: String,
-
-    /// Maximum time to wait after there was no maintenance to perform, before checking again.
-    ///
-    /// The expected wait time is half the max poll interval. A max poll interval
-    /// of a few minutes should be plenty fast for a production deployment, but
-    /// for testing you can reduce this value to make the daemon more responsive,
-    /// to eliminate some waiting time.
-    #[clap(long, default_value = "120")]
-    pub max_poll_interval_seconds: u64,
-}
 
 /// Metrics counters that track how many maintenance operations we performed.
 #[derive(Clone)]
@@ -61,9 +32,6 @@ struct MaintenanceMetrics {
 
     /// Number of times we performed `StakeDeposit`.
     transactions_stake_deposit: u64,
-
-    /// Number of times we performed `DepositActiveStakeToPool`.
-    transactions_deposit_active_stake_to_pool: u64,
     // TODO(#96#issuecomment-859388866): Track how much the daemon spends on transaction fees,
     // so we know how much SOL it costs to operate.
     // spent_lamports_total: u64
@@ -79,14 +47,14 @@ impl MaintenanceMetrics {
                 help:
                     "Number of times we checked if there is maintenance to perform, since launch.",
                 type_: "counter",
-                metrics: vec![Metric::simple(self.polls)],
+                metrics: vec![Metric::new(self.polls)],
             },
         )?;
         write_metric(out, &MetricFamily {
             name: "solido_maintenance_errors_total",
             help: "Number of times we encountered an error while trying to perform maintenance, since launch.",
             type_: "counter",
-            metrics: vec![Metric::simple(self.errors)]
+            metrics: vec![Metric::new(self.errors)]
         })?;
         write_metric(
             out,
@@ -94,14 +62,8 @@ impl MaintenanceMetrics {
                 name: "solido_maintenance_transactions_total",
                 help: "Number of maintenance transactions executed, since launch.",
                 type_: "counter",
-                metrics: vec![
-                    Metric::singleton("operation", "StakeDeposit", self.transactions_stake_deposit),
-                    Metric::singleton(
-                        "operation",
-                        "DepositActiveStakeToPool",
-                        self.transactions_deposit_active_stake_to_pool,
-                    ),
-                ],
+                metrics: vec![Metric::new(self.transactions_stake_deposit)
+                    .with_label("operation", "StakeDeposit".to_string())],
             },
         )?;
         Ok(())
@@ -110,7 +72,11 @@ impl MaintenanceMetrics {
 
 /// Snapshot of metrics and Solido state.
 struct Snapshot {
+    /// Metrics about what the daemon has done so far.
     metrics: MaintenanceMetrics,
+
+    /// The current state of on-chain accounts, and the time at which we obtained
+    /// that data.
     solido: Option<SolidoState>,
 }
 
@@ -130,21 +96,16 @@ fn run_main_loop(config: &Config, opts: &RunMaintainerOpts, snapshot_mutex: &Sna
         polls: 0,
         errors: 0,
         transactions_stake_deposit: 0,
-        transactions_deposit_active_stake_to_pool: 0,
     };
     let mut rng = rand::thread_rng();
 
     loop {
         let mut do_wait = false;
 
-        let state_result = SolidoState::new(
-            config,
-            &opts.solido_program_id,
-            &opts.solido_address,
-            &opts.stake_pool_program_id,
-        );
-        match &state_result {
-            &Err(ref err) => {
+        let state_result =
+            SolidoState::new(config, opts.solido_program_id(), opts.solido_address());
+        match state_result {
+            Err(ref err) => {
                 println!("Failed to obtain Solido state.");
                 err.print_pretty();
                 metrics.errors += 1;
@@ -154,7 +115,7 @@ fn run_main_loop(config: &Config, opts: &RunMaintainerOpts, snapshot_mutex: &Sna
                 // exponential backoff with jitter, but let's not go there right now.
                 do_wait = true;
             }
-            &Ok(ref state) => {
+            Ok(ref state) => {
                 match try_perform_maintenance(config, &state) {
                     Err(err) => {
                         println!("Error in maintenance.");
@@ -171,9 +132,6 @@ fn run_main_loop(config: &Config, opts: &RunMaintainerOpts, snapshot_mutex: &Sna
                         match something_done {
                             MaintenanceOutput::StakeDeposit { .. } => {
                                 metrics.transactions_stake_deposit += 1
-                            }
-                            MaintenanceOutput::DepositActiveStateToPool { .. } => {
-                                metrics.transactions_deposit_active_stake_to_pool += 1
                             }
                         }
                     }
@@ -194,7 +152,7 @@ fn run_main_loop(config: &Config, opts: &RunMaintainerOpts, snapshot_mutex: &Sna
             // Sleep a random time, to avoid a thundering herd problem, in case
             // multiple maintainer bots happened to run in sync. They would all
             // try to create the same transaction, and only one would pass.
-            let max_poll_interval = Duration::from_secs(opts.max_poll_interval_seconds);
+            let max_poll_interval = Duration::from_secs(*opts.max_poll_interval_seconds());
             let sleep_time = rng.gen_range(Duration::from_secs(0)..max_poll_interval);
             println!("Sleeping {:?} until next iteration ...", sleep_time);
             std::thread::sleep(sleep_time);
@@ -226,13 +184,17 @@ fn serve_request(request: Request, snapshot_mutex: &SnapshotMutex) -> Result<(),
     // We don't even look at the request, for now we always serve the metrics.
 
     let mut out: Vec<u8> = Vec::new();
-    let is_ok = snapshot.metrics.write_prometheus(&mut out).is_ok();
+    let mut is_ok = snapshot.metrics.write_prometheus(&mut out).is_ok();
 
-    return if is_ok {
+    if let Some(ref solido) = snapshot.solido {
+        is_ok = is_ok && solido.write_prometheus(&mut out).is_ok();
+    }
+
+    if is_ok {
         request.respond(Response::from_data(out))
     } else {
         request.respond(Response::from_string("error").with_status_code(500))
-    };
+    }
 }
 
 /// Spawn threads that run the http server.
@@ -240,8 +202,8 @@ fn start_http_server(
     opts: &RunMaintainerOpts,
     snapshot_mutex: Arc<SnapshotMutex>,
 ) -> Vec<JoinHandle<()>> {
-    let server = Arc::new(Server::http(opts.listen.clone()).unwrap());
-    println!("Http server listening on {}", opts.listen);
+    let server = Arc::new(Server::http(opts.listen().clone()).unwrap());
+    println!("Http server listening on {}", opts.listen());
 
     // Spawn a number of http handler threads, so we can handle requests in
     // parallel. This server is only used to serve metrics, it can be super basic,

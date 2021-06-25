@@ -1,0 +1,66 @@
+name: build
+
+on:
+  schedule:
+    # Schedule equates to 02:05
+    - cron: '5 2 * * *'  
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+
+  build_and_test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        submodules: true
+
+    - name: cache-build-artifacts
+      uses: actions/cache@v2
+      with:
+        path: |
+          target
+          multisig/target
+        key: cargo-bpf-${{ hashFiles('Cargo.lock') }}
+        restore-keys: |
+          cargo-bpf-${{ hashFiles('Cargo.lock') }}
+          cargo-bpf
+
+    - name: Build on-chain BPF programs
+      run: |
+        sudo apt-get install -y libudev-dev
+        sh -c "$(curl -sSfL https://release.solana.com/v1.7.3/install)"
+        export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
+
+        # Build all BPF programs in the workspace, including the SPL stake pool,
+        # because we will need them later to test Solido.
+        cargo build-bpf
+
+
+    - name: Build CLI client
+      run: cargo build --bin solido
+
+    - name: Run Solido integration test against testnet
+      run: |
+        export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
+
+        solana-keygen new --no-bip39-passphrase --silent
+        solana config set --url https://api.testnet.solana.com
+        # Loop airdrop as devnet doesn't seem to support large drops
+        for i in {1..10}; do solana airdrop 1.0; sleep 30;  done
+
+        NETWORK='https://api.testnet.solana.com' tests/test_solido.py
+
+    - name: Run Multisig integration test against testnet
+      run: |
+        export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
+
+        # We don't need to run keygen/setup again, the private key and state
+        # should still be there from the previous run.
+
+        # Loop airdrop as devnet doesn't seem to support large drops
+        for i in {1..10}; do solana airdrop 1.0; sleep 30;  done
+
+        NETWORK='https://api.testnet.solana.com' tests/test_multisig.py

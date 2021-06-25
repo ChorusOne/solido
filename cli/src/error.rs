@@ -2,9 +2,9 @@
 
 use solana_client::client_error::{ClientError, ClientErrorKind};
 use solana_client::rpc_request::{RpcError, RpcResponseErrorData};
+use solana_program::program_error::ProgramError;
+use solana_program::pubkey::PubkeyError;
 use solana_sdk::transaction::TransactionError;
-use spl_stake_pool::solana_program::program_error::ProgramError;
-use spl_stake_pool::solana_program::pubkey::PubkeyError;
 
 /// Print the message in bold using ANSI escape sequences.
 fn print_key(message: &'static str) {

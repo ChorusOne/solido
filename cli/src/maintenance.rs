@@ -1,54 +1,40 @@
 //! Entry point for maintenance operations, such as updating the pool balance.
 
-use crate::helpers::{get_solido, get_stake_pool, sign_and_send_transaction};
-use crate::{error::Error, Config};
-use clap::Clap;
-use lido::state::serialize_b58;
-use lido::state::PubkeyAndEntry;
-use lido::{
-    state::{Lido, Validator},
-    token::Lamports,
-    DEPOSIT_AUTHORITY, STAKE_POOL_AUTHORITY,
-};
+use std::fmt;
+use std::io;
+
 use serde::Serialize;
 use solana_client::rpc_client::RpcClient;
 use solana_program::{
     clock::Clock, pubkey::Pubkey, rent::Rent, stake_history::StakeHistory, sysvar,
 };
 use solana_sdk::{account::Account, borsh::try_from_slice_unchecked, instruction::Instruction};
+use spl_token::state::Mint;
+
+use lido::account_map::PubkeyAndEntry;
+use lido::util::serialize_b58;
+use lido::{
+    state::{Lido, Validator},
+    token::Lamports,
+    DEPOSIT_AUTHORITY, MINIMUM_STAKE_ACCOUNT_BALANCE,
+};
 use spl_stake_pool::stake_program::StakeState;
-use spl_stake_pool::state::{StakePool, ValidatorList};
-use std::fmt;
-use std::ops::Add;
+
+use crate::config::PerformMaintenanceOpts;
+use crate::helpers::{get_solido, sign_and_send_transaction};
+use crate::stake_account::StakeBalance;
+use crate::{error::Error, Config};
+use lido::token::StLamports;
+use solana_program::program_pack::Pack;
+use std::time::SystemTime;
 
 type Result<T> = std::result::Result<T, Error>;
 
-#[derive(Clap, Debug)]
-pub struct PerformMaintenanceOpts {
-    /// Address of the Solido program.
-    #[clap(long)]
-    pub solido_program_id: Pubkey,
-
-    /// Account that stores the data for this Solido instance.
-    #[clap(long)]
-    pub solido_address: Pubkey,
-
-    /// Stake pool program id
-    #[clap(long)]
-    pub stake_pool_program_id: Pubkey,
-}
-
 /// A brief description of the maintenance performed. Not relevant functionally,
 /// but helpful for automated testing, and just for info.
-#[derive(Serialize)]
+#[derive(Debug, Eq, PartialEq, Serialize)]
 pub enum MaintenanceOutput {
     StakeDeposit {
-        #[serde(serialize_with = "serialize_b58")]
-        validator_vote_account: Pubkey,
-        #[serde(rename = "amount_lamports")]
-        amount: Lamports,
-    },
-    DepositActiveStateToPool {
         #[serde(serialize_with = "serialize_b58")]
         validator_vote_account: Pubkey,
         #[serde(rename = "amount_lamports")]
@@ -67,14 +53,6 @@ impl fmt::Display for MaintenanceOutput {
                 writeln!(f, "  Validator vote account: {}", validator_vote_account)?;
                 writeln!(f, "  Amount staked:          {}", amount)?;
             }
-            MaintenanceOutput::DepositActiveStateToPool {
-                validator_vote_account,
-                amount,
-            } => {
-                writeln!(f, "Deposited stake to pool.")?;
-                writeln!(f, "  Validator vote account: {}", validator_vote_account)?;
-                writeln!(f, "  Amount staked:          {}", amount)?;
-            }
         }
         Ok(())
     }
@@ -82,74 +60,40 @@ impl fmt::Display for MaintenanceOutput {
 
 /// A snapshot of on-chain accounts relevant to Solido.
 pub struct SolidoState {
+    /// The time at which we finished querying the Solido state.
+    ///
+    /// This is used in metrics to assign a timestamp to metrics that we proxy
+    /// from the state and then expose to Prometheus. Because the time at which
+    /// Prometheus polls is not the time at which the data was obtained, we track
+    /// the timestamp to avoid introducing a polling delay in the reported metrics.
+    ///
+    /// There is also `clock.unix_timestamp`, which is the stake-weighted median
+    /// timestamp of the slot that we queried, rather than the time at the machine
+    /// that performed the query. However, when you run `solana-test-validator`,
+    /// that timestamp goes out of date quickly, so use the actual observed time
+    /// instead.
+    pub produced_at: SystemTime,
+
     pub solido_program_id: Pubkey,
     pub solido_address: Pubkey,
     pub solido: Lido,
-
-    pub stake_pool_program_id: Pubkey,
-    pub stake_pool: StakePool,
-
-    #[allow(dead_code)]
-    pub validator_list_account: Account,
-    #[allow(dead_code)]
-    pub validator_list: ValidatorList,
 
     /// For each validator, in the same order as in `solido.validators`, holds
     /// the stake balance of the derived stake accounts from the begin seed until
     /// end seed.
     pub validator_stake_accounts: Vec<Vec<(Pubkey, StakeBalance)>>,
 
+    /// SPL token mint for stSOL, to know the current supply.
+    pub st_sol_mint: Mint,
+
     pub reserve_address: Pubkey,
     pub reserve_account: Account,
     pub rent: Rent,
+    pub clock: Clock,
 
     /// Public key of the maintainer executing the maintenance.
     /// Must be a member of `solido.maintainers`.
     pub maintainer_address: Pubkey,
-}
-
-/// The balance of a stake account, split into the four states that stake can be in.
-///
-/// The sum of the four fields is equal to the SOL balance of the stake account.
-pub struct StakeBalance {
-    pub inactive: Lamports,
-    pub activating: Lamports,
-    pub active: Lamports,
-    pub deactivating: Lamports,
-}
-
-impl StakeBalance {
-    pub fn total(&self) -> Lamports {
-        self.active
-            .add(self.inactive)
-            .expect("Should not overflow: stake parts should be less than the total.")
-            .add(self.activating)
-            .expect("Should not overflow: stake parts should be less than the total.")
-            .add(self.deactivating)
-            .expect("Should not overflow: stake parts should be less than the total.")
-    }
-
-    /// Return whether the stake account reached its maximum activation.
-    ///
-    /// Stake accounts in Solana can be partially active, and the maximum amount
-    /// of active stake it reaches is set at `delegate_stake` time. This means
-    /// that a stake account can contain both active and inactive SOL, but still
-    /// be fully active. Normally this should not happen, but in principle anybody
-    /// can deposit SOL into a stake account after calling `delegate_stake`, and
-    /// that additional SOL will not be activated. Therefore this method does not
-    /// look at `inactive` SOL, it considers the account to be fully active when
-    /// nothing is activating or deactivating.
-    pub fn is_fully_active(&self) -> bool {
-        true
-        && self.activating == Lamports(0)
-        && self.deactivating == Lamports(0)
-        // We define an empty stake account to not be fully active,
-        // because the SPL stake pool program considers such accounts
-        // to not be fully active. The case is not relevant anyway,
-        // because an empty stake account would not be rent-exempt,
-        // so it would disappear.
-        && self.active > Lamports(0)
-    }
 }
 
 fn get_validator_stake_accounts(
@@ -175,32 +119,17 @@ fn get_validator_stake_accounts(
             .delegation()
             .expect("Encountered undelegated stake account, this should not happen.");
 
-        // TODO(#182): Confirm that `delegation.voter_pubkey == validator.vote_account`. Unfortunately we
-        // do not store the vote account in there at the moment. Once we switch to using the vote
-        // account as key for the dictionary, we could check that here.
+        assert_eq!(
+            delegation.voter_pubkey, validator.pubkey,
+            "Expected the stake account for validator to delegate to that validator."
+        );
 
-        let target_epoch = clock.epoch;
-        let history = Some(stake_history);
-        // TODO(#184): Confirm the meaning of this.
-        let fix_stake_deactivate = true;
-
-        let (active_lamports, activating_lamports, deactivating_lamports) = delegation
-            .stake_activating_and_deactivating(target_epoch, history, fix_stake_deactivate);
-
-        let inactive_lamports = account.lamports
-            .checked_sub(active_lamports)
-            .expect("Active stake cannot be larger than stake account balance.")
-            .checked_sub(activating_lamports)
-            .expect("Activating stake cannot be larger than stake account balance - active.")
-            .checked_sub(deactivating_lamports)
-            .expect("Deactivating stake cannot be larger than stake account balance - active - activating.");
-
-        let balance = StakeBalance {
-            inactive: Lamports(inactive_lamports),
-            activating: Lamports(activating_lamports),
-            active: Lamports(active_lamports),
-            deactivating: Lamports(deactivating_lamports),
-        };
+        let balance = StakeBalance::from_delegated_account(
+            Lamports(account.lamports),
+            &delegation,
+            clock,
+            stake_history,
+        );
 
         result.push((addr, balance));
     }
@@ -213,21 +142,18 @@ impl SolidoState {
         config: &Config,
         solido_program_id: &Pubkey,
         solido_address: &Pubkey,
-        stake_pool_program_id: &Pubkey,
     ) -> Result<SolidoState> {
         let rpc = &config.rpc;
 
         // TODO(#183): Transactions can execute in between those reads, leading to
         // a torn state. Make a function that re-reads everything with get_multiple_accounts.
         let solido = get_solido(rpc, solido_address)?;
-        let stake_pool = get_stake_pool(rpc, &solido.stake_pool_account)?;
-
-        let validator_list_account = rpc.get_account(&stake_pool.validator_list)?;
-        let validator_list =
-            try_from_slice_unchecked::<ValidatorList>(&validator_list_account.data)?;
 
         let reserve_address = solido.get_reserve_account(solido_program_id, solido_address)?;
         let reserve_account = rpc.get_account(&reserve_address)?;
+
+        let st_sol_mint_account = rpc.get_account(&solido.st_sol_mint)?;
+        let st_sol_mint = Mint::unpack(&st_sol_mint_account.data)?;
 
         let rent_account = rpc.get_account(&sysvar::rent::ID)?;
         let rent: Rent = bincode::deserialize(&rent_account.data)?;
@@ -251,17 +177,16 @@ impl SolidoState {
         }
 
         Ok(SolidoState {
-            solido_program_id: solido_program_id.clone(),
-            solido_address: solido_address.clone(),
+            produced_at: SystemTime::now(),
+            solido_program_id: *solido_program_id,
+            solido_address: *solido_address,
             solido,
-            stake_pool_program_id: stake_pool_program_id.clone(),
-            stake_pool,
-            validator_list_account,
-            validator_list,
             validator_stake_accounts,
             reserve_address,
             reserve_account,
+            st_sol_mint,
             rent,
+            clock,
             // The entity executing the maintenance transactions, is the maintainer.
             // We don't verify here if it is part of the maintainer set, the on-chain
             // program does that anyway.
@@ -280,44 +205,37 @@ impl SolidoState {
     }
 
     /// If there is a deposit that can be staked, return the instruction to do so.
-    pub fn try_stake_deposit(&self) -> Result<Option<(Instruction, MaintenanceOutput)>> {
+    pub fn try_stake_deposit(&self) -> Option<(Instruction, MaintenanceOutput)> {
         let reserve_balance = self.get_effective_reserve();
-        let minimum_stake_account_balance =
-            Lamports(self.rent.minimum_balance(std::mem::size_of::<StakeState>()));
-
-        // If there is not enough reserve to create a new stake account, we
-        // can't stake the deposit, even if there is some balance.
-        if reserve_balance < minimum_stake_account_balance {
-            return Ok(None);
-        }
 
         // If there is enough reserve, we can make a deposit. To keep the pool
         // balanced, find the validator furthest below its target balance, and
         // deposit to that validator.
-        let stake_infos = &self.validator_list.validators[..];
-        let mut targets = vec![Lamports(0); stake_infos.len()];
-        assert_eq!(targets.len(), self.solido.validators.entries.len());
+        let mut targets = vec![Lamports(0); self.solido.validators.len()];
 
         let undelegated_lamports = reserve_balance;
-        lido::balance::get_target_balance(undelegated_lamports, stake_infos, &mut targets[..])
-            .expect("Failed to compute target balance.");
+        lido::balance::get_target_balance(
+            undelegated_lamports,
+            &self.solido.validators,
+            &mut targets[..],
+        )
+        .expect("Failed to compute target balance.");
 
         let (validator_index, amount_below_target) =
-            lido::balance::get_validator_furthest_below_target(stake_infos, &targets[..]);
-
-        // NOTE: We assume here that the order in the stake pool's validator list
-        // is the same as in Solido's list. This is the case as long as we only add validators.
+            lido::balance::get_validator_furthest_below_target(
+                &self.solido.validators,
+                &targets[..],
+            );
         let validator = &self.solido.validators.entries[validator_index];
-        let stake_info = &self.validator_list.validators[validator_index];
 
-        let (stake_account_end, _bump_seed) = Validator::find_stake_account_address(
+        let (stake_account_end, _bump_seed_end) = Validator::find_stake_account_address(
             &self.solido_program_id,
             &self.solido_address,
             &validator.pubkey,
             validator.entry.stake_accounts_seed_end,
         );
 
-        let (deposit_authority, _bump_seed) = lido::find_authority_program_address(
+        let (deposit_authority, _bump_seed_authority) = lido::find_authority_program_address(
             &self.solido_program_id,
             &self.solido_address,
             DEPOSIT_AUTHORITY,
@@ -327,14 +245,19 @@ impl SolidoState {
         // reserve, a future maintenance run will stake the remainder with the next validator.
         let amount_to_deposit = amount_below_target.min(reserve_balance);
 
+        // If the amount to deposit would not make the stake account rent-exempt
+        // and mergeable, then we cannot deposit it at this point.
+        if amount_to_deposit < MINIMUM_STAKE_ACCOUNT_BALANCE {
+            return None;
+        }
+
         let instruction = lido::instruction::stake_deposit(
             &self.solido_program_id,
             &lido::instruction::StakeDepositAccountsMeta {
                 lido: self.solido_address,
                 maintainer: self.maintainer_address,
                 reserve: self.reserve_address,
-                validator_stake_pool_stake_account: validator.pubkey,
-                validator_vote_account: stake_info.vote_account_address,
+                validator_vote_account: validator.pubkey,
                 stake_account_end,
                 deposit_authority,
             },
@@ -343,30 +266,38 @@ impl SolidoState {
         .expect("Failed to construct StakeDeposit instruction.");
 
         let task = MaintenanceOutput::StakeDeposit {
-            validator_vote_account: stake_info.vote_account_address,
+            validator_vote_account: validator.pubkey,
             amount: amount_to_deposit,
         };
 
-        Ok(Some((instruction, task)))
+        Some((instruction, task))
     }
 
-    /// If there is active stake that can be deposited to the stake pool,
-    /// return the instruction to do so.
-    pub fn try_deposit_active_stake_to_pool(
-        &self,
-    ) -> Result<Option<(Instruction, MaintenanceOutput)>> {
-        let (deposit_authority, _bump_seed) = lido::find_authority_program_address(
-            &self.solido_program_id,
-            &self.solido_address,
-            DEPOSIT_AUTHORITY,
-        );
+    /// Write metrics about the current Solido instance in Prometheus format.
+    pub fn write_prometheus<W: io::Write>(&self, out: &mut W) -> io::Result<()> {
+        use crate::prometheus::{write_metric, Metric, MetricFamily};
 
-        // The stake pool withdraw authority is the stake pool authority.
-        let (withdraw_authority, _bump_seed) = lido::find_authority_program_address(
-            &self.solido_program_id,
-            &self.solido_address,
-            STAKE_POOL_AUTHORITY,
-        );
+        write_metric(
+            out,
+            &MetricFamily {
+                name: "solido_solana_block_height",
+                help: "Solana slot that we read the Solido details from.",
+                type_: "gauge",
+                metrics: vec![Metric::new(self.clock.slot).at(self.produced_at)],
+            },
+        )?;
+
+        // Gather the different components that make up Solido's SOL balance.
+        // The values are stored in Lamports (1e-9 SOL), but Prometheus convention
+        // is to use base units, so we set `.nano()` to report them in SOL.
+        let mut balance_sol_metrics = vec![Metric::new(self.get_effective_reserve().0)
+            .nano()
+            .at(self.produced_at)
+            .with_label("status", "reserve".to_string())];
+
+        // Track if there are any unclaimed (and therefore unminted) validation
+        // fees.
+        let mut unclaimed_fees = StLamports(0);
 
         for (validator, stake_accounts) in self
             .solido
@@ -375,38 +306,50 @@ impl SolidoState {
             .iter()
             .zip(self.validator_stake_accounts.iter())
         {
-            // We only check if the first stake account can be deposited, because stake accounts
-            // can only be deposited into the pool after the accounts preceding them.
-            for (stake_account_addr, stake_balance) in stake_accounts.iter().take(1) {
-                if stake_balance.is_fully_active() {
-                    let instr = lido::instruction::deposit_active_stake_to_pool(
-                        &self.solido_program_id,
-                        &lido::instruction::DepositActiveStakeToPoolAccountsMeta {
-                            lido: self.solido_address,
-                            maintainer: self.maintainer_address,
-                            validator_stake_pool_stake_account: validator.pubkey,
-                            stake_account_begin: stake_account_addr.clone(),
-                            deposit_authority: deposit_authority,
-                            stake_pool_token_holder: self.solido.stake_pool_token_holder,
-                            stake_pool_program: self.stake_pool_program_id,
-                            stake_pool: self.solido.stake_pool_account,
-                            stake_pool_validator_list: self.stake_pool.validator_list,
-                            stake_pool_withdraw_authority: withdraw_authority,
-                            stake_pool_mint: self.stake_pool.pool_mint,
-                        },
-                    )?;
-                    return Ok(Some((
-                        instr,
-                        MaintenanceOutput::DepositActiveStateToPool {
-                            // TODO(#185): This is not actually the vote account.
-                            validator_vote_account: validator.pubkey,
-                            amount: stake_balance.total(),
-                        },
-                    )));
-                }
-            }
+            let stake_balance: StakeBalance =
+                stake_accounts.iter().map(|(_addr, balance)| *balance).sum();
+            let metric = |amount: Lamports, status: &'static str| {
+                Metric::new(amount.0)
+                    .nano()
+                    .at(self.produced_at)
+                    .with_label("status", status.to_string())
+                    .with_label("vote_account", validator.pubkey.to_string())
+            };
+            balance_sol_metrics.push(metric(stake_balance.inactive, "inactive"));
+            balance_sol_metrics.push(metric(stake_balance.activating, "activating"));
+            balance_sol_metrics.push(metric(stake_balance.active, "active"));
+            balance_sol_metrics.push(metric(stake_balance.deactivating, "deactivating"));
+
+            unclaimed_fees = (unclaimed_fees + validator.entry.fee_credit)
+                .expect("There shouldn't be so many fees to cause stSOL overflow.");
         }
-        Ok(None)
+
+        write_metric(
+            out,
+            &MetricFamily {
+                name: "solido_balance_sol",
+                help: "Amount of SOL managed by Solido.",
+                type_: "gauge",
+                metrics: balance_sol_metrics,
+            },
+        )?;
+
+        let st_sol_supply = (StLamports(self.st_sol_mint.supply) + unclaimed_fees)
+            .expect("stSOL supply no longer fits in u64.");
+        write_metric(
+            out,
+            &MetricFamily {
+                name: "solido_token_supply_st_sol",
+                help: "Amount of stSOL that exists.",
+                type_: "gauge",
+                metrics: vec![
+                    // The supply is measured in stSOL lamports (1e-9 stSOL), so set .nano().
+                    Metric::new(st_sol_supply.0).nano().at(self.produced_at),
+                ],
+            },
+        )?;
+
+        Ok(())
     }
 }
 
@@ -416,20 +359,18 @@ pub fn try_perform_maintenance(
 ) -> Result<Option<MaintenanceOutput>> {
     // Try all of these operations one by one, and select the first one that
     // produces an instruction.
-    let instruction: Option<Result<(Instruction, MaintenanceOutput)>> = None
-        .or_else(|| state.try_stake_deposit().transpose())
-        .or_else(|| state.try_deposit_active_stake_to_pool().transpose());
+    let instruction: Option<(Instruction, MaintenanceOutput)> =
+        None.or_else(|| state.try_stake_deposit());
 
-    match instruction {
-        Some(Ok((instr, output))) => {
-            // For maintenance operations, the maintainer is the only signer,
-            // and that should be sufficient.
-            sign_and_send_transaction(config, &[instr], &[config.signer])?;
-            Ok(Some(output))
-        }
-        Some(Err(err)) => Err(err),
-        None => Ok(None),
-    }
+    let (instr, description) = match instruction {
+        Some(x) => x,
+        None => return Ok(None),
+    };
+
+    // For maintenance operations, the maintainer is the only signer,
+    // and that should be sufficient.
+    sign_and_send_transaction(config, &[instr], &[config.signer])?;
+    Ok(Some(description))
 }
 
 /// Inspect the on-chain Solido state, and if there is maintenance that can be
@@ -442,11 +383,73 @@ pub fn run_perform_maintenance(
     config: &Config,
     opts: &PerformMaintenanceOpts,
 ) -> Result<Option<MaintenanceOutput>> {
-    let state = SolidoState::new(
-        config,
-        &opts.solido_program_id,
-        &opts.solido_address,
-        &opts.stake_pool_program_id,
-    )?;
+    let state = SolidoState::new(config, opts.solido_program_id(), opts.solido_address())?;
     try_perform_maintenance(config, &state)
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    /// Produce a new state with `default` Solido instance in it, and random pubkeys.
+    fn new_empty_solido() -> SolidoState {
+        let mut state = SolidoState {
+            produced_at: SystemTime::UNIX_EPOCH,
+            solido_program_id: Pubkey::new_unique(),
+            solido_address: Pubkey::new_unique(),
+            solido: Lido::default(),
+            validator_stake_accounts: vec![],
+            st_sol_mint: Mint::default(),
+            reserve_address: Pubkey::new_unique(),
+            reserve_account: Account::default(),
+            rent: Rent::default(),
+            clock: Clock::default(),
+            maintainer_address: Pubkey::new_unique(),
+        };
+
+        // The reserve should be rent-exempt.
+        state.reserve_account.lamports = state.rent.minimum_balance(0);
+
+        state
+    }
+
+    /// This is a regression test. In the past we checked for the minimum stake
+    /// balance before capping it at the amount below target, which meant that
+    /// if there was enough in the reserve, but the amount below target was less
+    /// than that of a minimum stake account, we would still try to deposit it,
+    /// which would fail.
+    #[test]
+    fn stake_deposit_does_not_stake_less_than_the_minimum() {
+        let mut state = new_empty_solido();
+
+        // Add two validators, both without any stake account yet.
+        state.solido.validators.maximum_entries = 2;
+        state
+            .solido
+            .validators
+            .add(Pubkey::new_unique(), Validator::new(Pubkey::new_unique()))
+            .unwrap();
+        state
+            .solido
+            .validators
+            .add(Pubkey::new_unique(), Validator::new(Pubkey::new_unique()))
+            .unwrap();
+
+        // Put enough SOL in the reserve that we *could* stake it, if it had to
+        // go into a single stake account, but that it's too little to stake if
+        // we need to split it over two accounts.
+        state.reserve_account.lamports += MINIMUM_STAKE_ACCOUNT_BALANCE.0 + 1;
+
+        assert_eq!(
+            state.try_stake_deposit(),
+            None,
+            "Should not try to stake, this is not enough for a rent-exempt stake account.",
+        );
+
+        // If we add a bit more, then we can fund two stake accounts, and that
+        // should be enough to trigger a StakeDeposit.
+        state.reserve_account.lamports += MINIMUM_STAKE_ACCOUNT_BALANCE.0 + 1;
+
+        assert!(state.try_stake_deposit().is_some());
+    }
 }

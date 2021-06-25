@@ -1,7 +1,7 @@
 FROM solido-base
 
-ENV SOLVERSION=1.6.8
-ENV SOLINSTALLCHECKSUM=be0d60ba830b9f4910faa3d7095f7ff3666392d501af37720cf6d6d0704e6019
+ENV SOLVERSION=1.7.3
+ENV SOLINSTALLCHECKSUM=b5ef6183da7d489a0e6ebc203d64e82e4dd24a9144ead3e564df692625d91b10
 ENV SOLPATH="/root/.local/share/solana/install/active_release/bin"
 ENV SOLIDOBUILDPATH="$SOLPATH/solido-build"
 ENV SOLIDORELEASEPATH="$SOLPATH/solido"
@@ -40,9 +40,6 @@ RUN cd $SOLIDOBUILDPATH \
 RUN cd $SOLIDORELEASEPATH/deploy \
     && sha256sum lido.so >> lido.hash \
     && sha256sum multisig.so >> multisig.hash \
-    && sha256sum spl_math.so >> spl_math.hash \
-    && sha256sum spl_stake_pool.so >> spl_stake_pool.hash \
-    && sha256sum spl_token.so >> spl_token.hash
 
 
 # Hash CLI

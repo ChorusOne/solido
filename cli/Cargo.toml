@@ -17,15 +17,15 @@ multisig = {path = "../multisig/programs/multisig"}
 num_cpus = "1.0"
 serde = "1.0"
 serde_json = "1.0"
-solana-account-decoder = "1.6.6"
-solana-clap-utils = "1.6.6"
-solana-cli-config = "1.6.6"
-solana-client = "1.6.6"
-solana-logger = "1.6.6"
-solana-program = "1.6.6"
-solana-remote-wallet = "1.6.6"
-solana-sdk = "1.6.6"
-solana-stake-program = "1.6.6"
+solana-account-decoder = "1.7.3"
+solana-clap-utils = "1.7.3"
+solana-cli-config = "1.7.3"
+solana-client = "1.7.3"
+solana-logger = "1.7.3"
+solana-program = "1.7.3"
+solana-remote-wallet = "1.7.3"
+solana-sdk = "1.7.3"
+solana-stake-program = "1.7.3"
 rand = "0.8.3"
 tiny_http = "0.8.2"
 
@@ -40,10 +40,3 @@ path = "../solana-program-library/token/program"
 [[bin]]
 name = "solido"
 path = "src/main.rs"
-
-# Ensure that we don't leave half a program running if something in a thread panics.
-[profile.dev]
-panic = "abort"
-
-[profile.release]
-panic = "abort"

@@ -3,7 +3,7 @@
 # 1. Get last commit hash
 VERSION=$(git rev-parse --short HEAD)
 TAG="chorusone/solido:$VERSION"
-SOLIPATH="/root/.local/share/solana/install/releases/1.6.8/solana-release/bin/solido"
+SOLIPATH="/root/.local/share/solana/install/releases/1.7.3/solana-release/bin/solido"
 
 
 # 2. Build container image
@@ -28,7 +28,7 @@ echo "Running container id is=$CON_ID"
 
 #6. Copy artefacts locally
 ## a. on-chain
-programs=("lido" "multisig" "spl_math" "spl_stake_pool" "spl_token")
+programs=("lido" "multisig")
 for i in "${programs[@]}"
 do
   echo -e $"\nCopying $i program and hash"

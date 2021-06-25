@@ -26,7 +26,8 @@ from util import (
     create_test_account,
     solana_program_deploy,
     solana_program_show,
-    get_multisig,
+    multisig,
+    get_solido_program_path,
 )
 
 
@@ -46,19 +47,16 @@ print(f'> {addr3}')
 print('\nUploading Multisig program ...')
 multisig_program_id = solana_program_deploy(get_solido_program_path() + '/multisig.so')
 print(f'> Multisig program id is {multisig_program_id}.')
-multisig = get_multisig(multisig_program_id)
 
 print('\nCreating new multisig ...')
 result = multisig(
     'create-multisig',
+    '--multisig-program-id',
+    multisig_program_id,
     '--threshold',
     '2',
     '--owner',
-    addr1.pubkey,
-    '--owner',
-    addr2.pubkey,
-    '--owner',
-    addr3.pubkey,
+    ','.join([addr1.pubkey, addr2.pubkey, addr3.pubkey]),
 )
 multisig_address = result['multisig_address']
 multisig_program_derived_address = result['multisig_program_derived_address']
@@ -144,6 +142,8 @@ else:
 print('\nProposing program upgrade ...')
 result = multisig(
     'propose-upgrade',
+    '--multisig-program-id',
+    multisig_program_id,
     '--multisig-address',
     multisig_address,
     '--program-address',
@@ -162,6 +162,10 @@ print(f'> Transaction address is {upgrade_transaction_address}.')
 # it is the upgrade transaction that we intended.
 result = multisig(
     'show-transaction',
+    '--multisig-program-id',
+    multisig_program_id,
+    '--solido-program-id',
+    program_id,
     '--transaction-address',
     upgrade_transaction_address,
 )
@@ -185,6 +189,8 @@ print('\nTrying to execute with 1 of 2 signatures, which should fail ...')
 try:
     multisig(
         'execute-transaction',
+        '--multisig-program-id',
+        multisig_program_id,
         '--multisig-address',
         multisig_address,
         '--transaction-address',
@@ -208,6 +214,8 @@ else:
 print('\nApproving transaction from a second account ...')
 multisig(
     'approve',
+    '--multisig-program-id',
+    multisig_program_id,
     '--multisig-address',
     multisig_address,
     '--transaction-address',
@@ -216,6 +224,10 @@ multisig(
 )
 result = multisig(
     'show-transaction',
+    '--multisig-program-id',
+    multisig_program_id,
+    '--solido-program-id',
+    program_id,
     '--transaction-address',
     upgrade_transaction_address,
 )
@@ -230,6 +242,8 @@ print(f'> Transaction is now signed by {addr2} as well.')
 print('\nTrying to execute with 2 of 2 signatures, which should succeed ...')
 multisig(
     'execute-transaction',
+    '--multisig-program-id',
+    multisig_program_id,
     '--multisig-address',
     multisig_address,
     '--transaction-address',
@@ -237,6 +251,10 @@ multisig(
 )
 result = multisig(
     'show-transaction',
+    '--multisig-program-id',
+    multisig_program_id,
+    '--solido-program-id',
+    program_id,
     '--transaction-address',
     upgrade_transaction_address,
 )
@@ -252,6 +270,8 @@ print('\nTrying to execute a second time, which should fail ...')
 try:
     multisig(
         'execute-transaction',
+        '--multisig-program-id',
+        multisig_program_id,
         '--multisig-address',
         multisig_address,
         '--transaction-address',
@@ -274,7 +294,13 @@ else:
 
 # Next we are going to test changing the multisig. Before we go and do that,
 # confirm that it currently looks like we expect it to look.
-multisig_before = multisig('show-multisig', '--multisig-address', multisig_address)
+multisig_before = multisig(
+    'show-multisig',
+    '--multisig-program-id',
+    multisig_program_id,
+    '--multisig-address',
+    multisig_address,
+)
 assert multisig_before == {
     'multisig_program_derived_address': multisig_program_derived_address,
     'threshold': 2,
@@ -286,14 +312,14 @@ print('\nProposing to remove the third owner from the multisig ...')
 # This time we omit the third owner. The threshold remains 2.
 result = multisig(
     'propose-change-multisig',
+    '--multisig-program-id',
+    multisig_program_id,
     '--multisig-address',
     multisig_address,
     '--threshold',
     '2',
     '--owner',
-    addr1.pubkey,
-    '--owner',
-    addr2.pubkey,
+    ','.join([addr1.pubkey, addr2.pubkey]),
     keypair_path=addr1.keypair_path,
 )
 change_multisig_transaction_address = result['transaction_address']
@@ -303,6 +329,8 @@ print(f'> Transaction address is {change_multisig_transaction_address}.')
 print('\nApproving transaction from a second account ...')
 multisig(
     'approve',
+    '--multisig-program-id',
+    multisig_program_id,
     '--multisig-address',
     multisig_address,
     '--transaction-address',
@@ -311,6 +339,10 @@ multisig(
 )
 result = multisig(
     'show-transaction',
+    '--multisig-program-id',
+    multisig_program_id,
+    '--solido-program-id',
+    program_id,
     '--transaction-address',
     change_multisig_transaction_address,
 )
@@ -325,6 +357,8 @@ print('> Transaction has the required number of signatures.')
 print('\nExecuting multisig change transaction ...')
 multisig(
     'execute-transaction',
+    '--multisig-program-id',
+    multisig_program_id,
     '--multisig-address',
     multisig_address,
     '--transaction-address',
@@ -332,13 +366,23 @@ multisig(
 )
 result = multisig(
     'show-transaction',
+    '--multisig-program-id',
+    multisig_program_id,
+    '--solido-program-id',
+    program_id,
     '--transaction-address',
     change_multisig_transaction_address,
 )
 assert result['did_execute'] == True
 print('> Transaction is marked as executed.')
 
-multisig_after = multisig('show-multisig', '--multisig-address', multisig_address)
+multisig_after = multisig(
+    'show-multisig',
+    '--multisig-program-id',
+    multisig_program_id,
+    '--multisig-address',
+    multisig_address,
+)
 assert multisig_after == {
     'multisig_program_derived_address': multisig_program_derived_address,
     'threshold': 2,
@@ -350,6 +394,10 @@ print(f'> The third owner was removed.')
 print('\nChecking that the old transaction does not show outdated owner info ...')
 result = multisig(
     'show-transaction',
+    '--multisig-program-id',
+    multisig_program_id,
+    '--solido-program-id',
+    program_id,
     '--transaction-address',
     upgrade_transaction_address,
 )
@@ -366,6 +414,8 @@ print('> Owners ids are gone, but approval count is preserved as expected.')
 print('\nProposing new program upgrade ...')
 result = multisig(
     'propose-upgrade',
+    '--multisig-program-id',
+    multisig_program_id,
     '--multisig-address',
     multisig_address,
     '--program-address',
@@ -384,6 +434,8 @@ print('\nApproving this transaction from owner 3, which should fail ...')
 try:
     multisig(
         'approve',
+        '--multisig-program-id',
+        multisig_program_id,
         '--multisig-address',
         multisig_address,
         '--transaction-address',
@@ -399,6 +451,10 @@ except subprocess.CalledProcessError as err:
     assert 'custom program error: 0x64' in err.stdout
     result = multisig(
         'show-transaction',
+        '--multisig-program-id',
+        multisig_program_id,
+        '--solido-program-id',
+        program_id,
         '--transaction-address',
         upgrade_transaction_address,
     )

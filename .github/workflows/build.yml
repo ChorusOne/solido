@@ -29,6 +29,7 @@ jobs:
           # Install with Pip instead of Apt because Ubuntu ships ancient versions.
           # TODO: Pin the exact version with Nix instead, to make it easier to use
           # the same version locally.
+          sudo apt update
           sudo apt-get install -y python3-pip
           sudo pip3 install black==21.6b0
 
@@ -56,8 +57,9 @@ jobs:
 
     - name: Build on-chain BPF programs
       run: |
+        sudo apt update
         sudo apt-get install -y libudev-dev
-        sh -c "$(curl -sSfL https://release.solana.com/v1.6.7/install)"
+        sh -c "$(curl -sSfL https://release.solana.com/v1.7.3/install)"
         export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
 
         # Build all BPF programs in the workspace, including the SPL stake pool,
@@ -99,24 +101,6 @@ jobs:
         tests/test_multisig.py
         kill $validator
 
-    - name: Run Solido integration test against devnet
-      run: |
-        export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
-
-        solana config set --url https://api.devnet.solana.com
-        # Loop airdrop as devnet doesn't seem to support large drops
-        for i in {1..4}; do solana airdrop 10.0; done
-
-        NETWORK='https://api.devnet.solana.com' tests/test_solido.py
-
-    - name: Run Multisig integration test against devnet
-      run: |
-        export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
-
-        # We don't need to run keygen/setup again, the private key and state
-        # should still be there from the previous run.
-
-        NETWORK='https://api.devnet.solana.com' tests/test_multisig.py
   lint:
     runs-on: ubuntu-latest
 
@@ -137,6 +121,7 @@ jobs:
     - name: Install linters
       run: |
         # TODO: Pin the exact version with Nix.
+        sudo apt update
         sudo apt-get install -y python3-pip libudev-dev
         # Install with Pip instead of Apt because Ubuntu ships ancient versions.
         # TODO: Pin the exact version with Nix instead, to make it easier to use
@@ -146,7 +131,8 @@ jobs:
 
     - name: Run Clippy
       run: |
-        cargo clippy -- -W clippy::pedantic
+        cargo clippy --manifest-path program/Cargo.toml -- --deny warnings
+        cargo clippy --manifest-path cli/Cargo.toml -- --deny warnings
 
     - name: Typecheck Python
       run: |
