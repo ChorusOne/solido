@@ -1,0 +1,29 @@
+FROM solido-base
+
+ENV SOLIDOBUILDPATH="/solido-build"
+ENV SOLIDOPATH="/solido"
+
+# Make dirs for build artefacts
+RUN mkdir -p $SOLIDOBUILDPATH
+
+COPY . $SOLIDOBUILDPATH/
+
+# Build packages
+RUN cd $SOLIDOBUILDPATH \
+    && cargo build --release --bin solido
+
+
+RUN useradd -m -d $SOLIDOPATH solido
+
+# Copy from build container
+RUN cp -rf  /solido-build/target/release/* $SOLIDOPATH
+
+COPY docker/entrypoint.sh $SOLIDOPATH
+
+RUN chown -R solido:solido $SOLIDOPATH
+
+USER solido
+
+WORKDIR $SOLIDOPATH
+
+ENTRYPOINT ["/bin/bash", "/solido/entrypoint.sh"]

@@ -1,0 +1,12 @@
+version: '3.9'
+services:
+    solido-base:
+        image: solido-base
+        build:
+          context: ../
+          dockerfile: docker/Dockerfile.base
+    solido:
+        image: chorusone/solido-maintainer:${SOLIDO_VERSION}
+        build:
+          context: ../
+          dockerfile: docker/Dockerfile.maintainer
