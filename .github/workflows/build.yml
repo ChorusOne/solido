@@ -50,10 +50,9 @@ jobs:
         path: |
           target
           multisig/target
-        key: cargo-bpf-${{ hashFiles('Cargo.lock') }}
+        key: cargo-bpf-1.7.3-${{ hashFiles('Cargo.lock') }}
         restore-keys: |
-          cargo-bpf-${{ hashFiles('Cargo.lock') }}
-          cargo-bpf
+          cargo-bpf-1.7.3
 
     - name: Build on-chain BPF programs
       run: |
@@ -113,10 +112,9 @@ jobs:
       uses: actions/cache@v2
       with:
         path: target
-        key: cargo-clippy-${{ hashFiles('Cargo.lock') }}
+        key: cargo-clippy-1.7.3-${{ hashFiles('Cargo.lock') }}
         restore-keys: |
-          cargo-clippy-${{ hashFiles('Cargo.lock') }}
-          cargo-clippy
+          cargo-clippy-1.7.3
 
     - name: Install linters
       run: |
@@ -152,10 +150,9 @@ jobs:
         uses: actions/cache@v2
         with:
           path: target
-          key: cargo-tarpaulin-${{ hashFiles('Cargo.lock') }}
+          key: cargo-tarpaulin-1.7.3-${{ hashFiles('Cargo.lock') }}
           restore-keys: |
-            cargo-tarpaulin-${{ hashFiles('Cargo.lock') }}
-            cargo-tarpaulin
+            cargo-tarpaulin-1.7.3
 
       - name: Generate code coverage
         run: |

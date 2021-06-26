@@ -23,10 +23,9 @@ jobs:
         path: |
           target
           multisig/target
-        key: cargo-bpf-${{ hashFiles('Cargo.lock') }}
+        key: cargo-bpf-1.7.3-${{ hashFiles('Cargo.lock') }}
         restore-keys: |
-          cargo-bpf-${{ hashFiles('Cargo.lock') }}
-          cargo-bpf
+          cargo-bpf-1.7.3
 
     - name: Build on-chain BPF programs
       run: |
