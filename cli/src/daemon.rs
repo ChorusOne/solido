@@ -135,14 +135,16 @@ fn run_main_loop(config: &Config, opts: &RunMaintainerOpts, snapshot_mutex: &Sna
                         // Nothing to be done, try again later.
                         do_wait = true;
                     }
-                    Ok(Some(something_done)) => {
-                        println!("{}", something_done);
-                        match something_done {
-                            MaintenanceOutput::StakeDeposit { .. } => {
-                                metrics.transactions_stake_deposit += 1;
-                            }
-                            MaintenanceOutput::UpdateExchangeRate => {
-                                metrics.transactions_update_exchange_rate += 1;
+                    Ok(Some(outputs)) => {
+                        for maintenance_output in outputs.iter() {
+                            match maintenance_output {
+                                MaintenanceOutput::StakeDeposit { .. } => {
+                                    metrics.transactions_stake_deposit += 1;
+                                }
+                                MaintenanceOutput::UpdateExchangeRate => {
+                                    metrics.transactions_update_exchange_rate += 1;
+                                }
+                                _ => {}
                             }
                         }
                     }

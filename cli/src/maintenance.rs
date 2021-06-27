@@ -59,7 +59,6 @@ pub enum MaintenanceOutput {
         to_stake_seed: u64,
     },
 }
-pub type MaintenanceOutputs = Vec<MaintenanceOutput>;
 
 impl fmt::Display for MaintenanceOutput {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -97,6 +96,18 @@ impl fmt::Display for MaintenanceOutput {
                     to_stake, to_stake_seed
                 )?;
             }
+        }
+        Ok(())
+    }
+}
+#[derive(Debug, Eq, PartialEq, Serialize)]
+pub struct MaintenanceOutputs(pub Vec<MaintenanceOutput>);
+
+impl fmt::Display for MaintenanceOutputs {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        for (i, maintenance_ouput) in self.0.iter().enumerate() {
+            writeln!(f, "Instruction {}/{}", i, self.0.len())?;
+            writeln!(f, "{}", maintenance_ouput);
         }
         Ok(())
     }
@@ -268,7 +279,7 @@ impl SolidoState {
     }
 
     /// If there is a deposit that can be staked, return the instruction to do so.
-    pub fn try_stake_deposit(&self) -> Option<(Vec<Instruction>, Vec<MaintenanceOutput>)> {
+    pub fn try_stake_deposit(&self) -> Option<(Vec<Instruction>, MaintenanceOutputs)> {
         let reserve_balance = self.get_effective_reserve();
 
         // If there is enough reserve, we can make a deposit. To keep the pool
@@ -316,7 +327,7 @@ impl SolidoState {
             return None;
         }
 
-        let instructions = Vec::new();
+        let mut instructions = Vec::new();
         instructions.push(
             lido::instruction::stake_deposit(
                 &self.solido_program_id,
@@ -332,15 +343,15 @@ impl SolidoState {
             )
             .expect("Failed to construct StakeDeposit instruction."),
         );
-        let mut tasks = Vec::new();
-        tasks.push(MaintenanceOutput::StakeDeposit {
+        let mut tasks = MaintenanceOutputs(Vec::new());
+        tasks.0.push(MaintenanceOutput::StakeDeposit {
             validator_vote_account: validator.pubkey,
             amount: amount_to_deposit,
         });
 
         // Try to merge with previous account, if there's at least 1 stake account
         if let Some(last_stake) = self.validator_stake_accounts[validator_index].last() {
-            let validator = self.solido.validators.entries[validator_index];
+            let validator = &self.solido.validators.entries[validator_index];
 
             // Stake Account created by this transaction.
             let (from_stake, _bump_seed_end) = Validator::find_stake_account_address(
@@ -359,7 +370,7 @@ impl SolidoState {
                 to_seed,
             );
             instructions.push(merge_instruction);
-            tasks.push(MaintenanceOutput::MergeStake {
+            tasks.0.push(MaintenanceOutput::MergeStake {
                 validator_vote_account: validator.pubkey,
                 from_stake: from_stake,
                 to_stake: last_stake.0,
@@ -403,8 +414,8 @@ impl SolidoState {
             .iter()
             .zip(self.validator_stake_accounts.iter())
         {
-            let instructions = Vec::new();
-            let tasks = Vec::new();
+            let mut instructions = Vec::new();
+            let mut tasks = MaintenanceOutputs(Vec::new());
             // Try to merge from beginning
             if let Some(to_stake) = stake_accounts.iter().next() {
                 let from_stake = stake_accounts[0];
@@ -416,7 +427,7 @@ impl SolidoState {
                         from_stake.1.seed,
                         to_stake.1.seed,
                     ));
-                    tasks.push(MaintenanceOutput::MergeStake {
+                    tasks.0.push(MaintenanceOutput::MergeStake {
                         validator_vote_account: validator.pubkey,
                         from_stake: from_stake.0,
                         to_stake: to_stake.0,
@@ -436,7 +447,7 @@ impl SolidoState {
                         from_stake.1.seed,
                         to_stake.1.seed,
                     ));
-                    tasks.push(MaintenanceOutput::MergeStake {
+                    tasks.0.push(MaintenanceOutput::MergeStake {
                         validator_vote_account: validator.pubkey,
                         from_stake: from_stake.0,
                         to_stake: to_stake.0,
