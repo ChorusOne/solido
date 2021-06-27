@@ -162,7 +162,7 @@ impl Lido {
                 maintainer.key
             );
 
-            return Err(LidoError::InvalidManager.into());
+            return Err(LidoError::InvalidMaintainer.into());
         }
         Ok(())
     }
