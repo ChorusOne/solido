@@ -367,7 +367,7 @@ expected_result = [
         }
     }
 ]
-del result['StakeDeposit'][
+del result[0]['StakeDeposit'][
     'stake_account'
 ]  # This one we can't easily predict, don't compare it.
 assert result == expected_result, f'\nExpected: {expected_result}\nActual:   {result}'
