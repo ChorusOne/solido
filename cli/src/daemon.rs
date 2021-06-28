@@ -72,6 +72,8 @@ impl MaintenanceMetrics {
                         .with_label("operation", "StakeDeposit".to_string()),
                     Metric::new(self.transactions_update_exchange_rate)
                         .with_label("operation", "UpdateExchangeRate".to_string()),
+                    Metric::new(self.transactions_merge_stake)
+                        .with_label("operation", "MergeStake".to_string()),
                 ],
             },
         )?;

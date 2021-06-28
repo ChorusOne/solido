@@ -100,18 +100,6 @@ impl fmt::Display for MaintenanceOutput {
         Ok(())
     }
 }
-#[derive(Debug, Eq, PartialEq, Serialize)]
-pub struct MaintenanceOutputs(pub Vec<MaintenanceOutput>);
-
-impl fmt::Display for MaintenanceOutputs {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        for (i, maintenance_ouput) in self.0.iter().enumerate() {
-            writeln!(f, "Instruction {}/{}", i, self.0.len())?;
-            writeln!(f, "{}", maintenance_ouput)?;
-        }
-        Ok(())
-    }
-}
 
 /// A snapshot of on-chain accounts relevant to Solido.
 pub struct SolidoState {
@@ -152,8 +140,6 @@ pub struct SolidoState {
 
     /// Current state of the maintainer account.
     pub maintainer_account: Account,
-    /// Solido's stake authority' public key.
-    pub stake_authority: Pubkey,
 }
 
 fn get_validator_stake_accounts(
@@ -239,11 +225,6 @@ impl SolidoState {
                 validator,
             )?);
         }
-        let (stake_authority, _bump_seed_authority) = lido::find_authority_program_address(
-            &solido_program_id,
-            &solido_address,
-            STAKE_AUTHORITY,
-        );
 
         // The entity executing the maintenance transactions, is the maintainer.
         // We don't verify here if it is part of the maintainer set, the on-chain
@@ -264,7 +245,6 @@ impl SolidoState {
             clock,
             maintainer_address,
             maintainer_account,
-            stake_authority,
         })
     }
 
@@ -279,7 +259,7 @@ impl SolidoState {
     }
 
     /// If there is a deposit that can be staked, return the instruction to do so.
-    pub fn try_stake_deposit(&self) -> Option<(Vec<Instruction>, MaintenanceOutputs)> {
+    pub fn try_stake_deposit(&self) -> Option<Vec<(Instruction, MaintenanceOutput)>> {
         let reserve_balance = self.get_effective_reserve();
 
         // If there is enough reserve, we can make a deposit. To keep the pool
@@ -327,7 +307,7 @@ impl SolidoState {
             return None;
         }
 
-        let mut instructions = vec![lido::instruction::stake_deposit(
+        let instruction = lido::instruction::stake_deposit(
             &self.solido_program_id,
             &lido::instruction::StakeDepositAccountsMeta {
                 lido: self.solido_address,
@@ -335,58 +315,72 @@ impl SolidoState {
                 reserve: self.reserve_address,
                 validator_vote_account: validator.pubkey,
                 stake_account_end,
-                stake_authority: self.stake_authority,
+                stake_authority: self.get_stake_authority(),
             },
             amount_to_deposit,
         )
-        .expect("Failed to construct StakeDeposit instruction.")];
-        let mut tasks = MaintenanceOutputs(Vec::new());
-        tasks.0.push(MaintenanceOutput::StakeDeposit {
+        .expect("Failed to construct StakeDeposit instruction.");
+        let task = MaintenanceOutput::StakeDeposit {
             validator_vote_account: validator.pubkey,
             amount: amount_to_deposit,
-        });
+        };
+        let mut instructions_output = vec![(instruction, task)];
 
+        let current_stake = StakeAccount {
+            balance: StakeBalance {
+                activating: amount_to_deposit,
+                active: Lamports(0),
+                deactivating: Lamports(0),
+                inactive: Lamports(0),
+            },
+            credits_observed: 0,
+            activation_epoch: self.clock.epoch,
+            seed: validator.entry.stake_accounts_seed_end,
+        };
         // Try to merge with previous account, if there's at least 1 stake account
         if let Some(last_stake) = self.validator_stake_accounts[validator_index].last() {
-            let validator = &self.solido.validators.entries[validator_index];
+            if last_stake.1.can_merge(&current_stake) {
+                let validator = &self.solido.validators.entries[validator_index];
 
-            // Stake Account created by this transaction.
-            let (from_stake, _bump_seed_end) = Validator::find_stake_account_address(
-                &self.solido_program_id,
-                &self.solido_address,
-                &validator.pubkey,
-                validator.entry.stake_accounts_seed_end + 1,
-            );
-
-            let to_seed = validator.entry.stake_accounts_seed_end;
-            let merge_instruction = self.get_merge_instruction(
-                validator.pubkey,
-                from_stake,
-                last_stake.0,
-                to_seed + 1,
-                to_seed,
-            );
-            instructions.push(merge_instruction);
-            tasks.0.push(MaintenanceOutput::MergeStake {
-                validator_vote_account: validator.pubkey,
-                from_stake,
-                to_stake: last_stake.0,
-                from_stake_seed: to_seed + 1,
-                to_stake_seed: to_seed,
-            });
+                let to_seed = validator.entry.stake_accounts_seed_end;
+                let merge_instruction =
+                    self.get_merge_instruction(validator.pubkey, to_seed, to_seed - 1);
+                instructions_output.push((
+                    merge_instruction,
+                    MaintenanceOutput::MergeStake {
+                        validator_vote_account: validator.pubkey,
+                        from_stake: stake_account_end,
+                        to_stake: last_stake.0,
+                        from_stake_seed: to_seed + 1,
+                        to_stake_seed: to_seed,
+                    },
+                ));
+            }
         }
-        Some((instructions, tasks))
+        Some(instructions_output)
     }
 
     /// Get an instruction to merge accounts.
     fn get_merge_instruction(
         &self,
         validator_vote_key: Pubkey,
-        from_stake: Pubkey,
-        to_stake: Pubkey,
         from_seed: u64,
         to_seed: u64,
     ) -> Instruction {
+        // Stake Account created by this transaction.
+        let (from_stake, _bump_seed_end) = Validator::find_stake_account_address(
+            &self.solido_program_id,
+            &self.solido_address,
+            &validator_vote_key,
+            from_seed,
+        );
+        // Stake Account created by this transaction.
+        let (to_stake, _bump_seed_end) = Validator::find_stake_account_address(
+            &self.solido_program_id,
+            &self.solido_address,
+            &validator_vote_key,
+            to_seed,
+        );
         lido::instruction::merge_stake(
             &self.solido_program_id,
             from_seed,
@@ -396,14 +390,14 @@ impl SolidoState {
                 validator_vote_account: validator_vote_key,
                 from_stake,
                 to_stake,
-                stake_authority: self.stake_authority,
+                stake_authority: self.get_stake_authority(),
             },
         )
     }
 
     /// Tries to merge either accounts from the beginning or from the tip of the
     /// validator's stake accounts.  May return None, one or two instructions.
-    pub fn try_merge_on_all_stakes(&self) -> Option<(Vec<Instruction>, MaintenanceOutputs)> {
+    pub fn try_merge_on_all_stakes(&self) -> Option<Vec<(Instruction, MaintenanceOutput)>> {
         for (validator, stake_accounts) in self
             .solido
             .validators
@@ -418,8 +412,6 @@ impl SolidoState {
                 if to_stake.1.can_merge(&from_stake.1) {
                     let instruction = self.get_merge_instruction(
                         validator.pubkey,
-                        from_stake.0,
-                        to_stake.0,
                         from_stake.1.seed,
                         to_stake.1.seed,
                     );
@@ -430,27 +422,7 @@ impl SolidoState {
                         from_stake_seed: from_stake.1.seed,
                         to_stake_seed: to_stake.1.seed,
                     };
-                    return Some((vec![instruction], MaintenanceOutputs(vec![task])));
-                }
-                // Try to merge from end
-                let from_stake = stake_accounts[stake_accounts.len() - 1];
-                let to_stake = stake_accounts[stake_accounts.len() - 2];
-                if to_stake.1.can_merge(&from_stake.1) {
-                    let instruction = self.get_merge_instruction(
-                        validator.pubkey,
-                        from_stake.0,
-                        to_stake.0,
-                        from_stake.1.seed,
-                        to_stake.1.seed,
-                    );
-                    let task = MaintenanceOutput::MergeStake {
-                        validator_vote_account: validator.pubkey,
-                        from_stake: from_stake.0,
-                        to_stake: to_stake.0,
-                        from_stake_seed: from_stake.1.seed,
-                        to_stake_seed: to_stake.1.seed,
-                    };
-                    return Some((vec![instruction], MaintenanceOutputs(vec![task])));
+                    return Some(vec![(instruction, task)]);
                 }
             }
         }
@@ -614,6 +586,14 @@ impl SolidoState {
 
         Ok(())
     }
+    fn get_stake_authority(&self) -> Pubkey {
+        let (stake_authority, _bump_seed_authority) = lido::find_authority_program_address(
+            &self.solido_program_id,
+            &self.solido_address,
+            STAKE_AUTHORITY,
+        );
+        stake_authority
+    }
 }
 
 pub fn try_perform_maintenance(
@@ -642,15 +622,21 @@ pub fn try_perform_maintenance(
         .or_else(|| state.try_update_exchange_rate())
         .or_else(|| state.try_stake_deposit());
 
-    let (instr, description) = match instructions {
-        Some(x) => x,
-        None => return Ok(None),
-    };
-
-    // For maintenance operations, the maintainer is the only signer,
-    // and that should be sufficient.
-    sign_and_send_transaction(config, &instr, &[config.signer])?;
-    Ok(Some(description))
+    match instructions_outputs {
+        Some(x) => {
+            let mut instructions = vec![];
+            let mut outputs = vec![];
+            for (instr, mo) in x {
+                instructions.push(instr);
+                outputs.push(mo);
+            }
+            // For maintenance operations, the maintainer is the only signer,
+            // and that should be sufficient.
+            sign_and_send_transaction(config, &instructions, &[config.signer])?;
+            Ok(Some(outputs))
+        }
+        None => Ok(None),
+    }
 }
 
 /// Inspect the on-chain Solido state, and if there is maintenance that can be
@@ -662,7 +648,7 @@ pub fn try_perform_maintenance(
 pub fn run_perform_maintenance(
     config: &Config,
     opts: &PerformMaintenanceOpts,
-) -> Result<Option<MaintenanceOutputs>> {
+) -> Result<Option<Vec<MaintenanceOutput>>> {
     let state = SolidoState::new(config, opts.solido_program_id(), opts.solido_address())?;
     try_perform_maintenance(config, &state)
 }
@@ -686,7 +672,6 @@ mod test {
             clock: Clock::default(),
             maintainer_address: Pubkey::new_unique(),
             maintainer_account: Account::default(),
-            stake_authority: Pubkey::new_unique(),
         };
 
         // The reserve should be rent-exempt.
