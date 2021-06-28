@@ -747,6 +747,7 @@ mod test {
             .validators
             .add(Pubkey::new_unique(), Validator::new(Pubkey::new_unique()))
             .unwrap();
+        state.validator_stake_accounts = vec![vec![], vec![]];
 
         // Put enough SOL in the reserve that we can stake half of the deposit
         // with each of the validators, and still be above the minimum stake
