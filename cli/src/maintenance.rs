@@ -698,7 +698,7 @@ mod test {
             .validators
             .add(Pubkey::new_unique(), Validator::new(Pubkey::new_unique()))
             .unwrap();
-
+        state.validator_stake_accounts.push(vec![]);
         // Put some SOL in the reserve, but not enough to stake.
         state.reserve_account.lamports += MINIMUM_STAKE_ACCOUNT_BALANCE.0 - 1;
 
