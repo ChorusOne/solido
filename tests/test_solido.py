@@ -366,7 +366,7 @@ expected_result = [
             'amount_lamports': int(10.0e9),
         }
     }
-}
+]
 del result['StakeDeposit'][
     'stake_account'
 ]  # This one we can't easily predict, don't compare it.

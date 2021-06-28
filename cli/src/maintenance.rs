@@ -323,6 +323,7 @@ impl SolidoState {
         let task = MaintenanceOutput::StakeDeposit {
             validator_vote_account: validator.pubkey,
             amount: amount_to_deposit,
+            stake_account: stake_account_end,
         };
         let mut instructions_output = vec![(instruction, task)];
 
@@ -430,7 +431,7 @@ impl SolidoState {
     }
 
     /// If a new epoch started, and we haven't updated the exchange rate yet, do so.
-    pub fn try_update_exchange_rate(&self) -> Option<(Instruction, MaintenanceOutput)> {
+    pub fn try_update_exchange_rate(&self) -> Option<Vec<(Instruction, MaintenanceOutput)>> {
         if self.solido.exchange_rate.computed_in_epoch >= self.clock.epoch {
             // The exchange rate has already been updated in this epoch, nothing to do.
             return None;
@@ -446,7 +447,7 @@ impl SolidoState {
         );
         let task = MaintenanceOutput::UpdateExchangeRate;
 
-        Some((instruction, task))
+        Some(vec![(instruction, task)])
     }
 
     /// Write metrics about the current Solido instance in Prometheus format.
@@ -617,7 +618,7 @@ pub fn try_perform_maintenance(
 
     // Try all of these operations one by one, and select the first one that
     // produces an instruction.
-    let instructions: Option<(Vec<Instruction>, MaintenanceOutputs)> = None
+    let instructions_outputs: Option<Vec<(Instruction, MaintenanceOutput)>> = None
         .or_else(|| state.try_merge_on_all_stakes())
         .or_else(|| state.try_update_exchange_rate())
         .or_else(|| state.try_stake_deposit());
@@ -748,7 +749,7 @@ mod test {
 
         // The first attempt should stake with the first validator.
         assert_eq!(
-            state.try_stake_deposit().unwrap().1,
+            state.try_stake_deposit().unwrap()[0].1,
             MaintenanceOutput::StakeDeposit {
                 validator_vote_account: state.solido.validators.entries[0].pubkey,
                 amount: (MINIMUM_STAKE_ACCOUNT_BALANCE * 2).unwrap(),
@@ -774,7 +775,7 @@ mod test {
         // The second attempt should stake with the second validator, and the amount
         // should be the same as before.
         assert_eq!(
-            state.try_stake_deposit().unwrap().1,
+            state.try_stake_deposit().unwrap()[0].1,
             MaintenanceOutput::StakeDeposit {
                 validator_vote_account: state.solido.validators.entries[1].pubkey,
                 amount: (MINIMUM_STAKE_ACCOUNT_BALANCE * 2).unwrap(),
