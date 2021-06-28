@@ -354,7 +354,7 @@ mod test{
     use solana_program::{account_info::AccountInfo, instruction::AccountMeta};
 
     #[test]
-    fn accounts_struct_only_pub_roundtrips() {
+    fn accounts_struct_only_pub() {
         accounts_struct! {
             TestAccountsMeta, TestAccountsInfo {
                 pub s0_w0 { is_signer: false, is_writable: false, },
@@ -444,6 +444,29 @@ mod test{
         account_infos[0].is_signer = true;
         account_infos[0].is_writable = true;
         assert!(TestAccountsInfo::try_from_slice(&account_infos[..]).is_ok());
+    }
+
+    #[test]
+    fn accounts_struct_with_const() {
+        use solana_program::sysvar::clock;
+        accounts_struct! {
+            TestAccountsMeta, TestAccountsInfo {
+                pub not_sysvar { is_signer: false, is_writable: false, },
+                const clock = clock::id(),
+            }
+        }
+
+        let input = TestAccountsMeta {
+            not_sysvar: Pubkey::new_unique(),
+        };
+        let account_metas: Vec<AccountMeta> = input.to_vec();
+
+        assert_eq!(account_metas[0].pubkey, input.not_sysvar);
+        assert_eq!(account_metas[1].pubkey, clock::id());
+
+        // Sysvars are never writable or signers.
+        assert_eq!(account_metas[1].is_signer, false);
+        assert_eq!(account_metas[1].is_writable, false);
     }
 }
 
