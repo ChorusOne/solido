@@ -359,10 +359,12 @@ result = solido(
     solido_program_id,
     keypair_path=maintainer.keypair_path,
 )
-expected_result = {
-    'StakeDeposit': {
-        'validator_vote_account': validator_vote_account.pubkey,
-        'amount_lamports': int(10.0e9),
+expected_result = [
+    {
+        'StakeDeposit': {
+            'validator_vote_account': validator_vote_account.pubkey,
+            'amount_lamports': int(10.0e9),
+        }
     }
 }
 del result['StakeDeposit'][
