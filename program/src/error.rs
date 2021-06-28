@@ -107,6 +107,10 @@ pub enum LidoError {
     /// or its mint did not match.
     #[error("InvalidStSolAccount")]
     InvalidStSolAccount,
+
+    /// The exchange rate has already been updated this epoch.
+    #[error("ExchangeRateAlreadyUpToDate")]
+    ExchangeRateAlreadyUpToDate,
 }
 impl From<LidoError> for ProgramError {
     fn from(e: LidoError) -> Self {

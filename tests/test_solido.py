@@ -147,7 +147,11 @@ solido_instance = solido(
     solido_address,
 )
 assert solido_instance['solido']['manager'] == multisig_pda
-assert solido_instance['solido']['st_sol_total_shares'] == 0
+assert solido_instance['solido']['exchange_rate'] == {
+    'computed_in_epoch': 0,
+    'st_sol_supply': 0,
+    'sol_balance': 0,
+}
 assert solido_instance['solido']['fee_distribution'] == {
     'treasury_fee': 5,
     'validation_fee': 3,

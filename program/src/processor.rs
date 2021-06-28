@@ -6,11 +6,9 @@ use crate::{
     error::LidoError,
     instruction::{
         DepositAccountsInfo, InitializeAccountsInfo, LidoInstruction, StakeDepositAccountsInfo,
+        UpdateExchangeRateAccountsInfo,
     },
-    logic::{
-        calc_total_lamports, check_rent_exempt, deserialize_lido, get_reserve_available_amount,
-        token_mint_to,
-    },
+    logic::{check_rent_exempt, deserialize_lido, get_reserve_available_balance, token_mint_to},
     process_management::{
         process_add_maintainer, process_add_validator, process_change_fee_spec,
         process_claim_validator_fee, process_distribute_fees, process_remove_maintainer,
@@ -28,15 +26,18 @@ use {
     borsh::BorshDeserialize,
     solana_program::{
         account_info::AccountInfo,
+        clock::Clock,
         entrypoint::ProgramResult,
         msg,
         program::{invoke, invoke_signed},
         program_error::ProgramError,
+        program_pack::Pack,
         pubkey::Pubkey,
         rent::Rent,
         system_instruction,
         sysvar::Sysvar,
     },
+    spl_token::state::Mint,
 };
 
 /// Program state handler.
@@ -110,14 +111,11 @@ pub fn process_deposit(
         return Err(ProgramError::InvalidArgument);
     }
 
-    let mut lido = deserialize_lido(program_id, accounts.lido)?;
+    let lido = deserialize_lido(program_id, accounts.lido)?;
 
     lido.check_is_st_sol_account(&accounts.recipient)?;
     lido.check_reserve_authority(program_id, accounts.lido.key, accounts.reserve_account)?;
 
-    let rent = &Rent::from_account_info(accounts.sysvar_rent)?;
-
-    let total_lamports = calc_total_lamports(&lido, accounts.reserve_account, rent)?;
     invoke(
         &system_instruction::transfer(accounts.user.key, accounts.reserve_account.key, amount.0),
         &[
@@ -128,7 +126,8 @@ pub fn process_deposit(
     )?;
 
     let st_sol_amount = lido
-        .calc_pool_tokens_for_deposit(amount, total_lamports)
+        .exchange_rate
+        .exchange_sol(amount)
         .ok_or(LidoError::CalculationFailure)?;
 
     token_mint_to(
@@ -141,12 +140,8 @@ pub fn process_deposit(
         lido.sol_reserve_authority_bump_seed,
         st_sol_amount,
     )?;
-    let total_st_sol =
-        (lido.st_sol_total_shares + st_sol_amount).ok_or(LidoError::CalculationFailure)?;
 
-    lido.st_sol_total_shares = total_st_sol;
-
-    lido.save(accounts.lido)
+    Ok(())
 }
 
 pub fn process_stake_deposit(
@@ -156,7 +151,7 @@ pub fn process_stake_deposit(
 ) -> ProgramResult {
     let accounts = StakeDepositAccountsInfo::try_from_slice(raw_accounts)?;
 
-    let rent = &Rent::from_account_info(accounts.sysvar_rent)?;
+    let rent = Rent::from_account_info(accounts.sysvar_rent)?;
     let mut lido = deserialize_lido(program_id, accounts.lido)?;
     lido.check_maintainer(accounts.maintainer)?;
 
@@ -170,7 +165,7 @@ pub fn process_stake_deposit(
         return Err(LidoError::InvalidAmount.into());
     }
 
-    let available_reserve_amount = get_reserve_available_amount(accounts.reserve, rent)?;
+    let available_reserve_amount = get_reserve_available_balance(&rent, accounts.reserve)?;
     if amount > available_reserve_amount {
         msg!("The requested amount {} is greater than the available amount {}, considering rent-exemption", amount, available_reserve_amount);
         return Err(LidoError::AmountExceedsReserve.into());
@@ -321,6 +316,35 @@ pub fn process_stake_deposit(
     lido.save(accounts.lido)
 }
 
+pub fn process_update_exchange_rate(
+    program_id: &Pubkey,
+    raw_accounts: &[AccountInfo],
+) -> ProgramResult {
+    let accounts = UpdateExchangeRateAccountsInfo::try_from_slice(raw_accounts)?;
+    let mut lido = deserialize_lido(program_id, accounts.lido)?;
+    lido.check_mint_is_st_sol_mint(accounts.st_sol_mint)?;
+    lido.check_reserve_authority(program_id, accounts.lido.key, accounts.reserve)?;
+
+    let clock = Clock::from_account_info(accounts.sysvar_clock)?;
+    let rent = Rent::from_account_info(accounts.sysvar_rent)?;
+    let st_sol_mint = Mint::unpack_from_slice(&accounts.st_sol_mint.data.borrow())?;
+
+    if lido.exchange_rate.computed_in_epoch >= clock.epoch {
+        msg!(
+            "The exchange rate was already updated in epoch {}.",
+            lido.exchange_rate.computed_in_epoch
+        );
+        msg!("It can only be done once per epoch, so we are going to abort this transaction.");
+        return Err(LidoError::ExchangeRateAlreadyUpToDate.into());
+    }
+
+    lido.exchange_rate.computed_in_epoch = clock.epoch;
+    lido.exchange_rate.st_sol_supply = StLamports(st_sol_mint.supply);
+    lido.exchange_rate.sol_balance = lido.get_sol_balance(&rent, accounts.reserve)?;
+
+    lido.save(accounts.lido)
+}
+
 // TODO(#93) Implement withdraw
 pub fn process_withdraw(
     _program_id: &Pubkey,
@@ -350,6 +374,7 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
         LidoInstruction::StakeDeposit { amount } => {
             process_stake_deposit(program_id, amount, accounts)
         }
+        LidoInstruction::UpdateExchangeRate => process_update_exchange_rate(program_id, accounts),
         LidoInstruction::Withdraw { amount } => process_withdraw(program_id, amount, accounts),
         LidoInstruction::DistributeFees => process_distribute_fees(program_id, accounts),
         LidoInstruction::ClaimValidatorFees => process_claim_validator_fee(program_id, accounts),

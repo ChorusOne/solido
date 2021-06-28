@@ -29,7 +29,9 @@ pub enum LidoInstruction {
         #[allow(dead_code)] // but it's not
         max_maintainers: u32,
     },
-    /// Deposit with amount
+    /// Deposit a given amount of SOL.
+    ///
+    /// This can be called by anybody.
     Deposit {
         #[allow(dead_code)] // but it's not
         amount: Lamports,
@@ -42,6 +44,10 @@ pub enum LidoInstruction {
         #[allow(dead_code)] // but it's not
         amount: Lamports,
     },
+    /// Update the exchange rate, at the beginning of the epoch.
+    ///
+    /// This can be called by anybody.
+    UpdateExchangeRate,
     Withdraw {
         #[allow(dead_code)] // but it's not
         amount: StLamports,
@@ -362,7 +368,9 @@ accounts_struct! {
     DepositAccountsMeta, DepositAccountsInfo {
         pub lido {
             is_signer: false,
-            is_writable: true,
+            // TODO(glottologist): This will need to be writable again once we
+            // start storing metrics about deposits in the Solido state.
+            is_writable: false,
         },
         pub user {
             is_signer: true,
@@ -382,7 +390,6 @@ accounts_struct! {
         },
         const spl_token = spl_token::id(),
         const system_program = system_program::id(),
-        const sysvar_rent = sysvar::rent::id(),
     }
 }
 
@@ -449,6 +456,38 @@ pub fn stake_deposit(
         accounts: accounts.to_vec(),
         data,
     })
+}
+
+accounts_struct! {
+    UpdateExchangeRateAccountsMeta, UpdateExchangeRateAccountsInfo {
+        pub lido {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub reserve {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub st_sol_mint {
+            is_signer: false,
+            is_writable: false,
+        },
+        const sysvar_clock = sysvar::clock::id(),
+        const sysvar_rent = sysvar::rent::id(),
+    }
+}
+
+pub fn update_exchange_rate(
+    program_id: &Pubkey,
+    accounts: &UpdateExchangeRateAccountsMeta,
+) -> Instruction {
+    // There is no reason why `try_to_vec` should fail here.
+    let data = LidoInstruction::UpdateExchangeRate.try_to_vec().unwrap();
+    Instruction {
+        program_id: *program_id,
+        accounts: accounts.to_vec(),
+        data,
+    }
 }
 
 // Changes the Fee spec

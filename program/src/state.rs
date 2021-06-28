@@ -6,27 +6,126 @@ use std::ops::Sub;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use solana_program::borsh::get_instance_packed_len;
 use solana_program::{
-    account_info::AccountInfo, entrypoint::ProgramResult, msg, program_error::ProgramError,
-    program_pack::Pack, pubkey::Pubkey,
+    account_info::AccountInfo, clock::Epoch, entrypoint::ProgramResult, msg,
+    program_error::ProgramError, program_pack::Pack, pubkey::Pubkey, rent::Rent,
 };
 
 use crate::account_map::{AccountMap, AccountSet, PubkeyAndEntry};
 use crate::error::LidoError;
+use crate::logic::get_reserve_available_balance;
 use crate::token::{Lamports, Rational, StLamports};
 use crate::util::serialize_b58;
 use crate::RESERVE_AUTHORITY;
 use crate::VALIDATOR_STAKE_ACCOUNT;
 
 pub const LIDO_VERSION: u8 = 0;
-/// Constant size of header size = 1 version,2 public keys, 1 u64, 2 u8
-pub const LIDO_CONSTANT_HEADER_SIZE: usize = 1 + 2 * 32 + 8 + 2;
-/// Constant size of fee struct: 2 public keys + 3 u32
-pub const LIDO_CONSTANT_FEE_SIZE: usize = 2 * 32 + 3 * 4;
-/// Constant size of Lido
-pub const LIDO_CONSTANT_SIZE: usize = LIDO_CONSTANT_HEADER_SIZE + LIDO_CONSTANT_FEE_SIZE;
+
+/// Size of a serialized `Lido` struct excluding validators and maintainers.
+///
+/// To update this, run the tests and replace the value here with the test output.
+pub const LIDO_CONSTANT_SIZE: usize = 167;
 
 pub type Validators = AccountMap<Validator>;
 pub type Maintainers = AccountSet;
+
+/// The exchange rate used for deposits and rewards distribution.
+///
+/// The exchange rate of SOL to stSOL is determined by the SOL balance of
+/// Solido, and the total stSOL supply: every stSOL represents a share of
+/// ownership of the SOL pool.
+///
+/// Deposits do not change the exchange rate: we mint new stSOL proportional to
+/// the amount deposited, to keep the exchange rate constant. However, rewards
+/// *do* change the exchange rate. This is how rewards get distributed to stSOL
+/// holders without any transactions: their stSOL will be worth more SOL.
+///
+/// Let's call an increase of the SOL balance that mints a proportional amount
+/// of stSOL a *deposit*, and an increase of the SOL balance that does not mint
+/// any stSOL a *donation*. The ordering of donations relative to one another is
+/// not relevant, and the order of deposits relative to one another is not
+/// relevant either. But the order of deposits relative to donations is: if you
+/// deposit before a donation, you get more stSOL than when you deposit after.
+/// If you deposit before, you benefit from the reward, if you deposit after,
+/// you do not. In formal terms, *deposit and and donate do not commute*.
+///
+/// This presents a problem if we want to do rewards distribution in multiple
+/// steps (one step per validator). Reward distribution is a combination of a
+/// donation (the observed rewards minus fees), and a deposit (the fees, which
+/// get paid as stSOL). Because deposit and donate do not commute, different
+/// orders of observing validator rewards would lead to different outcomes. We
+/// don't want that.
+///
+/// To resolve this, we use a fixed exchange rate, and update it once per epoch.
+/// This means that a donation no longer changes the exchange rate (not
+/// instantly at least). That means that we can observe validator rewards in any
+/// order we like. A different way of thinking about this, is that by fixing
+/// the exchange rate for the duration of the epoch, all the different ways of
+/// ordering donations and deposits have the same outcome, so every sequence of
+/// deposits and donations is equivalent to one where they all happen
+/// simultaneously at the start of the epoch. Time within an epoch ceases to
+/// exist, the only thing relevant is the epoch.
+///
+/// When we update the exchange rate, we set the values to the balance that we
+/// inferred by tracking all changes. This does not include any external
+/// modifications (validation rewards paid into stake accounts) that were not
+/// yet observed at the time of the update.
+///
+/// When we observe the actual validator balance in `UpdateValidatorBalance`,
+/// the difference between the tracked balance and the observed balance, is the
+/// reward. We split this reward into a fee part, and a donation part, and
+/// update the tracked balances accordingly. This does not by itself change the
+/// exchange rate, but the new values will be used in the next exchange rate
+/// update.
+///
+/// `UpdateValidatorBalance` is blocked in a given epoch, until we update the
+/// exchange rate in that epoch. Validation rewards are distributed at the start
+/// of the epoch. This means that in epoch `i`:
+///
+/// 1. `UpdateExchangeRate` updates the exchange rate to what it was at the end
+///    of epoch `i - 1`.
+/// 2. `UpdateValidatorBalance` runs for every validator, and observes the
+///    rewards. Deposits (including those for fees) in epoch `i` therefore use
+///    the exchange rate at the end of epoch `i - 1`, so deposits in epoch `i`
+///    do not benefit from rewards received in epoch `i`.
+/// 3. Epoch `i + 1` starts, and validation rewards are paid into stake accounts.
+/// 4. `UpdateExchangeRate` updates the exchange rate to what it was at the end
+///    of epoch `i`. Everybody who deposited in epoch `i` (users, as well as fee
+///    recipients) now benefit from the validation rewards received in epoch `i`.
+/// 5. Etc.
+#[repr(C)]
+#[derive(
+    Clone, Debug, Default, BorshDeserialize, BorshSerialize, BorshSchema, Eq, PartialEq, Serialize,
+)]
+pub struct ExchangeRate {
+    /// The epoch in which we last called `UpdateExchangeRate`.
+    pub computed_in_epoch: Epoch,
+
+    /// The amount of stSOL that existed at that time.
+    pub st_sol_supply: StLamports,
+
+    /// The amount of SOL we managed at that time, according to our internal
+    /// bookkeeping, so excluding the validation rewards paid at the start of
+    /// epoch `computed_in_epoch`.
+    pub sol_balance: Lamports,
+}
+
+impl ExchangeRate {
+    pub fn exchange_sol(&self, amount: Lamports) -> Option<StLamports> {
+        // The exchange rate starts out at 1:1, if there are no deposits yet.
+        if self.sol_balance == Lamports(0) {
+            return Some(StLamports(amount.0));
+        }
+
+        let rate = Rational {
+            numerator: self.st_sol_supply.0,
+            denominator: self.sol_balance.0,
+        };
+        // The result is in Lamports, because the type system considers Rational
+        // dimensionless, but in this case `rate` has dimensions stSOL/SOL, so
+        // we need to re-wrap the result in the right type.
+        (amount * rate).map(|x| StLamports(x.0))
+    }
+}
 
 #[repr(C)]
 #[derive(
@@ -35,6 +134,7 @@ pub type Maintainers = AccountSet;
 pub struct Lido {
     /// Version number for the Lido
     pub lido_version: u8,
+
     /// Manager of the Lido program, able to execute administrative functions
     #[serde(serialize_with = "serialize_b58")]
     pub manager: Pubkey,
@@ -43,8 +143,8 @@ pub struct Lido {
     #[serde(serialize_with = "serialize_b58")]
     pub st_sol_mint: Pubkey,
 
-    /// Total Lido tokens in circulation
-    pub st_sol_total_shares: StLamports,
+    /// Exchange rate to use when depositing.
+    pub exchange_rate: ExchangeRate,
 
     /// Bump seeds for signing messages on behalf of the authority
     pub sol_reserve_authority_bump_seed: u8,
@@ -78,20 +178,6 @@ impl Lido {
             ..Default::default()
         };
         get_instance_packed_len(&lido_instance).unwrap()
-    }
-    pub fn calc_pool_tokens_for_deposit(
-        &self,
-        stake_lamports: Lamports,
-        total_lamports: Lamports,
-    ) -> Option<StLamports> {
-        if total_lamports == Lamports(0) {
-            return Some(StLamports(stake_lamports.0));
-        }
-        let ratio = Rational {
-            numerator: self.st_sol_total_shares.0,
-            denominator: total_lamports.0,
-        };
-        StLamports(stake_lamports.0) * ratio
     }
 
     pub fn is_initialized(&self) -> ProgramResult {
@@ -208,6 +294,34 @@ impl Lido {
         // ProgramTest matches the name of the crate.
         BorshSerialize::serialize(self, &mut *account.data.borrow_mut())?;
         Ok(())
+    }
+
+    /// Compute the total amount of SOL managed by this instance.
+    ///
+    /// This includes staked as well as non-staked SOL. It excludes SOL in the
+    /// reserve that effectively locked because it is needed to keep the reserve
+    /// rent-exempt.
+    ///
+    /// The computation is based on the amount of SOL per validator that we track
+    /// ourselves, so if there are any unobserved rewards in the stake accounts,
+    /// these will not be included.
+    pub fn get_sol_balance(
+        &self,
+        rent: &Rent,
+        reserve: &AccountInfo,
+    ) -> Result<Lamports, LidoError> {
+        let effective_reserve_balance = get_reserve_available_balance(rent, reserve)?;
+
+        // The remaining SOL managed is all in stake accounts.
+        let validator_balance: Option<Lamports> = self
+            .validators
+            .iter_entries()
+            .map(|v| v.stake_accounts_balance)
+            .sum();
+
+        validator_balance
+            .and_then(|s| s + effective_reserve_balance)
+            .ok_or(LidoError::CalculationFailure)
     }
 }
 
@@ -398,6 +512,24 @@ mod test_lido {
     }
 
     #[test]
+    fn test_lido_constant_size() {
+        // The minimal size of the struct is its size without any validators and
+        // maintainers.
+        let minimal = Lido::default();
+        let mut data = Vec::new();
+        BorshSerialize::serialize(&minimal, &mut data).unwrap();
+
+        let num_entries = 0;
+        let size_validators = Validators::required_bytes(num_entries);
+        let size_maintainers = Maintainers::required_bytes(num_entries);
+
+        assert_eq!(
+            data.len() - size_validators - size_maintainers,
+            LIDO_CONSTANT_SIZE
+        );
+    }
+
+    #[test]
     fn test_lido_serialization_roundtrips() {
         use solana_sdk::borsh::try_from_slice_unchecked;
 
@@ -410,7 +542,11 @@ mod test_lido {
             lido_version: 0,
             manager: Pubkey::new_unique(),
             st_sol_mint: Pubkey::new_unique(),
-            st_sol_total_shares: StLamports(1000),
+            exchange_rate: ExchangeRate {
+                computed_in_epoch: 11,
+                sol_balance: Lamports(13),
+                st_sol_supply: StLamports(17),
+            },
             sol_reserve_authority_bump_seed: 1,
             deposit_authority_bump_seed: 2,
             fee_distribution: FeeDistribution {
@@ -440,43 +576,20 @@ mod test_lido {
     }
 
     #[test]
-    fn test_pool_tokens_when_total_lamports_is_zero() {
-        let lido = Lido::default();
-
-        let pool_tokens_for_deposit = lido.calc_pool_tokens_for_deposit(Lamports(123), Lamports(0));
-
-        assert_eq!(pool_tokens_for_deposit, Some(StLamports(123)));
+    fn test_exchange_when_sol_balance_is_zero() {
+        let rate = ExchangeRate::default();
+        assert_eq!(rate.exchange_sol(Lamports(123)), Some(StLamports(123)));
     }
 
     #[test]
-    fn test_pool_tokens_when_st_sol_total_shares_is_default() {
-        let lido = Lido::default();
-
-        let pool_tokens_for_deposit =
-            lido.calc_pool_tokens_for_deposit(Lamports(200), Lamports(100));
-
-        assert_eq!(pool_tokens_for_deposit, Some(StLamports(0)));
-    }
-
-    #[test]
-    fn test_pool_tokens_when_st_sol_total_shares_is_increased() {
-        let mut lido = Lido::default();
-        lido.st_sol_total_shares = StLamports(120);
-
-        let pool_tokens_for_deposit =
-            lido.calc_pool_tokens_for_deposit(Lamports(200), Lamports(40));
-
-        assert_eq!(pool_tokens_for_deposit, Some(StLamports(600)));
-    }
-
-    #[test]
-    fn test_pool_tokens_when_stake_lamports_is_zero() {
-        let mut lido = Lido::default();
-        lido.st_sol_total_shares = StLamports(120);
-
-        let pool_tokens_for_deposit = lido.calc_pool_tokens_for_deposit(Lamports(0), Lamports(40));
-
-        assert_eq!(pool_tokens_for_deposit, Some(StLamports(0)));
+    fn test_exchange_when_rate_is_one_to_two() {
+        let rate = ExchangeRate {
+            computed_in_epoch: 0,
+            sol_balance: Lamports(2),
+            st_sol_supply: StLamports(1),
+        };
+        // If every stSOL is worth 1 SOL, I should get half my SOL amount in stSOL.
+        assert_eq!(rate.exchange_sol(Lamports(44)), Some(StLamports(22)));
     }
 
     #[test]
@@ -507,6 +620,60 @@ mod test_lido {
 
         let expected_error: ProgramError = LidoError::InvalidStSolAccount.into();
         assert_eq!(result, Err(expected_error));
+    }
+
+    #[test]
+    fn test_get_sol_balance() {
+        use std::cell::RefCell;
+        use std::rc::Rc;
+
+        let rent = &Rent::default();
+        let mut lido = Lido::default();
+        let key = Pubkey::default();
+        let mut amount = rent.minimum_balance(0);
+        let mut reserve_account =
+            AccountInfo::new(&key, true, true, &mut amount, &mut [], &key, false, 0);
+
+        assert_eq!(
+            lido.get_sol_balance(&rent, &reserve_account),
+            Ok(Lamports(0))
+        );
+
+        let mut new_amount = rent.minimum_balance(0) + 10;
+        reserve_account.lamports = Rc::new(RefCell::new(&mut new_amount));
+
+        assert_eq!(
+            lido.get_sol_balance(&rent, &reserve_account),
+            Ok(Lamports(10))
+        );
+
+        lido.validators.maximum_entries = 1;
+        lido.validators
+            .add(Pubkey::new_unique(), Validator::new(Pubkey::new_unique()))
+            .unwrap();
+        lido.validators.entries[0].entry.stake_accounts_balance = Lamports(37);
+        assert_eq!(
+            lido.get_sol_balance(&rent, &reserve_account),
+            Ok(Lamports(10 + 37))
+        );
+
+        lido.validators.entries[0].entry.stake_accounts_balance = Lamports(u64::MAX);
+
+        assert_eq!(
+            lido.get_sol_balance(&rent, &reserve_account),
+            Err(LidoError::CalculationFailure)
+        );
+
+        let mut new_amount = u64::MAX;
+        reserve_account.lamports = Rc::new(RefCell::new(&mut new_amount));
+        // The amount here is more than the rent exemption that gets discounted
+        // from the reserve, causing an overflow.
+        lido.validators.entries[0].entry.stake_accounts_balance = Lamports(5_000_000);
+
+        assert_eq!(
+            lido.get_sol_balance(&rent, &reserve_account),
+            Err(LidoError::CalculationFailure)
+        );
     }
 
     #[test]

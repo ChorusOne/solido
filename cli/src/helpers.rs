@@ -306,12 +306,25 @@ impl fmt::Display for ShowSolidoOutput {
             "stSOL mint:                  {}",
             self.solido.st_sol_mint
         )?;
+
+        writeln!(f, "\nExchange rate:")?;
         writeln!(
             f,
-            "Total supply of stSOL:       {}",
-            self.solido.st_sol_total_shares
+            "  Computed in epoch: {}",
+            self.solido.exchange_rate.computed_in_epoch
         )?;
-        writeln!(f, "Authorities (public key, bump seed):")?;
+        writeln!(
+            f,
+            "  SOL balance:       {}",
+            self.solido.exchange_rate.sol_balance
+        )?;
+        writeln!(
+            f,
+            "  stSOL supply:      {}",
+            self.solido.exchange_rate.st_sol_supply
+        )?;
+
+        writeln!(f, "\nAuthorities (public key, bump seed):")?;
         writeln!(
             f,
             "Reserve:     {}, {}",
@@ -352,10 +365,10 @@ impl fmt::Display for ShowSolidoOutput {
             "Developer fee SPL token account: {}",
             self.solido.fee_recipients.developer_account
         )?;
-        writeln!(f)?;
+
         writeln!(
             f,
-            "Validators: {} in use out of {} that the instance can support",
+            "\nValidators: {} in use out of {} that the instance can support",
             self.solido.validators.len(),
             self.solido.validators.maximum_entries
         )?;
@@ -368,7 +381,7 @@ impl fmt::Display for ShowSolidoOutput {
         }
         writeln!(
             f,
-            "Maintainers: {} in use out of {} that the instance can support",
+            "\nMaintainers: {} in use out of {} that the instance can support",
             self.solido.maintainers.len(),
             self.solido.maintainers.maximum_entries
         )?;
