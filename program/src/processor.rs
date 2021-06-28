@@ -1,5 +1,6 @@
 //! Program state processor
 
+use spl_stake_pool::stake_program;
 
 use crate::{
     error::LidoError,
