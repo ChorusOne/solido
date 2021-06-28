@@ -337,6 +337,17 @@ macro_rules! accounts_struct {
                             );
                             return Err(LidoError::InvalidAccountInfo.into());
                         }
+                        // Also confirm that the account passed is the hard-coded
+                        // one that we expected.
+                        if $const_account.key != $const_value {
+                            msg!(
+                                "Account {} was expected to be set to {}, but found {} instead.",
+                                stringify!($const_account),
+                                $const_value,
+                                $const_account.key,
+                            );
+                            return Err(LidoError::InvalidAccountInfo.into());
+                        }
                     )*
                 )?
 
