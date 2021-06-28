@@ -255,6 +255,31 @@ impl Lido {
         Ok(())
     }
 
+    /// Check if the passed treasury fee account is the one configured.
+    ///
+    /// Also confirm that the recipient is still an stSOL account.
+    pub fn check_treasury_fee_st_sol_account(&self, st_sol_account: &AccountInfo) -> ProgramResult {
+        if &self.fee_recipients.treasury_account != st_sol_account.key {
+            msg!("Invalid treasury fee stSOL account, not the same as the one stored in state.");
+            return Err(LidoError::InvalidFeeRecipient.into());
+        }
+        self.check_is_st_sol_account(st_sol_account)
+    }
+
+    /// Check if the passed developer fee account is the one configured.
+    ///
+    /// Also confirm that the recipient is still an stSOL account.
+    pub fn check_developer_fee_st_sol_account(
+        &self,
+        st_sol_account: &AccountInfo,
+    ) -> ProgramResult {
+        if &self.fee_recipients.developer_account != st_sol_account.key {
+            msg!("Invalid developer fee stSOL account, not the same as the one stored in state.");
+            return Err(LidoError::InvalidFeeRecipient.into());
+        }
+        self.check_is_st_sol_account(st_sol_account)
+    }
+
     /// Return the address of the reserve account, the account where SOL gets
     /// deposited into.
     pub fn get_reserve_account(

@@ -112,6 +112,14 @@ pub enum LidoError {
     /// The exchange rate has already been updated this epoch.
     #[error("ExchangeRateAlreadyUpToDate")]
     ExchangeRateAlreadyUpToDate,
+
+    /// The exchange rate has not yet been updated this epoch.
+    #[error("ExchangeRateOutdated")]
+    ExchangeRateOutdated,
+
+    /// We observed a decrease in the balance of the validator's stake accounts.
+    #[error("ValidatorBalanceDecreased")]
+    ValidatorBalanceDecreased,
 }
 impl From<LidoError> for ProgramError {
     fn from(e: LidoError) -> Self {

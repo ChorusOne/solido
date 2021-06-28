@@ -4,6 +4,7 @@ use solana_program::{
     program_error::ProgramError, pubkey::Pubkey, rent::Rent,
 };
 
+use crate::instruction::UpdateValidatorBalanceAccountsInfo;
 use crate::{
     error::LidoError,
     state::Fees,
@@ -96,18 +97,9 @@ pub fn mint_st_sol_to<'a>(
 }
 
 /// Mint stSOL for the given fees, and transfer them to the appropriate accounts.
-// TODO(ruuda): Both of these Clippy violations will be fixed when by implementing
-// UpdateValidatorBalance.
-#[allow(dead_code)]
-#[allow(clippy::too_many_arguments)]
-pub fn distribute_fees<'a>(
+pub fn distribute_fees<'a, 'b>(
     solido: &mut Lido,
-    solido_address: &Pubkey,
-    spl_token_program: &AccountInfo<'a>,
-    st_sol_mint: &AccountInfo<'a>,
-    reserve_authority: &AccountInfo<'a>,
-    treasury_st_sol_account: &AccountInfo<'a>,
-    developer_st_sol_account: &AccountInfo<'a>,
+    accounts: &UpdateValidatorBalanceAccountsInfo<'a, 'b>,
     fees: Fees,
 ) -> ProgramResult {
     // Convert all fees to stSOL according to the previously updated exchange rate.
@@ -132,20 +124,20 @@ pub fn distribute_fees<'a>(
     // The treasury and developer fee we can mint and pay immediately.
     mint_st_sol_to(
         solido,
-        solido_address,
-        spl_token_program,
-        st_sol_mint,
-        reserve_authority,
-        treasury_st_sol_account,
+        accounts.lido.key,
+        accounts.spl_token_program,
+        accounts.st_sol_mint,
+        accounts.reserve_authority,
+        accounts.treasury_st_sol_account,
         treasury_amount,
     )?;
     mint_st_sol_to(
         solido,
-        solido_address,
-        spl_token_program,
-        st_sol_mint,
-        reserve_authority,
-        developer_st_sol_account,
+        accounts.lido.key,
+        accounts.spl_token_program,
+        accounts.st_sol_mint,
+        accounts.reserve_authority,
+        accounts.developer_st_sol_account,
         developer_amount,
     )?;
 
