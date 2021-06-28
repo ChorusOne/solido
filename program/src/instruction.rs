@@ -135,14 +135,14 @@ macro_rules! accounts_struct {
                     is_signer: $is_signer:expr,
                     is_writable: $is_writable:tt,
                 }
-            ),+
+            ),*
             // This second part with const accounts is optional, so wrap it in
             // a $(...)? block.
             $(
                 ,
                 $(
                     const $const_account:ident = $const_value:expr
-                ),+
+                ),*
             )?
             // Per accounts struct you can have one variadic field,
             // prefixed with an ellipsis.
@@ -157,6 +157,7 @@ macro_rules! accounts_struct {
             ,
         }
     } => {
+        #[derive(Debug)]
         pub struct $NameAccountMeta {
             $(
                 pub $var_account: Pubkey
@@ -168,6 +169,7 @@ macro_rules! accounts_struct {
             )?
         }
 
+        #[derive(Debug)]
         pub struct $NameAccountInfo<'a, 'b> {
             $(
                 pub $var_account: &'a AccountInfo<'b>
@@ -343,6 +345,105 @@ macro_rules! accounts_struct {
                 Ok(result)
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod test{
+    use super::*;
+    use solana_program::{account_info::AccountInfo, instruction::AccountMeta};
+
+    #[test]
+    fn accounts_struct_only_pub_roundtrips() {
+        accounts_struct! {
+            TestAccountsMeta, TestAccountsInfo {
+                pub s0_w0 { is_signer: false, is_writable: false, },
+                pub s1_w0 { is_signer: true, is_writable: false, },
+                pub s0_w1 { is_signer: false, is_writable: true, },
+                pub s1_w1 { is_signer: true, is_writable: true, },
+            }
+        }
+
+        let input = TestAccountsMeta {
+            s0_w0: Pubkey::new_unique(),
+            s1_w0: Pubkey::new_unique(),
+            s0_w1: Pubkey::new_unique(),
+            s1_w1: Pubkey::new_unique(),
+        };
+        let account_metas: Vec<AccountMeta> = input.to_vec();
+
+        // Accounts should be serialized in the order that they were declared.
+        assert_eq!(account_metas[0].pubkey, input.s0_w0);
+        assert_eq!(account_metas[1].pubkey, input.s1_w0);
+        assert_eq!(account_metas[2].pubkey, input.s0_w1);
+        assert_eq!(account_metas[3].pubkey, input.s1_w1);
+
+        // Signer and write bits should be set correctly.
+        assert_eq!(account_metas[0].is_signer, false);
+        assert_eq!(account_metas[0].is_writable, false);
+
+        assert_eq!(account_metas[1].is_signer, true);
+        assert_eq!(account_metas[1].is_writable, false);
+
+        assert_eq!(account_metas[2].is_signer, false);
+        assert_eq!(account_metas[2].is_writable, true);
+
+        assert_eq!(account_metas[3].is_signer, true);
+        assert_eq!(account_metas[3].is_writable, true);
+
+        // The `try_from_slice` on the `AccountsMeta` struct should round-trip.
+        let roundtripped = TestAccountsMeta::try_from_slice(&account_metas).unwrap();
+        assert_eq!(roundtripped.s0_w0, input.s0_w0);
+        assert_eq!(roundtripped.s1_w0, input.s1_w0);
+        assert_eq!(roundtripped.s0_w1, input.s0_w1);
+        assert_eq!(roundtripped.s1_w1, input.s1_w1);
+
+        let mut lamports = vec![0; account_metas.len()];
+        let mut datas = vec![vec![]; account_metas.len()];
+        let owner = Pubkey::new_unique();
+        let executable = false;
+        let rent_epoch = 0;
+        let mut account_infos: Vec<AccountInfo> = account_metas
+            .iter()
+            .zip(lamports.iter_mut())
+            .zip(datas.iter_mut())
+            .map(|((meta, lamports), data)| AccountInfo::new(
+                &meta.pubkey,
+                meta.is_signer,
+                meta.is_writable,
+                lamports,
+                data,
+                &owner,
+                executable,
+                rent_epoch,
+            )).collect();
+
+        let output = TestAccountsInfo::try_from_slice(&account_infos[..]).unwrap();
+        assert_eq!(output.s0_w0.key, &input.s0_w0);
+        assert_eq!(output.s1_w0.key, &input.s1_w0);
+        assert_eq!(output.s0_w1.key, &input.s0_w1);
+
+        // If an account is required to be a signer, but it is not, then parsing should fail.
+        account_infos[1].is_signer = false;
+        assert_eq!(
+            TestAccountsInfo::try_from_slice(&account_infos[..]).err().unwrap(),
+            LidoError::InvalidAccountInfo.into(),
+        );
+        account_infos[1].is_signer = true;
+
+        // If an account is required to be writable, but it is not, then parsing should fail.
+        account_infos[2].is_writable = false;
+        assert_eq!(
+            TestAccountsInfo::try_from_slice(&account_infos[..]).err().unwrap(),
+            LidoError::InvalidAccountInfo.into(),
+        );
+        account_infos[2].is_writable = true;
+
+        // If an account is not required to be a signer or writable, it is fine
+        // for the account to still be that though.
+        account_infos[0].is_signer = true;
+        account_infos[0].is_writable = true;
+        assert!(TestAccountsInfo::try_from_slice(&account_infos[..]).is_ok());
     }
 }
 
