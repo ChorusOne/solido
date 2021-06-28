@@ -165,6 +165,7 @@ macro_rules! accounts_struct {
             // Const accounts are not included here, they are not a variable
             // input, they only show up in program, not in the call.
             $(
+                ,
                 pub $multi_account: Vec<Pubkey>,
             )?
         }
@@ -181,7 +182,8 @@ macro_rules! accounts_struct {
                 ),*
             )?
             $(
-                pub $multi_account: &'a [&'a AccountInfo<'b>],
+                ,
+                pub $multi_account: &'a [AccountInfo<'b>],
             )?
         }
 
@@ -211,7 +213,7 @@ macro_rules! accounts_struct {
                 $(
                     for pubkey in &self.$multi_account {
                         result.push(accounts_struct_meta!(
-                            pubkey,
+                            *pubkey,
                             is_signer: $multi_is_signer,
                             is_writable: $multi_is_writable,
                         ));
@@ -220,6 +222,10 @@ macro_rules! accounts_struct {
                 result
             }
 
+            // The `AccountsMeta::try_from_slice` function is not always used, we
+            // have the pair of `AccountsMeta::to_vec` and `AccountsInfo::try_from_slice`
+            // that should always be used. This one doesn’t have to be used.
+            #[allow(dead_code)]
             pub fn try_from_slice(accounts: &[AccountMeta]) -> Result<$NameAccountMeta, ProgramError> {
                 let mut accounts_iter = accounts.iter();
 
@@ -249,6 +255,14 @@ macro_rules! accounts_struct {
                     )*
                 )?
 
+                $(
+                    // Collect all remaining pubkeys in a vector.
+                    let mut $multi_account = Vec::new();
+                    while let Some(meta) = accounts_iter.next() {
+                        $multi_account.push(meta.pubkey);
+                    }
+                )?
+
                 // Check that there are no excess accounts provided.
                 if accounts_iter.next().is_some() {
                     return Err(LidoError::TooManyAccountKeys.into());
@@ -256,6 +270,7 @@ macro_rules! accounts_struct {
 
                 let result = $NameAccountMeta {
                     $( $var_account ),*
+                    $( , $multi_account )?
                 };
 
                 Ok(result)
@@ -325,6 +340,16 @@ macro_rules! accounts_struct {
                     )*
                 )?
 
+                $(
+                    // Collect all remaining AccountInfos in a slice.
+                    let $multi_account = accounts_iter.as_slice();
+                    // Also consume the iterator, so the no-excess-accounts check
+                    // below does not trigger.
+                    for _ in 0..$multi_account.len() {
+                        accounts_iter.next();
+                    }
+                )?
+
                 // Check that there are no excess accounts provided.
                 if let Some(account) = accounts_iter.next() {
                     msg!(
@@ -340,6 +365,7 @@ macro_rules! accounts_struct {
                         ,
                         $( $const_account ),*
                     )?
+                    $( , $multi_account )?
                 };
 
                 Ok(result)
@@ -452,7 +478,7 @@ mod test{
         accounts_struct! {
             TestAccountsMeta, TestAccountsInfo {
                 pub not_sysvar { is_signer: false, is_writable: false, },
-                const clock = clock::id(),
+                const sysvar_clock = clock::id(),
             }
         }
 
@@ -467,6 +493,127 @@ mod test{
         // Sysvars are never writable or signers.
         assert_eq!(account_metas[1].is_signer, false);
         assert_eq!(account_metas[1].is_writable, false);
+
+        let key0 = Pubkey::new_unique();
+        let key_clock = clock::id();
+        let is_signer = false;
+        let is_writable = false;
+        let mut lamports0 = 0;
+        let mut lamports1 = 0;
+        let mut data0 = vec![];
+        let mut data1 = vec![];
+        let owner = Pubkey::new_unique();
+        let executable = false;
+        let rent_epoch = 0;
+        let mut account_infos = vec![
+            AccountInfo::new(
+                &key0,
+                is_signer,
+                is_writable,
+                &mut lamports0,
+                &mut data0,
+                &owner,
+                executable,
+                rent_epoch,
+            ),
+            AccountInfo::new(
+                &key_clock,
+                is_signer,
+                is_writable,
+                &mut lamports1,
+                &mut data1,
+                &owner,
+                executable,
+                rent_epoch,
+            ),
+        ];
+        let output = TestAccountsInfo::try_from_slice(&account_infos).unwrap();
+        assert_eq!(output.not_sysvar.key, account_infos[0].key);
+        assert_eq!(output.sysvar_clock.key, &clock::id());
+
+        // `try_from_slice` should verify that we passed the correct public key;
+        // if we try to pass in a different one than the hard-coded expected one,
+        // it should fail.
+        let key1 = Pubkey::new_unique();
+        account_infos[1].key = &key1;
+        assert_eq!(
+            TestAccountsInfo::try_from_slice(&account_infos).err().unwrap(),
+            LidoError::InvalidAccountInfo.into(),
+        );
+    }
+
+    #[test]
+    fn accounts_struct_variadic() {
+        accounts_struct! {
+            TestAccountsMeta, TestAccountsInfo {
+                pub single { is_signer: false, is_writable: false, },
+                pub ...remainder { is_signer: false, is_writable: false, },
+            }
+        }
+
+        let input_0 = TestAccountsMeta {
+            single: Pubkey::new_unique(),
+            remainder: vec![],
+        };
+        let account_metas: Vec<AccountMeta> = input_0.to_vec();
+        assert_eq!(account_metas.len(), 1);
+
+        let input_1 = TestAccountsMeta {
+            single: Pubkey::new_unique(),
+            remainder: vec![
+                Pubkey::new_unique(),
+            ],
+        };
+        let account_metas: Vec<AccountMeta> = input_1.to_vec();
+        assert_eq!(account_metas.len(), 2);
+        assert_eq!(account_metas[0].pubkey, input_1.single);
+        assert_eq!(account_metas[1].pubkey, input_1.remainder[0]);
+
+        let input_2 = TestAccountsMeta {
+            single: Pubkey::new_unique(),
+            remainder: vec![
+                Pubkey::new_unique(),
+                Pubkey::new_unique(),
+            ],
+        };
+        let account_metas: Vec<AccountMeta> = input_2.to_vec();
+        assert_eq!(account_metas.len(), 3);
+        assert_eq!(account_metas[0].pubkey, input_2.single);
+        assert_eq!(account_metas[1].pubkey, input_2.remainder[0]);
+        assert_eq!(account_metas[2].pubkey, input_2.remainder[1]);
+
+        let pubkeys = vec![
+            Pubkey::new_unique(),
+            Pubkey::new_unique(),
+            Pubkey::new_unique(),
+        ];
+        let is_signer = false;
+        let is_writable = false;
+        let mut lamports = vec![0; 3];
+        let mut datas = vec![vec![]; 3];
+        let owner = Pubkey::new_unique();
+        let executable = false;
+        let rent_epoch = 0;
+        let account_infos: Vec<AccountInfo> = pubkeys
+            .iter()
+            .zip(lamports.iter_mut())
+            .zip(datas.iter_mut())
+            .map(|((pubkey, lamports), data)| AccountInfo::new(
+                pubkey,
+                is_signer,
+                is_writable,
+                lamports,
+                data,
+                &owner,
+                executable,
+                rent_epoch,
+            )).collect();
+
+        let output = TestAccountsInfo::try_from_slice(&account_infos).unwrap();
+        assert_eq!(output.single.key, &pubkeys[0]);
+        assert_eq!(output.remainder.len(), 2);
+        assert_eq!(output.remainder[0].key, &pubkeys[1]);
+        assert_eq!(output.remainder[1].key, &pubkeys[2]);
     }
 }
 
