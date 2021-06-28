@@ -27,6 +27,17 @@ pub trait AsPrettyError {
 
 pub type Error = Box<dyn AsPrettyError + 'static>;
 
+pub struct MaintenanceError {
+    pub message: String,
+}
+
+impl AsPrettyError for MaintenanceError {
+    fn print_pretty(&self) {
+        print_red("Maintenance error:\n\n");
+        println!("{}", self.message);
+    }
+}
+
 impl AsPrettyError for ClientError {
     fn print_pretty(&self) {
         print_red("Solana RPC client returned an error:\n\n");

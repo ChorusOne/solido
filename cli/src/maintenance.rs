@@ -21,6 +21,7 @@ use lido::{
 use spl_stake_pool::stake_program::StakeState;
 
 use crate::config::PerformMaintenanceOpts;
+use crate::error::MaintenanceError;
 use crate::helpers::{get_solido, sign_and_send_transaction};
 use crate::stake_account::StakeBalance;
 use crate::{error::Error, Config};
@@ -37,6 +38,10 @@ pub enum MaintenanceOutput {
     StakeDeposit {
         #[serde(serialize_with = "serialize_b58")]
         validator_vote_account: Pubkey,
+
+        #[serde(serialize_with = "serialize_b58")]
+        stake_account: Pubkey,
+
         #[serde(rename = "amount_lamports")]
         amount: Lamports,
     },
@@ -48,10 +53,12 @@ impl fmt::Display for MaintenanceOutput {
         match self {
             MaintenanceOutput::StakeDeposit {
                 validator_vote_account,
+                stake_account,
                 amount,
             } => {
                 writeln!(f, "Staked deposit.")?;
                 writeln!(f, "  Validator vote account: {}", validator_vote_account)?;
+                writeln!(f, "  Stake account:          {}", stake_account)?;
                 writeln!(f, "  Amount staked:          {}", amount)?;
             }
             MaintenanceOutput::UpdateExchangeRate => {
@@ -98,6 +105,9 @@ pub struct SolidoState {
     /// Public key of the maintainer executing the maintenance.
     /// Must be a member of `solido.maintainers`.
     pub maintainer_address: Pubkey,
+
+    /// Current state of the maintainer account.
+    pub maintainer_account: Account,
 }
 
 fn get_validator_stake_accounts(
@@ -180,6 +190,12 @@ impl SolidoState {
             )?);
         }
 
+        // The entity executing the maintenance transactions, is the maintainer.
+        // We don't verify here if it is part of the maintainer set, the on-chain
+        // program does that anyway.
+        let maintainer_address = config.signer.pubkey();
+        let maintainer_account = rpc.get_account(&maintainer_address)?;
+
         Ok(SolidoState {
             produced_at: SystemTime::now(),
             solido_program_id: *solido_program_id,
@@ -191,10 +207,8 @@ impl SolidoState {
             st_sol_mint,
             rent,
             clock,
-            // The entity executing the maintenance transactions, is the maintainer.
-            // We don't verify here if it is part of the maintainer set, the on-chain
-            // program does that anyway.
-            maintainer_address: config.signer.pubkey(),
+            maintainer_address,
+            maintainer_account,
         })
     }
 
@@ -272,6 +286,7 @@ impl SolidoState {
         let task = MaintenanceOutput::StakeDeposit {
             validator_vote_account: validator.pubkey,
             amount: amount_to_deposit,
+            stake_account: stake_account_end,
         };
 
         Some((instruction, task))
@@ -308,6 +323,23 @@ impl SolidoState {
                 help: "Solana slot that we read the Solido details from.",
                 type_: "gauge",
                 metrics: vec![Metric::new(self.clock.slot).at(self.produced_at)],
+            },
+        )?;
+
+        // Include the maintainer balance, so maintainers can alert on it getting too low.
+        write_metric(
+            out,
+            &MetricFamily {
+                name: "solido_maintainer_balance_sol",
+                help: "Balance of the maintainer account, in SOL.",
+                type_: "gauge",
+                metrics: vec![Metric::new(self.maintainer_account.lamports)
+                    // Enable 1e-9 factor: the metric is in SOL, but the value in lamports.
+                    .nano()
+                    .at(self.produced_at)
+                    // Include the maintainer address, to prevent any confusion
+                    // about which account this is monitoring.
+                    .with_label("maintainer_address", self.maintainer_address.to_string())],
             },
         )?;
 
@@ -421,6 +453,21 @@ pub fn try_perform_maintenance(
     config: &Config,
     state: &SolidoState,
 ) -> Result<Option<MaintenanceOutput>> {
+    // To prevent the maintenance transactions failing with mysterious errors
+    // that are difficult to debug, before we do any maintenance, do a sanity
+    // check to ensure that the maintainer has at least some SOL to pay the
+    // transaction fees.
+    let minimum_maintainer_balance = Lamports(100_000_000);
+    if Lamports(state.maintainer_account.lamports) < minimum_maintainer_balance {
+        return Err(Box::new(MaintenanceError {
+            message: format!(
+                "Balance of the maintainer account {} is less than {}. \
+                Please fund the maintainer account.",
+                state.maintainer_address, minimum_maintainer_balance,
+            ),
+        }));
+    }
+
     // Try all of these operations one by one, and select the first one that
     // produces an instruction.
     let instruction: Option<(Instruction, MaintenanceOutput)> = None
