@@ -3,6 +3,7 @@ use solana_program::pubkey::Pubkey;
 #[cfg(not(feature = "no-entrypoint"))]
 pub mod entrypoint;
 
+pub mod accounts;
 pub mod account_map;
 pub mod balance;
 pub mod error;
