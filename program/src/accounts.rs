@@ -328,9 +328,12 @@ macro_rules! accounts_struct {
 }
 
 #[cfg(test)]
-mod test{
-    use solana_program::{account_info::AccountInfo, instruction::AccountMeta, pubkey::Pubkey, program_error::ProgramError};
+mod test {
     use crate::error::LidoError;
+    use solana_program::{
+        account_info::AccountInfo, instruction::AccountMeta, program_error::ProgramError,
+        pubkey::Pubkey,
+    };
 
     #[test]
     fn accounts_struct_only_pub() {
@@ -386,16 +389,19 @@ mod test{
             .iter()
             .zip(lamports.iter_mut())
             .zip(datas.iter_mut())
-            .map(|((meta, lamports), data)| AccountInfo::new(
-                &meta.pubkey,
-                meta.is_signer,
-                meta.is_writable,
-                lamports,
-                data,
-                &owner,
-                executable,
-                rent_epoch,
-            )).collect();
+            .map(|((meta, lamports), data)| {
+                AccountInfo::new(
+                    &meta.pubkey,
+                    meta.is_signer,
+                    meta.is_writable,
+                    lamports,
+                    data,
+                    &owner,
+                    executable,
+                    rent_epoch,
+                )
+            })
+            .collect();
 
         let output = TestAccountsInfo::try_from_slice(&account_infos[..]).unwrap();
         assert_eq!(output.s0_w0.key, &input.s0_w0);
@@ -405,7 +411,9 @@ mod test{
         // If an account is required to be a signer, but it is not, then parsing should fail.
         account_infos[1].is_signer = false;
         assert_eq!(
-            TestAccountsInfo::try_from_slice(&account_infos[..]).err().unwrap(),
+            TestAccountsInfo::try_from_slice(&account_infos[..])
+                .err()
+                .unwrap(),
             LidoError::InvalidAccountInfo.into(),
         );
         account_infos[1].is_signer = true;
@@ -413,7 +421,9 @@ mod test{
         // If an account is required to be writable, but it is not, then parsing should fail.
         account_infos[2].is_writable = false;
         assert_eq!(
-            TestAccountsInfo::try_from_slice(&account_infos[..]).err().unwrap(),
+            TestAccountsInfo::try_from_slice(&account_infos[..])
+                .err()
+                .unwrap(),
             LidoError::InvalidAccountInfo.into(),
         );
         account_infos[2].is_writable = true;
@@ -490,7 +500,9 @@ mod test{
         let key1 = Pubkey::new_unique();
         account_infos[1].key = &key1;
         assert_eq!(
-            TestAccountsInfo::try_from_slice(&account_infos).err().unwrap(),
+            TestAccountsInfo::try_from_slice(&account_infos)
+                .err()
+                .unwrap(),
             LidoError::InvalidAccountInfo.into(),
         );
     }
@@ -513,9 +525,7 @@ mod test{
 
         let input_1 = TestAccountsMeta {
             single: Pubkey::new_unique(),
-            remainder: vec![
-                Pubkey::new_unique(),
-            ],
+            remainder: vec![Pubkey::new_unique()],
         };
         let account_metas: Vec<AccountMeta> = input_1.to_vec();
         assert_eq!(account_metas.len(), 2);
@@ -524,10 +534,7 @@ mod test{
 
         let input_2 = TestAccountsMeta {
             single: Pubkey::new_unique(),
-            remainder: vec![
-                Pubkey::new_unique(),
-                Pubkey::new_unique(),
-            ],
+            remainder: vec![Pubkey::new_unique(), Pubkey::new_unique()],
         };
         let account_metas: Vec<AccountMeta> = input_2.to_vec();
         assert_eq!(account_metas.len(), 3);
@@ -551,16 +558,19 @@ mod test{
             .iter()
             .zip(lamports.iter_mut())
             .zip(datas.iter_mut())
-            .map(|((pubkey, lamports), data)| AccountInfo::new(
-                pubkey,
-                is_signer,
-                is_writable,
-                lamports,
-                data,
-                &owner,
-                executable,
-                rent_epoch,
-            )).collect();
+            .map(|((pubkey, lamports), data)| {
+                AccountInfo::new(
+                    pubkey,
+                    is_signer,
+                    is_writable,
+                    lamports,
+                    data,
+                    &owner,
+                    executable,
+                    rent_epoch,
+                )
+            })
+            .collect();
 
         let output = TestAccountsInfo::try_from_slice(&account_infos).unwrap();
         assert_eq!(output.single.key, &pubkeys[0]);
@@ -569,4 +579,3 @@ mod test{
         assert_eq!(output.remainder[1].key, &pubkeys[2]);
     }
 }
-
