@@ -412,8 +412,9 @@ impl SolidoState {
             .zip(self.validator_stake_accounts.iter())
         {
             // Try to merge from beginning
-            if let Some(to_stake) = stake_accounts.iter().next() {
+            if stake_accounts.len() > 1 {
                 let from_stake = stake_accounts[0];
+                let to_stake = stake_accounts[1];
                 if to_stake.1.can_merge(&from_stake.1) {
                     let instruction = self.get_merge_instruction(
                         validator.pubkey,
@@ -431,10 +432,9 @@ impl SolidoState {
                     };
                     return Some((vec![instruction], MaintenanceOutputs(vec![task])));
                 }
-            }
-            // Try to merge from end
-            if let Some(to_stake) = stake_accounts.iter().rev().next() {
-                let from_stake = stake_accounts.last().unwrap();
+                // Try to merge from end
+                let from_stake = stake_accounts[stake_accounts.len() - 1];
+                let to_stake = stake_accounts[stake_accounts.len() - 2];
                 if to_stake.1.can_merge(&from_stake.1) {
                     let instruction = self.get_merge_instruction(
                         validator.pubkey,
