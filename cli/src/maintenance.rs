@@ -40,6 +40,7 @@ pub enum MaintenanceOutput {
         #[serde(rename = "amount_lamports")]
         amount: Lamports,
     },
+    UpdateExchangeRate,
 }
 
 impl fmt::Display for MaintenanceOutput {
@@ -52,6 +53,9 @@ impl fmt::Display for MaintenanceOutput {
                 writeln!(f, "Staked deposit.")?;
                 writeln!(f, "  Validator vote account: {}", validator_vote_account)?;
                 writeln!(f, "  Amount staked:          {}", amount)?;
+            }
+            MaintenanceOutput::UpdateExchangeRate => {
+                writeln!(f, "Updated exchange rate.")?;
             }
         }
         Ok(())
@@ -273,6 +277,26 @@ impl SolidoState {
         Some((instruction, task))
     }
 
+    /// If a new epoch started, and we haven't updated the exchange rate yet, do so.
+    pub fn try_update_exchange_rate(&self) -> Option<(Instruction, MaintenanceOutput)> {
+        if self.solido.exchange_rate.computed_in_epoch >= self.clock.epoch {
+            // The exchange rate has already been updated in this epoch, nothing to do.
+            return None;
+        }
+
+        let instruction = lido::instruction::update_exchange_rate(
+            &self.solido_program_id,
+            &lido::instruction::UpdateExchangeRateAccountsMeta {
+                lido: self.solido_address,
+                reserve: self.reserve_address,
+                st_sol_mint: self.solido.st_sol_mint,
+            },
+        );
+        let task = MaintenanceOutput::UpdateExchangeRate;
+
+        Some((instruction, task))
+    }
+
     /// Write metrics about the current Solido instance in Prometheus format.
     pub fn write_prometheus<W: io::Write>(&self, out: &mut W) -> io::Result<()> {
         use crate::prometheus::{write_metric, Metric, MetricFamily};
@@ -328,7 +352,7 @@ impl SolidoState {
             out,
             &MetricFamily {
                 name: "solido_balance_sol",
-                help: "Amount of SOL managed by Solido.",
+                help: "Amount of SOL currently managed by Solido.",
                 type_: "gauge",
                 metrics: balance_sol_metrics,
             },
@@ -340,11 +364,51 @@ impl SolidoState {
             out,
             &MetricFamily {
                 name: "solido_token_supply_st_sol",
-                help: "Amount of stSOL that exists.",
+                help: "Amount of stSOL that exists currently.",
                 type_: "gauge",
                 metrics: vec![
                     // The supply is measured in stSOL lamports (1e-9 stSOL), so set .nano().
                     Metric::new(st_sol_supply.0).nano().at(self.produced_at),
+                ],
+            },
+        )?;
+
+        write_metric(
+            out,
+            &MetricFamily {
+                name: "solido_exchange_rate_supply_st_sol",
+                help: "Amount of stSOL that existed at the time of the last exchange rate update.",
+                type_: "gauge",
+                metrics: vec![
+                    // The supply is measured in stSOL lamports (1e-9 stSOL), so set .nano().
+                    Metric::new(self.solido.exchange_rate.st_sol_supply.0)
+                        .nano()
+                        .at(self.produced_at),
+                ],
+            },
+        )?;
+        write_metric(
+            out,
+            &MetricFamily {
+                name: "solido_exchange_rate_balance_sol",
+                help: "Amount of SOL managed at the time of the last exchange rate update.",
+                type_: "gauge",
+                metrics: vec![
+                    // The balance is measured in SOL lamports (1e-9 stSOL), so set .nano().
+                    Metric::new(self.solido.exchange_rate.sol_balance.0)
+                        .nano()
+                        .at(self.produced_at),
+                ],
+            },
+        )?;
+        write_metric(
+            out,
+            &MetricFamily {
+                name: "solido_exchange_rate_computed_epoch",
+                help: "The epoch in which the exchange rate was last computed.",
+                type_: "gauge",
+                metrics: vec![
+                    Metric::new(self.solido.exchange_rate.computed_in_epoch).at(self.produced_at)
                 ],
             },
         )?;
@@ -359,8 +423,9 @@ pub fn try_perform_maintenance(
 ) -> Result<Option<MaintenanceOutput>> {
     // Try all of these operations one by one, and select the first one that
     // produces an instruction.
-    let instruction: Option<(Instruction, MaintenanceOutput)> =
-        None.or_else(|| state.try_stake_deposit());
+    let instruction: Option<(Instruction, MaintenanceOutput)> = None
+        .or_else(|| state.try_update_exchange_rate())
+        .or_else(|| state.try_stake_deposit());
 
     let (instr, description) = match instruction {
         Some(x) => x,

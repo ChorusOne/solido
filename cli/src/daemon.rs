@@ -32,6 +32,9 @@ struct MaintenanceMetrics {
 
     /// Number of times we performed `StakeDeposit`.
     transactions_stake_deposit: u64,
+
+    /// Number of times we performed `UpdateExchangeRate`.
+    transactions_update_exchange_rate: u64,
     // TODO(#96#issuecomment-859388866): Track how much the daemon spends on transaction fees,
     // so we know how much SOL it costs to operate.
     // spent_lamports_total: u64
@@ -62,8 +65,12 @@ impl MaintenanceMetrics {
                 name: "solido_maintenance_transactions_total",
                 help: "Number of maintenance transactions executed, since launch.",
                 type_: "counter",
-                metrics: vec![Metric::new(self.transactions_stake_deposit)
-                    .with_label("operation", "StakeDeposit".to_string())],
+                metrics: vec![
+                    Metric::new(self.transactions_stake_deposit)
+                        .with_label("operation", "StakeDeposit".to_string()),
+                    Metric::new(self.transactions_update_exchange_rate)
+                        .with_label("operation", "UpdateExchangeRate".to_string()),
+                ],
             },
         )?;
         Ok(())
@@ -96,6 +103,7 @@ fn run_main_loop(config: &Config, opts: &RunMaintainerOpts, snapshot_mutex: &Sna
         polls: 0,
         errors: 0,
         transactions_stake_deposit: 0,
+        transactions_update_exchange_rate: 0,
     };
     let mut rng = rand::thread_rng();
 
@@ -131,7 +139,10 @@ fn run_main_loop(config: &Config, opts: &RunMaintainerOpts, snapshot_mutex: &Sna
                         println!("{}", something_done);
                         match something_done {
                             MaintenanceOutput::StakeDeposit { .. } => {
-                                metrics.transactions_stake_deposit += 1
+                                metrics.transactions_stake_deposit += 1;
+                            }
+                            MaintenanceOutput::UpdateExchangeRate => {
+                                metrics.transactions_update_exchange_rate += 1;
                             }
                         }
                     }
