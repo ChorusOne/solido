@@ -1,5 +1,6 @@
 //! Contains a utility macro that makes it safer to work with lists of accounts.
 
+/// Implementation detail of [`accounts_struct`].
 #[macro_export]
 macro_rules! accounts_struct_meta {
     ($pubkey:expr, is_signer: $is_signer:expr, is_writable: true, ) => {
@@ -26,20 +27,27 @@ macro_rules! accounts_struct_meta {
 ///
 /// Example:
 /// ```
+/// # use lido::{accounts_struct, error::LidoError};
+/// # use lido::{accounts_struct_meta};
+/// # use solana_program::{pubkey::Pubkey, account_info::AccountInfo, instruction::AccountMeta, program_error::ProgramError, sysvar};
 /// accounts_struct! {
 ///     ExampleAccountsMeta, ExampleAccountsInfo {
-///         frobnicator: { is_signer: true, is_writable: false, },
-///         sysvar_rent = sysvar::rent::id(),
+///         pub frobnicator { is_signer: true, is_writable: false, },
+///         const sysvar_rent = sysvar::rent::id(),
 ///     }
+/// }
 /// ```
 /// This generates two structs:
 /// ```
+/// # use solana_program::{pubkey::Pubkey, account_info::AccountInfo, instruction::AccountMeta, program_error::ProgramError};
 /// struct ExampleAccountsMeta {
 ///     frobnicator: Pubkey,
 /// }
 ///
 /// impl ExampleAccountsMeta {
-///     pub fn to_vec(&self) -> Vec<AccountMeta>;
+///     pub fn to_vec(&self) -> Vec<AccountMeta> {
+///         # unimplemented!("Body omitted in example.")
+///     }
 /// }
 ///
 /// struct ExampleAccountsInfo<'a> {
@@ -47,8 +55,10 @@ macro_rules! accounts_struct_meta {
 ///     sysvar_rent: &'a AccountInfo<'a>,
 /// }
 ///
-/// impl ExampleAccountsInfo {
-///     pub fn try_from_slice<'a, 'b: 'a>(raw: &'b [AccountInfo<'a>]) -> Result<ExampleAccountsInfo, ProgramError>;
+/// impl<'a> ExampleAccountsInfo<'a> {
+///     pub fn try_from_slice<'b: 'a>(raw: &'b [AccountInfo<'a>]) -> Result<ExampleAccountsInfo<'a>, ProgramError> {
+///         # unimplemented!("Body omitted in example.")
+///     }
 /// }
 /// ```
 /// Such that the accounts returned by `to_vec` are in the same order that
@@ -122,8 +132,6 @@ macro_rules! accounts_struct {
         impl $NameAccountMeta {
             #[must_use]
             pub fn to_vec(&self) -> Vec<AccountMeta> {
-                use crate::accounts_struct_meta;
-
                 // The mut is used depending on whether we have a variadic account at the end.
                 #[allow(unused_mut)]
                 let mut result = vec![
@@ -321,8 +329,8 @@ macro_rules! accounts_struct {
 
 #[cfg(test)]
 mod test{
-    use super::*;
-    use solana_program::{account_info::AccountInfo, instruction::AccountMeta};
+    use solana_program::{account_info::AccountInfo, instruction::AccountMeta, pubkey::Pubkey, program_error::ProgramError};
+    use crate::error::LidoError;
 
     #[test]
     fn accounts_struct_only_pub() {

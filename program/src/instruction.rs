@@ -14,6 +14,7 @@ use spl_stake_pool::stake_program;
 
 use crate::{
     accounts_struct,
+    accounts_struct_meta,
     error::LidoError,
     state::FeeDistribution,
     token::{Lamports, StLamports},
