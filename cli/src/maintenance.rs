@@ -107,7 +107,7 @@ impl fmt::Display for MaintenanceOutputs {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         for (i, maintenance_ouput) in self.0.iter().enumerate() {
             writeln!(f, "Instruction {}/{}", i, self.0.len())?;
-            writeln!(f, "{}", maintenance_ouput);
+            writeln!(f, "{}", maintenance_ouput)?;
         }
         Ok(())
     }
@@ -327,22 +327,19 @@ impl SolidoState {
             return None;
         }
 
-        let mut instructions = Vec::new();
-        instructions.push(
-            lido::instruction::stake_deposit(
-                &self.solido_program_id,
-                &lido::instruction::StakeDepositAccountsMeta {
-                    lido: self.solido_address,
-                    maintainer: self.maintainer_address,
-                    reserve: self.reserve_address,
-                    validator_vote_account: validator.pubkey,
-                    stake_account_end,
-                    stake_authority: self.stake_authority,
-                },
-                amount_to_deposit,
-            )
-            .expect("Failed to construct StakeDeposit instruction."),
-        );
+        let mut instructions = vec![lido::instruction::stake_deposit(
+            &self.solido_program_id,
+            &lido::instruction::StakeDepositAccountsMeta {
+                lido: self.solido_address,
+                maintainer: self.maintainer_address,
+                reserve: self.reserve_address,
+                validator_vote_account: validator.pubkey,
+                stake_account_end,
+                stake_authority: self.stake_authority,
+            },
+            amount_to_deposit,
+        )
+        .expect("Failed to construct StakeDeposit instruction.")];
         let mut tasks = MaintenanceOutputs(Vec::new());
         tasks.0.push(MaintenanceOutput::StakeDeposit {
             validator_vote_account: validator.pubkey,
@@ -372,7 +369,7 @@ impl SolidoState {
             instructions.push(merge_instruction);
             tasks.0.push(MaintenanceOutput::MergeStake {
                 validator_vote_account: validator.pubkey,
-                from_stake: from_stake,
+                from_stake,
                 to_stake: last_stake.0,
                 from_stake_seed: to_seed + 1,
                 to_stake_seed: to_seed,
@@ -397,8 +394,8 @@ impl SolidoState {
             &lido::instruction::MergeStakeMeta {
                 lido: self.solido_address,
                 validator_vote_account: validator_vote_key,
-                from_stake: from_stake,
-                to_stake: to_stake,
+                from_stake,
+                to_stake,
                 stake_authority: self.stake_authority,
             },
         )
@@ -414,49 +411,48 @@ impl SolidoState {
             .iter()
             .zip(self.validator_stake_accounts.iter())
         {
-            let mut instructions = Vec::new();
-            let mut tasks = MaintenanceOutputs(Vec::new());
             // Try to merge from beginning
             if let Some(to_stake) = stake_accounts.iter().next() {
                 let from_stake = stake_accounts[0];
                 if to_stake.1.can_merge(&from_stake.1) {
-                    instructions.push(self.get_merge_instruction(
+                    let instruction = self.get_merge_instruction(
                         validator.pubkey,
                         from_stake.0,
                         to_stake.0,
                         from_stake.1.seed,
                         to_stake.1.seed,
-                    ));
-                    tasks.0.push(MaintenanceOutput::MergeStake {
+                    );
+                    let task = MaintenanceOutput::MergeStake {
                         validator_vote_account: validator.pubkey,
                         from_stake: from_stake.0,
                         to_stake: to_stake.0,
                         from_stake_seed: from_stake.1.seed,
                         to_stake_seed: to_stake.1.seed,
-                    });
+                    };
+                    return Some((vec![instruction], MaintenanceOutputs(vec![task])));
                 }
             }
             // Try to merge from end
             if let Some(to_stake) = stake_accounts.iter().rev().next() {
                 let from_stake = stake_accounts.last().unwrap();
                 if to_stake.1.can_merge(&from_stake.1) {
-                    instructions.push(self.get_merge_instruction(
+                    let instruction = self.get_merge_instruction(
                         validator.pubkey,
                         from_stake.0,
                         to_stake.0,
                         from_stake.1.seed,
                         to_stake.1.seed,
-                    ));
-                    tasks.0.push(MaintenanceOutput::MergeStake {
+                    );
+                    let task = MaintenanceOutput::MergeStake {
                         validator_vote_account: validator.pubkey,
                         from_stake: from_stake.0,
                         to_stake: to_stake.0,
                         from_stake_seed: from_stake.1.seed,
                         to_stake_seed: to_stake.1.seed,
-                    });
+                    };
+                    return Some((vec![instruction], MaintenanceOutputs(vec![task])));
                 }
             }
-            return Some((instructions, tasks));
         }
         None
     }

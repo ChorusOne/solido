@@ -38,6 +38,8 @@ struct MaintenanceMetrics {
     // TODO(#96#issuecomment-859388866): Track how much the daemon spends on transaction fees,
     // so we know how much SOL it costs to operate.
     // spent_lamports_total: u64
+    /// Number of times we performed a `MergeStake`.
+    transactions_merge_stake: u64,
 }
 
 impl MaintenanceMetrics {
@@ -104,6 +106,7 @@ fn run_main_loop(config: &Config, opts: &RunMaintainerOpts, snapshot_mutex: &Sna
         errors: 0,
         transactions_stake_deposit: 0,
         transactions_update_exchange_rate: 0,
+        transactions_merge_stake: 0,
     };
     let mut rng = rand::thread_rng();
 
@@ -144,7 +147,9 @@ fn run_main_loop(config: &Config, opts: &RunMaintainerOpts, snapshot_mutex: &Sna
                                 MaintenanceOutput::UpdateExchangeRate => {
                                     metrics.transactions_update_exchange_rate += 1;
                                 }
-                                _ => {}
+                                MaintenanceOutput::MergeStake { .. } => {
+                                    metrics.transactions_merge_stake += 1
+                                }
                             }
                         }
                     }
