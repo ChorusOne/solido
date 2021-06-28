@@ -530,8 +530,8 @@ impl SolidoState {
             },
         )?;
 
-        let st_sol_supply = (StLamports(self.st_sol_mint.supply) + unclaimed_fees)
-            .expect("stSOL supply no longer fits in u64.");
+        let st_sol_supply = StLamports(self.st_sol_mint.supply);
+
         write_metric(
             out,
             &MetricFamily {
@@ -540,7 +540,14 @@ impl SolidoState {
                 type_: "gauge",
                 metrics: vec![
                     // The supply is measured in stSOL lamports (1e-9 stSOL), so set .nano().
-                    Metric::new(st_sol_supply.0).nano().at(self.produced_at),
+                    Metric::new(st_sol_supply.0)
+                        .nano()
+                        .at(self.produced_at)
+                        .with_label("status", "minted".to_string()),
+                    Metric::new(unclaimed_fees.0)
+                        .nano()
+                        .at(self.produced_at)
+                        .with_label("status", "unclaimed_fee".to_string()),
                 ],
             },
         )?;
