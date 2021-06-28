@@ -135,17 +135,26 @@ macro_rules! accounts_struct {
                     is_signer: $is_signer:expr,
                     is_writable: $is_writable:tt,
                 }
-            ),*
+            ),+
             // This second part with const accounts is optional, so wrap it in
             // a $(...)? block.
             $(
                 ,
                 $(
                     const $const_account:ident = $const_value:expr
-                ),*
-                // Allow an optional trailing comma.
-                $(,)?
+                ),+
             )?
+            // Per accounts struct you can have one variadic field,
+            // prefixed with an ellipsis.
+            $(
+                ,
+                pub ... $multi_account:ident {
+                    is_signer: $multi_is_signer:expr,
+                    is_writable: $multi_is_writable:tt,
+                }
+            )?
+            // Require a trailing comma.
+            ,
         }
     } => {
         pub struct $NameAccountMeta {
@@ -154,6 +163,9 @@ macro_rules! accounts_struct {
             ),*
             // Const accounts are not included here, they are not a variable
             // input, they only show up in program, not in the call.
+            $(
+                pub $multi_account: Vec<Pubkey>,
+            )?
         }
 
         pub struct $NameAccountInfo<'a, 'b> {
@@ -166,12 +178,17 @@ macro_rules! accounts_struct {
                     pub $const_account: &'a AccountInfo<'b>
                 ),*
             )?
+            $(
+                pub $multi_account: &'a [&'a AccountInfo<'b>],
+            )?
         }
 
         impl $NameAccountMeta {
             #[must_use]
             pub fn to_vec(&self) -> Vec<AccountMeta> {
-                vec![
+                // The mut is used depending on whether we have a variadic account at the end.
+                #[allow(unused_mut)]
+                let mut result = vec![
                     $(
                         accounts_struct_meta!(
                             self.$var_account,
@@ -188,7 +205,17 @@ macro_rules! accounts_struct {
                             )
                         ),*
                     )?
-                ]
+                ];
+                $(
+                    for pubkey in &self.$multi_account {
+                        result.push(accounts_struct_meta!(
+                            pubkey,
+                            is_signer: $multi_is_signer,
+                            is_writable: $multi_is_writable,
+                        ));
+                    }
+                )?
+                result
             }
 
             pub fn try_from_slice(accounts: &[AccountMeta]) -> Result<$NameAccountMeta, ProgramError> {
