@@ -91,8 +91,11 @@ macro_rules! accounts_struct {
             $(
                 ,
                 pub ... $multi_account:ident {
-                    is_signer: $multi_is_signer:expr,
-                    is_writable: $multi_is_writable:tt,
+                    // For now, only allow non-signer non-writable accounts in
+                    // the variadic parts, so we don't have to implement
+                    // verification checks. We can add that when we need it.
+                    is_signer: false,
+                    is_writable: false,
                 }
             )?
             // Require a trailing comma.
@@ -156,8 +159,8 @@ macro_rules! accounts_struct {
                     for pubkey in &self.$multi_account {
                         result.push(accounts_struct_meta!(
                             *pubkey,
-                            is_signer: $multi_is_signer,
-                            is_writable: $multi_is_writable,
+                            is_signer: false,
+                            is_writable: false,
                         ));
                     }
                 )?
