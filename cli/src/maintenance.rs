@@ -525,6 +525,7 @@ mod test {
             rent: Rent::default(),
             clock: Clock::default(),
             maintainer_address: Pubkey::new_unique(),
+            maintainer_account: Account::default(),
         };
 
         // The reserve should be rent-exempt.
@@ -591,13 +592,28 @@ mod test {
         // balance.
         state.reserve_account.lamports += 4 * MINIMUM_STAKE_ACCOUNT_BALANCE.0;
 
+        let stake_account_0 = Validator::find_stake_account_address(
+            &state.solido_program_id,
+            &state.solido_address,
+            &state.solido.validators.entries[0].pubkey,
+            0,
+        );
+
         // The first attempt should stake with the first validator.
         assert_eq!(
             state.try_stake_deposit().unwrap().1,
             MaintenanceOutput::StakeDeposit {
                 validator_vote_account: state.solido.validators.entries[0].pubkey,
                 amount: (MINIMUM_STAKE_ACCOUNT_BALANCE * 2).unwrap(),
+                stake_account: stake_account_0.0,
             }
+        );
+
+        let stake_account_1 = Validator::find_stake_account_address(
+            &state.solido_program_id,
+            &state.solido_address,
+            &state.solido.validators.entries[1].pubkey,
+            0,
         );
 
         // Pretend that the amount was actually staked.
@@ -615,6 +631,7 @@ mod test {
             MaintenanceOutput::StakeDeposit {
                 validator_vote_account: state.solido.validators.entries[1].pubkey,
                 amount: (MINIMUM_STAKE_ACCOUNT_BALANCE * 2).unwrap(),
+                stake_account: stake_account_1.0,
             }
         );
     }

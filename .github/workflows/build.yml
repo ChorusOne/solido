@@ -54,14 +54,22 @@ jobs:
         restore-keys: |
           cargo-bpf-1.7.3
 
-    - name: Build on-chain BPF programs
+    - name: Install development tools
       run: |
         sudo apt update
         sudo apt-get install -y libudev-dev
         sh -c "$(curl -sSfL https://release.solana.com/v1.7.3/install)"
+
+    - name: Run unit tests
+      run: |
+        cargo test --manifest-path program/Cargo.toml
+        cargo test --manifest-path cli/Cargo.toml
+
+    - name: Build on-chain BPF programs
+      run: |
         export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
 
-        # Build all BPF programs in the workspace, including the SPL stake pool,
+        # Build all BPF programs in the workspace, including the multisig program,
         # because we will need them later to test Solido.
         cargo build-bpf
 
