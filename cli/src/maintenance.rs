@@ -796,44 +796,4 @@ mod test {
             }
         );
     }
-
-    /// This is a regression test. In the past we checked for the minimum stake
-    /// balance before capping it at the amount below target, which meant that
-    /// if there was enough in the reserve, but the amount below target was less
-    /// than that of a minimum stake account, we would still try to deposit it,
-    /// which would fail.
-    #[test]
-    fn deposit_andS() {
-        let mut state = new_empty_solido();
-
-        // Add two validators, both without any stake account yet.
-        state.solido.validators.maximum_entries = 2;
-        state
-            .solido
-            .validators
-            .add(Pubkey::new_unique(), Validator::new(Pubkey::new_unique()))
-            .unwrap();
-        state
-            .solido
-            .validators
-            .add(Pubkey::new_unique(), Validator::new(Pubkey::new_unique()))
-            .unwrap();
-
-        // Put enough SOL in the reserve that we *could* stake it, if it had to
-        // go into a single stake account, but that it's too little to stake if
-        // we need to split it over two accounts.
-        state.reserve_account.lamports += MINIMUM_STAKE_ACCOUNT_BALANCE.0 + 1;
-
-        assert_eq!(
-            state.try_stake_deposit(),
-            None,
-            "Should not try to stake, this is not enough for a rent-exempt stake account.",
-        );
-
-        // If we add a bit more, then we can fund two stake accounts, and that
-        // should be enough to trigger a StakeDeposit.
-        state.reserve_account.lamports += MINIMUM_STAKE_ACCOUNT_BALANCE.0 + 1;
-
-        assert!(state.try_stake_deposit().is_some());
-    }
 }
