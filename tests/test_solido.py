@@ -109,20 +109,18 @@ result = solido(
     multisig_program_id,
     '--solido-program-id',
     solido_program_id,
-    '--fee-numerator',
-    '4',
-    '--fee-denominator',
-    '31',
     '--max-validators',
     '9',
     '--max-maintainers',
     '1',
-    '--treasury-fee',
+    '--treasury-fee-share',
     '5',
-    '--validation-fee',
+    '--validation-fee-share',
     '3',
-    '--developer-fee',
+    '--developer-fee-share',
     '2',
+    '--st-sol-appreciation-share',
+    '90',
     '--treasury-account-owner',
     treasury_account_owner.pubkey,
     '--developer-account-owner',
@@ -152,10 +150,11 @@ assert solido_instance['solido']['exchange_rate'] == {
     'st_sol_supply': 0,
     'sol_balance': 0,
 }
-assert solido_instance['solido']['fee_distribution'] == {
+assert solido_instance['solido']['reward_distribution'] == {
     'treasury_fee': 5,
     'validation_fee': 3,
     'developer_fee': 2,
+    'st_sol_appreciation': 90,
 }
 
 print('\nAdding a validator ...')

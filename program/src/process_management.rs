@@ -7,28 +7,28 @@ use crate::STAKE_AUTHORITY;
 use crate::{
     error::LidoError,
     instruction::{
-        AddMaintainerInfo, AddValidatorInfo, ChangeFeeSpecInfo, ClaimValidatorFeeInfo,
-        DistributeFeesInfo, MergeStakeInfo, RemoveMaintainerInfo, RemoveValidatorInfo,
+        AddMaintainerInfo, AddValidatorInfo, ChangeRewardDistributionInfo, ClaimValidatorFeeInfo, MergeStakeInfo,
+        DistributeFeesInfo, RemoveMaintainerInfo, RemoveValidatorInfo,
     },
     logic::{deserialize_lido, token_mint_to},
-    state::{distribute_fees, FeeDistribution, Validator},
+    state::{split_reward, RewardDistribution, Validator},
     token::StLamports,
     RESERVE_AUTHORITY,
 };
 
-pub fn process_change_fee_spec(
+pub fn process_change_reward_distribution(
     program_id: &Pubkey,
-    new_fee_distribution: FeeDistribution,
+    new_reward_distribution: RewardDistribution,
     accounts_raw: &[AccountInfo],
 ) -> ProgramResult {
-    let accounts = ChangeFeeSpecInfo::try_from_slice(accounts_raw)?;
+    let accounts = ChangeRewardDistributionInfo::try_from_slice(accounts_raw)?;
     let mut lido = deserialize_lido(program_id, accounts.lido)?;
     lido.check_manager(accounts.manager)?;
 
     lido.check_is_st_sol_account(&accounts.treasury_account)?;
     lido.check_is_st_sol_account(&accounts.developer_account)?;
 
-    lido.fee_distribution = new_fee_distribution;
+    lido.reward_distribution = new_reward_distribution;
     lido.fee_recipients.treasury_account = *accounts.treasury_account.key;
     lido.fee_recipients.developer_account = *accounts.developer_account.key;
 
@@ -111,8 +111,8 @@ pub fn process_distribute_fees(program_id: &Pubkey, accounts_raw: &[AccountInfo]
     let mut lido = deserialize_lido(program_id, accounts.lido)?;
     lido.check_maintainer(accounts.maintainer)?;
 
-    let token_shares = distribute_fees(
-        &lido.fee_distribution,
+    let token_shares = split_reward(
+        &lido.reward_distribution,
         lido.validators.len() as u64,
         // TODO(#178): Compute the rewards, and then distribute fees.
         Lamports(0),

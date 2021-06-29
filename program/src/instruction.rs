@@ -15,7 +15,7 @@ use spl_stake_pool::stake_program;
 use crate::{
     accounts_struct, accounts_struct_meta,
     error::LidoError,
-    state::FeeDistribution,
+    state::RewardDistribution,
     token::{Lamports, StLamports},
 };
 
@@ -24,7 +24,7 @@ use crate::{
 pub enum LidoInstruction {
     Initialize {
         #[allow(dead_code)] // but it's not
-        fee_distribution: FeeDistribution,
+        reward_distribution: RewardDistribution,
         #[allow(dead_code)] // but it's not
         max_validators: u32,
         #[allow(dead_code)] // but it's not
@@ -55,9 +55,9 @@ pub enum LidoInstruction {
     },
     DistributeFees,
     ClaimValidatorFees,
-    ChangeFeeSpec {
+    ChangeRewardDistribution {
         #[allow(dead_code)] // but it's not
-        new_fee_distribution: FeeDistribution,
+        new_reward_distribution: RewardDistribution,
     },
     AddValidator,
     RemoveValidator,
@@ -104,13 +104,13 @@ accounts_struct! {
 
 pub fn initialize(
     program_id: &Pubkey,
-    fee_distribution: FeeDistribution,
+    reward_distribution: RewardDistribution,
     max_validators: u32,
     max_maintainers: u32,
     accounts: &InitializeAccountsMeta,
 ) -> Result<Instruction, ProgramError> {
     let init_data = LidoInstruction::Initialize {
-        fee_distribution,
+        reward_distribution,
         max_validators,
         max_maintainers,
     };
@@ -251,7 +251,7 @@ pub fn update_exchange_rate(
 // Changes the Fee spec
 // The new Fee structure is passed by argument and the recipients are passed here
 accounts_struct! {
-    ChangeFeeSpecMeta, ChangeFeeSpecInfo {
+    ChangeRewardDistributionMeta, ChangeRewardDistributionInfo {
         pub lido {
             is_signer: false,
             is_writable: true,
@@ -271,19 +271,21 @@ accounts_struct! {
     }
 }
 
-pub fn change_fee_distribution(
+pub fn change_reward_distribution(
     program_id: &Pubkey,
-    new_fee_distribution: FeeDistribution,
-    accounts: &ChangeFeeSpecMeta,
-) -> Result<Instruction, ProgramError> {
-    Ok(Instruction {
+    new_reward_distribution: RewardDistribution,
+    accounts: &ChangeRewardDistributionMeta,
+) -> Instruction {
+    Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
-        data: LidoInstruction::ChangeFeeSpec {
-            new_fee_distribution,
+        data: LidoInstruction::ChangeRewardDistribution {
+            new_reward_distribution,
         }
-        .try_to_vec()?,
-    })
+        // Serializing the instruction should never fail.
+        .try_to_vec()
+        .unwrap(),
+    }
 }
 
 accounts_struct! {

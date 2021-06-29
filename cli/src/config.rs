@@ -185,14 +185,6 @@ cli_opt_struct! {
         #[clap(long, value_name = "address")]
         solido_program_id: Pubkey,
 
-        /// Numerator of the fee fraction.
-        #[clap(long, value_name = "int")]
-        fee_numerator: u64,
-
-        ///Denominator of the fee fraction.
-        #[clap(long, value_name = "int")]
-        fee_denominator: u64,
-
         /// The maximum number of validators that this Solido instance will support.
         #[clap(long, value_name = "int")]
         max_validators: u32,
@@ -201,22 +193,59 @@ cli_opt_struct! {
         #[clap(long, value_name = "int")]
         max_maintainers: u32,
 
-        /// Fees are divided proportionally to the sum of all specified fees,
-        /// for instance, if all the fees are the same value, they will be divided
-        /// equally.  Treasury fee share.
+        /// Treasury fee share of the rewards.
+        ///
+        /// A fraction T / (T + V + D + A) of the SOL rewards is paid to the
+        /// treasury in the form of stSOL.
+        ///
+        /// * T: Treasury fee share
+        /// * V: Validation fee share
+        /// * D: Developer fee share
+        /// * A: stSOL appreciation share
+        #[clap(long, value_name = "int")]
+        treasury_fee_share: u32,
 
+        /// Validation fee share of the rewards.
+        ///
+        /// A fraction V / (T + V + D + A) of the SOL rewards is divided evenly
+        /// among all validators, and they can claim this in the form of stSOL.
+        ///
+        /// * T: Treasury fee share
+        /// * V: Validation fee share
+        /// * D: Developer fee share
+        /// * A: stSOL appreciation share
         #[clap(long, value_name = "int")]
-        treasury_fee: u32,
-        /// Validation fee share, to be divided equally among validators.
+        validation_fee_share: u32,
+
+        /// Developer fee share of the rewards.
+        ///
+        /// A fraction D / (T + V + D + A) of the SOL rewards is paid to the
+        /// developer in the form of stSOL.
+        ///
+        /// * T: Treasury fee share
+        /// * V: Validation fee share
+        /// * D: Developer fee share
+        /// * A: stSOL appreciation share
         #[clap(long, value_name = "int")]
-        validation_fee: u32,
-        /// Developer fee share.
+        developer_fee_share: u32,
+
+        /// Share of the rewards that goes to stSOL appreciation.
+        ///
+        /// A fraction A / (T + V + D + A) of SOL the rewards go towards value
+        /// increase of stSOL. No stSOL is minted for these SOL rewards, which
+        /// means that one stSOL is now a share of a larger pool.
+        ///
+        /// * T: Treasury fee share
+        /// * V: Validation fee share
+        /// * D: Developer fee share
+        /// * A: stSOL appreciation share
         #[clap(long, value_name = "int")]
-        developer_fee: u32,
+        st_sol_appreciation_share: u32,
 
         /// Account who will own the stSOL SPL token account that receives treasury fees.
         #[clap(long, value_name = "address")]
         treasury_account_owner: Pubkey,
+
         /// Account who will own the stSOL SPL token account that receives the developer fees.
         #[clap(long, value_name = "address")]
         developer_account_owner: Pubkey,

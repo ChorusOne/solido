@@ -20,7 +20,7 @@ use solana_vote_program::vote_instruction;
 use solana_vote_program::vote_state::{VoteInit, VoteState};
 
 use lido::error::LidoError;
-use lido::state::{FeeDistribution, FeeRecipients, Lido, Validator};
+use lido::state::{FeeRecipients, Lido, RewardDistribution, Validator};
 use lido::token::{Lamports, StLamports};
 use lido::{instruction, RESERVE_AUTHORITY, STAKE_AUTHORITY};
 use spl_stake_pool::stake_program::{Meta, Stake, StakeState};
@@ -45,7 +45,7 @@ pub struct Context {
 
     pub treasury_st_sol_account: Pubkey,
     pub developer_st_sol_account: Pubkey,
-    pub fee_distribution: FeeDistribution,
+    pub reward_distribution: RewardDistribution,
 
     pub reserve_address: Pubkey,
     pub stake_authority: Pubkey,
@@ -145,10 +145,11 @@ impl Context {
         let manager = Keypair::new();
         let solido = Keypair::new();
 
-        let fee_distribution = FeeDistribution {
-            treasury_fee: 2,
-            validation_fee: 2,
-            developer_fee: 4,
+        let reward_distribution = RewardDistribution {
+            treasury_fee: 3,
+            validation_fee: 4,
+            developer_fee: 3,
+            st_sol_appreciation: 90,
         };
 
         let (reserve_address, _) = Pubkey::find_program_address(
@@ -181,7 +182,7 @@ impl Context {
             validator: None,
             treasury_st_sol_account: Pubkey::default(),
             developer_st_sol_account: Pubkey::default(),
-            fee_distribution,
+            reward_distribution,
             reserve_address,
             stake_authority,
         };
@@ -221,7 +222,7 @@ impl Context {
                 ),
                 instruction::initialize(
                     &id(),
-                    result.fee_distribution.clone(),
+                    result.reward_distribution.clone(),
                     max_validators,
                     max_maintainers,
                     &instruction::InitializeAccountsMeta {
@@ -627,25 +628,24 @@ impl Context {
             .expect("Failed to call StakeDeposit on Solido instance.")
     }
 
-    pub async fn try_change_fee_distribution(
+    pub async fn try_change_reward_distribution(
         &mut self,
-        new_fee_distribution: &FeeDistribution,
+        new_reward_distribution: &RewardDistribution,
         new_fee_recipients: &FeeRecipients,
     ) -> transport::Result<()> {
         send_transaction(
             &mut self.context,
             &mut self.nonce,
-            &[instruction::change_fee_distribution(
+            &[instruction::change_reward_distribution(
                 &id(),
-                new_fee_distribution.clone(),
-                &instruction::ChangeFeeSpecMeta {
+                new_reward_distribution.clone(),
+                &instruction::ChangeRewardDistributionMeta {
                     lido: self.solido.pubkey(),
                     manager: self.manager.pubkey(),
                     treasury_account: new_fee_recipients.treasury_account,
                     developer_account: new_fee_recipients.developer_account,
                 },
-            )
-            .unwrap()],
+            )],
             vec![&self.manager],
         )
         .await

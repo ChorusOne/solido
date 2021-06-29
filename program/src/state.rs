@@ -24,7 +24,7 @@ pub const LIDO_VERSION: u8 = 0;
 /// Size of a serialized `Lido` struct excluding validators and maintainers.
 ///
 /// To update this, run the tests and replace the value here with the test output.
-pub const LIDO_CONSTANT_SIZE: usize = 167;
+pub const LIDO_CONSTANT_SIZE: usize = 171;
 
 pub type Validators = AccountMap<Validator>;
 pub type Maintainers = AccountSet;
@@ -151,8 +151,10 @@ pub struct Lido {
     pub sol_reserve_authority_bump_seed: u8,
     pub stake_authority_bump_seed: u8,
 
-    /// Fees
-    pub fee_distribution: FeeDistribution,
+    /// How rewards are distributed.
+    pub reward_distribution: RewardDistribution,
+
+    /// Accounts of the fee recipients.
     pub fee_recipients: FeeRecipients,
 
     /// Map of enrolled validators, maps their vote account to `Validator` details.
@@ -410,16 +412,17 @@ impl Validator {
     }
 }
 
-/// Determines how fees are split up among these parties, represented as the
+/// Determines how rewards are split up among these parties, represented as the
 /// number of parts of the total. For example, if each party has 1 part, then
-/// they all get an equal share of the fee.
+/// they all get an equal share of the reward.
 #[derive(
     Clone, Default, Debug, Eq, PartialEq, BorshSerialize, BorshDeserialize, BorshSchema, Serialize,
 )]
-pub struct FeeDistribution {
+pub struct RewardDistribution {
     pub treasury_fee: u32,
     pub validation_fee: u32,
     pub developer_fee: u32,
+    pub st_sol_appreciation: u32,
 }
 
 /// Specifies the fee recipients, accounts that should be created by Lido's minter
@@ -433,20 +436,32 @@ pub struct FeeRecipients {
     pub developer_account: Pubkey,
 }
 
-impl FeeDistribution {
+impl RewardDistribution {
     pub fn sum(&self) -> u64 {
         // These adds don't overflow because we widen from u32 to u64 first.
-        self.treasury_fee as u64 + self.validation_fee as u64 + self.developer_fee as u64
+        self.treasury_fee as u64
+            + self.validation_fee as u64
+            + self.developer_fee as u64
+            + self.st_sol_appreciation as u64
     }
+
     pub fn treasury_fraction(&self) -> Rational {
         Rational {
             numerator: self.treasury_fee as u64,
             denominator: self.sum(),
         }
     }
+
     pub fn validation_fraction(&self) -> Rational {
         Rational {
             numerator: self.validation_fee as u64,
+            denominator: self.sum(),
+        }
+    }
+
+    pub fn developer_fraction(&self) -> Rational {
+        Rational {
+            numerator: self.developer_fee as u64,
             denominator: self.sum(),
         }
     }
@@ -459,18 +474,18 @@ pub struct Fees {
     pub developer_amount: StLamports,
 }
 
-pub fn distribute_fees(
-    fee_distribution: &FeeDistribution,
+pub fn split_reward(
+    reward_distribution: &RewardDistribution,
     num_validators: u64,
     reward: Lamports,
 ) -> Option<Fees> {
     let amount = StLamports(reward.0);
-    let treasury_amount = (amount * fee_distribution.treasury_fraction())?;
+    let treasury_amount = (amount * reward_distribution.treasury_fraction())?;
 
     // The actual amount that goes to validation can be a tiny bit lower
     // than the target amount, when the number of validators does not divide
     // the target amount. The loss is at most `num_validators` stLamports.
-    let validation_target = (amount * fee_distribution.validation_fraction())?;
+    let validation_target = (amount * reward_distribution.validation_fraction())?;
     let reward_per_validator = (validation_target / num_validators)?;
     let validation_actual = (reward_per_validator * num_validators)?;
 
@@ -569,10 +584,11 @@ mod test_lido {
             },
             sol_reserve_authority_bump_seed: 1,
             stake_authority_bump_seed: 2,
-            fee_distribution: FeeDistribution {
+            reward_distribution: RewardDistribution {
                 treasury_fee: 2,
                 validation_fee: 3,
                 developer_fee: 4,
+                st_sol_appreciation: 7,
             },
             fee_recipients: FeeRecipients {
                 treasury_account: Pubkey::new_unique(),
@@ -754,11 +770,12 @@ mod test_lido {
     }
 
     #[test]
-    fn test_fee_distribution() {
-        let spec = FeeDistribution {
+    fn test_split_reward() {
+        let spec = RewardDistribution {
             treasury_fee: 3,
             validation_fee: 2,
             developer_fee: 1,
+            st_sol_appreciation: 0,
         };
         assert_eq!(
             Fees {
@@ -767,7 +784,7 @@ mod test_lido {
                 developer_amount: StLamports(100),
             },
             // Test no rounding errors
-            distribute_fees(&spec, 1, Lamports(600)).unwrap()
+            split_reward(&spec, 1, Lamports(600)).unwrap()
         );
 
         assert_eq!(
@@ -777,12 +794,13 @@ mod test_lido {
                 developer_amount: StLamports(168),
             },
             // Test rounding errors going to manager
-            distribute_fees(&spec, 4, Lamports(1_000)).unwrap()
+            split_reward(&spec, 4, Lamports(1_000)).unwrap()
         );
-        let spec_coprime = FeeDistribution {
+        let spec_coprime = RewardDistribution {
             treasury_fee: 17,
             validation_fee: 23,
             developer_fee: 19,
+            st_sol_appreciation: 0,
         };
         assert_eq!(
             Fees {
@@ -790,7 +808,7 @@ mod test_lido {
                 reward_per_validator: StLamports(389),
                 developer_amount: StLamports(323),
             },
-            distribute_fees(&spec_coprime, 1, Lamports(1_000)).unwrap()
+            split_reward(&spec_coprime, 1, Lamports(1_000)).unwrap()
         );
     }
     #[test]
