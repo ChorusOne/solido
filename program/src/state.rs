@@ -1,7 +1,6 @@
 //! State transition types
 
 use serde::Serialize;
-use std::ops::Sub;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use solana_program::borsh::get_instance_packed_len;
@@ -465,42 +464,58 @@ impl RewardDistribution {
             denominator: self.sum(),
         }
     }
+
+    /// Split the reward according to the distribution defined in this instance.
+    ///
+    /// Fees are all rounded down, and the remainder goes to stSOL appreciation.
+    /// This means that the outputs may not sum to the input, even when
+    /// `st_sol_appreciation` is 0.
+    ///
+    /// Returns the fee amounts in SOL. stSOL should be minted for those when
+    /// they get distributed. This acts like a deposit: it is like the fee
+    /// recipients received their fee in SOL outside of Solido, and then
+    /// deposited it. The remaining SOL, which is not taken as a fee, acts as a
+    /// donation to the pool, and makes the SOL value of stSOL go up. It is not
+    /// included in the output, as nothing needs to be done to handle it.
+    pub fn split_reward(&self, amount: Lamports, num_validators: u64) -> Option<Fees> {
+        use std::ops::Add;
+
+        let treasury_amount = (amount * self.treasury_fraction())?;
+        let developer_amount = (amount * self.developer_fraction())?;
+
+        // The actual amount that goes to validation can be a tiny bit lower
+        // than the target amount, when the number of validators does not divide
+        // the target amount. The loss is at most `num_validators` Lamports.
+        let validation_amount = (amount * self.validation_fraction())?;
+        let reward_per_validator = (validation_amount / num_validators)?;
+
+        // Sanity check: We should not produce more fees than we had to split in
+        // the first place.
+        let total_fees = Lamports(0)
+            .add(treasury_amount)?
+            .add(developer_amount)?
+            .add((reward_per_validator * num_validators)?)?;
+        assert!(total_fees <= amount);
+
+        let result = Fees {
+            treasury_amount,
+            reward_per_validator,
+            developer_amount,
+        };
+
+        Some(result)
+    }
 }
 
+/// The result of [`RewardDistribution::split_reward`].
+///
+/// It contains only the fees. The amount that goes to stSOL value appreciation
+/// is implicitly the remainder.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Fees {
-    pub treasury_amount: StLamports,
-    pub reward_per_validator: StLamports,
-    pub developer_amount: StLamports,
-}
-
-pub fn split_reward(
-    reward_distribution: &RewardDistribution,
-    num_validators: u64,
-    reward: Lamports,
-) -> Option<Fees> {
-    let amount = StLamports(reward.0);
-    let treasury_amount = (amount * reward_distribution.treasury_fraction())?;
-
-    // The actual amount that goes to validation can be a tiny bit lower
-    // than the target amount, when the number of validators does not divide
-    // the target amount. The loss is at most `num_validators` stLamports.
-    let validation_target = (amount * reward_distribution.validation_fraction())?;
-    let reward_per_validator = (validation_target / num_validators)?;
-    let validation_actual = (reward_per_validator * num_validators)?;
-
-    // The leftovers are for the manager. Rather than computing the fraction,
-    // we compute the leftovers, to ensure that the output amount equals the
-    // input amount.
-    let developer_amount = amount.sub(treasury_amount)?.sub(validation_actual)?;
-
-    let result = Fees {
-        treasury_amount,
-        reward_per_validator,
-        developer_amount,
-    };
-
-    Some(result)
+    pub treasury_amount: Lamports,
+    pub reward_per_validator: Lamports,
+    pub developer_amount: Lamports,
 }
 
 #[cfg(test)]
@@ -771,31 +786,47 @@ mod test_lido {
 
     #[test]
     fn test_split_reward() {
-        let spec = RewardDistribution {
+        let mut spec = RewardDistribution {
             treasury_fee: 3,
             validation_fee: 2,
             developer_fee: 1,
             st_sol_appreciation: 0,
         };
+
         assert_eq!(
+            // In this case the amount can be split exactly,
+            // there is no remainder.
+            spec.split_reward(Lamports(600), 1).unwrap(),
             Fees {
-                treasury_amount: StLamports(300),
-                reward_per_validator: StLamports(200),
-                developer_amount: StLamports(100),
+                treasury_amount: Lamports(300),
+                reward_per_validator: Lamports(200),
+                developer_amount: Lamports(100),
             },
-            // Test no rounding errors
-            split_reward(&spec, 1, Lamports(600)).unwrap()
         );
 
         assert_eq!(
+            // In this case the amount cannot be split exactly, all fees are
+            // rounded down.
+            spec.split_reward(Lamports(1_000), 4).unwrap(),
             Fees {
-                treasury_amount: StLamports(500),
-                reward_per_validator: StLamports(83),
-                developer_amount: StLamports(168),
+                treasury_amount: Lamports(500),
+                reward_per_validator: Lamports(83),
+                developer_amount: Lamports(166),
             },
-            // Test rounding errors going to manager
-            split_reward(&spec, 4, Lamports(1_000)).unwrap()
         );
+
+        // If we use 3%, 2%, 1% fee, and the remaining 94% go to stSOL appreciation,
+        // we should see 3%, 2%, and 1% fee.
+        spec.st_sol_appreciation = 94;
+        assert_eq!(
+            spec.split_reward(Lamports(100), 1).unwrap(),
+            Fees {
+                treasury_amount: Lamports(3),
+                reward_per_validator: Lamports(2),
+                developer_amount: Lamports(1),
+            },
+        );
+
         let spec_coprime = RewardDistribution {
             treasury_fee: 17,
             validation_fee: 23,
@@ -803,12 +834,12 @@ mod test_lido {
             st_sol_appreciation: 0,
         };
         assert_eq!(
+            spec_coprime.split_reward(Lamports(1_000), 1).unwrap(),
             Fees {
-                treasury_amount: StLamports(288),
-                reward_per_validator: StLamports(389),
-                developer_amount: StLamports(323),
+                treasury_amount: Lamports(288),
+                reward_per_validator: Lamports(389),
+                developer_amount: Lamports(322),
             },
-            split_reward(&spec_coprime, 1, Lamports(1_000)).unwrap()
         );
     }
     #[test]

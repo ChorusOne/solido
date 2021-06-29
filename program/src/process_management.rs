@@ -7,11 +7,11 @@ use crate::STAKE_AUTHORITY;
 use crate::{
     error::LidoError,
     instruction::{
-        AddMaintainerInfo, AddValidatorInfo, ChangeRewardDistributionInfo, ClaimValidatorFeeInfo, MergeStakeInfo,
-        DistributeFeesInfo, RemoveMaintainerInfo, RemoveValidatorInfo,
+        AddMaintainerInfo, AddValidatorInfo, ChangeRewardDistributionInfo, ClaimValidatorFeeInfo,
+        DistributeFeesInfo, MergeStakeInfo, RemoveMaintainerInfo, RemoveValidatorInfo,
     },
     logic::{deserialize_lido, token_mint_to},
-    state::{split_reward, RewardDistribution, Validator},
+    state::{RewardDistribution, Validator},
     token::StLamports,
     RESERVE_AUTHORITY,
 };
@@ -111,13 +111,11 @@ pub fn process_distribute_fees(program_id: &Pubkey, accounts_raw: &[AccountInfo]
     let mut lido = deserialize_lido(program_id, accounts.lido)?;
     lido.check_maintainer(accounts.maintainer)?;
 
-    let token_shares = split_reward(
-        &lido.reward_distribution,
-        lido.validators.len() as u64,
-        // TODO(#178): Compute the rewards, and then distribute fees.
-        Lamports(0),
-    )
-    .ok_or(LidoError::CalculationFailure)?;
+    // TODO(#178): Compute the rewards, and then distribute fees.
+    let fees = lido
+        .reward_distribution
+        .split_reward(Lamports(0), lido.validators.len() as u64)
+        .ok_or(LidoError::CalculationFailure)?;
 
     // Mint tokens for treasury
     token_mint_to(
@@ -128,7 +126,9 @@ pub fn process_distribute_fees(program_id: &Pubkey, accounts_raw: &[AccountInfo]
         accounts.reserve_authority.clone(),
         RESERVE_AUTHORITY,
         lido.sol_reserve_authority_bump_seed,
-        token_shares.treasury_amount,
+        lido.exchange_rate
+            .exchange_sol(fees.treasury_amount)
+            .ok_or(LidoError::CalculationFailure)?,
     )?;
     // Mint tokens for developer
     token_mint_to(
@@ -139,13 +139,19 @@ pub fn process_distribute_fees(program_id: &Pubkey, accounts_raw: &[AccountInfo]
         accounts.reserve_authority.clone(),
         RESERVE_AUTHORITY,
         lido.sol_reserve_authority_bump_seed,
-        token_shares.developer_amount,
+        lido.exchange_rate
+            .exchange_sol(fees.developer_amount)
+            .ok_or(LidoError::CalculationFailure)?,
     )?;
 
     // Update validator list that can be claimed at a later time
+    let reward_per_validator = lido
+        .exchange_rate
+        .exchange_sol(fees.reward_per_validator)
+        .ok_or(LidoError::CalculationFailure)?;
     for pe in lido.validators.entries.iter_mut() {
-        pe.entry.fee_credit = (pe.entry.fee_credit + token_shares.reward_per_validator)
-            .ok_or(LidoError::CalculationFailure)?;
+        pe.entry.fee_credit =
+            (pe.entry.fee_credit + reward_per_validator).ok_or(LidoError::CalculationFailure)?;
     }
 
     lido.save(accounts.lido)
