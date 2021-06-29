@@ -25,6 +25,17 @@ macro_rules! accounts_struct_meta {
 ///  * It has a shorthand for defining accounts that have a statically known
 ///    address.
 ///
+/// The macro accepts three types of field:
+///
+///  * User-specified accounts, with `pub`.
+///
+///  * Optionally, one or more accounts with a fixed address, with `const`. These
+///    are not part of the `Meta` struct, because their address is known, so the
+///    caller does not need to provide it, but they are part of the `Info` struct,
+///    because the program does need to access them.
+///
+///  * Optionally, a vector with a variable number of accounts, with `pub ...`.
+///
 /// Example:
 /// ```
 /// # use lido::{accounts_struct, error::LidoError};
@@ -34,6 +45,7 @@ macro_rules! accounts_struct_meta {
 ///     ExampleAccountsMeta, ExampleAccountsInfo {
 ///         pub frobnicator { is_signer: true, is_writable: false, },
 ///         const sysvar_rent = sysvar::rent::id(),
+///         pub ...widgets { is_signer: false, is_writable: false, },
 ///     }
 /// }
 /// ```
@@ -42,6 +54,7 @@ macro_rules! accounts_struct_meta {
 /// # use solana_program::{pubkey::Pubkey, account_info::AccountInfo, instruction::AccountMeta, program_error::ProgramError};
 /// struct ExampleAccountsMeta {
 ///     frobnicator: Pubkey,
+///     widgets: Vec<Pubkey>,
 /// }
 ///
 /// impl ExampleAccountsMeta {
@@ -53,6 +66,7 @@ macro_rules! accounts_struct_meta {
 /// struct ExampleAccountsInfo<'a> {
 ///     frobnicator: &'a AccountInfo<'a>,
 ///     sysvar_rent: &'a AccountInfo<'a>,
+///     widgets: &'a [AccountInfo<'a>],
 /// }
 ///
 /// impl<'a> ExampleAccountsInfo<'a> {
