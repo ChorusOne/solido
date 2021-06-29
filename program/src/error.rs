@@ -44,7 +44,8 @@ pub enum LidoError {
     /// Wrong maintainer trying  to alter the state
     #[error("InvalidMaintainer")]
     InvalidMaintainer,
-    /// One of the provided accounts had a mismatch in is_writable or is_signer.
+    /// One of the provided accounts had a mismatch in is_writable or is_signer,
+    /// or for a const account, the address does not match the expected address.
     #[error("InvalidAccountInfo")]
     InvalidAccountInfo,
     /// More accounts were provided than the program expects.

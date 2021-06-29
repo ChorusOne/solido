@@ -4,6 +4,7 @@ use solana_program::pubkey::Pubkey;
 pub mod entrypoint;
 
 pub mod account_map;
+pub mod accounts;
 pub mod balance;
 pub mod error;
 pub mod instruction;
