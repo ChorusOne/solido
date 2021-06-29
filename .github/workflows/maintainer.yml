@@ -22,7 +22,7 @@ jobs:
 
        - name: Build Docker image
          run: |
-           export SOLIDO_VERSION=$(echo $GITHUB_REF | sed 's/refs\/heads\/main\///g')
+           export SOLIDO_VERSION=$(echo $GITHUB_REF | sed 's/refs\/tags\///g')
            docker-compose -f docker/docker-compose.yml build
 
        - name: Login to Docker Hub
@@ -33,5 +33,5 @@ jobs:
 
        - name: Push Docker image
          run: |
-           export SOLIDO_VERSION=$(echo $GITHUB_REF | sed 's/refs\/heads\/main\///g')
+           export SOLIDO_VERSION=$(echo $GITHUB_REF | sed 's/refs\/tags\///g')
            docker-compose -f docker/docker-compose.yml push
