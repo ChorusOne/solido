@@ -31,13 +31,11 @@ use {
         msg,
         program::{invoke, invoke_signed},
         program_error::ProgramError,
-        program_pack::Pack,
         pubkey::Pubkey,
         rent::Rent,
         system_instruction,
         sysvar::Sysvar,
     },
-    spl_token::state::Mint,
 };
 
 /// Program state handler.
@@ -322,12 +320,10 @@ pub fn process_update_exchange_rate(
 ) -> ProgramResult {
     let accounts = UpdateExchangeRateAccountsInfo::try_from_slice(raw_accounts)?;
     let mut lido = deserialize_lido(program_id, accounts.lido)?;
-    lido.check_mint_is_st_sol_mint(accounts.st_sol_mint)?;
     lido.check_reserve_authority(program_id, accounts.lido.key, accounts.reserve)?;
 
     let clock = Clock::from_account_info(accounts.sysvar_clock)?;
     let rent = Rent::from_account_info(accounts.sysvar_rent)?;
-    let st_sol_mint = Mint::unpack_from_slice(&accounts.st_sol_mint.data.borrow())?;
 
     if lido.exchange_rate.computed_in_epoch >= clock.epoch {
         msg!(
@@ -339,8 +335,8 @@ pub fn process_update_exchange_rate(
     }
 
     lido.exchange_rate.computed_in_epoch = clock.epoch;
-    lido.exchange_rate.st_sol_supply = StLamports(st_sol_mint.supply);
     lido.exchange_rate.sol_balance = lido.get_sol_balance(&rent, accounts.reserve)?;
+    lido.exchange_rate.st_sol_supply = lido.get_st_sol_supply(accounts.st_sol_mint)?;
 
     lido.save(accounts.lido)
 }

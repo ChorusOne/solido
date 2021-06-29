@@ -17,6 +17,7 @@ use crate::token::{Lamports, Rational, StLamports};
 use crate::util::serialize_b58;
 use crate::RESERVE_AUTHORITY;
 use crate::VALIDATOR_STAKE_ACCOUNT;
+use spl_token::state::Mint;
 
 pub const LIDO_VERSION: u8 = 0;
 
@@ -322,6 +323,25 @@ impl Lido {
         validator_balance
             .and_then(|s| s + effective_reserve_balance)
             .ok_or(LidoError::CalculationFailure)
+    }
+
+    /// Return the total amount of stSOL in existence.
+    ///
+    /// The total is the amount minted so far, plus any unminted rewards that validators
+    /// are entitled to, but haven’t claimed yet.
+    pub fn get_st_sol_supply(&self, st_sol_mint: &AccountInfo) -> Result<StLamports, ProgramError> {
+        self.check_mint_is_st_sol_mint(st_sol_mint)?;
+
+        let st_sol_mint = Mint::unpack_from_slice(&st_sol_mint.data.borrow())?;
+        let minted_supply = StLamports(st_sol_mint.supply);
+
+        let credit: Option<StLamports> = self.validators.iter_entries().map(|v| v.fee_credit).sum();
+
+        let result = credit
+            .and_then(|s| s + minted_supply)
+            .ok_or(LidoError::CalculationFailure)?;
+
+        Ok(result)
     }
 }
 
@@ -673,6 +693,63 @@ mod test_lido {
         assert_eq!(
             lido.get_sol_balance(&rent, &reserve_account),
             Err(LidoError::CalculationFailure)
+        );
+    }
+
+    #[test]
+    fn test_get_st_sol_supply() {
+        use solana_program::program_option::COption;
+
+        let mint = Mint {
+            mint_authority: COption::None,
+            supply: 200_000,
+            decimals: 9,
+            is_initialized: true,
+            freeze_authority: COption::None,
+        };
+        let mut data = [0_u8; 128];
+        mint.pack_into_slice(&mut data);
+
+        let mut lido = Lido::default();
+        let mint_address = Pubkey::default();
+        let mut amount = 0;
+        let is_signer = false;
+        let is_writable = false;
+        let executable = false;
+        let rent_epoch = 0;
+        let st_sol_mint = AccountInfo::new(
+            &mint_address,
+            is_signer,
+            is_writable,
+            &mut amount,
+            &mut data,
+            &mint_address,
+            executable,
+            rent_epoch,
+        );
+
+        lido.st_sol_mint = mint_address;
+
+        assert_eq!(
+            lido.get_st_sol_supply(&st_sol_mint),
+            Ok(StLamports(200_000)),
+        );
+
+        lido.validators.maximum_entries = 1;
+        lido.validators
+            .add(Pubkey::new_unique(), Validator::new(Pubkey::new_unique()))
+            .unwrap();
+        lido.validators.entries[0].entry.fee_credit = StLamports(37);
+        assert_eq!(
+            lido.get_st_sol_supply(&st_sol_mint),
+            Ok(StLamports(200_000 + 37))
+        );
+
+        lido.st_sol_mint = Pubkey::new_unique();
+
+        assert_eq!(
+            lido.get_st_sol_supply(&st_sol_mint),
+            Err(LidoError::InvalidStSolAccount.into())
         );
     }
 
