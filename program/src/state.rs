@@ -337,9 +337,11 @@ impl Lido {
 
         let credit: Option<StLamports> = self.validators.iter_entries().map(|v| v.fee_credit).sum();
 
-        credit
+        let result = credit
             .and_then(|s| s + minted_supply)
-            .ok_or(LidoError::CalculationFailure.into())
+            .ok_or(LidoError::CalculationFailure)?;
+
+        Ok(result)
     }
 }
 
