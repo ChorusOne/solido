@@ -689,7 +689,6 @@ fn try_parse_solido_instruction(
 ) -> Result<ParsedInstruction, Error> {
     let instruction: LidoInstruction = BorshDeserialize::deserialize(&mut instr.data.as_slice())?;
     Ok(match instruction {
-        LidoInstruction::DistributeFees => todo!(),
         LidoInstruction::ChangeRewardDistribution {
             new_reward_distribution,
         } => {

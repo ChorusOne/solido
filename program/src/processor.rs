@@ -8,11 +8,11 @@ use crate::{
         DepositAccountsInfo, InitializeAccountsInfo, LidoInstruction, StakeDepositAccountsInfo,
         UpdateExchangeRateAccountsInfo,
     },
-    logic::{check_rent_exempt, deserialize_lido, get_reserve_available_balance, token_mint_to},
+    logic::{check_rent_exempt, deserialize_lido, get_reserve_available_balance, mint_st_sol_to},
     process_management::{
         process_add_maintainer, process_add_validator, process_change_reward_distribution,
-        process_claim_validator_fee, process_distribute_fees, process_merge_stake,
-        process_remove_maintainer, process_remove_validator,
+        process_claim_validator_fee, process_merge_stake, process_remove_maintainer,
+        process_remove_validator,
     },
     state::{
         FeeRecipients, Maintainers, RewardDistribution, Validator, Validators, LIDO_CONSTANT_SIZE,
@@ -111,9 +111,6 @@ pub fn process_deposit(
 
     let lido = deserialize_lido(program_id, accounts.lido)?;
 
-    lido.check_is_st_sol_account(&accounts.recipient)?;
-    lido.check_reserve_authority(program_id, accounts.lido.key, accounts.reserve_account)?;
-
     invoke(
         &system_instruction::transfer(accounts.user.key, accounts.reserve_account.key, amount.0),
         &[
@@ -128,14 +125,13 @@ pub fn process_deposit(
         .exchange_sol(amount)
         .ok_or(LidoError::CalculationFailure)?;
 
-    token_mint_to(
+    mint_st_sol_to(
+        &lido,
         accounts.lido.key,
-        accounts.spl_token.clone(),
-        accounts.st_sol_mint.clone(),
-        accounts.recipient.clone(),
-        accounts.reserve_account.clone(),
-        RESERVE_AUTHORITY,
-        lido.sol_reserve_authority_bump_seed,
+        accounts.spl_token,
+        accounts.st_sol_mint,
+        accounts.reserve_account,
+        accounts.recipient,
         st_sol_amount,
     )?;
 
@@ -372,7 +368,6 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
         }
         LidoInstruction::UpdateExchangeRate => process_update_exchange_rate(program_id, accounts),
         LidoInstruction::Withdraw { amount } => process_withdraw(program_id, amount, accounts),
-        LidoInstruction::DistributeFees => process_distribute_fees(program_id, accounts),
         LidoInstruction::ClaimValidatorFees => process_claim_validator_fee(program_id, accounts),
         LidoInstruction::ChangeRewardDistribution {
             new_reward_distribution,

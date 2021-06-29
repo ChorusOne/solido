@@ -128,6 +128,13 @@ impl<T: Default> AccountMap<T> {
             iter: self.entries.iter(),
         }
     }
+
+    /// Iterate just the values mutably, not the keys.
+    pub fn iter_entries_mut(&mut self) -> IterEntriesMut<T> {
+        IterEntriesMut {
+            iter: self.entries.iter_mut(),
+        }
+    }
 }
 
 pub struct IterEntries<'a, T: 'a> {
@@ -139,5 +146,17 @@ impl<'a, T: 'a> std::iter::Iterator for IterEntries<'a, T> {
 
     fn next(&mut self) -> Option<&'a T> {
         self.iter.next().map(|pubkey_entry| &pubkey_entry.entry)
+    }
+}
+
+pub struct IterEntriesMut<'a, T: 'a> {
+    iter: std::slice::IterMut<'a, PubkeyAndEntry<T>>,
+}
+
+impl<'a, T: 'a> std::iter::Iterator for IterEntriesMut<'a, T> {
+    type Item = &'a mut T;
+
+    fn next(&mut self) -> Option<&'a mut T> {
+        self.iter.next().map(|pubkey_entry| &mut pubkey_entry.entry)
     }
 }

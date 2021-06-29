@@ -53,7 +53,6 @@ pub enum LidoInstruction {
         #[allow(dead_code)] // but it's not
         amount: StLamports,
     },
-    DistributeFees,
     ClaimValidatorFees,
     ChangeRewardDistribution {
         #[allow(dead_code)] // but it's not
@@ -350,47 +349,6 @@ pub fn remove_validator(
         program_id: *program_id,
         accounts: accounts.to_vec(),
         data: LidoInstruction::RemoveValidator.try_to_vec()?,
-    })
-}
-
-accounts_struct! {
-    DistributeFeesMeta, DistributeFeesInfo {
-        pub lido {
-            is_signer: false,
-            is_writable: true,
-        },
-        pub maintainer {
-            is_signer: true,
-            is_writable: false,
-        },
-        pub st_sol_mint {
-            is_signer: false,
-            is_writable: true,
-        },
-        pub reserve_authority {
-            is_signer: false,
-            is_writable: false,
-        },
-        pub treasury_account {
-            is_signer: false,
-            is_writable: true,
-        },
-        pub developer_account {
-            is_signer: false,
-            is_writable: true,
-        },
-        const spl_token = spl_token::id(),
-    }
-}
-
-pub fn distribute_fees(
-    program_id: &Pubkey,
-    accounts: &DistributeFeesMeta,
-) -> Result<Instruction, ProgramError> {
-    Ok(Instruction {
-        program_id: *program_id,
-        accounts: accounts.to_vec(),
-        data: LidoInstruction::DistributeFees.try_to_vec()?,
     })
 }
 

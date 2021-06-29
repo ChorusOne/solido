@@ -8,6 +8,7 @@ use solana_program::{
     account_info::AccountInfo, clock::Epoch, entrypoint::ProgramResult, msg,
     program_error::ProgramError, program_pack::Pack, pubkey::Pubkey, rent::Rent,
 };
+use spl_token::state::Mint;
 
 use crate::account_map::{AccountMap, AccountSet, PubkeyAndEntry};
 use crate::error::LidoError;
@@ -16,7 +17,6 @@ use crate::token::{Lamports, Rational, StLamports};
 use crate::util::serialize_b58;
 use crate::RESERVE_AUTHORITY;
 use crate::VALIDATOR_STAKE_ACCOUNT;
-use spl_token::state::Mint;
 
 pub const LIDO_VERSION: u8 = 0;
 
