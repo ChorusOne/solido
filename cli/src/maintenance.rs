@@ -258,7 +258,7 @@ impl SolidoState {
         )
     }
 
-    /// If there is a deposit that can be staked, return the instruction to do so.
+    /// If there is a deposit that can be staked, return the instructions to do so.
     pub fn try_stake_deposit(&self) -> Option<Vec<(Instruction, MaintenanceOutput)>> {
         let reserve_balance = self.get_effective_reserve();
 
@@ -396,8 +396,8 @@ impl SolidoState {
         )
     }
 
-    /// Tries to merge either accounts from the beginning or from the tip of the
-    /// validator's stake accounts.  May return None, one or two instructions.
+    // Tries to merge either accounts from the beginning of the validator's
+    // stake accounts.  May return None, one or two instructions.
     pub fn try_merge_on_all_stakes(&self) -> Option<Vec<(Instruction, MaintenanceOutput)>> {
         for (validator, stake_accounts) in self
             .solido
