@@ -193,52 +193,21 @@ cli_opt_struct! {
         #[clap(long, value_name = "int")]
         max_maintainers: u32,
 
+        // See also the docs section of `create-solido` in main.rs for a description
+        // of the fee shares.
         /// Treasury fee share of the rewards.
-        ///
-        /// A fraction T / (T + V + D + A) of the SOL rewards is paid to the
-        /// treasury in the form of stSOL.
-        ///
-        /// * T: Treasury fee share
-        /// * V: Validation fee share
-        /// * D: Developer fee share
-        /// * A: stSOL appreciation share
         #[clap(long, value_name = "int")]
         treasury_fee_share: u32,
 
         /// Validation fee share of the rewards.
-        ///
-        /// A fraction V / (T + V + D + A) of the SOL rewards is divided evenly
-        /// among all validators, and they can claim this in the form of stSOL.
-        ///
-        /// * T: Treasury fee share
-        /// * V: Validation fee share
-        /// * D: Developer fee share
-        /// * A: stSOL appreciation share
         #[clap(long, value_name = "int")]
         validation_fee_share: u32,
 
         /// Developer fee share of the rewards.
-        ///
-        /// A fraction D / (T + V + D + A) of the SOL rewards is paid to the
-        /// developer in the form of stSOL.
-        ///
-        /// * T: Treasury fee share
-        /// * V: Validation fee share
-        /// * D: Developer fee share
-        /// * A: stSOL appreciation share
         #[clap(long, value_name = "int")]
         developer_fee_share: u32,
 
         /// Share of the rewards that goes to stSOL appreciation.
-        ///
-        /// A fraction A / (T + V + D + A) of SOL the rewards go towards value
-        /// increase of stSOL. No stSOL is minted for these SOL rewards, which
-        /// means that one stSOL is now a share of a larger pool.
-        ///
-        /// * T: Treasury fee share
-        /// * V: Validation fee share
-        /// * D: Developer fee share
-        /// * A: stSOL appreciation share
         #[clap(long, value_name = "int")]
         st_sol_appreciation_share: u32,
 
