@@ -3,7 +3,7 @@ use std::fmt;
 use crate::config::{AddRemoveMaintainerOpts, AddValidatorOpts, CreateSolidoOpts, ShowSolidoOpts};
 use lido::{
     state::{FeeDistribution, Lido},
-    DEPOSIT_AUTHORITY, RESERVE_AUTHORITY,
+    RESERVE_AUTHORITY, STAKE_AUTHORITY,
 };
 use serde::Serialize;
 use solana_client::rpc_client::RpcClient;
@@ -295,7 +295,7 @@ pub struct ShowSolidoOutput {
     pub solido_address: PubkeyBase58,
     pub solido: Lido,
     pub reserve_authority: PubkeyBase58,
-    pub deposit_authority: PubkeyBase58,
+    pub stake_authority: PubkeyBase58,
 }
 
 impl fmt::Display for ShowSolidoOutput {
@@ -333,7 +333,7 @@ impl fmt::Display for ShowSolidoOutput {
         writeln!(
             f,
             "Deposit:     {}, {}",
-            self.deposit_authority, self.solido.deposit_authority_bump_seed
+            self.stake_authority, self.solido.stake_authority_bump_seed
         )?;
         writeln!(f, "\nFee distribution:")?;
         writeln!(
@@ -406,11 +406,11 @@ pub fn command_show_solido(
         opts.solido_program_id(),
     )?;
 
-    let deposit_authority = Pubkey::create_program_address(
+    let stake_authority = Pubkey::create_program_address(
         &[
             &opts.solido_address().to_bytes(),
-            DEPOSIT_AUTHORITY,
-            &[lido.deposit_authority_bump_seed],
+            STAKE_AUTHORITY,
+            &[lido.stake_authority_bump_seed],
         ],
         opts.solido_program_id(),
     )?;
@@ -420,7 +420,7 @@ pub fn command_show_solido(
         solido_address: opts.solido_address().into(),
         solido: lido,
         reserve_authority: reserve_authority.into(),
-        deposit_authority: deposit_authority.into(),
+        stake_authority: stake_authority.into(),
     })
 }
 

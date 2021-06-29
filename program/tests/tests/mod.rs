@@ -3,5 +3,6 @@ pub mod change_fee;
 pub mod deposit;
 pub mod fee_distribution;
 pub mod maintainers;
+pub mod merge_stake;
 pub mod stake_deposit;
 pub mod update_exchange_rate;

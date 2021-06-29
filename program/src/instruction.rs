@@ -62,6 +62,12 @@ pub enum LidoInstruction {
     RemoveValidator,
     AddMaintainer,
     RemoveMaintainer,
+    MergeStake {
+        #[allow(dead_code)] // but it's not
+        from_seed: u64,
+        #[allow(dead_code)] // but it's not
+        to_seed: u64,
+    },
 }
 
 macro_rules! accounts_struct_meta {
@@ -431,7 +437,7 @@ accounts_struct! {
             is_signer: false,
             is_writable: true,
         },
-        pub deposit_authority {
+        pub stake_authority {
             is_signer: false,
             is_writable: true,
         },
@@ -721,4 +727,50 @@ pub fn remove_maintainer(
         accounts: accounts.to_vec(),
         data: LidoInstruction::RemoveMaintainer.try_to_vec()?,
     })
+}
+
+accounts_struct! {
+    MergeStakeMeta, MergeStakeInfo {
+        pub lido {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub validator_vote_account {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub from_stake {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub to_stake {
+            is_signer: false,
+            is_writable: true,
+        },
+        // This instruction doesn’t reference the authority directly, but it
+        // invokes one a `MergeStake` instruction that needs the deposit
+        // authority to sign.
+        pub stake_authority {
+            is_signer: false,
+            is_writable: false,
+        },
+        const sysvar_clock = sysvar::clock::id(),
+        const stake_history = stake_history::id(),
+        const stake_program = stake_program::id(),
+    }
+}
+
+pub fn merge_stake(
+    program_id: &Pubkey,
+    from_seed: u64,
+    to_seed: u64,
+    accounts: &MergeStakeMeta,
+) -> Instruction {
+    Instruction {
+        program_id: *program_id,
+        accounts: accounts.to_vec(),
+        data: LidoInstruction::MergeStake { from_seed, to_seed }
+            .try_to_vec()
+            .unwrap(), // This should never fail.
+    }
 }

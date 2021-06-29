@@ -148,7 +148,7 @@ pub struct Lido {
 
     /// Bump seeds for signing messages on behalf of the authority
     pub sol_reserve_authority_bump_seed: u8,
-    pub deposit_authority_bump_seed: u8,
+    pub stake_authority_bump_seed: u8,
 
     /// Fees
     pub fee_distribution: FeeDistribution,
@@ -548,7 +548,7 @@ mod test_lido {
                 st_sol_supply: StLamports(17),
             },
             sol_reserve_authority_bump_seed: 1,
-            deposit_authority_bump_seed: 2,
+            stake_authority_bump_seed: 2,
             fee_distribution: FeeDistribution {
                 treasury_fee: 2,
                 validation_fee: 3,
