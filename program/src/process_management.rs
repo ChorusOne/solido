@@ -233,7 +233,16 @@ pub fn process_merge_stake(
         // The accounts to merge are not at the beginning or the end, we refuse
         // to merge them, as it would create a hole in the list of stake
         // accounts.
-        msg!("Attempting to merge stakes defined by {} and {}. Only stake that are in the bounder indexes can be merged. ({} and {}, or {} and {})", from_seed, to_seed, validator.entry.stake_accounts_seed_begin, validator.entry.stake_accounts_seed_begin+1, validator.entry.stake_accounts_seed_end, validator.entry.stake_accounts_seed_end-1);
+        msg!(
+            "Attempting to merge stakes defined by {} and {}. 
+        Only stake that are in the boundary indexes can be merged. ({} and {}, or {} and {})",
+            from_seed,
+            to_seed,
+            validator.entry.stake_accounts_seed_begin,
+            validator.entry.stake_accounts_seed_begin + 1,
+            validator.entry.stake_accounts_seed_end - 1,
+            validator.entry.stake_accounts_seed_end - 2
+        );
         return Err(LidoError::WrongStakeState.into());
     }
 

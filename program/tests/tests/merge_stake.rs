@@ -91,7 +91,7 @@ async fn test_successful_merge_stake_end() {
 }
 
 #[tokio::test]
-async fn test_merge_validator_with_one_stake_account() {
+async fn test_merge_validator_with_zero_and_one_stake_account() {
     let mut context = Context::new_with_maintainer().await;
     let validator = context.add_validator().await;
     context.deposit(Lamports(10_000_000_000)).await;
