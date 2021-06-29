@@ -3,7 +3,6 @@
 use std::fmt;
 use std::io;
 
-use lido::stake_account::StakeBalance;
 use serde::Serialize;
 use solana_client::rpc_client::RpcClient;
 use solana_program::{
@@ -24,6 +23,8 @@ use spl_stake_pool::stake_program::StakeState;
 use crate::config::PerformMaintenanceOpts;
 use crate::error::MaintenanceError;
 use crate::helpers::{get_solido, sign_and_send_transaction};
+use crate::stake_account::StakeAccount;
+use crate::stake_account::StakeBalance;
 use crate::{error::Error, Config};
 use lido::token::StLamports;
 use solana_program::program_pack::Pack;
@@ -46,6 +47,17 @@ pub enum MaintenanceOutput {
         amount: Lamports,
     },
     UpdateExchangeRate,
+
+    MergeStake {
+        #[serde(serialize_with = "serialize_b58")]
+        validator_vote_account: Pubkey,
+        #[serde(serialize_with = "serialize_b58")]
+        from_stake: Pubkey,
+        #[serde(serialize_with = "serialize_b58")]
+        to_stake: Pubkey,
+        from_stake_seed: u64,
+        to_stake_seed: u64,
+    },
 }
 
 impl fmt::Display for MaintenanceOutput {
@@ -63,6 +75,26 @@ impl fmt::Display for MaintenanceOutput {
             }
             MaintenanceOutput::UpdateExchangeRate => {
                 writeln!(f, "Updated exchange rate.")?;
+            }
+            MaintenanceOutput::MergeStake {
+                validator_vote_account,
+                from_stake,
+                to_stake,
+                from_stake_seed,
+                to_stake_seed,
+            } => {
+                writeln!(f, "Stake accounts merged")?;
+                writeln!(f, "  Validator vote account: {}", validator_vote_account)?;
+                writeln!(
+                    f,
+                    "  From stake:             {}, seed: {}",
+                    from_stake, from_stake_seed
+                )?;
+                writeln!(
+                    f,
+                    "  To stake:               {}, seed: {}",
+                    to_stake, to_stake_seed
+                )?;
             }
         }
         Ok(())
@@ -92,7 +124,7 @@ pub struct SolidoState {
     /// For each validator, in the same order as in `solido.validators`, holds
     /// the stake balance of the derived stake accounts from the begin seed until
     /// end seed.
-    pub validator_stake_accounts: Vec<Vec<(Pubkey, StakeBalance)>>,
+    pub validator_stake_accounts: Vec<Vec<(Pubkey, StakeAccount)>>,
 
     /// SPL token mint for stSOL, to know the current supply.
     pub st_sol_mint: Mint,
@@ -117,7 +149,7 @@ fn get_validator_stake_accounts(
     clock: &Clock,
     stake_history: &StakeHistory,
     validator: &PubkeyAndEntry<Validator>,
-) -> Result<Vec<(Pubkey, StakeBalance)>> {
+) -> Result<Vec<(Pubkey, StakeAccount)>> {
     let mut result = Vec::new();
     for seed in validator.entry.stake_accounts_seed_begin..validator.entry.stake_accounts_seed_end {
         let (addr, _bump_seed) = Validator::find_stake_account_address(
@@ -129,20 +161,24 @@ fn get_validator_stake_accounts(
         let account = rpc_client.get_account(&addr)?;
         let stake_state: StakeState = try_from_slice_unchecked(&account.data)
             .expect("Derived stake account contains invalid data.");
-        let delegation = stake_state
-            .delegation()
-            .expect("Encountered undelegated stake account, this should not happen.");
+
+        let stake = if let StakeState::Stake(_, stake) = stake_state {
+            stake
+        } else {
+            panic!("Stake state should have been StakeState::Stake")
+        };
 
         assert_eq!(
-            delegation.voter_pubkey, validator.pubkey,
+            stake.delegation.voter_pubkey, validator.pubkey,
             "Expected the stake account for validator to delegate to that validator."
         );
 
-        let balance = StakeBalance::from_delegated_account(
+        let balance = StakeAccount::from_delegated_account(
             Lamports(account.lamports),
-            &delegation,
+            &stake,
             clock,
             stake_history,
+            seed,
         );
 
         result.push((addr, balance));
@@ -222,8 +258,8 @@ impl SolidoState {
         )
     }
 
-    /// If there is a deposit that can be staked, return the instruction to do so.
-    pub fn try_stake_deposit(&self) -> Option<(Instruction, MaintenanceOutput)> {
+    /// If there is a deposit that can be staked, return the instructions to do so.
+    pub fn try_stake_deposit(&self) -> Option<Vec<(Instruction, MaintenanceOutput)>> {
         let reserve_balance = self.get_effective_reserve();
 
         // If there is enough reserve, we can make a deposit. To keep the pool
@@ -253,12 +289,6 @@ impl SolidoState {
             validator.entry.stake_accounts_seed_end,
         );
 
-        let (stake_authority, _bump_seed_authority) = lido::find_authority_program_address(
-            &self.solido_program_id,
-            &self.solido_address,
-            STAKE_AUTHORITY,
-        );
-
         // Top up the validator to at most its target. If that means we don't use the full
         // reserve, a future maintenance run will stake the remainder with the next validator.
         let mut amount_to_deposit = amount_below_target.min(reserve_balance);
@@ -285,23 +315,123 @@ impl SolidoState {
                 reserve: self.reserve_address,
                 validator_vote_account: validator.pubkey,
                 stake_account_end,
-                stake_authority,
+                stake_authority: self.get_stake_authority(),
             },
             amount_to_deposit,
         )
         .expect("Failed to construct StakeDeposit instruction.");
-
         let task = MaintenanceOutput::StakeDeposit {
             validator_vote_account: validator.pubkey,
             amount: amount_to_deposit,
             stake_account: stake_account_end,
         };
+        let mut instructions_output = vec![(instruction, task)];
 
-        Some((instruction, task))
+        let current_stake = StakeAccount {
+            balance: StakeBalance {
+                activating: amount_to_deposit,
+                active: Lamports(0),
+                deactivating: Lamports(0),
+                inactive: Lamports(0),
+            },
+            credits_observed: 0,
+            activation_epoch: self.clock.epoch,
+            seed: validator.entry.stake_accounts_seed_end,
+        };
+        // Try to merge with previous account, if there's at least 1 stake account
+        if let Some(last_stake) = self.validator_stake_accounts[validator_index].last() {
+            if last_stake.1.can_merge(&current_stake) {
+                let validator = &self.solido.validators.entries[validator_index];
+
+                let to_seed = validator.entry.stake_accounts_seed_end;
+                let merge_instruction =
+                    self.get_merge_instruction(validator.pubkey, to_seed, to_seed - 1);
+                instructions_output.push((
+                    merge_instruction,
+                    MaintenanceOutput::MergeStake {
+                        validator_vote_account: validator.pubkey,
+                        from_stake: stake_account_end,
+                        to_stake: last_stake.0,
+                        from_stake_seed: to_seed + 1,
+                        to_stake_seed: to_seed,
+                    },
+                ));
+            }
+        }
+        Some(instructions_output)
+    }
+
+    /// Get an instruction to merge accounts.
+    fn get_merge_instruction(
+        &self,
+        validator_vote_key: Pubkey,
+        from_seed: u64,
+        to_seed: u64,
+    ) -> Instruction {
+        // Stake Account created by this transaction.
+        let (from_stake, _bump_seed_end) = Validator::find_stake_account_address(
+            &self.solido_program_id,
+            &self.solido_address,
+            &validator_vote_key,
+            from_seed,
+        );
+        // Stake Account created by this transaction.
+        let (to_stake, _bump_seed_end) = Validator::find_stake_account_address(
+            &self.solido_program_id,
+            &self.solido_address,
+            &validator_vote_key,
+            to_seed,
+        );
+        lido::instruction::merge_stake(
+            &self.solido_program_id,
+            from_seed,
+            to_seed,
+            &lido::instruction::MergeStakeMeta {
+                lido: self.solido_address,
+                validator_vote_account: validator_vote_key,
+                from_stake,
+                to_stake,
+                stake_authority: self.get_stake_authority(),
+            },
+        )
+    }
+
+    // Tries to merge either accounts from the beginning of the validator's
+    // stake accounts.  May return None, one or two instructions.
+    pub fn try_merge_on_all_stakes(&self) -> Option<Vec<(Instruction, MaintenanceOutput)>> {
+        for (validator, stake_accounts) in self
+            .solido
+            .validators
+            .entries
+            .iter()
+            .zip(self.validator_stake_accounts.iter())
+        {
+            // Try to merge from beginning
+            if stake_accounts.len() > 1 {
+                let from_stake = stake_accounts[0];
+                let to_stake = stake_accounts[1];
+                if to_stake.1.can_merge(&from_stake.1) {
+                    let instruction = self.get_merge_instruction(
+                        validator.pubkey,
+                        from_stake.1.seed,
+                        to_stake.1.seed,
+                    );
+                    let task = MaintenanceOutput::MergeStake {
+                        validator_vote_account: validator.pubkey,
+                        from_stake: from_stake.0,
+                        to_stake: to_stake.0,
+                        from_stake_seed: from_stake.1.seed,
+                        to_stake_seed: to_stake.1.seed,
+                    };
+                    return Some(vec![(instruction, task)]);
+                }
+            }
+        }
+        None
     }
 
     /// If a new epoch started, and we haven't updated the exchange rate yet, do so.
-    pub fn try_update_exchange_rate(&self) -> Option<(Instruction, MaintenanceOutput)> {
+    pub fn try_update_exchange_rate(&self) -> Option<Vec<(Instruction, MaintenanceOutput)>> {
         if self.solido.exchange_rate.computed_in_epoch >= self.clock.epoch {
             // The exchange rate has already been updated in this epoch, nothing to do.
             return None;
@@ -317,7 +447,7 @@ impl SolidoState {
         );
         let task = MaintenanceOutput::UpdateExchangeRate;
 
-        Some((instruction, task))
+        Some(vec![(instruction, task)])
     }
 
     /// Write metrics about the current Solido instance in Prometheus format.
@@ -370,8 +500,10 @@ impl SolidoState {
             .iter()
             .zip(self.validator_stake_accounts.iter())
         {
-            let stake_balance: StakeBalance =
-                stake_accounts.iter().map(|(_addr, balance)| *balance).sum();
+            let stake_balance: StakeBalance = stake_accounts
+                .iter()
+                .map(|(_addr, stake_account)| stake_account.balance)
+                .sum();
             let metric = |amount: Lamports, status: &'static str| {
                 Metric::new(amount.0)
                     .nano()
@@ -455,12 +587,20 @@ impl SolidoState {
 
         Ok(())
     }
+    fn get_stake_authority(&self) -> Pubkey {
+        let (stake_authority, _bump_seed_authority) = lido::find_authority_program_address(
+            &self.solido_program_id,
+            &self.solido_address,
+            STAKE_AUTHORITY,
+        );
+        stake_authority
+    }
 }
 
 pub fn try_perform_maintenance(
     config: &Config,
     state: &SolidoState,
-) -> Result<Option<MaintenanceOutput>> {
+) -> Result<Option<Vec<MaintenanceOutput>>> {
     // To prevent the maintenance transactions failing with mysterious errors
     // that are difficult to debug, before we do any maintenance, do a sanity
     // check to ensure that the maintainer has at least some SOL to pay the
@@ -478,19 +618,26 @@ pub fn try_perform_maintenance(
 
     // Try all of these operations one by one, and select the first one that
     // produces an instruction.
-    let instruction: Option<(Instruction, MaintenanceOutput)> = None
+    let instructions_outputs: Option<Vec<(Instruction, MaintenanceOutput)>> = None
+        .or_else(|| state.try_merge_on_all_stakes())
         .or_else(|| state.try_update_exchange_rate())
         .or_else(|| state.try_stake_deposit());
 
-    let (instr, description) = match instruction {
-        Some(x) => x,
-        None => return Ok(None),
-    };
-
-    // For maintenance operations, the maintainer is the only signer,
-    // and that should be sufficient.
-    sign_and_send_transaction(config, &[instr], &[config.signer])?;
-    Ok(Some(description))
+    match instructions_outputs {
+        Some(x) => {
+            let mut instructions = vec![];
+            let mut outputs = vec![];
+            for (instr, mo) in x {
+                instructions.push(instr);
+                outputs.push(mo);
+            }
+            // For maintenance operations, the maintainer is the only signer,
+            // and that should be sufficient.
+            sign_and_send_transaction(config, &instructions, &[config.signer])?;
+            Ok(Some(outputs))
+        }
+        None => Ok(None),
+    }
 }
 
 /// Inspect the on-chain Solido state, and if there is maintenance that can be
@@ -502,7 +649,7 @@ pub fn try_perform_maintenance(
 pub fn run_perform_maintenance(
     config: &Config,
     opts: &PerformMaintenanceOpts,
-) -> Result<Option<MaintenanceOutput>> {
+) -> Result<Option<Vec<MaintenanceOutput>>> {
     let state = SolidoState::new(config, opts.solido_program_id(), opts.solido_address())?;
     try_perform_maintenance(config, &state)
 }
@@ -551,7 +698,7 @@ mod test {
             .validators
             .add(Pubkey::new_unique(), Validator::new(Pubkey::new_unique()))
             .unwrap();
-
+        state.validator_stake_accounts.push(vec![]);
         // Put some SOL in the reserve, but not enough to stake.
         state.reserve_account.lamports += MINIMUM_STAKE_ACCOUNT_BALANCE.0 - 1;
 
@@ -586,6 +733,7 @@ mod test {
             .validators
             .add(Pubkey::new_unique(), Validator::new(Pubkey::new_unique()))
             .unwrap();
+        state.validator_stake_accounts = vec![vec![], vec![]];
 
         // Put enough SOL in the reserve that we can stake half of the deposit
         // with each of the validators, and still be above the minimum stake
@@ -601,7 +749,7 @@ mod test {
 
         // The first attempt should stake with the first validator.
         assert_eq!(
-            state.try_stake_deposit().unwrap().1,
+            state.try_stake_deposit().unwrap()[0].1,
             MaintenanceOutput::StakeDeposit {
                 validator_vote_account: state.solido.validators.entries[0].pubkey,
                 amount: (MINIMUM_STAKE_ACCOUNT_BALANCE * 2).unwrap(),
@@ -627,7 +775,7 @@ mod test {
         // The second attempt should stake with the second validator, and the amount
         // should be the same as before.
         assert_eq!(
-            state.try_stake_deposit().unwrap().1,
+            state.try_stake_deposit().unwrap()[0].1,
             MaintenanceOutput::StakeDeposit {
                 validator_vote_account: state.solido.validators.entries[1].pubkey,
                 amount: (MINIMUM_STAKE_ACCOUNT_BALANCE * 2).unwrap(),
