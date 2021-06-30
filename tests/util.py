@@ -154,7 +154,7 @@ def create_test_account(keypair_fname: str, *, fund: bool = True) -> TestAccount
     )
     pubkey = run('solana-keygen', 'pubkey', keypair_fname).strip()
     if fund:
-        solana('transfer', '--allow-unfunded-recipient', pubkey, '10.0')
+        solana('transfer', '--allow-unfunded-recipient', pubkey, '1.0')
     return TestAccount(pubkey, keypair_fname)
 
 

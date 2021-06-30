@@ -331,8 +331,9 @@ transaction_result = solido(
 transaction_address = transaction_result['transaction_address']
 approve_and_execute(transaction_address, test_addrs[0])
 
+current_epoch = int(solana('epoch'))
 
-print('\nRunning maintenance (should be no-op) ...')
+print('\nRunning maintenance (should be no-op if epoch is unchanged) ...')
 result = solido(
     'perform-maintenance',
     '--solido-address',
@@ -341,14 +342,22 @@ result = solido(
     solido_program_id,
     keypair_path=maintainer.keypair_path,
 )
-assert result is None, f'Huh, perform-maintenance performed {result}'
-print('> There was nothing to do, as expected.')
+if solido_instance['solido']['exchange_rate']['computed_in_epoch'] == current_epoch:
+    assert result is None, f'Huh, perform-maintenance performed {result}'
+    print('> There was nothing to do, as expected.')
+else:
+    update_exchange_rate_result = ['UpdateExchangeRate']
+    # Epoch is likely to be > 0 for the test-net runs
+    assert (
+        result == update_exchange_rate_result
+    ), f'\nExpected: {update_exchange_rate_result}\nActual:   {result}'
+    print('> Updated the exchange rate, as expected in a change of Epoch.')
 
-print('\nSimulating 10 SOL deposit, then running maintenance ...')
+print('\nSimulating 1 SOL deposit, then running maintenance ...')
 # TODO(#154): Perform an actual deposit here.
 reserve_authority: str = solido_instance['reserve_authority']
-solana('transfer', '--allow-unfunded-recipient', reserve_authority, '10.0')
-print(f'> Funded reserve {reserve_authority} with 10.0 SOL')
+solana('transfer', '--allow-unfunded-recipient', reserve_authority, '1.0')
+print(f'> Funded reserve {reserve_authority} with 1.0 SOL')
 
 result = solido(
     'perform-maintenance',
@@ -362,7 +371,7 @@ expected_result = [
     {
         'StakeDeposit': {
             'validator_vote_account': validator_vote_account.pubkey,
-            'amount_lamports': int(10.0e9),
+            'amount_lamports': int(1.0e9),
         }
     }
 ]
