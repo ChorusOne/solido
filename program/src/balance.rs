@@ -1,8 +1,8 @@
 //! Logic for keeping the stake pool balanced.
 
-use crate::error::LidoError;
 use crate::state::Validators;
 use crate::token::Lamports;
+use crate::{error::LidoError, token::Rational};
 
 /// Compute the ideal stake balance for each validator.
 ///
@@ -32,18 +32,22 @@ pub fn get_target_balance(
         .and_then(|t| t + undelegated_lamports)
         .ok_or(LidoError::CalculationFailure)?;
 
+    let total_weights: u32 = validators.iter_entries().map(|v| v.weight.0).sum();
+
     // We only want to target validators that are not in the process of being
     // removed. For now, those are all the validators. Once we add validator
     // removal, we need to take the removal flag into account here.
     let num_active_validators = validators.len() as u64;
 
-    // We simply target a uniform distribution. If this causes division by
-    // zero, that means there are no active validators.
-    let target_balance_per_active_validator =
-        (total_lamports / num_active_validators).ok_or(LidoError::NoActiveValidators)?;
-
-    for target in target_balance.iter_mut() {
-        *target = target_balance_per_active_validator;
+    // Target a weighted distribution. A division by zero means that
+    // `total_weights` is zero, that means there are no active validators.
+    for (target, validator) in target_balance.iter_mut().zip(validators.iter_entries()) {
+        *target = (total_lamports
+            * Rational {
+                numerator: validator.weight.0 as u64,
+                denominator: total_weights as u64,
+            })
+        .ok_or(LidoError::NoActiveValidators)?
     }
 
     // The total lamports to distribute may be slightly larger than the total
@@ -114,7 +118,7 @@ pub fn get_validator_furthest_below_target(
 #[cfg(test)]
 mod test {
     use super::{get_target_balance, get_validator_furthest_below_target};
-    use crate::state::Validators;
+    use crate::state::{Validators, Weight};
     use crate::token::Lamports;
 
     #[test]
@@ -194,6 +198,44 @@ mod test {
         assert_eq!(
             get_validator_furthest_below_target(&validators, &targets[..]),
             (0, Lamports(0))
+        );
+    }
+    #[test]
+    fn get_target_balance_weighted_validators() {
+        // 200 Lamports delegated, but only one active validator,
+        // so all of the target should be with that one validator.
+        let mut validators = Validators::new_fill_default(2);
+        validators.entries[0].entry.weight = Weight(1000);
+        validators.entries[1].entry.weight = Weight(3000);
+
+        let mut targets = [Lamports(0); 2];
+        let undelegated_stake = Lamports(100);
+        let result = get_target_balance(undelegated_stake, &validators, &mut targets[..]);
+        assert!(result.is_ok());
+        assert_eq!(targets, [Lamports(25), Lamports(75)]);
+
+        assert_eq!(
+            get_validator_furthest_below_target(&validators, &targets[..]),
+            (1, Lamports(75))
+        );
+    }
+    #[test]
+    fn get_target_balance_weighted_validators_non_integer_multiple() {
+        let mut validators = Validators::new_fill_default(2);
+        validators.entries[0].entry.weight = Weight(1000);
+        validators.entries[1].entry.weight = Weight(2000);
+        validators.entries[0].entry.stake_accounts_balance = Lamports(101);
+        validators.entries[1].entry.stake_accounts_balance = Lamports(99);
+
+        let mut targets = [Lamports(0); 2];
+        let undelegated_stake = Lamports(51);
+        let result = get_target_balance(undelegated_stake, &validators, &mut targets[..]);
+        assert!(result.is_ok());
+        assert_eq!(targets, [Lamports(84), Lamports(167)]);
+
+        assert_eq!(
+            get_validator_furthest_below_target(&validators, &targets[..]),
+            (1, Lamports(68))
         );
     }
 }
