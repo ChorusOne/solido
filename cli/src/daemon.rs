@@ -149,6 +149,7 @@ fn run_main_loop(config: &Config, opts: &RunMaintainerOpts, snapshot_mutex: &Sna
                     }
                     Ok(Some(outputs)) => {
                         for maintenance_output in outputs.iter() {
+                            println!("{}", maintenance_output);
                             match maintenance_output {
                                 MaintenanceOutput::StakeDeposit { .. } => {
                                     metrics.transactions_stake_deposit += 1;
