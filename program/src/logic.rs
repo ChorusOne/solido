@@ -1,11 +1,15 @@
-use crate::{
-    error::LidoError,
-    state::Lido,
-    token::{Lamports, StLamports},
-};
+use solana_program::entrypoint::ProgramResult;
 use solana_program::{
     account_info::AccountInfo, borsh::try_from_slice_unchecked, msg, program::invoke_signed,
     program_error::ProgramError, pubkey::Pubkey, rent::Rent,
+};
+
+use crate::{
+    error::LidoError,
+    state::Fees,
+    state::Lido,
+    token::{Lamports, StLamports},
+    RESERVE_AUTHORITY,
 };
 
 pub(crate) fn check_rent_exempt(
@@ -38,32 +42,122 @@ pub fn get_reserve_available_balance(
     }
 }
 
-/// Issue a spl_token `MintTo` instruction.
-#[allow(clippy::too_many_arguments)]
-pub fn token_mint_to<'a>(
-    lido: &Pubkey,
-    token_program: AccountInfo<'a>,
-    mint: AccountInfo<'a>,
-    destination: AccountInfo<'a>,
-    authority: AccountInfo<'a>,
-    authority_type: &[u8],
-    bump_seed: u8,
+/// Mint the given amount of stSOL and put it in the recipient's account.
+///
+/// * The stSOL mint must be the one configured in the Solido instance.
+/// * The recipient account must be an stSOL SPL token account.
+pub fn mint_st_sol_to<'a>(
+    solido: &Lido,
+    solido_address: &Pubkey,
+    spl_token_program: &AccountInfo<'a>,
+    st_sol_mint: &AccountInfo<'a>,
+    reserve_authority: &AccountInfo<'a>,
+    recipient: &AccountInfo<'a>,
     amount: StLamports,
-) -> Result<(), ProgramError> {
-    let me_bytes = lido.to_bytes();
-    let authority_signature_seeds = [&me_bytes, authority_type, &[bump_seed]];
-    let signers = &[&authority_signature_seeds[..]];
+) -> ProgramResult {
+    solido.check_mint_is_st_sol_mint(st_sol_mint)?;
+    solido.check_is_st_sol_account(recipient)?;
 
-    let ix = spl_token::instruction::mint_to(
-        token_program.key,
-        mint.key,
-        destination.key,
-        authority.key,
-        &[],
+    // The reserve authority is the account that stores deposited SOL, but
+    // it doubles as the mint authority for stSOL, and we sign the mint_to
+    // instruction on behalf of it.
+    let mint_authority = reserve_authority;
+    let solido_address_bytes = solido_address.to_bytes();
+    let authority_signature_seeds = [
+        &solido_address_bytes[..],
+        RESERVE_AUTHORITY,
+        &[solido.sol_reserve_authority_bump_seed],
+    ];
+    let signers = [&authority_signature_seeds[..]];
+
+    // The SPL token program supports multisig-managed mints, but we do not
+    // use those.
+    let mint_to_signers = [];
+
+    let instruction = spl_token::instruction::mint_to(
+        &spl_token_program.key,
+        &st_sol_mint.key,
+        &recipient.key,
+        &mint_authority.key,
+        &mint_to_signers,
         amount.0,
     )?;
 
-    invoke_signed(&ix, &[mint, destination, authority, token_program], signers)
+    invoke_signed(
+        &instruction,
+        &[
+            st_sol_mint.clone(),
+            recipient.clone(),
+            mint_authority.clone(),
+            spl_token_program.clone(),
+        ],
+        &signers,
+    )
+}
+
+/// Mint stSOL for the given fees, and transfer them to the appropriate accounts.
+// TODO(ruuda): Both of these Clippy violations will be fixed when by implementing
+// UpdateValidatorBalance.
+#[allow(dead_code)]
+#[allow(clippy::too_many_arguments)]
+pub fn distribute_fees<'a>(
+    solido: &mut Lido,
+    solido_address: &Pubkey,
+    spl_token_program: &AccountInfo<'a>,
+    st_sol_mint: &AccountInfo<'a>,
+    reserve_authority: &AccountInfo<'a>,
+    treasury_st_sol_account: &AccountInfo<'a>,
+    developer_st_sol_account: &AccountInfo<'a>,
+    fees: Fees,
+) -> ProgramResult {
+    // Convert all fees to stSOL according to the previously updated exchange rate.
+    // In the case of fees, the SOL is already part of one of the stake accounts,
+    // but we do still need to mint stSOL to represent it.
+
+    let treasury_amount = solido
+        .exchange_rate
+        .exchange_sol(fees.treasury_amount)
+        .ok_or(LidoError::CalculationFailure)?;
+
+    let developer_amount = solido
+        .exchange_rate
+        .exchange_sol(fees.developer_amount)
+        .ok_or(LidoError::CalculationFailure)?;
+
+    let per_validator_amount = solido
+        .exchange_rate
+        .exchange_sol(fees.reward_per_validator)
+        .ok_or(LidoError::CalculationFailure)?;
+
+    // The treasury and developer fee we can mint and pay immediately.
+    mint_st_sol_to(
+        solido,
+        solido_address,
+        spl_token_program,
+        st_sol_mint,
+        reserve_authority,
+        treasury_st_sol_account,
+        treasury_amount,
+    )?;
+    mint_st_sol_to(
+        solido,
+        solido_address,
+        spl_token_program,
+        st_sol_mint,
+        reserve_authority,
+        developer_st_sol_account,
+        developer_amount,
+    )?;
+
+    // For the validators, as there can be many of them, we can't pay all of
+    // them in a single transaction. Instead, we store how much they are
+    // entitled to, and they can later claim it themselves with `ClaimValidatorFees`.
+    for validator in solido.validators.iter_entries_mut() {
+        validator.fee_credit =
+            (validator.fee_credit + per_validator_amount).ok_or(LidoError::CalculationFailure)?;
+    }
+
+    Ok(())
 }
 
 pub fn deserialize_lido(program_id: &Pubkey, lido: &AccountInfo) -> Result<Lido, ProgramError> {

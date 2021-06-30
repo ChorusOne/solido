@@ -8,14 +8,14 @@ use crate::{
         DepositAccountsInfo, InitializeAccountsInfo, LidoInstruction, StakeDepositAccountsInfo,
         UpdateExchangeRateAccountsInfo,
     },
-    logic::{check_rent_exempt, deserialize_lido, get_reserve_available_balance, token_mint_to},
+    logic::{check_rent_exempt, deserialize_lido, get_reserve_available_balance, mint_st_sol_to},
     process_management::{
-        process_add_maintainer, process_add_validator, process_change_fee_spec,
-        process_claim_validator_fee, process_distribute_fees, process_merge_stake,
-        process_remove_maintainer, process_remove_validator,
+        process_add_maintainer, process_add_validator, process_change_reward_distribution,
+        process_claim_validator_fee, process_merge_stake, process_remove_maintainer,
+        process_remove_validator,
     },
     state::{
-        FeeDistribution, FeeRecipients, Maintainers, Validator, Validators, LIDO_CONSTANT_SIZE,
+        FeeRecipients, Maintainers, RewardDistribution, Validator, Validators, LIDO_CONSTANT_SIZE,
         LIDO_VERSION,
     },
     token::{Lamports, StLamports},
@@ -42,7 +42,7 @@ use {
 pub fn process_initialize(
     version: u8,
     program_id: &Pubkey,
-    fee_distribution: FeeDistribution,
+    reward_distribution: RewardDistribution,
     max_validators: u32,
     max_maintainers: u32,
     accounts_raw: &[AccountInfo],
@@ -88,7 +88,7 @@ pub fn process_initialize(
     lido.st_sol_mint = *accounts.st_sol_mint.key;
     lido.sol_reserve_authority_bump_seed = reserve_bump_seed;
     lido.stake_authority_bump_seed = deposit_bump_seed;
-    lido.fee_distribution = fee_distribution;
+    lido.reward_distribution = reward_distribution;
 
     // Confirm that the fee recipients are actually stSOL accounts.
     lido.check_is_st_sol_account(&accounts.treasury_account)?;
@@ -111,9 +111,6 @@ pub fn process_deposit(
 
     let lido = deserialize_lido(program_id, accounts.lido)?;
 
-    lido.check_is_st_sol_account(&accounts.recipient)?;
-    lido.check_reserve_authority(program_id, accounts.lido.key, accounts.reserve_account)?;
-
     invoke(
         &system_instruction::transfer(accounts.user.key, accounts.reserve_account.key, amount.0),
         &[
@@ -128,14 +125,13 @@ pub fn process_deposit(
         .exchange_sol(amount)
         .ok_or(LidoError::CalculationFailure)?;
 
-    token_mint_to(
+    mint_st_sol_to(
+        &lido,
         accounts.lido.key,
-        accounts.spl_token.clone(),
-        accounts.st_sol_mint.clone(),
-        accounts.recipient.clone(),
-        accounts.reserve_account.clone(),
-        RESERVE_AUTHORITY,
-        lido.sol_reserve_authority_bump_seed,
+        accounts.spl_token,
+        accounts.st_sol_mint,
+        accounts.reserve_account,
+        accounts.recipient,
         st_sol_amount,
     )?;
 
@@ -355,13 +351,13 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
     let instruction = LidoInstruction::try_from_slice(input)?;
     match instruction {
         LidoInstruction::Initialize {
-            fee_distribution,
+            reward_distribution,
             max_validators,
             max_maintainers,
         } => process_initialize(
             LIDO_VERSION,
             program_id,
-            fee_distribution,
+            reward_distribution,
             max_validators,
             max_maintainers,
             accounts,
@@ -372,11 +368,10 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
         }
         LidoInstruction::UpdateExchangeRate => process_update_exchange_rate(program_id, accounts),
         LidoInstruction::Withdraw { amount } => process_withdraw(program_id, amount, accounts),
-        LidoInstruction::DistributeFees => process_distribute_fees(program_id, accounts),
         LidoInstruction::ClaimValidatorFees => process_claim_validator_fee(program_id, accounts),
-        LidoInstruction::ChangeFeeSpec {
-            new_fee_distribution,
-        } => process_change_fee_spec(program_id, new_fee_distribution, accounts),
+        LidoInstruction::ChangeRewardDistribution {
+            new_reward_distribution,
+        } => process_change_reward_distribution(program_id, new_reward_distribution, accounts),
         LidoInstruction::AddValidator => process_add_validator(program_id, accounts),
         LidoInstruction::RemoveValidator => process_remove_validator(program_id, accounts),
         LidoInstruction::AddMaintainer => process_add_maintainer(program_id, accounts),

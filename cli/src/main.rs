@@ -58,32 +58,31 @@ struct Opts {
 #[derive(Clap, Debug)]
 enum SubCommand {
     /// Create a new Lido for Solana instance.
-    #[clap(after_help = r"ACCOUNTS:
+    #[clap(after_help = r"ACCOUNTS
 
     This sets up a few things:
 
-    * An SPL token mint for stake pool tokens.
     * An SPL token mint for stSOL.
     * stSOL-denominated SPL token accounts for fee receivers.
-    * The stake pool managed by this Solido instance.
     * The Solido instance itself.
 
-FEES:
+REWARDS
 
-    Of the validation rewards that the stake pool receives, a fraction
-    «fee-numerator» / «fee-denominator» gets paid out as fees. The remaining
-    rewards get distributed implicitly to stSOL holders because they now own
+    Solido takes a fraction of the rewards that it receives as fees. The
+    remainder gets distributed implicitly to stSOL holders because they now own
     a share of a larger pool of SOL.
 
-    The fees are distributed among the treasury, validators, and the
-    developer, according to the ratio
+    The SOL rewards get split according to the ratio T : V : D : A, where
 
-    «treasury-fee» : «validation-fee» : «developer-fee»
+      T: Treasury fee share
+      V: Validation fee share (this is for all validators combined)
+      D: Developer fee share
+      A: stSOL value appreciation share
 
-    For example, if the fees are set to a 1 : 2 : 1 proportion, then the
-    treasury and developers would receive 50% of the fees, and the validation
-    would receive the remaining 50%. Subsequently, the validation fee is divided
-    equally among all validators.
+    For example, if the reward distribution is set to '5 : 3 : 2 : 90', then 90%
+    of the rewards go to stSOL value appreciation, and 10% go to fees. Of those
+    fees, 50% go to the treasury, 30% are divided among validators, and 20% goes
+    to the developer.
     ")]
     CreateSolido(CreateSolidoOpts),
 

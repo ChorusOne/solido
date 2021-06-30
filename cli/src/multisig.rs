@@ -12,20 +12,22 @@ use anchor_lang::{Discriminator, InstructionData};
 use borsh::de::BorshDeserialize;
 use borsh::ser::BorshSerialize;
 use clap::Clap;
-use lido::instruction::AddMaintainerMeta;
-use lido::instruction::AddValidatorMeta;
-use lido::instruction::ChangeFeeSpecMeta;
-use lido::instruction::LidoInstruction;
-use lido::instruction::RemoveMaintainerMeta;
-use lido::state::FeeDistribution;
-use lido::state::FeeRecipients;
-use lido::state::Lido;
-use multisig::accounts as multisig_accounts;
-use multisig::instruction as multisig_instruction;
 use serde::Serialize;
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::commitment_config::CommitmentConfig;
 use solana_sdk::transaction::TransactionError;
+
+use lido::instruction::AddMaintainerMeta;
+use lido::instruction::AddValidatorMeta;
+use lido::instruction::ChangeRewardDistributionMeta;
+use lido::instruction::LidoInstruction;
+use lido::instruction::RemoveMaintainerMeta;
+use lido::state::FeeRecipients;
+use lido::state::Lido;
+use lido::state::RewardDistribution;
+use lido::util::serialize_b58;
+use multisig::accounts as multisig_accounts;
+use multisig::instruction as multisig_instruction;
 
 use crate::config::ConfigFile;
 use crate::config::{
@@ -38,7 +40,6 @@ use crate::helpers::sign_and_send_transaction;
 use crate::util::PubkeyBase58;
 use crate::Config;
 use crate::{print_output, OutputMode};
-use lido::util::serialize_b58;
 
 #[derive(Clap, Debug)]
 pub struct MultisigOpts {
@@ -313,9 +314,9 @@ enum SolidoInstruction {
         #[serde(serialize_with = "serialize_b58")]
         maintainer: Pubkey,
     },
-    ChangeFee {
+    ChangeRewardDistribution {
         current_solido: Box<Lido>,
-        fee_distribution: FeeDistribution,
+        reward_distribution: RewardDistribution,
 
         #[serde(serialize_with = "serialize_b58")]
         solido_instance: Pubkey,
@@ -456,19 +457,22 @@ impl fmt::Display for ShowTransactionOutput {
                         writeln!(f, "    Manager:         {}", manager)?;
                         writeln!(f, "    Maintainer:      {}", maintainer)?;
                     }
-                    SolidoInstruction::ChangeFee {
+                    SolidoInstruction::ChangeRewardDistribution {
                         current_solido,
-                        fee_distribution,
-
+                        reward_distribution,
                         solido_instance,
                         manager,
                         fee_recipients,
                     } => {
-                        writeln!(f, "It changes the fee structure and distribution")?;
+                        writeln!(f, "It changes the reward distribution")?;
                         writeln!(f, "    Solido instance:       {}", solido_instance)?;
                         writeln!(f, "    Manager:               {}", manager)?;
                         writeln!(f)?;
-                        print_changed_fee(f, &current_solido, &fee_distribution)?;
+                        print_changed_reward_distribution(
+                            f,
+                            &current_solido,
+                            &reward_distribution,
+                        )?;
                         print_changed_recipients(f, &current_solido, &fee_recipients)?;
                     }
                 }
@@ -506,36 +510,44 @@ fn changed_fee(
     Ok(())
 }
 
-fn print_changed_fee(
+fn print_changed_reward_distribution(
     f: &mut fmt::Formatter,
     current_solido: &Lido,
-    fee_disribution: &FeeDistribution,
+    reward_distribution: &RewardDistribution,
 ) -> fmt::Result {
-    let current_sum = current_solido.fee_distribution.sum();
-    let new_sum = fee_disribution.sum();
+    let current_sum = current_solido.reward_distribution.sum();
+    let new_sum = reward_distribution.sum();
     changed_fee(
         f,
-        current_solido.fee_distribution.treasury_fee,
-        fee_disribution.treasury_fee,
+        current_solido.reward_distribution.treasury_fee,
+        reward_distribution.treasury_fee,
         current_sum,
         new_sum,
         "treasury",
     )?;
     changed_fee(
         f,
-        current_solido.fee_distribution.validation_fee,
-        fee_disribution.validation_fee,
+        current_solido.reward_distribution.validation_fee,
+        reward_distribution.validation_fee,
         current_sum,
         new_sum,
         "validation",
     )?;
     changed_fee(
         f,
-        current_solido.fee_distribution.developer_fee,
-        fee_disribution.developer_fee,
+        current_solido.reward_distribution.developer_fee,
+        reward_distribution.developer_fee,
         current_sum,
         new_sum,
         "developer",
+    )?;
+    changed_fee(
+        f,
+        current_solido.reward_distribution.st_sol_appreciation,
+        reward_distribution.st_sol_appreciation,
+        current_sum,
+        new_sum,
+        "stSOL appreciation",
     )?;
     Ok(())
 }
@@ -677,16 +689,14 @@ fn try_parse_solido_instruction(
 ) -> Result<ParsedInstruction, Error> {
     let instruction: LidoInstruction = BorshDeserialize::deserialize(&mut instr.data.as_slice())?;
     Ok(match instruction {
-        LidoInstruction::DistributeFees => todo!(),
-        LidoInstruction::ChangeFeeSpec {
-            new_fee_distribution,
+        LidoInstruction::ChangeRewardDistribution {
+            new_reward_distribution,
         } => {
-            let accounts = ChangeFeeSpecMeta::try_from_slice(&instr.accounts)?;
+            let accounts = ChangeRewardDistributionMeta::try_from_slice(&instr.accounts)?;
             let current_solido = get_solido(&rpc_client, &accounts.lido)?;
-            ParsedInstruction::SolidoInstruction(SolidoInstruction::ChangeFee {
+            ParsedInstruction::SolidoInstruction(SolidoInstruction::ChangeRewardDistribution {
                 current_solido: Box::new(current_solido),
-                fee_distribution: new_fee_distribution,
-
+                reward_distribution: new_reward_distribution,
                 solido_instance: accounts.lido,
                 manager: accounts.manager,
                 fee_recipients: FeeRecipients {

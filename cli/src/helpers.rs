@@ -2,7 +2,7 @@ use std::fmt;
 
 use crate::config::{AddRemoveMaintainerOpts, AddValidatorOpts, CreateSolidoOpts, ShowSolidoOpts};
 use lido::{
-    state::{FeeDistribution, Lido},
+    state::{Lido, RewardDistribution},
     RESERVE_AUTHORITY, STAKE_AUTHORITY,
 };
 use serde::Serialize;
@@ -188,10 +188,11 @@ pub fn command_create_solido(
 
     instructions.push(lido::instruction::initialize(
         opts.solido_program_id(),
-        FeeDistribution {
-            treasury_fee: *opts.treasury_fee(),
-            validation_fee: *opts.validation_fee(),
-            developer_fee: *opts.developer_fee(),
+        RewardDistribution {
+            treasury_fee: *opts.treasury_fee_share(),
+            validation_fee: *opts.validation_fee_share(),
+            developer_fee: *opts.developer_fee_share(),
+            st_sol_appreciation: *opts.st_sol_appreciation_share(),
         },
         *opts.max_validators(),
         *opts.max_maintainers(),
@@ -335,25 +336,21 @@ impl fmt::Display for ShowSolidoOutput {
             "Deposit:     {}, {}",
             self.stake_authority, self.solido.stake_authority_bump_seed
         )?;
-        writeln!(f, "\nFee distribution:")?;
-        writeln!(
-            f,
-            "Treasury:      {}/{}",
-            self.solido.fee_distribution.treasury_fee,
-            self.solido.fee_distribution.sum()
-        )?;
-        writeln!(
-            f,
-            "Validation:    {}/{}",
-            self.solido.fee_distribution.validation_fee,
-            self.solido.fee_distribution.sum()
-        )?;
-        writeln!(
-            f,
-            "Developer:     {}/{}",
-            self.solido.fee_distribution.developer_fee,
-            self.solido.fee_distribution.sum()
-        )?;
+        writeln!(f, "\nReward distribution:")?;
+        let mut print_reward = |name, get: fn(&RewardDistribution) -> u32| {
+            writeln!(
+                f,
+                "  {:4}/{:4} => {}",
+                get(&self.solido.reward_distribution),
+                self.solido.reward_distribution.sum(),
+                name,
+            )
+        };
+        print_reward("stSOL appreciation", |d| d.st_sol_appreciation)?;
+        print_reward("Treasury", |d| d.treasury_fee)?;
+        print_reward("Validation fee", |d| d.validation_fee)?;
+        print_reward("Developer fee", |d| d.developer_fee)?;
+
         writeln!(f, "\nFee recipients:")?;
         writeln!(
             f,
