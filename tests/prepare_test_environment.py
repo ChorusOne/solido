@@ -155,17 +155,26 @@ def add_validator(index: int, vote_account: Optional[str]) -> str:
 # For the first validator, add the test validator itself, so we include a
 # validator that is actually voting, and earning rewards.
 current_validators = json.loads(solana('validators', '--output', 'json'))
+
+# Filter out the validators that are actually voting. On a local testnet, this
+# will only contain the test validator, but on devnet or testnet, there can be
+# more validators.
+active_validators = [v for v in current_validators['validators'] if not v['delinquent']]
+
+# Add up to 5 of the active validators. Locally there will only be one, but on
+# the devnet or testnet there can be more, and we don't want to add *all* of them.
 validators = [
     add_validator(i, vote_account=v['voteAccountPubkey'])
-    for (i, v) in enumerate(current_validators['validators'])
-    # Filter out the test validator, it is the only one that's actually voting.
-    if not v['delinquent']
+    for (i, v) in enumerate(active_validators[:5])
 ]
 
 # Create two validators of our own, so we have a more interesting stake
 # distribution. These validators are not running, so they will not earn
 # rewards.
-validators.extend(add_validator(i, vote_account=None) for i in range(2))
+validators.extend(
+    add_validator(i, vote_account=None)
+    for i in range(len(validators), len(validators) + 2)
+)
 
 
 print('Adding maintainer ...')
