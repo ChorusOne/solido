@@ -362,7 +362,7 @@ pub fn process_update_validator_balance(
             clock.epoch,
         );
         msg!("Please call UpdateExchangeRate before calling UpdateValidatorBalance.");
-        return Err(LidoError::ExchangeRateOutdated.into());
+        return Err(LidoError::ExchangeRateNotUpdatedInThisEpoch.into());
     }
 
     let validator = lido

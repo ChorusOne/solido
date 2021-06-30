@@ -114,8 +114,8 @@ pub enum LidoError {
     ExchangeRateAlreadyUpToDate,
 
     /// The exchange rate has not yet been updated this epoch.
-    #[error("ExchangeRateOutdated")]
-    ExchangeRateOutdated,
+    #[error("ExchangeRateNotUpdatedInThisEpoch")]
+    ExchangeRateNotUpdatedInThisEpoch,
 
     /// We observed a decrease in the balance of the validator's stake accounts.
     #[error("ValidatorBalanceDecreased")]
