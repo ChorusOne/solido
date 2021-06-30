@@ -184,4 +184,30 @@ async fn test_successful_fee_distribution() {
         .exchange_st_sol(validator_fee)
         .unwrap();
     assert_eq!(validator_fee_sol, Lamports(rewards.0 / 100 * 5 - 1));
+
+    // Finally, create a second deposit and stake account, so we also test that
+    // `UpdateValidatorBalance` works when multiple stake accounts are
+    // involved.
+    let extra_amount = Lamports(150_000_000_000);
+    context.deposit(extra_amount).await;
+    let stake_account_2 = context
+        .stake_deposit(validator.vote_account, extra_amount)
+        .await;
+
+    // Donate into both stake accounts, so we have some change to observe.
+    let donation = Lamports(100);
+    context.fund(stake_account, donation).await;
+    context.fund(stake_account_2, donation).await;
+
+    let solido_before = context.get_solido().await;
+    context
+        .update_validator_balance(validator.vote_account)
+        .await;
+    let solido_after = context.get_solido().await;
+
+    let increase = (
+        solido_after.validators.entries[0].entry.stake_accounts_balance -
+        solido_before.validators.entries[0].entry.stake_accounts_balance
+        ).unwrap();
+    assert_eq!(increase, (donation * 2).unwrap());
 }
