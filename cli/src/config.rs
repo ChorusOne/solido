@@ -207,7 +207,7 @@ cli_opt_struct! {
         #[clap(long, value_name = "int")]
         developer_fee_share: u32,
 
-        /// Share of the rewards that goes to stSOL appreciation.
+        /// Share of the rewards that goes to stSOL appreciation (the non-fee part).
         #[clap(long, value_name = "int")]
         st_sol_appreciation_share: u32,
 
