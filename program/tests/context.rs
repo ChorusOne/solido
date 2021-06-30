@@ -738,14 +738,17 @@ impl Context {
         let begin = validator.entry.stake_accounts_seed_begin;
         let end = validator.entry.stake_accounts_seed_end;
 
-        let stake_account_addrs: Vec<Pubkey> = (begin..end).map(|seed|
-            Validator::find_stake_account_address(
-                &id(),
-                &self.solido.pubkey(),
-                &validator_vote_account,
-                seed,
-            ).0
-        ).collect();
+        let stake_account_addrs: Vec<Pubkey> = (begin..end)
+            .map(|seed| {
+                Validator::find_stake_account_address(
+                    &id(),
+                    &self.solido.pubkey(),
+                    &validator_vote_account,
+                    seed,
+                )
+                .0
+            })
+            .collect();
 
         send_transaction(
             &mut self.context,
@@ -764,7 +767,7 @@ impl Context {
             )],
             vec![],
         )
-            .await
+        .await
     }
 
     pub async fn update_validator_balance(&mut self, validator_vote_account: Pubkey) {

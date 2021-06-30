@@ -5,8 +5,8 @@ use solana_program::{
 };
 
 use crate::{
-    instruction::UpdateValidatorBalanceInfo,
     error::LidoError,
+    instruction::UpdateValidatorBalanceInfo,
     state::Fees,
     state::Lido,
     token::{Lamports, StLamports},
