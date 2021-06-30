@@ -146,9 +146,9 @@ impl Context {
         let solido = Keypair::new();
 
         let reward_distribution = RewardDistribution {
+            validation_fee: 5,
             treasury_fee: 3,
-            validation_fee: 4,
-            developer_fee: 3,
+            developer_fee: 2,
             st_sol_appreciation: 90,
         };
 
