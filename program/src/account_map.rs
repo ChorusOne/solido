@@ -28,7 +28,7 @@ pub struct AccountMap<T> {
     pub maximum_entries: u32,
 }
 pub trait EntryConstantSize {
-    fn entry_size() -> usize;
+    const SIZE: usize;
 }
 
 pub type AccountSet = AccountMap<()>;
@@ -104,10 +104,9 @@ impl<T: Default + EntryConstantSize> AccountMap<T> {
     }
 
     /// Return how many bytes are needed to serialize an instance holding `max_entries`.
-    ///
     pub fn required_bytes(max_entries: usize) -> usize {
         let key_size = std::mem::size_of::<Pubkey>();
-        let value_size = T::entry_size();
+        let value_size = T::SIZE;
         let entry_size = key_size + value_size;
 
         // 8 bytes for the length and u32 field, then the entries themselves.
@@ -117,7 +116,7 @@ impl<T: Default + EntryConstantSize> AccountMap<T> {
     /// Return how many entries could fit in a buffer of the given size.
     pub fn maximum_entries(buffer_size: usize) -> usize {
         let key_size = std::mem::size_of::<Pubkey>();
-        let value_size = T::entry_size();
+        let value_size = T::SIZE;
         let entry_size = key_size + value_size;
 
         buffer_size.saturating_sub(8) / entry_size

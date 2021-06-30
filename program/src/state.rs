@@ -30,15 +30,11 @@ pub type Validators = AccountMap<Validator>;
 pub type Maintainers = AccountSet;
 
 impl EntryConstantSize for Validator {
-    fn entry_size() -> usize {
-        VALIDATOR_CONSTANT_SIZE
-    }
+    const SIZE: usize = VALIDATOR_CONSTANT_SIZE;
 }
 
 impl EntryConstantSize for () {
-    fn entry_size() -> usize {
-        0
-    }
+    const SIZE: usize = 0;
 }
 
 /// The exchange rate used for deposits and rewards distribution.
@@ -403,8 +399,8 @@ pub struct Validator {
     /// Sum of the balances of the stake accounts.
     pub stake_accounts_balance: Lamports,
 
-    /// Weight of the validator: defines the validator's share of fees.  Also
-    /// used when calculating the stake amount for keeping a weighted balance.
+    /// Weight of the validator. Used when calculating the stake amount for
+    /// keeping a weighted balance, also defines the validator's share of fees.
     pub weight: Weight,
 }
 
@@ -573,14 +569,14 @@ mod test_lido {
     #[test]
     fn test_validators_size() {
         let validator = get_instance_packed_len(&Validator::default()).unwrap();
-        assert_eq!(validator, Validator::entry_size());
+        assert_eq!(validator, Validator::SIZE);
         let one_len = get_instance_packed_len(&Validators::new_fill_default(1)).unwrap();
         let two_len = get_instance_packed_len(&Validators::new_fill_default(2)).unwrap();
         assert_eq!(one_len, Validators::required_bytes(1));
         assert_eq!(two_len, Validators::required_bytes(2));
         assert_eq!(
             two_len - one_len,
-            std::mem::size_of::<Pubkey>() + Validator::entry_size()
+            std::mem::size_of::<Pubkey>() + Validator::SIZE
         );
     }
 

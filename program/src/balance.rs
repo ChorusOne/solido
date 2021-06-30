@@ -32,7 +32,7 @@ pub fn get_target_balance(
         .and_then(|t| t + undelegated_lamports)
         .ok_or(LidoError::CalculationFailure)?;
 
-    let total_weights: u32 = validators.iter_entries().map(|v| v.weight.0).sum();
+    let total_weights: u64 = validators.iter_entries().map(|v| v.weight.0 as u64).sum();
 
     // We only want to target validators that are not in the process of being
     // removed. For now, those are all the validators. Once we add validator
@@ -202,8 +202,6 @@ mod test {
     }
     #[test]
     fn get_target_balance_weighted_validators() {
-        // 200 Lamports delegated, but only one active validator,
-        // so all of the target should be with that one validator.
         let mut validators = Validators::new_fill_default(2);
         validators.entries[0].entry.weight = Weight(1000);
         validators.entries[1].entry.weight = Weight(3000);
