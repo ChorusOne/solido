@@ -432,6 +432,7 @@ pub fn process_update_validator_balance(
     // by some joker, we treat those the same way.)
     let rewards = (observed_total - validator.entry.stake_accounts_balance)
         .expect("Does not underflow because observed_total >= stake_accounts_balance.");
+    msg!("{} in rewards observed.", rewards);
 
     // Store the new total, so we only distribute these rewards once.
     validator.entry.stake_accounts_balance = observed_total;

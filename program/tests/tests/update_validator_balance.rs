@@ -66,6 +66,7 @@ async fn test_successful_fee_distribution() {
     // Skip ahead a number of epochs.
     let epoch_schedule = context.context.genesis_config().epoch_schedule;
     let start_slot = epoch_schedule.first_normal_slot;
+    let slots_per_epoch = epoch_schedule.slots_per_epoch;
     context.context.warp_to_slot(start_slot).unwrap();
 
     // In this new epoch, we should not be allowed to update the validator balance
@@ -76,4 +77,54 @@ async fn test_successful_fee_distribution() {
     // So after we update the exchange rate, we should be allowed to update the balance.
     context.update_exchange_rate().await;
     context.update_validator_balance(validator.vote_account).await;
+
+    // Increment the vote account credits, to simulate the validator voting in
+    // this epoch, which means it will receive rewards at the start of the next
+    // epoch. The number of votes is not relevant, as long as it is positive;
+    // the rewards get distributed proportional to the votes, but because there
+    // is only one account voting in our test, it gets all the rewards anyway.
+    context.context.increment_vote_account_credits(&validator.vote_account, 1);
+
+    // We are going to skip ahead one more epoch. The number of SOL we receive
+    // is not a nice round number, so instead of hard-coding the numbers here,
+    // record the change in balances, so we can perform some checks on those.
+    let stake_before = context.get_sol_balance(stake_account).await;
+    let treasury_before = context.get_st_sol_balance(context.treasury_st_sol_account).await;
+    let developer_before = context.get_st_sol_balance(context.developer_st_sol_account).await;
+    let solido_before = context.get_solido().await;
+    let validator_before = solido_before.validators.entries[0].entry.fee_credit;
+
+    context.context.warp_to_slot(start_slot + slots_per_epoch).unwrap();
+    let stake_after = context.get_sol_balance(stake_account).await;
+
+    context.update_exchange_rate().await;
+    context.update_validator_balance(validator.vote_account).await;
+    let treasury_after = context.get_st_sol_balance(context.treasury_st_sol_account).await;
+    let developer_after = context.get_st_sol_balance(context.developer_st_sol_account).await;
+    let solido_after = context.get_solido().await;
+    let validator_after = solido_after.validators.entries[0].entry.fee_credit;
+
+    // The rewards received is the difference in stake balance. The number looks
+    // arbitrary, but this is the amount that the current reward configuration
+    // yields, so we have to deal with it.
+    let rewards = (stake_after - stake_before).unwrap();
+    assert_eq!(rewards, Lamports(1246_030_107_208));
+
+    // The treasury balance increase, when converted back to SOL, should be equal
+    // to 3% of the rewards. One lamport is lost due to rounding.
+    let treasury_fee = (treasury_after - treasury_before).unwrap();
+    let treasury_fee_sol = solido_after.exchange_rate.exchange_st_sol(treasury_fee).unwrap();
+    assert_eq!(treasury_fee_sol, Lamports(rewards.0 / 100 * 3 - 1));
+
+    // The developer balance increase, when converted back to SOL, should be equal
+    // to 2% of the rewards. One lamport is lost due to rounding.
+    let developer_fee = (developer_after - developer_before).unwrap();
+    let developer_fee_sol = solido_after.exchange_rate.exchange_st_sol(developer_fee).unwrap();
+    assert_eq!(developer_fee_sol, Lamports(rewards.0 / 100 * 2 - 1));
+
+    // The validator balance increase, when converted back to SOL, should be equal
+    // to 5% of the rewards. One lamport is lost due to rounding.
+    let validator_fee = (validator_after - validator_before).unwrap();
+    let validator_fee_sol = solido_after.exchange_rate.exchange_st_sol(validator_fee).unwrap();
+    assert_eq!(validator_fee_sol, Lamports(rewards.0 / 100 * 5 - 1));
 }

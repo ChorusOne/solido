@@ -110,6 +110,7 @@ pub struct ExchangeRate {
 }
 
 impl ExchangeRate {
+    /// Convert SOL to stSOL.
     pub fn exchange_sol(&self, amount: Lamports) -> Option<StLamports> {
         // The exchange rate starts out at 1:1, if there are no deposits yet.
         if self.sol_balance == Lamports(0) {
@@ -124,6 +125,23 @@ impl ExchangeRate {
         // dimensionless, but in this case `rate` has dimensions stSOL/SOL, so
         // we need to re-wrap the result in the right type.
         (amount * rate).map(|x| StLamports(x.0))
+    }
+
+    /// Convert stSOL to SOL.
+    pub fn exchange_st_sol(&self, amount: StLamports) -> Option<Lamports> {
+        // If there is no stSOL in existence, it cannot be exchanged.
+        if self.st_sol_supply == StLamports(0) {
+            return None;
+        }
+
+        let rate = Rational {
+            numerator: self.sol_balance.0,
+            denominator: self.st_sol_supply.0,
+        };
+        // The result is in StLamports, because the type system considers Rational
+        // dimensionless, but in this case `rate` has dimensions SOL/stSOL, so
+        // we need to re-wrap the result in the right type.
+        (amount * rate).map(|x| Lamports(x.0))
     }
 }
 
