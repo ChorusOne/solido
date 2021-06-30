@@ -840,7 +840,7 @@ impl Context {
 
 #[macro_export]
 macro_rules! assert_solido_error {
-    ($result:expr, $error:expr) => {
+    ($result:expr, $error:expr $(, /* Accept an optional trailing comma. */)?) => {
         // Open a scope so the imports don't clash.
         {
             use solana_program::instruction::InstructionError;

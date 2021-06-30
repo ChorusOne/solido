@@ -1,8 +1,11 @@
 #![cfg(feature = "test-bpf")]
 
 use crate::context::Context;
+use crate::assert_solido_error;
 
+use lido::error::LidoError;
 use lido::token::{StLamports, Lamports};
+
 use solana_program_test::tokio;
 
 #[tokio::test]
@@ -59,4 +62,18 @@ async fn test_successful_fee_distribution() {
     assert_eq!(treasury_after, StLamports(3_000));
     assert_eq!(developer_after, StLamports(2_000));
     assert_eq!(solido_after.validators.entries[0].entry.fee_credit, StLamports(5_000));
+
+    // Skip ahead a number of epochs.
+    let epoch_schedule = context.context.genesis_config().epoch_schedule;
+    let start_slot = epoch_schedule.first_normal_slot;
+    context.context.warp_to_slot(start_slot).unwrap();
+
+    // In this new epoch, we should not be allowed to update the validator balance
+    // yet, because we haven’t updated the exchange rate yet.
+    let result = context.try_update_validator_balance(validator.vote_account).await;
+    assert_solido_error!(result, LidoError::ExchangeRateNotUpdatedInThisEpoch);
+
+    // So after we update the exchange rate, we should be allowed to update the balance.
+    context.update_exchange_rate().await;
+    context.update_validator_balance(validator.vote_account).await;
 }
