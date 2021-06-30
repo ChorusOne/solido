@@ -40,7 +40,19 @@ impl StakeBalance {
             deactivating: Lamports(0),
         }
     }
+
+    /// Return the total balance of the stake account.
+    pub fn total(&self) -> Lamports {
+        self.inactive
+            .add(self.activating)
+            .expect("Does not overflow: total fitted in u64 before we split it.")
+            .add(self.active)
+            .expect("Does not overflow: total fitted in u64 before we split it.")
+            .add(self.deactivating)
+            .expect("Does not overflow: total fitted in u64 before we split it.")
+    }
 }
+
 impl StakeAccount {
     /// Extract the stake balance from a delegated stake account.
     pub fn from_delegated_account(
@@ -81,22 +93,26 @@ impl StakeAccount {
             seed,
         }
     }
+
     /// Returns `true` if the stake account is active, `false` otherwise.
     pub fn is_active(&self) -> bool {
         self.balance.active > Lamports(0)
             && self.balance.activating == Lamports(0)
             && self.balance.deactivating == Lamports(0)
     }
+
     /// Returns `true` if the stake account is inactive, `false` otherwise.
     pub fn is_inactive(&self) -> bool {
         self.balance.active == Lamports(0)
             && self.balance.activating == Lamports(0)
             && self.balance.deactivating == Lamports(0)
     }
+
     /// Returns `true` if the stake account is activating, `false` otherwise.
     pub fn is_activating(&self) -> bool {
         self.balance.activating > Lamports(0)
     }
+
     /// Returs `true` if `merge_from` can be merged into this stake account, `false` otherwise.
     /// see: https://docs.solana.com/staking/stake-accounts
     pub fn can_merge(&self, merge_from: &Self) -> bool {
