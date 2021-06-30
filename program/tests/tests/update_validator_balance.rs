@@ -9,7 +9,7 @@ use lido::token::{Lamports, StLamports};
 use solana_program_test::tokio;
 
 #[tokio::test]
-async fn test_successful_fee_distribution() {
+async fn test_update_validator_balance() {
     let mut context = Context::new_with_maintainer().await;
     let validator = context.add_validator().await;
 
@@ -205,9 +205,12 @@ async fn test_successful_fee_distribution() {
         .await;
     let solido_after = context.get_solido().await;
 
-    let increase = (
-        solido_after.validators.entries[0].entry.stake_accounts_balance -
-        solido_before.validators.entries[0].entry.stake_accounts_balance
-        ).unwrap();
+    let increase = (solido_after.validators.entries[0]
+        .entry
+        .stake_accounts_balance
+        - solido_before.validators.entries[0]
+            .entry
+            .stake_accounts_balance)
+        .unwrap();
     assert_eq!(increase, (donation * 2).unwrap());
 }
