@@ -252,7 +252,7 @@ pub fn update_exchange_rate(
 accounts_struct! {
     // Note: there are no signers among these accounts, updating validator
     // balance is permissionless, anybody can do it.
-    UpdateValidatorBalanceAccountsMeta, UpdateValidatorBalanceAccountsInfo {
+    UpdateValidatorBalanceMeta, UpdateValidatorBalanceInfo {
         pub lido {
             is_signer: false,
             is_writable: true,
@@ -305,7 +305,7 @@ accounts_struct! {
 
 pub fn update_validator_balance(
     program_id: &Pubkey,
-    accounts: &UpdateValidatorBalanceAccountsMeta,
+    accounts: &UpdateValidatorBalanceMeta,
 ) -> Instruction {
     // There is no reason why `try_to_vec` should fail here.
     let data = LidoInstruction::UpdateValidatorBalance

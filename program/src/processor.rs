@@ -6,7 +6,7 @@ use crate::{
     error::LidoError,
     instruction::{
         DepositAccountsInfo, InitializeAccountsInfo, LidoInstruction, StakeDepositAccountsInfo,
-        UpdateExchangeRateAccountsInfo, UpdateValidatorBalanceAccountsInfo,
+        UpdateExchangeRateAccountsInfo, UpdateValidatorBalanceInfo,
     },
     logic::{
         check_rent_exempt, deserialize_lido, distribute_fees, get_reserve_available_balance,
@@ -344,7 +344,7 @@ pub fn process_update_validator_balance(
     program_id: &Pubkey,
     raw_accounts: &[AccountInfo],
 ) -> ProgramResult {
-    let accounts = UpdateValidatorBalanceAccountsInfo::try_from_slice(raw_accounts)?;
+    let accounts = UpdateValidatorBalanceInfo::try_from_slice(raw_accounts)?;
     let mut lido = deserialize_lido(program_id, accounts.lido)?;
 
     // Confirm that the passed accounts are the ones configured in the state,

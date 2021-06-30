@@ -4,8 +4,8 @@ use solana_program::{
     program_error::ProgramError, pubkey::Pubkey, rent::Rent,
 };
 
-use crate::instruction::UpdateValidatorBalanceAccountsInfo;
 use crate::{
+    instruction::UpdateValidatorBalanceInfo,
     error::LidoError,
     state::Fees,
     state::Lido,
@@ -99,7 +99,7 @@ pub fn mint_st_sol_to<'a>(
 /// Mint stSOL for the given fees, and transfer them to the appropriate accounts.
 pub fn distribute_fees<'a, 'b>(
     solido: &mut Lido,
-    accounts: &UpdateValidatorBalanceAccountsInfo<'a, 'b>,
+    accounts: &UpdateValidatorBalanceInfo<'a, 'b>,
     fees: Fees,
 ) -> ProgramResult {
     // Convert all fees to stSOL according to the previously updated exchange rate.
