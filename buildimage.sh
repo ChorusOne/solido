@@ -3,12 +3,13 @@
 # 1. Get last commit hash
 VERSION=$(git rev-parse --short HEAD)
 TAG="chorusone/solido:$VERSION"
+BASETAG="chorusone/solido-base"
 SOLIPATH="/root/.local/share/solana/install/releases/1.7.3/solana-release/bin/solido"
 
 
 # 2. Build container image
 echo "Building container image $TAG"
-docker build -t solido-base -f docker/Dockerfile.base .
+docker build -t $BASETAG -f docker/Dockerfile.base .
 docker build -t $TAG -f docker/Dockerfile.dev .
 
 # 3. Clean directory for artefacts

@@ -1,7 +1,7 @@
 version: '3.9'
 services:
     solido-base:
-        image: solido-base
+        image: chorusone/solido-base
         build:
           context: ../
           dockerfile: docker/Dockerfile.base

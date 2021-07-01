@@ -1,6 +1,12 @@
 name: maintainer
 
 on:
+  workflow_dispatch: # adding the workflow_dispatch so it can be triggered manually
+    inputs:
+      version:
+        description: 'Tag override for image version, i.e. v0.1.0 '
+        required: true
+        default: 'v0.1.0'
   push:
     tags:
       - v*
@@ -20,9 +26,13 @@ jobs:
          with:
            submodules: true
 
+       - name: Set Version
+         run: |
+           export SOLIDO_VERSION=${{ github.event.inputs.version || (GITHUB_REF | sed 's/refs\/tags\///g')  }}
+           echo "Set image version as $SOLIDO_VERSION"
+
        - name: Build Docker image
          run: |
-           export SOLIDO_VERSION=$(echo $GITHUB_REF | sed 's/refs\/tags\///g')
            docker-compose -f docker/docker-compose.yml build
 
        - name: Login to Docker Hub
@@ -33,5 +43,4 @@ jobs:
 
        - name: Push Docker image
          run: |
-           export SOLIDO_VERSION=$(echo $GITHUB_REF | sed 's/refs\/tags\///g')
            docker-compose -f docker/docker-compose.yml push
