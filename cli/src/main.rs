@@ -28,8 +28,9 @@ mod helpers;
 mod maintenance;
 mod multisig;
 mod prometheus;
+mod snapshot;
 mod spl_token_utils;
-pub mod stake_account;
+mod stake_account;
 mod util;
 
 /// Solido -- Interact with Lido for Solana.
