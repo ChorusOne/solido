@@ -35,11 +35,15 @@ struct MaintenanceMetrics {
 
     /// Number of times we performed `UpdateExchangeRate`.
     transactions_update_exchange_rate: u64,
+
+    /// Number of times we performed `UpdateValidatorBalance`.
+    transactions_update_validator_balance: u64,
+
+    /// Number of times we performed a `MergeStake`.
+    transactions_merge_stake: u64,
     // TODO(#96#issuecomment-859388866): Track how much the daemon spends on transaction fees,
     // so we know how much SOL it costs to operate.
     // spent_lamports_total: u64
-    /// Number of times we performed a `MergeStake`.
-    transactions_merge_stake: u64,
 }
 
 impl MaintenanceMetrics {
@@ -72,6 +76,8 @@ impl MaintenanceMetrics {
                         .with_label("operation", "StakeDeposit".to_string()),
                     Metric::new(self.transactions_update_exchange_rate)
                         .with_label("operation", "UpdateExchangeRate".to_string()),
+                    Metric::new(self.transactions_update_validator_balance)
+                        .with_label("operation", "UpdateValidatorBalance".to_string()),
                     Metric::new(self.transactions_merge_stake)
                         .with_label("operation", "MergeStake".to_string()),
                 ],
@@ -108,6 +114,7 @@ fn run_main_loop(config: &Config, opts: &RunMaintainerOpts, snapshot_mutex: &Sna
         errors: 0,
         transactions_stake_deposit: 0,
         transactions_update_exchange_rate: 0,
+        transactions_update_validator_balance: 0,
         transactions_merge_stake: 0,
     };
     let mut rng = rand::thread_rng();
@@ -142,12 +149,16 @@ fn run_main_loop(config: &Config, opts: &RunMaintainerOpts, snapshot_mutex: &Sna
                     }
                     Ok(Some(outputs)) => {
                         for maintenance_output in outputs.iter() {
+                            println!("{}", maintenance_output);
                             match maintenance_output {
                                 MaintenanceOutput::StakeDeposit { .. } => {
                                     metrics.transactions_stake_deposit += 1;
                                 }
                                 MaintenanceOutput::UpdateExchangeRate => {
                                     metrics.transactions_update_exchange_rate += 1;
+                                }
+                                MaintenanceOutput::UpdateValidatorBalance { .. } => {
+                                    metrics.transactions_update_validator_balance += 1;
                                 }
                                 MaintenanceOutput::MergeStake { .. } => {
                                     metrics.transactions_merge_stake += 1

@@ -46,7 +46,22 @@ pub enum MaintenanceOutput {
         #[serde(rename = "amount_lamports")]
         amount: Lamports,
     },
+
     UpdateExchangeRate,
+
+    UpdateValidatorBalance {
+        /// The vote account of the validator that we want to update.
+        #[serde(serialize_with = "serialize_b58")]
+        validator_vote_account: Pubkey,
+
+        /// The expected difference that the update will observe.
+        ///
+        /// This is only an expected value, because a different transaction might
+        /// execute between us observing the state and concluding that there is
+        /// a difference, and our `UpdateValidatorBalance` instruction executing.
+        #[serde(rename = "expected_difference_lamports")]
+        expected_difference: Lamports,
+    },
 
     MergeStake {
         #[serde(serialize_with = "serialize_b58")]
@@ -75,6 +90,14 @@ impl fmt::Display for MaintenanceOutput {
             }
             MaintenanceOutput::UpdateExchangeRate => {
                 writeln!(f, "Updated exchange rate.")?;
+            }
+            MaintenanceOutput::UpdateValidatorBalance {
+                validator_vote_account,
+                expected_difference,
+            } => {
+                writeln!(f, "Updated validator balance.")?;
+                writeln!(f, "  Validator vote account: {}", validator_vote_account)?;
+                writeln!(f, "  Expected difference:    {}", expected_difference)?;
             }
             MaintenanceOutput::MergeStake {
                 validator_vote_account,
@@ -450,6 +473,53 @@ impl SolidoState {
         Some(vec![(instruction, task)])
     }
 
+    /// Check if any validator's balance is outdated, and if so, update it.
+    ///
+    /// A validator's balance should normally only be outdated at the start of
+    /// an epoch, after validation rewards have been paid. But it could happen
+    /// in the middle of an epoch, if some joker donates to one of the stake
+    /// accounts.
+    pub fn try_update_validator_balance(&self) -> Option<Vec<(Instruction, MaintenanceOutput)>> {
+        for (validator, stake_accounts) in self
+            .solido
+            .validators
+            .entries
+            .iter()
+            .zip(self.validator_stake_accounts.iter())
+        {
+            let current_balance = stake_accounts
+                .iter()
+                .map(|(_addr, detail)| detail.balance.total())
+                .sum::<Option<Lamports>>()
+                .expect("If this overflows, there would be more than u64::MAX staked.");
+
+            if current_balance > validator.entry.stake_accounts_balance {
+                // The balance of this validator is not up to date, try to update it.
+                let stake_account_addrs = stake_accounts.iter().map(|(addr, _)| *addr).collect();
+                let instruction = lido::instruction::update_validator_balance(
+                    &self.solido_program_id,
+                    &lido::instruction::UpdateValidatorBalanceMeta {
+                        lido: self.solido_address,
+                        validator_vote_account: validator.pubkey,
+                        reserve_authority: self.reserve_address,
+                        st_sol_mint: self.solido.st_sol_mint,
+                        treasury_st_sol_account: self.solido.fee_recipients.treasury_account,
+                        developer_st_sol_account: self.solido.fee_recipients.developer_account,
+                        stake_accounts: stake_account_addrs,
+                    },
+                );
+                let task = MaintenanceOutput::UpdateValidatorBalance {
+                    validator_vote_account: validator.pubkey,
+                    expected_difference: (current_balance - validator.entry.stake_accounts_balance)
+                        .expect("Does not overflow because current > entry.balance."),
+                };
+                return Some(vec![(instruction, task)]);
+            }
+        }
+
+        None
+    }
+
     /// Write metrics about the current Solido instance in Prometheus format.
     pub fn write_prometheus<W: io::Write>(&self, out: &mut W) -> io::Result<()> {
         use crate::prometheus::{write_metric, Metric, MetricFamily};
@@ -626,8 +696,14 @@ pub fn try_perform_maintenance(
     // Try all of these operations one by one, and select the first one that
     // produces an instruction.
     let instructions_outputs: Option<Vec<(Instruction, MaintenanceOutput)>> = None
+        // Merging stake accounts goes before updating validator balance, to
+        // ensure that the balance update needs to reference as few accounts
+        // as possible.
         .or_else(|| state.try_merge_on_all_stakes())
         .or_else(|| state.try_update_exchange_rate())
+        // Updating validator balance goes after updating the exchange rate,
+        // because it may be rejected if the exchange rate is outdated.
+        .or_else(|| state.try_update_validator_balance())
         .or_else(|| state.try_stake_deposit());
 
     match instructions_outputs {

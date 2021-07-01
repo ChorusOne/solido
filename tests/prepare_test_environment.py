@@ -5,14 +5,17 @@ Set up a Solido instance on a local testnet, and print its details. This is
 useful when testing the maintenance daemon locally.
 """
 
+import json
 import os
+from typing import Optional
+
 from util import (
-    TestAccount,
     create_test_account,
     solana_program_deploy,
     create_spl_token,
     create_vote_account,
     get_network,
+    solana,
     solido,
     multisig,
 )
@@ -102,7 +105,12 @@ def approve_and_execute(transaction_address: str) -> None:
     )
 
 
-def add_validator(index: int) -> TestAccount:
+def add_validator(index: int, vote_account: Optional[str]) -> str:
+    """
+    Add a validator to the instance, create the right accounts for it. The vote
+    account can be a pre-existing one, but if it is not provided, we will create
+    one. Returns the vote account address.
+    """
     print(f'\nCreating validator {index} ...')
     validator_fee_st_sol_account_owner = create_test_account(
         f'tests/.keys/validator-{index}-fee-st-sol-account.json'
@@ -114,11 +122,14 @@ def add_validator(index: int) -> TestAccount:
     print(f'> Validator token account owner: {validator_fee_st_sol_account_owner}')
     print(f'> Validator stSOL token account: {validator_fee_st_sol_account}')
 
-    validator = create_test_account(f'tests/.keys/validator-{index}-account.json')
-    validator_vote_account = create_vote_account(
-        f'tests/.keys/validator-{index}-vote-account.json', validator.keypair_path
-    )
-    print(f'> Validator vote account:        {validator_vote_account}')
+    if vote_account is None:
+        validator = create_test_account(f'tests/.keys/validator-{index}-account.json')
+        validator_vote_account = create_vote_account(
+            f'tests/.keys/validator-{index}-vote-account.json', validator.keypair_path
+        )
+        vote_account = validator_vote_account.pubkey
+
+    print(f'> Validator vote account:        {vote_account}')
 
     print('Adding validator ...')
     transaction_result = solido(
@@ -130,7 +141,7 @@ def add_validator(index: int) -> TestAccount:
         '--solido-address',
         solido_address,
         '--validator-vote-account',
-        validator_vote_account.pubkey,
+        vote_account,
         '--validator-fee-account',
         validator_fee_st_sol_account,
         '--multisig-address',
@@ -138,10 +149,33 @@ def add_validator(index: int) -> TestAccount:
         keypair_path=maintainer.keypair_path,
     )
     approve_and_execute(transaction_result['transaction_address'])
-    return validator_vote_account
+    return vote_account
 
 
-validators = [add_validator(i) for i in range(3)]
+# For the first validator, add the test validator itself, so we include a
+# validator that is actually voting, and earning rewards.
+current_validators = json.loads(solana('validators', '--output', 'json'))
+
+# Filter out the validators that are actually voting. On a local testnet, this
+# will only contain the test validator, but on devnet or testnet, there can be
+# more validators.
+active_validators = [v for v in current_validators['validators'] if not v['delinquent']]
+
+# Add up to 5 of the active validators. Locally there will only be one, but on
+# the devnet or testnet there can be more, and we don't want to add *all* of them.
+validators = [
+    add_validator(i, vote_account=v['voteAccountPubkey'])
+    for (i, v) in enumerate(active_validators[:5])
+]
+
+# Create two validators of our own, so we have a more interesting stake
+# distribution. These validators are not running, so they will not earn
+# rewards.
+validators.extend(
+    add_validator(i, vote_account=None)
+    for i in range(len(validators), len(validators) + 2)
+)
+
 
 print('Adding maintainer ...')
 transaction_result = solido(
@@ -177,7 +211,7 @@ print(f'  Reserve address:          {solido_instance["reserve_authority"]}')
 print(f'  Maintainer address:       {maintainer.pubkey}')
 
 for i, vote_account in enumerate(validators):
-    print(f'  Validator {i} vote account: {vote_account.pubkey}')
+    print(f'  Validator {i} vote account: {vote_account}')
 
 
 print('\nMaintenance command line:')
