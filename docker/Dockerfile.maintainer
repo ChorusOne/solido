@@ -26,4 +26,4 @@ USER solido
 
 WORKDIR $SOLIDOPATH
 
-ENTRYPOINT ["/bin/bash", "/solido/entrypoint.sh"]
+ENTRYPOINT ["/bin/bash", "/solido/setup.sh"]
