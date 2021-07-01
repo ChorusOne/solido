@@ -45,7 +45,7 @@ pub fn get_target_balance(
         *target = (total_lamports
             * Rational {
                 numerator: validator.weight.0 as u64,
-                denominator: total_weights as u64,
+                denominator: total_weights,
             })
         .ok_or(LidoError::NoActiveValidators)?
     }
