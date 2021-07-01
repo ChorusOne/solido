@@ -21,13 +21,25 @@
 
 use std::collections::{HashMap, HashSet};
 
-use anchor_client::solana_sdk::account::Account;
+use anchor_lang::AccountDeserialize;
 use solana_client::rpc_client::RpcClient;
+use solana_sdk::account::Account;
+use solana_sdk::borsh::try_from_slice_unchecked;
 use solana_sdk::pubkey::Pubkey;
+use solana_sdk::signature::Signature;
+use solana_sdk::sysvar::stake_history::StakeHistory;
+use solana_sdk::sysvar::{
+    self, clock::Clock, recent_blockhashes::RecentBlockhashes, rent::Rent, Sysvar,
+};
+use solana_sdk::transaction::Transaction;
+
+use lido::state::Lido;
+use lido::token::Lamports;
+use spl_token::solana_program::hash::Hash;
 
 use crate::error::Error;
 
-enum SnapshotError {
+pub enum SnapshotError {
     /// We tried to access an account, but it was not present in the snapshot.
     ///
     /// When this happens, we need to retry, with a new set of accounts.
@@ -40,22 +52,129 @@ enum SnapshotError {
     OtherError(Error),
 }
 
-pub struct Snapshot {
+impl<T> From<T> for SnapshotError
+where
+    Error: From<T>,
+{
+    fn from(err: T) -> SnapshotError {
+        SnapshotError::OtherError(Error::from(err))
+    }
+}
+
+pub type Result<T> = std::result::Result<T, SnapshotError>;
+
+/// A snapshot of one or more accounts.
+pub struct Snapshot<'a> {
     /// Addresses, and their values, at the time of the snapshot.
-    accounts: HashMap<Pubkey, Account>,
+    accounts: &'a HashMap<Pubkey, Account>,
 
     /// The accounts that we actually read. This is used to remove any unused
     /// accounts from a future snapshot, so the set of accounts to query does
     /// not continue growing indefinitely.
-    accounts_referenced: HashSet<Pubkey>,
+    accounts_referenced: &'a mut HashSet<Pubkey>,
+
+    /// The wrapped client, so we can still send transactions.
+    rpc_client: &'a RpcClient,
+
+    /// Whether we sent at least one transaction.
+    ///
+    /// If we did, then retrying is potentially unsafe, because it would also
+    /// retry sending the transaction. If that happens, we need to update the
+    /// program, so it reads everything it needs before sending a transaction.
+    sent_transaction: &'a mut bool,
 }
 
-impl Snapshot {
-    pub fn get(&mut self, address: Pubkey) -> Result<&Account, SnapshotError> {
-        self.accounts_referenced.insert(address);
+impl<'a> Snapshot<'a> {
+    pub fn get_account(&mut self, address: &Pubkey) -> Result<&'a Account> {
+        self.accounts_referenced.insert(*address);
         self.accounts
-            .get(&address)
+            .get(address)
             .ok_or(SnapshotError::MissingAccount)
+    }
+
+    /// Read an account and immediately bincode-deserialize it.
+    pub fn get_bincode<T: Sysvar>(&mut self, address: &Pubkey) -> Result<T> {
+        let account = self.get_account(address)?;
+        let result = bincode::deserialize(&account.data)?;
+        Ok(result)
+    }
+
+    /// Read an Anchor account and immediately deserialize it.
+    pub fn get_account_deserialize<T: AccountDeserialize>(
+        &mut self,
+        address: &Pubkey,
+    ) -> Result<T> {
+        let account = self.get_account(address)?;
+        let mut data_ref = &account.data[..];
+        let result = T::try_deserialize(&mut data_ref)?;
+        Ok(result)
+    }
+
+    /// Read `sysvar::rent`.
+    pub fn get_rent(&mut self) -> Result<Rent> {
+        self.get_bincode(&sysvar::rent::id())
+    }
+
+    /// Read `sysvar::clock`.
+    pub fn get_clock(&mut self) -> Result<Clock> {
+        self.get_bincode(&sysvar::clock::id())
+    }
+
+    /// Read `sysvar::stake_history`.
+    pub fn get_stake_history(&mut self) -> Result<StakeHistory> {
+        self.get_bincode(&sysvar::stake_history::id())
+    }
+
+    /// Read `sysvar::recent_blockhashes`.
+    pub fn get_recent_blockhashes(&mut self) -> Result<RecentBlockhashes> {
+        self.get_bincode(&sysvar::recent_blockhashes::id())
+    }
+
+    /// Return the most recent block hash at the time of the snapshot.
+    pub fn get_recent_blockhash(&mut self) -> Result<Hash> {
+        let blockhashes = self.get_recent_blockhashes()?;
+        // The blockhashes are ordered from most recent to least recent.
+        Ok(blockhashes[0].blockhash)
+    }
+
+    /// Return the minimum rent-exempt balance for an account with `data_len` bytes of data.
+    pub fn get_minimum_balance_for_rent_exemption(&mut self, data_len: usize) -> Result<Lamports> {
+        let rent = self.get_rent()?;
+        Ok(Lamports(rent.minimum_balance(data_len)))
+    }
+
+    /// Read the account and deserialize the Solido struct.
+    pub fn get_solido(&mut self, solido_address: &Pubkey) -> Result<Lido> {
+        let account = self.get_account(solido_address)?;
+        let solido = try_from_slice_unchecked::<Lido>(&account.data)?;
+        Ok(solido)
+    }
+
+    /// Send a transaction without printing to stdout.
+    ///
+    /// After this, avoid reads from accounts not accessed before. Note, you
+    /// probably want to use [`SnapshotConfig::sign_and_send_transaction`]
+    /// instead of calling this directly, to ensure correct output handling.
+    pub fn send_and_confirm_transaction(
+        &mut self,
+        transaction: &Transaction,
+    ) -> solana_client::client_error::Result<Signature> {
+        *self.sent_transaction = true;
+        self.rpc_client.send_and_confirm_transaction(transaction)
+    }
+
+    /// Send a transaction, show a spinner on stdout.
+    ///
+    /// After this, avoid reads from accounts not accessed before. Note, you
+    /// probably want to use [`SnapshotConfig::sign_and_send_transaction`]
+    /// instead of calling this directly, to ensure correct output handling.
+    pub fn send_and_confirm_transaction_with_spinner(
+        &mut self,
+        transaction: &Transaction,
+    ) -> solana_client::client_error::Result<Signature> {
+        *self.sent_transaction = true;
+        self.rpc_client
+            .send_and_confirm_transaction_with_spinner(transaction)
     }
 }
 
@@ -73,9 +192,22 @@ impl SnapshotClient {
         }
     }
 
-    pub fn with_snapshot<T, F>(&mut self, f: F) -> Result<T, Error>
+    /// Run the function `f`, which has access to a consistent snapshot of accounts.
+    ///
+    /// If `f` tries to access an account that's not in the snapshot, we will
+    /// retry with an extended snapshot. This means that `f` can be called
+    /// multiple times, beware of side effects! In particular, after sending a
+    /// transaction, `f` should not try to access any accounts that it did not
+    /// access before sending the transaction. For sending transactions, this
+    /// function will detect that and panic, but for external side effects (such
+    /// as printing to stdout), we can’t, so be careful.
+    ///
+    /// For the first iteration, the accounts that we load are the ones from the
+    /// previous call. This means that it's better to recycle one snapshot client,
+    /// than to create a new one all the time.
+    pub fn with_snapshot<T, F>(&mut self, mut f: F) -> std::result::Result<T, crate::error::Error>
     where
-        F: Fn(&mut Snapshot) -> Result<T, SnapshotError>,
+        F: FnMut(Snapshot) -> Result<T>,
     {
         loop {
             let account_values = self
@@ -91,20 +223,37 @@ impl SnapshotClient {
                 .filter_map(|(k, opt_v)| opt_v.map(|v| (*k, v)))
                 .collect();
 
-            let mut snapshot = Snapshot {
-                accounts,
-                accounts_referenced: HashSet::new(),
+            let mut accounts_referenced = HashSet::new();
+            let mut sent_transaction = false;
+
+            let snapshot = Snapshot {
+                accounts: &accounts,
+                accounts_referenced: &mut accounts_referenced,
+                rpc_client: &self.rpc_client,
+                sent_transaction: &mut sent_transaction,
             };
 
-            match f(&mut snapshot) {
+            match f(snapshot) {
                 Ok(result) => return Ok(result),
                 Err(SnapshotError::OtherError(err)) => return Err(err),
                 Err(SnapshotError::MissingAccount) => {
-                    // `f` tried to access an account that was not in the snapshot.
-                    // That should have put the account in `accounts_referenced`,
-                    // so on the next iteration, we will include that account.
-                    self.accounts_to_query.clear();
-                    self.accounts_to_query.extend(snapshot.accounts_referenced);
+                    if sent_transaction {
+                        // `f` tried to access an account that was not in the
+                        // snapshot, after already sending a transaction. We
+                        // can't just retry, because it would also send that
+                        // transaction again. This is a programming error.
+                        panic!(
+                            "Tried to read an account that is not in the snapshot, \
+                            after sending a transaction. Move the read before the \
+                            write, or make a new snapshot after the write."
+                        );
+                    } else {
+                        // `f` tried to access an account that was not in the snapshot.
+                        // That should have put the account in `accounts_referenced`,
+                        // so on the next iteration, we will include that account.
+                        self.accounts_to_query.clear();
+                        self.accounts_to_query.extend(accounts_referenced);
+                    }
                 }
             }
         }

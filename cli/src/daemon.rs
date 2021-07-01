@@ -16,10 +16,11 @@ use rand::Rng;
 use tiny_http::{Request, Response, Server};
 
 use crate::config::RunMaintainerOpts;
-use crate::error::AsPrettyError;
+use crate::error::{Abort, AsPrettyError};
 use crate::maintenance::{try_perform_maintenance, MaintenanceOutput, SolidoState};
 use crate::prometheus::{write_metric, Metric, MetricFamily};
-use crate::Config;
+use crate::snapshot::SnapshotError;
+use crate::SnapshotClientConfig;
 
 /// Metrics counters that track how many maintenance operations we performed.
 #[derive(Clone)]
@@ -108,7 +109,11 @@ struct Snapshot {
 type SnapshotMutex = Mutex<Option<Arc<Snapshot>>>;
 
 /// Run the maintenance loop.
-fn run_main_loop(config: &Config, opts: &RunMaintainerOpts, snapshot_mutex: &SnapshotMutex) {
+fn run_main_loop(
+    config: &mut SnapshotClientConfig,
+    opts: &RunMaintainerOpts,
+    snapshot_mutex: &SnapshotMutex,
+) {
     let mut metrics = MaintenanceMetrics {
         polls: 0,
         errors: 0,
@@ -122,62 +127,75 @@ fn run_main_loop(config: &Config, opts: &RunMaintainerOpts, snapshot_mutex: &Sna
     loop {
         let mut do_wait = false;
 
-        let state_result =
-            SolidoState::new(config, opts.solido_program_id(), opts.solido_address());
-        match state_result {
-            Err(ref err) => {
-                println!("Failed to obtain Solido state.");
-                err.print_pretty();
-                metrics.errors += 1;
+        config
+            .with_snapshot(|mut config| {
+                let state_result =
+                    SolidoState::new(&mut config, opts.solido_program_id(), opts.solido_address());
 
-                // If the error was caused by a connectivity problem, we shouldn't
-                // hammer the RPC again straight away. Even better would be to do
-                // exponential backoff with jitter, but let's not go there right now.
-                do_wait = true;
-            }
-            Ok(ref state) => {
-                match try_perform_maintenance(config, &state) {
-                    Err(err) => {
-                        println!("Error in maintenance.");
+                match state_result {
+                    Err(SnapshotError::MissingAccount) => {
+                        return Err(SnapshotError::MissingAccount)
+                    }
+                    Err(SnapshotError::OtherError(ref err)) => {
+                        println!("Failed to obtain Solido state.");
                         err.print_pretty();
                         metrics.errors += 1;
+
+                        // If the error was caused by a connectivity problem, we shouldn't
+                        // hammer the RPC again straight away. Even better would be to do
+                        // exponential backoff with jitter, but let's not go there right now.
                         do_wait = true;
                     }
-                    Ok(None) => {
-                        // Nothing to be done, try again later.
-                        do_wait = true;
-                    }
-                    Ok(Some(outputs)) => {
-                        for maintenance_output in outputs.iter() {
-                            println!("{}", maintenance_output);
-                            match maintenance_output {
-                                MaintenanceOutput::StakeDeposit { .. } => {
-                                    metrics.transactions_stake_deposit += 1;
-                                }
-                                MaintenanceOutput::UpdateExchangeRate => {
-                                    metrics.transactions_update_exchange_rate += 1;
-                                }
-                                MaintenanceOutput::UpdateValidatorBalance { .. } => {
-                                    metrics.transactions_update_validator_balance += 1;
-                                }
-                                MaintenanceOutput::MergeStake { .. } => {
-                                    metrics.transactions_merge_stake += 1
+                    Ok(ref state) => {
+                        match try_perform_maintenance(&mut config, &state) {
+                            Err(SnapshotError::MissingAccount) => {
+                                return Err(SnapshotError::MissingAccount)
+                            }
+                            Err(SnapshotError::OtherError(err)) => {
+                                println!("Error in maintenance.");
+                                err.print_pretty();
+                                metrics.errors += 1;
+                                do_wait = true;
+                            }
+                            Ok(None) => {
+                                // Nothing to be done, try again later.
+                                do_wait = true;
+                            }
+                            Ok(Some(outputs)) => {
+                                for maintenance_output in outputs.iter() {
+                                    println!("{}", maintenance_output);
+                                    match maintenance_output {
+                                        MaintenanceOutput::StakeDeposit { .. } => {
+                                            metrics.transactions_stake_deposit += 1;
+                                        }
+                                        MaintenanceOutput::UpdateExchangeRate => {
+                                            metrics.transactions_update_exchange_rate += 1;
+                                        }
+                                        MaintenanceOutput::UpdateValidatorBalance { .. } => {
+                                            metrics.transactions_update_validator_balance += 1;
+                                        }
+                                        MaintenanceOutput::MergeStake { .. } => {
+                                            metrics.transactions_merge_stake += 1
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
                 }
-            }
-        }
 
-        metrics.polls += 1;
+                metrics.polls += 1;
 
-        // Publish the new state and metrics, so the webserver can serve them.
-        let snapshot = Snapshot {
-            metrics: metrics.clone(),
-            solido: state_result.ok(),
-        };
-        snapshot_mutex.lock().unwrap().replace(Arc::new(snapshot));
+                // Publish the new state and metrics, so the webserver can serve them.
+                let snapshot = Snapshot {
+                    metrics: metrics.clone(),
+                    solido: state_result.ok(),
+                };
+                snapshot_mutex.lock().unwrap().replace(Arc::new(snapshot));
+
+                Ok(())
+            })
+            .ok_or_abort_with("Errors should be handled inside the daemon loop.");
 
         if do_wait {
             // Sleep a random time, to avoid a thundering herd problem, in case
@@ -259,7 +277,7 @@ fn start_http_server(
 }
 
 /// Run the maintenance daemon.
-pub fn main(config: &Config, opts: &RunMaintainerOpts) {
+pub fn main(config: &mut SnapshotClientConfig, opts: &RunMaintainerOpts) {
     let snapshot_mutex = Arc::new(Mutex::new(None));
     let http_threads = start_http_server(&opts, snapshot_mutex.clone());
 

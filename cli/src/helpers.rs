@@ -1,66 +1,22 @@
 use std::fmt;
 
-use crate::config::{AddRemoveMaintainerOpts, AddValidatorOpts, CreateSolidoOpts, ShowSolidoOpts};
+use serde::Serialize;
+use solana_program::{pubkey::Pubkey, system_instruction};
+use solana_sdk::signature::{Keypair, Signer};
+
 use lido::{
     state::{Lido, RewardDistribution},
     RESERVE_AUTHORITY, STAKE_AUTHORITY,
 };
-use serde::Serialize;
-use solana_client::rpc_client::RpcClient;
-use solana_program::{pubkey::Pubkey, system_instruction};
-use solana_sdk::{
-    borsh::try_from_slice_unchecked,
-    instruction::Instruction,
-    signature::{Keypair, Signer},
-    signer::signers::Signers,
-    transaction::Transaction,
-};
 
+use crate::config::{AddRemoveMaintainerOpts, AddValidatorOpts, CreateSolidoOpts, ShowSolidoOpts};
 use crate::{
-    error::Error,
     multisig::{get_multisig_program_address, propose_instruction, ProposeInstructionOutput},
+    snapshot::Result,
     spl_token_utils::{push_create_spl_token_account, push_create_spl_token_mint},
     util::PubkeyBase58,
-    Config, OutputMode,
+    SnapshotConfig,
 };
-
-pub fn send_transaction(
-    config: &Config,
-    transaction: Transaction,
-) -> solana_client::client_error::Result<()> {
-    let _signature = match config.output_mode {
-        OutputMode::Text => {
-            // In text mode, we can display a spinner.
-            config
-                .rpc
-                .send_and_confirm_transaction_with_spinner(&transaction)?
-        }
-        OutputMode::Json => {
-            // In json mode, printing a spinner to stdout would break the
-            // json that we also print to stdout, so opt for the silent
-            // version.
-            config.rpc.send_and_confirm_transaction(&transaction)?
-        }
-    };
-    Ok(())
-}
-
-pub fn sign_and_send_transaction<T: Signers>(
-    config: &Config,
-    instructions: &[Instruction],
-    signers: &T,
-) -> solana_client::client_error::Result<()> {
-    let mut tx = Transaction::new_with_payer(instructions, Some(&config.signer.pubkey()));
-
-    let (recent_blockhash, _fee_calculator) = config
-        .rpc
-        .get_recent_blockhash()
-        .expect("Failed to get recent blockhash.");
-
-    // Add multisig signer
-    tx.sign(signers, recent_blockhash);
-    send_transaction(&config, tx)
-}
 
 #[derive(Serialize)]
 pub struct CreateSolidoOutput {
@@ -113,9 +69,9 @@ impl fmt::Display for CreateSolidoOutput {
 }
 
 pub fn command_create_solido(
-    config: &Config,
+    config: &mut SnapshotConfig,
     opts: &CreateSolidoOpts,
-) -> Result<CreateSolidoOutput, Error> {
+) -> Result<CreateSolidoOutput> {
     let lido_keypair = Keypair::new();
 
     let (reserve_authority, _) = lido::find_authority_program_address(
@@ -129,48 +85,47 @@ pub fn command_create_solido(
 
     let lido_size = Lido::calculate_size(*opts.max_validators(), *opts.max_maintainers());
     let lido_account_balance = config
-        .rpc
+        .client
         .get_minimum_balance_for_rent_exemption(lido_size)?;
 
     let mut instructions = Vec::new();
 
     // We need to fund Lido's reserve account so it is rent-exempt, otherwise it
     // might disappear.
-    let min_balance_empty_data_account = config.rpc.get_minimum_balance_for_rent_exemption(0)?;
+    let min_balance_empty_data_account = config.client.get_minimum_balance_for_rent_exemption(0)?;
     instructions.push(system_instruction::transfer(
         &config.signer.pubkey(),
         &reserve_authority,
-        min_balance_empty_data_account,
+        min_balance_empty_data_account.0,
     ));
 
     // Set up the Lido stSOL SPL token mint account.
     let st_sol_mint_keypair =
-        push_create_spl_token_mint(&config, &mut instructions, &reserve_authority)?;
+        push_create_spl_token_mint(config, &mut instructions, &reserve_authority)?;
 
     // Ideally we would set up the entire instance in a single transaction, but
     // Solana transaction size limits are so low that we need to break our
     // instructions down into multiple transactions. So set up the mint first,
     // then continue.
     let signers = &[&st_sol_mint_keypair, config.signer];
-    sign_and_send_transaction(&config, &instructions[..], signers)?;
+    config.sign_and_send_transaction(&instructions[..], signers)?;
     instructions.clear();
     eprintln!("Did send mint init.");
 
     // Set up the SPL token account that receive the fees in stSOL.
     let treasury_keypair = push_create_spl_token_account(
-        &config,
+        config,
         &mut instructions,
         &st_sol_mint_keypair.pubkey(),
         opts.treasury_account_owner(),
     )?;
     let developer_keypair = push_create_spl_token_account(
-        &config,
+        config,
         &mut instructions,
         &st_sol_mint_keypair.pubkey(),
         opts.developer_account_owner(),
     )?;
-    sign_and_send_transaction(
-        &config,
+    config.sign_and_send_transaction(
         &instructions[..],
         &vec![config.signer, &treasury_keypair, &developer_keypair],
     )?;
@@ -181,7 +136,7 @@ pub fn command_create_solido(
     instructions.push(system_instruction::create_account(
         &config.signer.pubkey(),
         &lido_keypair.pubkey(),
-        lido_account_balance,
+        lido_account_balance.0,
         lido_size as u64,
         opts.solido_program_id(),
     ));
@@ -206,7 +161,7 @@ pub fn command_create_solido(
         },
     )?);
 
-    sign_and_send_transaction(&config, &instructions[..], &[config.signer, &lido_keypair])?;
+    config.sign_and_send_transaction(&instructions[..], &[config.signer, &lido_keypair])?;
     eprintln!("Did send Lido init.");
 
     let result = CreateSolidoOutput {
@@ -221,9 +176,9 @@ pub fn command_create_solido(
 
 /// Command to add a validator to Solido.
 pub fn command_add_validator(
-    config: &Config,
+    config: &mut SnapshotConfig,
     opts: &AddValidatorOpts,
-) -> Result<ProposeInstructionOutput, Error> {
+) -> Result<ProposeInstructionOutput> {
     let (multisig_address, _) =
         get_multisig_program_address(opts.multisig_program_id(), opts.multisig_address());
 
@@ -237,19 +192,19 @@ pub fn command_add_validator(
             validator_fee_st_sol_account: *opts.validator_fee_account(),
         },
     )?;
-    Ok(propose_instruction(
-        &config,
+    propose_instruction(
+        config,
         opts.multisig_program_id(),
         *opts.multisig_address(),
         instruction,
-    ))
+    )
 }
 
 /// Command to add a validator to Solido.
 pub fn command_add_maintainer(
-    config: &Config,
+    config: &mut SnapshotConfig,
     opts: &AddRemoveMaintainerOpts,
-) -> Result<ProposeInstructionOutput, Error> {
+) -> Result<ProposeInstructionOutput> {
     let (multisig_address, _) =
         get_multisig_program_address(opts.multisig_program_id(), opts.multisig_address());
     let instruction = lido::instruction::add_maintainer(
@@ -260,19 +215,19 @@ pub fn command_add_maintainer(
             maintainer: *opts.maintainer_address(),
         },
     )?;
-    Ok(propose_instruction(
-        &config,
+    propose_instruction(
+        config,
         opts.multisig_program_id(),
         *opts.multisig_address(),
         instruction,
-    ))
+    )
 }
 
 /// Command to add a validator to Solido.
 pub fn command_remove_maintainer(
-    config: &Config,
+    config: &mut SnapshotConfig,
     opts: &AddRemoveMaintainerOpts,
-) -> Result<ProposeInstructionOutput, Error> {
+) -> Result<ProposeInstructionOutput> {
     let (multisig_address, _) =
         get_multisig_program_address(opts.multisig_program_id(), opts.multisig_address());
     let instruction = lido::instruction::remove_maintainer(
@@ -283,12 +238,12 @@ pub fn command_remove_maintainer(
             maintainer: *opts.maintainer_address(),
         },
     )?;
-    Ok(propose_instruction(
-        &config,
+    propose_instruction(
+        config,
         opts.multisig_program_id(),
         *opts.multisig_address(),
         instruction,
-    ))
+    )
 }
 
 #[derive(Serialize)]
@@ -391,10 +346,10 @@ impl fmt::Display for ShowSolidoOutput {
 }
 
 pub fn command_show_solido(
-    config: &Config,
+    config: &mut SnapshotConfig,
     opts: &ShowSolidoOpts,
-) -> Result<ShowSolidoOutput, Error> {
-    let lido = get_solido(&config.rpc, opts.solido_address())?;
+) -> Result<ShowSolidoOutput> {
+    let lido = config.client.get_solido(opts.solido_address())?;
     let reserve_authority = Pubkey::create_program_address(
         &[
             &opts.solido_address().to_bytes(),
@@ -420,13 +375,4 @@ pub fn command_show_solido(
         reserve_authority: reserve_authority.into(),
         stake_authority: stake_authority.into(),
     })
-}
-
-// TODO(#181): Make `get_solido` return the structures in a single call to
-// `rpc_client.get_multiple_accounts(..)`.
-/// Gets the Solido data structure
-pub fn get_solido(rpc_client: &RpcClient, solido_address: &Pubkey) -> Result<Lido, Error> {
-    let solido_data = rpc_client.get_account_data(solido_address)?;
-    let solido = try_from_slice_unchecked::<Lido>(&solido_data)?;
-    Ok(solido)
 }

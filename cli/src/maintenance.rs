@@ -2,16 +2,15 @@
 
 use std::fmt;
 use std::io;
+use std::time::SystemTime;
 
 use serde::Serialize;
-use solana_client::rpc_client::RpcClient;
-use solana_program::{
-    clock::Clock, pubkey::Pubkey, rent::Rent, stake_history::StakeHistory, sysvar,
-};
+use solana_program::program_pack::Pack;
+use solana_program::{clock::Clock, pubkey::Pubkey, rent::Rent, stake_history::StakeHistory};
 use solana_sdk::{account::Account, borsh::try_from_slice_unchecked, instruction::Instruction};
-use spl_token::state::Mint;
 
 use lido::account_map::PubkeyAndEntry;
+use lido::token::StLamports;
 use lido::util::serialize_b58;
 use lido::{
     state::{Lido, Validator},
@@ -19,18 +18,14 @@ use lido::{
     MINIMUM_STAKE_ACCOUNT_BALANCE, STAKE_AUTHORITY,
 };
 use spl_stake_pool::stake_program::StakeState;
+use spl_token::state::Mint;
 
 use crate::config::PerformMaintenanceOpts;
 use crate::error::MaintenanceError;
-use crate::helpers::{get_solido, sign_and_send_transaction};
+use crate::snapshot::Result;
 use crate::stake_account::StakeAccount;
 use crate::stake_account::StakeBalance;
-use crate::{error::Error, Config};
-use lido::token::StLamports;
-use solana_program::program_pack::Pack;
-use std::time::SystemTime;
-
-type Result<T> = std::result::Result<T, Error>;
+use crate::SnapshotConfig;
 
 /// A brief description of the maintenance performed. Not relevant functionally,
 /// but helpful for automated testing, and just for info.
@@ -166,7 +161,7 @@ pub struct SolidoState {
 }
 
 fn get_validator_stake_accounts(
-    rpc_client: &RpcClient,
+    config: &mut SnapshotConfig,
     solido_program_id: &Pubkey,
     solido_address: &Pubkey,
     clock: &Clock,
@@ -181,7 +176,7 @@ fn get_validator_stake_accounts(
             &validator.pubkey,
             seed,
         );
-        let account = rpc_client.get_account(&addr)?;
+        let account = config.client.get_account(&addr)?;
         let stake_state: StakeState = try_from_slice_unchecked(&account.data)
             .expect("Derived stake account contains invalid data.");
 
@@ -212,35 +207,26 @@ fn get_validator_stake_accounts(
 impl SolidoState {
     /// Read the state from the on-chain data.
     pub fn new(
-        config: &Config,
+        config: &mut SnapshotConfig,
         solido_program_id: &Pubkey,
         solido_address: &Pubkey,
     ) -> Result<SolidoState> {
-        let rpc = &config.rpc;
-
-        // TODO(#183): Transactions can execute in between those reads, leading to
-        // a torn state. Make a function that re-reads everything with get_multiple_accounts.
-        let solido = get_solido(rpc, solido_address)?;
+        let solido = config.client.get_solido(solido_address)?;
 
         let reserve_address = solido.get_reserve_account(solido_program_id, solido_address)?;
-        let reserve_account = rpc.get_account(&reserve_address)?;
+        let reserve_account = config.client.get_account(&reserve_address)?;
 
-        let st_sol_mint_account = rpc.get_account(&solido.st_sol_mint)?;
+        let st_sol_mint_account = config.client.get_account(&solido.st_sol_mint)?;
         let st_sol_mint = Mint::unpack(&st_sol_mint_account.data)?;
 
-        let rent_account = rpc.get_account(&sysvar::rent::ID)?;
-        let rent: Rent = bincode::deserialize(&rent_account.data)?;
-
-        let clock_account = rpc.get_account(&sysvar::clock::ID)?;
-        let clock: Clock = bincode::deserialize(&clock_account.data)?;
-
-        let stake_history_account = rpc.get_account(&sysvar::stake_history::ID)?;
-        let stake_history: StakeHistory = bincode::deserialize(&stake_history_account.data)?;
+        let rent = config.client.get_rent()?;
+        let clock = config.client.get_clock()?;
+        let stake_history = config.client.get_stake_history()?;
 
         let mut validator_stake_accounts = Vec::new();
         for validator in solido.validators.entries.iter() {
             validator_stake_accounts.push(get_validator_stake_accounts(
-                rpc,
+                config,
                 solido_program_id,
                 solido_address,
                 &clock,
@@ -253,7 +239,7 @@ impl SolidoState {
         // We don't verify here if it is part of the maintainer set, the on-chain
         // program does that anyway.
         let maintainer_address = config.signer.pubkey();
-        let maintainer_account = rpc.get_account(&maintainer_address)?;
+        let maintainer_account = config.client.get_account(&maintainer_address)?;
 
         Ok(SolidoState {
             produced_at: SystemTime::now(),
@@ -262,12 +248,12 @@ impl SolidoState {
             solido,
             validator_stake_accounts,
             reserve_address,
-            reserve_account,
+            reserve_account: reserve_account.clone(),
             st_sol_mint,
             rent,
             clock,
             maintainer_address,
-            maintainer_account,
+            maintainer_account: maintainer_account.clone(),
         })
     }
 
@@ -675,7 +661,7 @@ impl SolidoState {
 }
 
 pub fn try_perform_maintenance(
-    config: &Config,
+    config: &mut SnapshotConfig,
     state: &SolidoState,
 ) -> Result<Option<Vec<MaintenanceOutput>>> {
     // To prevent the maintenance transactions failing with mysterious errors
@@ -684,13 +670,14 @@ pub fn try_perform_maintenance(
     // transaction fees.
     let minimum_maintainer_balance = Lamports(100_000_000);
     if Lamports(state.maintainer_account.lamports) < minimum_maintainer_balance {
-        return Err(Box::new(MaintenanceError {
+        let error: crate::error::Error = Box::new(MaintenanceError {
             message: format!(
                 "Balance of the maintainer account {} is less than {}. \
                 Please fund the maintainer account.",
                 state.maintainer_address, minimum_maintainer_balance,
             ),
-        }));
+        });
+        return Err(error.into());
     }
 
     // Try all of these operations one by one, and select the first one that
@@ -716,7 +703,7 @@ pub fn try_perform_maintenance(
             }
             // For maintenance operations, the maintainer is the only signer,
             // and that should be sufficient.
-            sign_and_send_transaction(config, &instructions, &[config.signer])?;
+            config.sign_and_send_transaction(&instructions, &[config.signer])?;
             Ok(Some(outputs))
         }
         None => Ok(None),
@@ -730,7 +717,7 @@ pub fn try_perform_maintenance(
 /// function returns. Call it in a loop until it returns `None`. (And then still
 /// call it in a loop, because the on-chain state might change.)
 pub fn run_perform_maintenance(
-    config: &Config,
+    config: &mut SnapshotConfig,
     opts: &PerformMaintenanceOpts,
 ) -> Result<Option<Vec<MaintenanceOutput>>> {
     let state = SolidoState::new(config, opts.solido_program_id(), opts.solido_address())?;

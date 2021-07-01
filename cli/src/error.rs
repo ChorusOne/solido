@@ -169,7 +169,7 @@ pub trait Abort {
     fn ok_or_abort_with(self, message: &'static str) -> Self::Item;
 }
 
-impl<T, E: AsPrettyError> Abort for Result<T, E> {
+impl<T, E: AsPrettyError> Abort for std::result::Result<T, E> {
     type Item = T;
 
     fn ok_or_abort(self) -> T {
