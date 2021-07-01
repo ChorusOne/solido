@@ -18,7 +18,7 @@ RUN useradd -m -d $SOLIDOPATH solido
 # Copy from build container
 RUN cp -rf  /solido-build/target/release/* $SOLIDOPATH
 
-COPY docker/entrypoint.sh $SOLIDOPATH
+COPY docker/setup.sh $SOLIDOPATH
 
 RUN chown -R solido:solido $SOLIDOPATH
 
