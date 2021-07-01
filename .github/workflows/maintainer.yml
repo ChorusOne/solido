@@ -26,13 +26,10 @@ jobs:
          with:
            submodules: true
 
-       - name: Set Version
+       - name: Build Docker image
          run: |
            export SOLIDO_VERSION=${{ github.event.inputs.version || (GITHUB_REF | sed 's/refs\/tags\///g')  }}
            echo "Set image version as $SOLIDO_VERSION"
-
-       - name: Build Docker image
-         run: |
            docker-compose -f docker/docker-compose.yml build
 
        - name: Login to Docker Hub
@@ -43,4 +40,6 @@ jobs:
 
        - name: Push Docker image
          run: |
+           export SOLIDO_VERSION=${{ github.event.inputs.version || (GITHUB_REF | sed 's/refs\/tags\///g')  }}
+           echo "Set image version as $SOLIDO_VERSION"
            docker-compose -f docker/docker-compose.yml push
