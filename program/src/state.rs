@@ -10,7 +10,7 @@ use solana_program::{
 };
 use spl_token::state::Mint;
 
-use crate::account_map::{AccountMap, AccountSet, PubkeyAndEntry};
+use crate::account_map::{AccountMap, AccountSet, EntryConstantSize, PubkeyAndEntry};
 use crate::error::LidoError;
 use crate::logic::get_reserve_available_balance;
 use crate::token::{Lamports, Rational, StLamports};
@@ -24,9 +24,18 @@ pub const LIDO_VERSION: u8 = 0;
 ///
 /// To update this, run the tests and replace the value here with the test output.
 pub const LIDO_CONSTANT_SIZE: usize = 171;
+pub const VALIDATOR_CONSTANT_SIZE: usize = 68;
 
 pub type Validators = AccountMap<Validator>;
 pub type Maintainers = AccountSet;
+
+impl EntryConstantSize for Validator {
+    const SIZE: usize = VALIDATOR_CONSTANT_SIZE;
+}
+
+impl EntryConstantSize for () {
+    const SIZE: usize = 0;
+}
 
 /// The exchange rate used for deposits and rewards distribution.
 ///
@@ -389,6 +398,13 @@ impl Lido {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema, Serialize)]
+pub struct Weight(pub u32);
+impl Default for Weight {
+    fn default() -> Self {
+        Weight(1000)
+    }
+}
 #[repr(C)]
 #[derive(
     Clone, Debug, Default, Eq, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema, Serialize,
@@ -425,16 +441,17 @@ pub struct Validator {
 
     /// Sum of the balances of the stake accounts.
     pub stake_accounts_balance: Lamports,
+
+    /// Weight of the validator. Used when calculating the stake amount for
+    /// keeping a weighted balance, also defines the validator's share of fees.
+    pub weight: Weight,
 }
 
 impl Validator {
     pub fn new(fee_address: Pubkey) -> Validator {
         Validator {
             fee_address,
-            fee_credit: StLamports(0),
-            stake_accounts_seed_begin: 0,
-            stake_accounts_seed_end: 0,
-            stake_accounts_balance: Lamports(0),
+            ..Default::default()
         }
     }
 
@@ -594,13 +611,15 @@ mod test_lido {
 
     #[test]
     fn test_validators_size() {
+        let validator = get_instance_packed_len(&Validator::default()).unwrap();
+        assert_eq!(validator, Validator::SIZE);
         let one_len = get_instance_packed_len(&Validators::new_fill_default(1)).unwrap();
         let two_len = get_instance_packed_len(&Validators::new_fill_default(2)).unwrap();
         assert_eq!(one_len, Validators::required_bytes(1));
         assert_eq!(two_len, Validators::required_bytes(2));
         assert_eq!(
             two_len - one_len,
-            std::mem::size_of::<(Pubkey, Validator)>()
+            std::mem::size_of::<Pubkey>() + Validator::SIZE
         );
     }
 

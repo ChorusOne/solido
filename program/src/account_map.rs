@@ -27,10 +27,13 @@ pub struct AccountMap<T> {
     pub entries: Vec<PubkeyAndEntry<T>>,
     pub maximum_entries: u32,
 }
+pub trait EntryConstantSize {
+    const SIZE: usize;
+}
 
 pub type AccountSet = AccountMap<()>;
 
-impl<T: Default> AccountMap<T> {
+impl<T: Default + EntryConstantSize> AccountMap<T> {
     /// Creates a new instance with the `maximum_entries` positions filled with the default value
     pub fn new_fill_default(maximum_entries: u32) -> Self {
         let mut v = Vec::with_capacity(maximum_entries as usize);
@@ -101,12 +104,9 @@ impl<T: Default> AccountMap<T> {
     }
 
     /// Return how many bytes are needed to serialize an instance holding `max_entries`.
-    ///
-    /// Assumes that the serialized size of `T` is the same as its in-memory
-    /// size.
     pub fn required_bytes(max_entries: usize) -> usize {
         let key_size = std::mem::size_of::<Pubkey>();
-        let value_size = std::mem::size_of::<T>();
+        let value_size = T::SIZE;
         let entry_size = key_size + value_size;
 
         // 8 bytes for the length and u32 field, then the entries themselves.
@@ -116,7 +116,7 @@ impl<T: Default> AccountMap<T> {
     /// Return how many entries could fit in a buffer of the given size.
     pub fn maximum_entries(buffer_size: usize) -> usize {
         let key_size = std::mem::size_of::<Pubkey>();
-        let value_size = std::mem::size_of::<T>();
+        let value_size = T::SIZE;
         let entry_size = key_size + value_size;
 
         buffer_size.saturating_sub(8) / entry_size
