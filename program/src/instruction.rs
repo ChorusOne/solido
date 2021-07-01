@@ -49,6 +49,8 @@ pub enum LidoInstruction {
     ///
     /// This can be called by anybody.
     UpdateExchangeRate,
+    /// Observe any external changes in the balances of a validator's stake accounts.
+    UpdateValidatorBalance,
     Withdraw {
         #[allow(dead_code)] // but it's not
         amount: StLamports,
@@ -240,6 +242,75 @@ pub fn update_exchange_rate(
 ) -> Instruction {
     // There is no reason why `try_to_vec` should fail here.
     let data = LidoInstruction::UpdateExchangeRate.try_to_vec().unwrap();
+    Instruction {
+        program_id: *program_id,
+        accounts: accounts.to_vec(),
+        data,
+    }
+}
+
+accounts_struct! {
+    // Note: there are no signers among these accounts, updating validator
+    // balance is permissionless, anybody can do it.
+    UpdateValidatorBalanceMeta, UpdateValidatorBalanceInfo {
+        pub lido {
+            is_signer: false,
+            is_writable: true,
+        },
+        // The validator to update the balance for.
+        pub validator_vote_account {
+            is_signer: false,
+            is_writable: false,
+        },
+
+        // Updating balances also immediately mints rewards, so we need the stSOL
+        // mint, and the fee accounts to deposit the stSOL into.
+        pub st_sol_mint {
+            is_signer: false,
+            is_writable: true,
+        },
+
+        // The reserve account doubles as the mint authority, we need it here so
+        // it can sign minting stSOL. It is not a signer of *this* transaction,
+        // but it will do a signed invoke for `spl_token::mint_to`.
+        pub reserve_authority {
+            is_signer: false,
+            is_writable: false,
+        },
+
+        pub treasury_st_sol_account {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub developer_st_sol_account {
+            is_signer: false,
+            is_writable: true,
+        },
+
+        // We only allow updating balances if the exchange rate is up to date,
+        // so we need to know the current epoch.
+        const sysvar_clock = sysvar::clock::id(),
+
+        // Needed for minting rewards.
+        const spl_token_program = spl_token::id(),
+
+        // The validator's stake accounts, from the begin seed until (but
+        // excluding) the end seed.
+        pub ...stake_accounts {
+            is_signer: false,
+            is_writable: false,
+        },
+    }
+}
+
+pub fn update_validator_balance(
+    program_id: &Pubkey,
+    accounts: &UpdateValidatorBalanceMeta,
+) -> Instruction {
+    // There is no reason why `try_to_vec` should fail here.
+    let data = LidoInstruction::UpdateValidatorBalance
+        .try_to_vec()
+        .unwrap();
     Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),

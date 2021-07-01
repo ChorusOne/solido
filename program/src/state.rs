@@ -110,6 +110,7 @@ pub struct ExchangeRate {
 }
 
 impl ExchangeRate {
+    /// Convert SOL to stSOL.
     pub fn exchange_sol(&self, amount: Lamports) -> Option<StLamports> {
         // The exchange rate starts out at 1:1, if there are no deposits yet.
         if self.sol_balance == Lamports(0) {
@@ -124,6 +125,23 @@ impl ExchangeRate {
         // dimensionless, but in this case `rate` has dimensions stSOL/SOL, so
         // we need to re-wrap the result in the right type.
         (amount * rate).map(|x| StLamports(x.0))
+    }
+
+    /// Convert stSOL to SOL.
+    pub fn exchange_st_sol(&self, amount: StLamports) -> Option<Lamports> {
+        // If there is no stSOL in existence, it cannot be exchanged.
+        if self.st_sol_supply == StLamports(0) {
+            return None;
+        }
+
+        let rate = Rational {
+            numerator: self.sol_balance.0,
+            denominator: self.st_sol_supply.0,
+        };
+        // The result is in StLamports, because the type system considers Rational
+        // dimensionless, but in this case `rate` has dimensions SOL/stSOL, so
+        // we need to re-wrap the result in the right type.
+        (amount * rate).map(|x| Lamports(x.0))
     }
 }
 
@@ -253,6 +271,31 @@ impl Lido {
             return Err(LidoError::InvalidMaintainer.into());
         }
         Ok(())
+    }
+
+    /// Check if the passed treasury fee account is the one configured.
+    ///
+    /// Also confirm that the recipient is still an stSOL account.
+    pub fn check_treasury_fee_st_sol_account(&self, st_sol_account: &AccountInfo) -> ProgramResult {
+        if &self.fee_recipients.treasury_account != st_sol_account.key {
+            msg!("Invalid treasury fee stSOL account, not the same as the one stored in state.");
+            return Err(LidoError::InvalidFeeRecipient.into());
+        }
+        self.check_is_st_sol_account(st_sol_account)
+    }
+
+    /// Check if the passed developer fee account is the one configured.
+    ///
+    /// Also confirm that the recipient is still an stSOL account.
+    pub fn check_developer_fee_st_sol_account(
+        &self,
+        st_sol_account: &AccountInfo,
+    ) -> ProgramResult {
+        if &self.fee_recipients.developer_account != st_sol_account.key {
+            msg!("Invalid developer fee stSOL account, not the same as the one stored in state.");
+            return Err(LidoError::InvalidFeeRecipient.into());
+        }
+        self.check_is_st_sol_account(st_sol_account)
     }
 
     /// Return the address of the reserve account, the account where SOL gets

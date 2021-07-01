@@ -101,7 +101,6 @@ pub fn process_claim_validator_fee(
         accounts.validator_fee_st_sol_account,
         amount_claimed,
     )?;
-
     lido.save(accounts.lido)
 }
 

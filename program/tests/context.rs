@@ -146,9 +146,9 @@ impl Context {
         let solido = Keypair::new();
 
         let reward_distribution = RewardDistribution {
+            validation_fee: 5,
             treasury_fee: 3,
-            validation_fee: 4,
-            developer_fee: 3,
+            developer_fee: 2,
             st_sol_appreciation: 90,
         };
 
@@ -668,6 +668,12 @@ impl Context {
         .await
     }
 
+    pub async fn update_exchange_rate(&mut self) {
+        self.try_update_exchange_rate()
+            .await
+            .expect("Failed to update exchange rate.");
+    }
+
     /// Merge two accounts of a given validator.
     pub async fn try_merge_stake(
         &mut self,
@@ -709,12 +715,6 @@ impl Context {
         .await
     }
 
-    pub async fn update_exchange_rate(&mut self) {
-        self.try_update_exchange_rate()
-            .await
-            .expect("Failed to update exchange rate.");
-    }
-
     /// Merge two accounts of a given validator.
     pub async fn merge_stake(
         &mut self,
@@ -725,6 +725,55 @@ impl Context {
         self.try_merge_stake(validator_vote_account, from_seed, to_seed)
             .await
             .expect("Failed to call MergeStake on Solido instance.")
+    }
+
+    /// Observe the new validator balance and write it ot the state,
+    /// distribute any rewards received.
+    pub async fn try_update_validator_balance(
+        &mut self,
+        validator_vote_account: Pubkey,
+    ) -> transport::Result<()> {
+        let solido = self.get_solido().await;
+        let validator = solido.validators.get(&validator_vote_account).unwrap();
+        let begin = validator.entry.stake_accounts_seed_begin;
+        let end = validator.entry.stake_accounts_seed_end;
+
+        let stake_account_addrs: Vec<Pubkey> = (begin..end)
+            .map(|seed| {
+                Validator::find_stake_account_address(
+                    &id(),
+                    &self.solido.pubkey(),
+                    &validator_vote_account,
+                    seed,
+                )
+                .0
+            })
+            .collect();
+
+        send_transaction(
+            &mut self.context,
+            &mut self.nonce,
+            &[instruction::update_validator_balance(
+                &id(),
+                &instruction::UpdateValidatorBalanceMeta {
+                    lido: self.solido.pubkey(),
+                    validator_vote_account: validator_vote_account,
+                    st_sol_mint: self.st_sol_mint,
+                    reserve_authority: self.reserve_address,
+                    treasury_st_sol_account: self.treasury_st_sol_account,
+                    developer_st_sol_account: self.developer_st_sol_account,
+                    stake_accounts: stake_account_addrs,
+                },
+            )],
+            vec![],
+        )
+        .await
+    }
+
+    pub async fn update_validator_balance(&mut self, validator_vote_account: Pubkey) {
+        self.try_update_validator_balance(validator_vote_account)
+            .await
+            .expect("Failed to update validator balance.");
     }
 
     pub async fn try_get_account(&mut self, address: Pubkey) -> Option<Account> {
@@ -794,7 +843,7 @@ impl Context {
 
 #[macro_export]
 macro_rules! assert_solido_error {
-    ($result:expr, $error:expr) => {
+    ($result:expr, $error:expr $(, /* Accept an optional trailing comma. */)?) => {
         // Open a scope so the imports don't clash.
         {
             use solana_program::instruction::InstructionError;
