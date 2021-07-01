@@ -101,7 +101,7 @@ pub fn process_claim_validator_fee(
         accounts.lido.key,
         accounts.spl_token,
         accounts.st_sol_mint,
-        accounts.reserve_authority,
+        accounts.mint_authority,
         accounts.validator_fee_st_sol_account,
         amount_claimed,
     )?;

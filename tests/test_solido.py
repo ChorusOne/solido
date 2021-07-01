@@ -358,9 +358,9 @@ else:
 
 print('\nSimulating 1 SOL deposit, then running maintenance ...')
 # TODO(#154): Perform an actual deposit here.
-reserve_authority: str = solido_instance['reserve_authority']
-solana('transfer', '--allow-unfunded-recipient', reserve_authority, '1.0')
-print(f'> Funded reserve {reserve_authority} with 1.0 SOL')
+reserve_account: str = solido_instance['reserve_account']
+solana('transfer', '--allow-unfunded-recipient', reserve_account, '1.0')
+print(f'> Funded reserve {reserve_account} with 1.0 SOL')
 
 result = solido(
     'perform-maintenance',
@@ -388,8 +388,8 @@ print(
     '\nSimulating 0.0005 SOL deposit (too little to stake), then running maintenance ...'
 )
 # TODO(#154): Perform an actual deposit here.
-solana('transfer', '--allow-unfunded-recipient', reserve_authority, '0.0005')
-print(f'> Funded reserve {reserve_authority} with 0.0005 SOL')
+solana('transfer', '--allow-unfunded-recipient', reserve_account, '0.0005')
+print(f'> Funded reserve {reserve_account} with 0.0005 SOL')
 
 # 0.0005 SOL is not enough to make a stake account, so even though the reserve
 # is not empty, we can't stake what's in the reserve.

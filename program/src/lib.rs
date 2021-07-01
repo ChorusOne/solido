@@ -15,8 +15,11 @@ pub mod state;
 pub mod token;
 pub mod util;
 
-/// Seed for reserve authority in SOL.
-pub const RESERVE_AUTHORITY: &[u8] = b"reserve_authority";
+/// Seed for reserve account that holds SOL.
+pub const RESERVE_ACCOUNT: &[u8] = b"reserve_account";
+
+/// Mint authority, mints StSol.
+pub const MINT_AUTHORITY: &[u8] = b"mint_authority";
 
 /// Seed for managing the stake.
 pub const STAKE_AUTHORITY: &[u8] = b"stake_authority";
