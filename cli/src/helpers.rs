@@ -171,7 +171,7 @@ pub fn command_create_solido(
             manager,
             treasury_account: treasury_keypair.pubkey(),
             developer_account: developer_keypair.pubkey(),
-            reserve_account: reserve_account,
+            reserve_account,
         },
     )?);
 
