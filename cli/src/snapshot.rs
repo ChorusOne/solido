@@ -225,6 +225,63 @@ impl SnapshotClient {
         }
     }
 
+    /// Call `GetMultipleAccounts` to get `self.accounts_to_query`.
+    ///
+    /// Ideally, we do a single `GetMultipleAccounts` call for the accounts we
+    /// need, and then we have a consistent snapshot. But unfortunately, the
+    /// default limit on the number of accounts that you can query in one call
+    /// is quite low. This means that in somme cases, we may need to resort to
+    /// doing multiple calls. This can result in torn reads, and observing an
+    /// inconsistent state, but unfortunately there is no other way. If this
+    /// happens, we print a warning to stderr.
+    fn get_multiple_accounts_chunked(&self) -> std::result::Result<Vec<Option<Account>>, crate::error::Error> {
+        let mut result = Vec::new();
+
+        // Handle the empty case first, because otherwise we try to make chunks
+        // of length 0 below.
+        if self.accounts_to_query.is_empty() {
+            return Ok(result);
+        }
+
+        'num_chunks: for num_chunks in 1.. {
+            result.clear();
+
+            let items_per_chunk = self.accounts_to_query.len() / num_chunks;
+            assert!(
+                items_per_chunk > 0,
+                "We should be able to get at least *one* account with GetMultipleAccounts."
+            );
+
+            for chunk in self.accounts_to_query.chunks(items_per_chunk) {
+                match self.rpc_client.get_multiple_accounts(chunk) {
+                    Ok(accounts) => {
+                        result.extend(accounts);
+                    }
+                    Err(ref err) if is_too_many_inputs_error(err) => {
+                        eprintln!(
+                            "Warning: Failed to retrieve all accounts in a single \
+                                GetMultipleAccounts call. The resulting snapshot may be \
+                                inconsistent."
+                        );
+                        eprintln!(
+                            "Please ask the RPC node operator to bump \
+                                --rpc-max-multiple-accounts to {}, or connect to a different RPC \
+                                node.",
+                            self.accounts_to_query.len()
+                        );
+                        continue 'num_chunks;
+                    }
+                    Err(err) => return Err(err.into()),
+                };
+            }
+
+            assert_eq!(result.len(), self.accounts_to_query.len());
+            return Ok(result);
+        }
+
+        unreachable!("Above loop fails the assertion when items_per_chunk > accounts_to_query.len");
+    }
+
     /// Run the function `f`, which has access to a consistent snapshot of accounts.
     ///
     /// If `f` tries to access an account that's not in the snapshot, we will
@@ -243,18 +300,7 @@ impl SnapshotClient {
         F: FnMut(Snapshot) -> Result<T>,
     {
         loop {
-            let account_values_result = self
-                .rpc_client
-                .get_multiple_accounts(&self.accounts_to_query[..]);
-
-            let account_values = match account_values_result {
-                Ok(v) => v,
-                Err(ref err) if is_too_many_inputs_error(err) => {
-                    panic!("Too many inputs!");
-                }
-                Err(err) => return Err(err.into()),
-            };
-
+            let account_values = self.get_multiple_accounts_chunked()?;
             let accounts: HashMap<_, _> = self
                 .accounts_to_query
                 .iter()
