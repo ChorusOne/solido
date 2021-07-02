@@ -76,14 +76,14 @@ impl StakeAccount {
         amount: Lamports,
         stake_account: &Pubkey,
         to_account: &Pubkey,
-        authorized_pubkey: &Pubkey,
+        withdraw_authority: &Pubkey,
     ) -> Instruction {
         let account_metas = vec![
             AccountMeta::new(*stake_account, false),
             AccountMeta::new(*to_account, false),
             AccountMeta::new_readonly(sysvar::clock::id(), false),
             AccountMeta::new_readonly(sysvar::stake_history::id(), false),
-            AccountMeta::new_readonly(*authorized_pubkey, true),
+            AccountMeta::new_readonly(*withdraw_authority, true),
         ];
 
         Instruction::new_with_bincode(

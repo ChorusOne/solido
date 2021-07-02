@@ -243,15 +243,7 @@ pub fn process_merge_stake(
         return Err(LidoError::InvalidStakeAccount.into());
     }
 
-    let reserve_account = lido.get_reserve_account(program_id, accounts.lido.key)?;
-    if &reserve_account != accounts.reserve_account.key {
-        msg!(
-            "Invalid reserve account, should be {}, got {}",
-            reserve_account,
-            accounts.reserve_account.key
-        );
-        return Err(LidoError::InvalidReserveAuthority.into());
-    }
+    lido.check_reserve_authority(program_id, accounts.lido.key, accounts.reserve_account)?;
     // Merge `from_stake` to `to_stake`, at the end of the instruction,
     // `from_stake` ceases to exist.
     let merge_ix = stake_program::merge(
@@ -295,7 +287,7 @@ pub fn process_merge_stake(
             (to_stake_account.balance.inactive - stake_account_rent)
                 .expect("Should succeed because of the if condition."),
             &to_stake_addr,
-            &reserve_account,
+            accounts.lido.key,
             accounts.stake_authority.key,
         );
         invoke_signed(
