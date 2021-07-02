@@ -65,15 +65,66 @@ where
 
 pub type Result<T> = std::result::Result<T, SnapshotError>;
 
+/// A set that preserves insertion order.
+pub struct OrderedSet<T> {
+    // Invariant: the vec and set contain the same elements.
+    pub elements_vec: Vec<T>,
+    pub elements_set: HashSet<T>,
+}
+
+impl<T: std::hash::Hash + Copy + Eq> OrderedSet<T> {
+    pub fn new() -> OrderedSet<T> {
+        OrderedSet {
+            elements_vec: Vec::new(),
+            elements_set: HashSet::new(),
+        }
+    }
+
+    /// Append an element at the end, if it was not yet in the set.
+    pub fn push(&mut self, element: T) {
+        let is_new = self.elements_set.insert(element);
+        if is_new {
+            self.elements_vec.push(element);
+        }
+    }
+
+    /// Merge `other` into `self`.
+    ///
+    /// This preserves the order of `self`, and adds additional elements at the
+    /// end, in the order of `other`.
+    pub fn union_with(&mut self, other: &OrderedSet<T>) {
+        for element in other.iter() {
+            self.push(*element)
+        }
+    }
+}
+
+// Deref impl so we get `.len()`, `.iter()`, `.chunks()`, etc.
+// This is the same Deref impl that `Vec` has.
+impl<T> std::ops::Deref for OrderedSet<T> {
+    type Target = [T];
+
+    fn deref(&self) -> &[T] {
+        self.elements_vec.deref()
+    }
+}
+
 /// A snapshot of one or more accounts.
 pub struct Snapshot<'a> {
     /// Addresses, and their values, at the time of the snapshot.
     accounts: &'a HashMap<Pubkey, Account>,
 
-    /// The accounts that we actually read. This is used to remove any unused
-    /// accounts from a future snapshot, so the set of accounts to query does
-    /// not continue growing indefinitely.
-    accounts_referenced: &'a mut HashSet<Pubkey>,
+    /// The accounts referenced so far, in the order of first reference.
+    ///
+    /// This set serves two purposes:
+    ///
+    /// * If we try to access an account that is not in the set, we can union
+    ///   the set of accounts to query with this, so the account is present in
+    ///   the next iteration.
+    ///
+    /// * After a successful run, we can prune the accounts to query, to remove
+    ///   any accounts in the snapshot that we did not reference.
+    accounts_referenced: &'a mut OrderedSet<Pubkey>,
 
     /// The wrapped client, so we can still send transactions.
     rpc_client: &'a RpcClient,
@@ -88,7 +139,7 @@ pub struct Snapshot<'a> {
 
 impl<'a> Snapshot<'a> {
     pub fn get_account(&mut self, address: &Pubkey) -> Result<&'a Account> {
-        self.accounts_referenced.insert(*address);
+        self.accounts_referenced.push(*address);
         self.accounts
             .get(address)
             .ok_or(SnapshotError::MissingAccount)
@@ -192,7 +243,7 @@ impl<'a> Snapshot<'a> {
 /// A wrapper around [`RpcClient`] that enables reading consistent snapshots of multiple accounts.
 pub struct SnapshotClient {
     rpc_client: RpcClient,
-    accounts_to_query: Vec<Pubkey>,
+    accounts_to_query: OrderedSet<Pubkey>,
 }
 
 /// Return whether a call to `GetMultipleAccounts` failed due to the RPC account limit.
@@ -221,7 +272,7 @@ impl SnapshotClient {
     pub fn new(rpc_client: RpcClient) -> SnapshotClient {
         SnapshotClient {
             rpc_client,
-            accounts_to_query: Vec::new(),
+            accounts_to_query: OrderedSet::new(),
         }
     }
 
@@ -313,7 +364,7 @@ impl SnapshotClient {
             // Confirm that we did read all the accounts that we needed, and
             // fail otherwise. Without this check, we could get stuck in an
             // infinite loop, trying to read the same non-existing account.
-            for addr in &self.accounts_to_query {
+            for addr in self.accounts_to_query.iter() {
                 if !accounts.contains_key(addr) {
                     return Err(Box::new(MissingAccountError {
                         missing_account: *addr,
@@ -321,7 +372,7 @@ impl SnapshotClient {
                 }
             }
 
-            let mut accounts_referenced = HashSet::new();
+            let mut accounts_referenced = OrderedSet::new();
             let mut sent_transaction = false;
 
             let snapshot = Snapshot {
@@ -332,7 +383,16 @@ impl SnapshotClient {
             };
 
             match f(snapshot) {
-                Ok(result) => return Ok(result),
+                Ok(result) => {
+                    // This snapshot was good, it contained all accounts
+                    // referenced by `f`. But it might have contained more. To
+                    // prevent the set of accounts from growing indefinitely with
+                    // accounts that were once referenced, but now no longer
+                    // needed, update our accounts to query to be only what `f`
+                    // actually used this time.
+                    self.accounts_to_query = accounts_referenced;
+                    return Ok(result);
+                },
                 Err(SnapshotError::OtherError(err)) => return Err(err),
                 Err(SnapshotError::MissingAccount) => {
                     if sent_transaction {
@@ -349,8 +409,19 @@ impl SnapshotClient {
                         // `f` tried to access an account that was not in the snapshot.
                         // That should have put the account in `accounts_referenced`,
                         // so on the next iteration, we will include that account.
-                        self.accounts_to_query.clear();
-                        self.accounts_to_query.extend(accounts_referenced);
+                        // Don't just replace `accounts_to_query` with
+                        // `accounts_referenced` though, union them. This way, if we
+                        // had a good set for a few snapshots, but now a new account
+                        // appears in the middle, we don't throw away those accounts
+                        // that we knew we would need later anyway. Merge the old
+                        // set into the referenced accounts to preserve the most
+                        // recent reference order. This ensures that if we do need
+                        // to break up the query into multiple chunks, the accounts
+                        // that get referenced after each other will likely end up
+                        // in the same chunk, and this minimizes bad effects of
+                        // tearing.
+                        accounts_referenced.union_with(&self.accounts_to_query);
+                        self.accounts_to_query = accounts_referenced;
                     }
                 }
             }
