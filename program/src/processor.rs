@@ -200,7 +200,7 @@ pub fn process_stake_deposit(
     let (reserve_account, _) = Pubkey::find_program_address(reserve_account_seed, program_id);
 
     if accounts.reserve.key != &reserve_account {
-        return Err(LidoError::InvalidReserveAuthority.into());
+        return Err(LidoError::InvalidReserveAccount.into());
     }
 
     let reserve_account_bump_seed = [lido.sol_reserve_account_bump_seed];
