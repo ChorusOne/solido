@@ -4,8 +4,8 @@ use solana_client::client_error::{ClientError, ClientErrorKind};
 use solana_client::rpc_request::{RpcError, RpcResponseErrorData};
 use solana_program::program_error::ProgramError;
 use solana_program::pubkey::PubkeyError;
-use solana_sdk::transaction::TransactionError;
 use solana_sdk::pubkey::Pubkey;
+use solana_sdk::transaction::TransactionError;
 
 /// Print the message in bold using ANSI escape sequences.
 fn print_key(message: &'static str) {
@@ -48,7 +48,10 @@ pub struct MissingAccountError {
 impl AsPrettyError for MissingAccountError {
     fn print_pretty(&self) {
         print_red("Missing account error:\n");
-        println!("We tried to read the following account, but it does not exist: {}", self.missing_account);
+        println!(
+            "We tried to read the following account, but it does not exist: {}",
+            self.missing_account
+        );
     }
 }
 

@@ -38,7 +38,7 @@ use lido::token::Lamports;
 use spl_token::solana_program::hash::Hash;
 
 use crate::error::{Error, MissingAccountError, SerializationError};
-use solana_client::client_error::{ClientErrorKind, ClientError};
+use solana_client::client_error::{ClientError, ClientErrorKind};
 use solana_client::rpc_request::RpcError;
 
 pub enum SnapshotError {
@@ -205,7 +205,10 @@ impl<'a> Snapshot<'a> {
                 let error: Error = Box::new(SerializationError {
                     cause: err.into(),
                     address: *solido_address,
-                    context: format!("Failed to deserialize Lido struct, data length is {} bytes.", account.data.len()),
+                    context: format!(
+                        "Failed to deserialize Lido struct, data length is {} bytes.",
+                        account.data.len()
+                    ),
                 });
                 Err(error.into())
             }
@@ -263,7 +266,7 @@ fn is_too_many_inputs_error(error: &ClientError) -> bool {
             // ever changes their responses, this will break :/
             RpcError::RpcRequestError(message) => message.contains("Too many inputs provided"),
             _ => false,
-        }
+        },
         _ => false,
     }
 }
@@ -285,7 +288,9 @@ impl SnapshotClient {
     /// doing multiple calls. This can result in torn reads, and observing an
     /// inconsistent state, but unfortunately there is no other way. If this
     /// happens, we print a warning to stderr.
-    fn get_multiple_accounts_chunked(&self) -> std::result::Result<Vec<Option<Account>>, crate::error::Error> {
+    fn get_multiple_accounts_chunked(
+        &self,
+    ) -> std::result::Result<Vec<Option<Account>>, crate::error::Error> {
         let mut result = Vec::new();
 
         // Handle the empty case first, because otherwise we try to make chunks
@@ -392,7 +397,7 @@ impl SnapshotClient {
                     // actually used this time.
                     self.accounts_to_query = accounts_referenced;
                     return Ok(result);
-                },
+                }
                 Err(SnapshotError::OtherError(err)) => return Err(err),
                 Err(SnapshotError::MissingAccount) => {
                     if sent_transaction {
