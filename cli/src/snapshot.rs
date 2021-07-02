@@ -37,7 +37,7 @@ use lido::state::Lido;
 use lido::token::Lamports;
 use spl_token::solana_program::hash::Hash;
 
-use crate::error::Error;
+use crate::error::{Error, MissingAccountError, SerializationError};
 
 pub enum SnapshotError {
     /// We tried to access an account, but it was not present in the snapshot.
@@ -146,8 +146,17 @@ impl<'a> Snapshot<'a> {
     /// Read the account and deserialize the Solido struct.
     pub fn get_solido(&mut self, solido_address: &Pubkey) -> Result<Lido> {
         let account = self.get_account(solido_address)?;
-        let solido = try_from_slice_unchecked::<Lido>(&account.data)?;
-        Ok(solido)
+        match try_from_slice_unchecked::<Lido>(&account.data) {
+            Ok(solido) => Ok(solido),
+            Err(err) => {
+                let error: Error = Box::new(SerializationError {
+                    cause: err.into(),
+                    address: *solido_address,
+                    context: format!("Failed to deserialize Lido struct, data length is {} bytes.", account.data.len()),
+                });
+                Err(error.into())
+            }
+        }
     }
 
     /// Send a transaction without printing to stdout.
@@ -222,6 +231,17 @@ impl SnapshotClient {
                 // filter those out.
                 .filter_map(|(k, opt_v)| opt_v.map(|v| (*k, v)))
                 .collect();
+
+            // Confirm that we did read all the accounts that we needed, and
+            // fail otherwise. Without this check, we could get stuck in an
+            // infinite loop, trying to read the same non-existing account.
+            for addr in &self.accounts_to_query {
+                if !accounts.contains_key(addr) {
+                    return Err(Box::new(MissingAccountError {
+                        missing_account: *addr,
+                    }));
+                }
+            }
 
             let mut accounts_referenced = HashSet::new();
             let mut sent_transaction = false;
