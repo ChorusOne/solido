@@ -300,18 +300,18 @@ impl fmt::Display for ShowSolidoOutput {
         writeln!(f, "\nAuthorities (public key, bump seed):")?;
         writeln!(
             f,
-            "Reserve:     {}, {}",
-            self.reserve_account, self.solido.sol_reserve_account_bump_seed
-        )?;
-        writeln!(
-            f,
-            "Deposit:     {}, {}",
+            "Deposit authority:     {}, {}",
             self.stake_authority, self.solido.stake_authority_bump_seed
         )?;
         writeln!(
             f,
-            "Mint:        {}, {}",
+            "Mint authority:        {}, {}",
             self.mint_authority, self.solido.mint_authority_bump_seed
+        )?;
+        writeln!(
+            f,
+            "Reserve:               {}, {}",
+            self.reserve_account, self.solido.sol_reserve_account_bump_seed
         )?;
         writeln!(f, "\nReward distribution:")?;
         let mut print_reward = |name, get: fn(&RewardDistribution) -> u32| {

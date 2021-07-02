@@ -659,12 +659,12 @@ impl SolidoState {
     }
 
     fn get_mint_authority(&self) -> Pubkey {
-        let (stake_authority, _bump_seed_authority) = lido::find_authority_program_address(
+        let (mint_authority, _bump_seed_authority) = lido::find_authority_program_address(
             &self.solido_program_id,
             &self.solido_address,
             MINT_AUTHORITY,
         );
-        stake_authority
+        mint_authority
     }
 }
 

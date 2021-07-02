@@ -59,7 +59,6 @@ pub fn mint_st_sol_to<'a>(
     solido.check_mint_is_st_sol_mint(st_sol_mint)?;
     solido.check_is_st_sol_account(recipient)?;
 
-    let mint_authority = mint_authority;
     let solido_address_bytes = solido_address.to_bytes();
     let authority_signature_seeds = [
         &solido_address_bytes[..],
