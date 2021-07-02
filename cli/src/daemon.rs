@@ -195,7 +195,7 @@ fn run_main_loop(
 
                 Ok(())
             })
-            .ok_or_abort_with("Errors should be handled inside the daemon loop.");
+            .ok_or_abort_with("Failed to obtain a snapshot of all accounts.");
 
         if do_wait {
             // Sleep a random time, to avoid a thundering herd problem, in case

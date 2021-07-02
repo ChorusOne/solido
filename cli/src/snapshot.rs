@@ -38,6 +38,8 @@ use lido::token::Lamports;
 use spl_token::solana_program::hash::Hash;
 
 use crate::error::{Error, MissingAccountError, SerializationError};
+use solana_client::client_error::{ClientErrorKind, ClientError};
+use solana_client::rpc_request::RpcError;
 
 pub enum SnapshotError {
     /// We tried to access an account, but it was not present in the snapshot.
@@ -193,6 +195,28 @@ pub struct SnapshotClient {
     accounts_to_query: Vec<Pubkey>,
 }
 
+/// Return whether a call to `GetMultipleAccounts` failed due to the RPC account limit.
+///
+/// If this happens, the RPC operator increase `--rpc-max-multiple-accounts` on
+/// their validator. At the time of writing, it defaults to 100.
+fn is_too_many_inputs_error(error: &ClientError) -> bool {
+    match error.kind() {
+        ClientErrorKind::RpcError(inner) => match inner {
+            // Unfortunately, there is no way to get a structured error; all we
+            // get is a string that looks like this:
+            //
+            //     Failed to deserialize RPC error response: {"code":-32602,
+            //     "message":"Too many inputs provided; max 100"} [missing field `data`]
+            //
+            // So we have to resort to testing for a substring, and if Solana
+            // ever changes their responses, this will break :/
+            RpcError::RpcRequestError(message) => message.contains("Too many inputs provided"),
+            _ => false,
+        }
+        _ => false,
+    }
+}
+
 impl SnapshotClient {
     pub fn new(rpc_client: RpcClient) -> SnapshotClient {
         SnapshotClient {
@@ -219,9 +243,17 @@ impl SnapshotClient {
         F: FnMut(Snapshot) -> Result<T>,
     {
         loop {
-            let account_values = self
+            let account_values_result = self
                 .rpc_client
-                .get_multiple_accounts(&self.accounts_to_query[..])?;
+                .get_multiple_accounts(&self.accounts_to_query[..]);
+
+            let account_values = match account_values_result {
+                Ok(v) => v,
+                Err(ref err) if is_too_many_inputs_error(err) => {
+                    panic!("Too many inputs!");
+                }
+                Err(err) => return Err(err.into()),
+            };
 
             let accounts: HashMap<_, _> = self
                 .accounts_to_query
