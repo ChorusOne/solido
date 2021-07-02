@@ -251,11 +251,11 @@ pub struct SnapshotClient {
 
 /// Return whether a call to `GetMultipleAccounts` failed due to the RPC account limit.
 ///
-/// If this happens, the RPC operator increase `--rpc-max-multiple-accounts` on
-/// their validator. At the time of writing, it defaults to 100.
+/// If this happens, the RPC operator must increase `--rpc-max-multiple-accounts`
+/// on their validator. At the time of writing, it defaults to 100.
 fn is_too_many_inputs_error(error: &ClientError) -> bool {
     match error.kind() {
-        ClientErrorKind::RpcError(inner) => match inner {
+        ClientErrorKind::RpcError(RpcError::RpcRequestError(message)) => {
             // Unfortunately, there is no way to get a structured error; all we
             // get is a string that looks like this:
             //
@@ -264,9 +264,8 @@ fn is_too_many_inputs_error(error: &ClientError) -> bool {
             //
             // So we have to resort to testing for a substring, and if Solana
             // ever changes their responses, this will break :/
-            RpcError::RpcRequestError(message) => message.contains("Too many inputs provided"),
-            _ => false,
-        },
+            message.contains("Too many inputs provided")
+        }
         _ => false,
     }
 }

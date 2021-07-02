@@ -148,8 +148,8 @@ impl<'a> SnapshotClientConfig<'a> {
         self.client.with_snapshot(|snapshot| {
             let mut config = SnapshotConfig {
                 client: snapshot,
-                signer: signer,
-                output_mode: output_mode,
+                signer,
+                output_mode,
             };
             f(&mut config)
         })
