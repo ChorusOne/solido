@@ -3,12 +3,19 @@
 use std::iter::Sum;
 use std::ops::Add;
 
-use solana_program::clock::Clock;
-use solana_program::stake_history::StakeHistory;
-use solana_sdk::clock::Epoch;
-
-use lido::token::Lamports;
-use spl_stake_pool::stake_program::Stake;
+use crate::{error::LidoError, token::Lamports};
+use solana_program::{
+    account_info::AccountInfo,
+    borsh::try_from_slice_unchecked,
+    clock::{Clock, Epoch},
+    instruction::AccountMeta,
+    msg,
+    program_error::ProgramError,
+    pubkey::Pubkey,
+    sysvar,
+};
+use solana_program::{instruction::Instruction, stake_history::StakeHistory};
+use spl_stake_pool::stake_program::{self, Stake, StakeInstruction, StakeState};
 
 /// The balance of a stake account, split into the four states that stake can be in.
 ///
@@ -55,6 +62,36 @@ impl StakeBalance {
 }
 
 impl StakeAccount {
+    pub fn get_stake(account: &AccountInfo) -> Result<Stake, ProgramError> {
+        let stake_state: StakeState = try_from_slice_unchecked(&account.data.borrow())?;
+        if let StakeState::Stake(_, stake) = stake_state {
+            Ok(stake)
+        } else {
+            msg!("Stake state should have been StakeState::Stake");
+            Err(LidoError::InvalidStakeAccount.into())
+        }
+    }
+    /// Makes an instruction that withdraws from the stake to an account
+    pub fn stake_account_withdraw(
+        amount: Lamports,
+        stake_account: &Pubkey,
+        to_account: &Pubkey,
+        authorized_pubkey: &Pubkey,
+    ) -> Instruction {
+        let account_metas = vec![
+            AccountMeta::new(*stake_account, false),
+            AccountMeta::new(*to_account, false),
+            AccountMeta::new_readonly(sysvar::clock::id(), false),
+            AccountMeta::new_readonly(sysvar::stake_history::id(), false),
+            AccountMeta::new_readonly(*authorized_pubkey, true),
+        ];
+
+        Instruction::new_with_bincode(
+            stake_program::id(),
+            &StakeInstruction::Withdraw(amount.0),
+            account_metas,
+        )
+    }
     /// Extract the stake balance from a delegated stake account.
     pub fn from_delegated_account(
         account_lamports: Lamports,

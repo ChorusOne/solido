@@ -9,7 +9,8 @@ use solana_program::program_pack::Pack;
 use solana_program::{clock::Clock, pubkey::Pubkey, rent::Rent, stake_history::StakeHistory};
 use solana_sdk::{account::Account, borsh::try_from_slice_unchecked, instruction::Instruction};
 
-use lido::{account_map::PubkeyAndEntry, MINT_AUTHORITY};
+use lido::{account_map::PubkeyAndEntry, stake_account::StakeAccount, MINT_AUTHORITY};
+use lido::{stake_account::StakeBalance, util::serialize_b58};
 use lido::{
     state::{Lido, Validator},
     token::Lamports,
@@ -21,10 +22,12 @@ use spl_token::state::Mint;
 
 use crate::config::PerformMaintenanceOpts;
 use crate::error::MaintenanceError;
-use crate::snapshot::Result;
-use crate::stake_account::StakeAccount;
-use crate::stake_account::StakeBalance;
-use crate::SnapshotConfig;
+use crate::{error::Error, Config};
+use lido::token::StLamports;
+use solana_program::program_pack::Pack;
+use std::time::SystemTime;
+
+type Result<T> = std::result::Result<T, Error>;
 
 /// A brief description of the maintenance performed. Not relevant functionally,
 /// but helpful for automated testing, and just for info.
@@ -400,6 +403,7 @@ impl SolidoState {
                 from_stake,
                 to_stake,
                 stake_authority: self.get_stake_authority(),
+                reserve_account: self.reserve_address,
             },
         )
     }

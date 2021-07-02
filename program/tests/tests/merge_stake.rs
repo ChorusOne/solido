@@ -2,8 +2,9 @@
 
 use crate::assert_solido_error;
 use crate::context::Context;
-use lido::{error::LidoError, token::Lamports};
+use lido::{error::LidoError, state::Validator, token::Lamports};
 use solana_program_test::tokio;
+use solana_sdk::signer::Signer;
 
 // TODO(#226): We test only merging inactive stake accounts, test also other combinations.
 #[tokio::test]
@@ -107,4 +108,27 @@ async fn test_merge_validator_with_zero_and_one_stake_account() {
     // Try to merge stake on a validator that has 1 stake account.
     let result = context.try_merge_stake(validator.vote_account, 0, 1).await;
     assert_solido_error!(result, LidoError::InvalidStakeAccount);
+}
+
+#[tokio::test]
+async fn test_merge_with_donated_stake() {
+    let (mut context, _stake_account_pubkeys) = Context::new_with_two_stake_accounts().await;
+    let validator_vote_account = context.validator.as_ref().unwrap().vote_account;
+    let (from_stake_account, _) = Validator::find_stake_account_address(
+        &crate::context::id(),
+        &context.solido.pubkey(),
+        &validator_vote_account,
+        0,
+    );
+    context
+        .fund(from_stake_account, Lamports(1_000_000_000))
+        .await;
+
+    let reserve_balance_before = context.get_sol_balance(context.reserve_address).await;
+    context.merge_stake(validator_vote_account, 1, 0).await;
+    let reserve_balance_after = context.get_sol_balance(context.reserve_address).await;
+    assert_eq!(
+        (reserve_balance_before + Lamports(1_000_000_000)).unwrap(),
+        reserve_balance_after
+    );
 }

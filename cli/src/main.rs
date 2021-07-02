@@ -35,7 +35,6 @@ mod multisig;
 mod prometheus;
 mod snapshot;
 mod spl_token_utils;
-mod stake_account;
 mod util;
 
 /// Solido -- Interact with Lido for Solana.

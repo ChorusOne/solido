@@ -543,7 +543,14 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
+        // The reserve account is used to transfer the inactive stake when
+        // merging accounts, so it can be staked later.
+        pub reserve_account {
+            is_signer: false,
+            is_writable: true,
+        },
         const sysvar_clock = sysvar::clock::id(),
+        const sysvar_rent = sysvar::rent::id(),
         const stake_history = stake_history::id(),
         const stake_program = stake_program::id(),
     }
