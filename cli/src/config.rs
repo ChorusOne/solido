@@ -24,7 +24,7 @@ pub fn get_option_from_config<T: FromStr>(
     }
 }
 
-pub fn get_option_from_env<T: FromStr>(str_key: &'static str) -> Option<T> {
+pub fn get_option_from_env<'a, T: FromStr>(str_key: &'a str) -> Option<T> {
     let env_var = (std::env::var(str_key)).ok()?;
     match T::from_str(&env_var) {
         Ok(t) => Some(t),
@@ -120,13 +120,14 @@ macro_rules! cli_opt_struct {
                     #[allow(unused_mut, unused_assignments)]
                     let mut default = None;
                     $(default = Some($default);)?
-                    let env_option = get_option_from_env(str_field);
+                    let env_var_name = format!("SOLIDO_{}", str_field.to_ascii_uppercase());
+                    let env_option = get_option_from_env(&env_var_name);
                     // Sets the field with the argument or the config field.
                     self.$field = from_cli.or(from_config).or(env_option).or(default);
                     if self.$field.is_none() {
                         failed = true;
                         eprintln!("Expected --{} to be provided on the command line, set in config file with key \"{}\", or specified in an environment variable with key \"{}\".",
-                        str_field.replace("_", "-"), str_field, str_field);
+                        str_field.replace("_", "-"), str_field, env_var_name);
                     }
                 )*
                 if failed {
