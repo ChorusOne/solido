@@ -30,7 +30,7 @@ jobs:
          run: |
            export VERSION_OVERRIDE="${{ github.event.inputs.version }}"
            export REF_VERSION="$(echo ${GITHUB_REF} | sed 's/refs\/tags\///g')"
-           export SOLIDO_VERSION="${VERSION_OVERRIDE:-REF_VERSION}"
+           export SOLIDO_VERSION="${VERSION_OVERRIDE:-${REF_VERSION}}"
            echo "Set image version as $SOLIDO_VERSION"
            docker-compose -f docker/docker-compose.yml build
 
@@ -44,6 +44,6 @@ jobs:
          run: |
            export VERSION_OVERRIDE="${{ github.event.inputs.version }}"
            export REF_VERSION="$(echo ${GITHUB_REF} | sed 's/refs\/tags\///g')"
-           export SOLIDO_VERSION="${VERSION_OVERRIDE:-REF_VERSION}"
+           export SOLIDO_VERSION="${VERSION_OVERRIDE:-${REF_VERSION}}"
            echo "Set image version as $SOLIDO_VERSION"
            docker-compose -f docker/docker-compose.yml push
