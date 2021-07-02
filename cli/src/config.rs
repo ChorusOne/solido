@@ -24,7 +24,7 @@ pub fn get_option_from_config<T: FromStr>(
     }
 }
 
-pub fn get_option_from_env<'a, T: FromStr>(str_key: &'a str) -> Option<T> {
+pub fn get_option_from_env<T: FromStr>(str_key: &str) -> Option<T> {
     let env_var = (std::env::var(str_key)).ok()?;
     match T::from_str(&env_var) {
         Ok(t) => Some(t),
