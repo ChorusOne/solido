@@ -278,8 +278,8 @@ pub fn process_merge_stake(
     )?;
 
     let to_stake = StakeAccount::get_stake(accounts.to_stake)?;
-    // Try to get the rent paid in the `from_stake`. It will be added to the
-    // `to_stake` after the merge.
+    // Try to get the rent paid in the `from_stake` or any other inactive stake.
+    // It will be added to the `to_stake` after the merge.
     let to_stake_account = StakeAccount::from_delegated_account(
         Lamports(accounts.to_stake.lamports()),
         &to_stake,
