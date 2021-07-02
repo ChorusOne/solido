@@ -287,7 +287,7 @@ pub fn process_merge_stake(
             (to_stake_account.balance.inactive - stake_account_rent)
                 .expect("Should succeed because of the if condition."),
             &to_stake_addr,
-            accounts.lido.key,
+            accounts.reserve_account.key,
             accounts.stake_authority.key,
         );
         invoke_signed(
