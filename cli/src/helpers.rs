@@ -49,7 +49,7 @@ impl fmt::Display for CreateSolidoOutput {
         )?;
         writeln!(
             f,
-            "  Reserve authority:             {}",
+            "  Reserve account:               {}",
             self.reserve_account
         )?;
         writeln!(

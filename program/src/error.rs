@@ -20,9 +20,9 @@ pub enum LidoError {
     /// A required signature is missing
     #[error("SignatureMissing")]
     SignatureMissing,
-    /// The reserve authority is invalid
-    #[error("InvalidReserveAuthority")]
-    InvalidReserveAuthority,
+    /// The reserve account is invalid
+    #[error("InvalidReserveAccount")]
+    InvalidReserveAccount,
     /// Calculation failed due to division by zero or overflow
     #[error("CalculationFailure")]
     CalculationFailure,

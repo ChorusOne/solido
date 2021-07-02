@@ -327,10 +327,10 @@ impl Lido {
             ],
             program_id,
         )
-        .map_err(|_| LidoError::InvalidReserveAuthority.into())
+        .map_err(|_| LidoError::InvalidReserveAccount.into())
     }
 
-    /// Confirm that the reserve authority belongs to this Lido instance, return
+    /// Confirm that the reserve account belongs to this Lido instance, return
     /// the reserve address.
     pub fn check_reserve_account(
         &self,
@@ -340,8 +340,8 @@ impl Lido {
     ) -> Result<Pubkey, ProgramError> {
         let reserve_id = self.get_reserve_account(program_id, solido_address)?;
         if reserve_id != *reserve_account_info.key {
-            msg!("Invalid reserve authority");
-            return Err(LidoError::InvalidReserveAuthority.into());
+            msg!("Invalid reserve account");
+            return Err(LidoError::InvalidReserveAccount.into());
         }
         Ok(reserve_id)
     }
