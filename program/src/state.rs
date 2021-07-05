@@ -1,5 +1,7 @@
 //! State transition types
 
+use std::{num::ParseIntError, str::FromStr};
+
 use serde::Serialize;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
@@ -405,6 +407,15 @@ impl Default for Weight {
         Weight(1000)
     }
 }
+impl FromStr for Weight {
+    type Err = ParseIntError;
+
+    fn from_str(s: &str) -> Result<Self, ParseIntError> {
+        let weight: u32 = s.parse()?;
+        Ok(Weight(weight))
+    }
+}
+
 #[repr(C)]
 #[derive(
     Clone, Debug, Default, Eq, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema, Serialize,
@@ -448,9 +459,10 @@ pub struct Validator {
 }
 
 impl Validator {
-    pub fn new(fee_address: Pubkey) -> Validator {
+    pub fn new(fee_address: Pubkey, weight: Weight) -> Validator {
         Validator {
             fee_address,
+            weight,
             ..Default::default()
         }
     }
@@ -647,7 +659,10 @@ mod test_lido {
 
         let mut validators = Validators::new(10_000);
         validators
-            .add(Pubkey::new_unique(), Validator::new(Pubkey::new_unique()))
+            .add(
+                Pubkey::new_unique(),
+                Validator::new(Pubkey::new_unique(), Weight::default()),
+            )
             .unwrap();
         let maintainers = Maintainers::new(1);
         let lido = Lido {
@@ -762,7 +777,10 @@ mod test_lido {
 
         lido.validators.maximum_entries = 1;
         lido.validators
-            .add(Pubkey::new_unique(), Validator::new(Pubkey::new_unique()))
+            .add(
+                Pubkey::new_unique(),
+                Validator::new(Pubkey::new_unique(), Weight::default()),
+            )
             .unwrap();
         lido.validators.entries[0].entry.stake_accounts_balance = Lamports(37);
         assert_eq!(
@@ -830,7 +848,10 @@ mod test_lido {
 
         lido.validators.maximum_entries = 1;
         lido.validators
-            .add(Pubkey::new_unique(), Validator::new(Pubkey::new_unique()))
+            .add(
+                Pubkey::new_unique(),
+                Validator::new(Pubkey::new_unique(), Weight::default()),
+            )
             .unwrap();
         lido.validators.entries[0].entry.fee_credit = StLamports(37);
         assert_eq!(

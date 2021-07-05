@@ -19,9 +19,9 @@ use solana_sdk::transport::TransportError;
 use solana_vote_program::vote_instruction;
 use solana_vote_program::vote_state::{VoteInit, VoteState};
 
-use lido::error::LidoError;
 use lido::state::{FeeRecipients, Lido, RewardDistribution, Validator};
 use lido::token::{Lamports, StLamports};
+use lido::{error::LidoError, state::Weight};
 use lido::{instruction, RESERVE_AUTHORITY, STAKE_AUTHORITY};
 use spl_stake_pool::stake_program::{Meta, Stake, StakeState};
 
@@ -485,6 +485,7 @@ impl Context {
             &mut self.nonce,
             &[lido::instruction::add_validator(
                 &id(),
+                Weight::default(),
                 &lido::instruction::AddValidatorMeta {
                     lido: self.solido.pubkey(),
                     manager: self.manager.pubkey(),

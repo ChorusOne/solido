@@ -739,6 +739,8 @@ pub fn run_perform_maintenance(
 
 #[cfg(test)]
 mod test {
+    use lido::state::Weight;
+
     use super::*;
 
     /// Produce a new state with `default` Solido instance in it, and random pubkeys.
@@ -779,7 +781,10 @@ mod test {
         state
             .solido
             .validators
-            .add(Pubkey::new_unique(), Validator::new(Pubkey::new_unique()))
+            .add(
+                Pubkey::new_unique(),
+                Validator::new(Pubkey::new_unique(), Weight::default()),
+            )
             .unwrap();
         state.validator_stake_accounts.push(vec![]);
         // Put some SOL in the reserve, but not enough to stake.
@@ -809,12 +814,18 @@ mod test {
         state
             .solido
             .validators
-            .add(Pubkey::new_unique(), Validator::new(Pubkey::new_unique()))
+            .add(
+                Pubkey::new_unique(),
+                Validator::new(Pubkey::new_unique(), Weight::default()),
+            )
             .unwrap();
         state
             .solido
             .validators
-            .add(Pubkey::new_unique(), Validator::new(Pubkey::new_unique()))
+            .add(
+                Pubkey::new_unique(),
+                Validator::new(Pubkey::new_unique(), Weight::default()),
+            )
             .unwrap();
         state.validator_stake_accounts = vec![vec![], vec![]];
 

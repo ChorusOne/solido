@@ -193,6 +193,8 @@ transaction_result = solido(
     validator_fee_account,
     '--multisig-address',
     multisig_instance,
+    '--weight',
+    '2000',
     keypair_path=test_addrs[1].keypair_path,
 )
 transaction_address = transaction_result['transaction_address']
@@ -249,7 +251,7 @@ assert solido_instance['solido']['validators']['entries'][0] == {
         'stake_accounts_seed_begin': 0,
         'stake_accounts_seed_end': 0,
         'stake_accounts_balance': 0,
-        'weight': 1000,
+        'weight': 2000,
     },
 }, f'Unexpected validator entry, in {json.dumps(solido_instance, indent=True)}'
 
