@@ -158,7 +158,7 @@ impl<'a> Snapshot<'a> {
                 Err(error.into())
             }
             // The account was not included in the snapshot, we need to retry.
-            None => Err(SnapshotError::MissingAccount)
+            None => Err(SnapshotError::MissingAccount),
         }
     }
 
@@ -263,7 +263,20 @@ impl<'a> Snapshot<'a> {
 /// A wrapper around [`RpcClient`] that enables reading consistent snapshots of multiple accounts.
 pub struct SnapshotClient {
     rpc_client: RpcClient,
+
+    /// The initial set of accounts to query.
+    ///
+    /// We store the set here to reuse it between `with_snapshot` calls, so that
+    /// a next call doesn't need to learn from scratch which accounts we are
+    /// going to access.
     accounts_to_query: OrderedSet<Pubkey>,
+
+    /// The maximum number of accounts that we can request per `GetMultipleAccounts` call.
+    ///
+    /// This is an empirical observation: initially we set it to `usize::MAX`,
+    /// and when we get a too-many-accounts error when requesting `n` accounts,
+    /// we set this to `n - 1`, so we should quickly learn an upper bound.
+    max_items_per_call: usize,
 }
 
 /// Return whether a call to `GetMultipleAccounts` failed due to the RPC account limit.
@@ -292,6 +305,7 @@ impl SnapshotClient {
         SnapshotClient {
             rpc_client,
             accounts_to_query: OrderedSet::new(),
+            max_items_per_call: usize::MAX,
         }
     }
 
@@ -304,8 +318,13 @@ impl SnapshotClient {
     /// doing multiple calls. This can result in torn reads, and observing an
     /// inconsistent state, but unfortunately there is no other way. If this
     /// happens, we print a warning to stderr.
+    ///
+    /// Uses the known upper bound on the number of items that we can get per
+    /// call, `max_items_per_call` (set to `usize::MAX` initially, when this is
+    /// unknown). If we learn a tighter upper bound, this function updates the
+    /// maximum.
     fn get_multiple_accounts_chunked(
-        &self,
+        &mut self,
     ) -> std::result::Result<Vec<Option<Account>>, crate::error::Error> {
         let mut result = Vec::new();
 
@@ -324,23 +343,18 @@ impl SnapshotClient {
                 "We should be able to get at least *one* account with GetMultipleAccounts."
             );
 
+            if items_per_chunk > self.max_items_per_call {
+                // We already know that this would fail, try again with more chunks.
+                continue;
+            }
+
             for chunk in self.accounts_to_query.chunks(items_per_chunk) {
                 match self.rpc_client.get_multiple_accounts(chunk) {
                     Ok(accounts) => {
                         result.extend(accounts);
                     }
                     Err(ref err) if is_too_many_inputs_error(err) => {
-                        eprintln!(
-                            "Warning: Failed to retrieve all accounts in a single \
-                                GetMultipleAccounts call. The resulting snapshot may be \
-                                inconsistent."
-                        );
-                        eprintln!(
-                            "Please ask the RPC node operator to bump \
-                                --rpc-max-multiple-accounts to {}, or connect to a different RPC \
-                                node.",
-                            self.accounts_to_query.len()
-                        );
+                        self.max_items_per_call = chunk.len() - 1;
                         continue 'num_chunks;
                     }
                     Err(err) => return Err(err.into()),
@@ -348,6 +362,23 @@ impl SnapshotClient {
             }
 
             assert_eq!(result.len(), self.accounts_to_query.len());
+
+            // Warn every time if this was not a consistent read, but only warn
+            // once per successful read.
+            if num_chunks > 1 {
+                eprintln!(
+                    "Warning: Failed to retrieve all accounts in a single \
+                        GetMultipleAccounts call. The resulting snapshot may be \
+                        inconsistent."
+                );
+                eprintln!(
+                    "Please ask the RPC node operator to bump \
+                        --rpc-max-multiple-accounts to {}, or connect to a \
+                        different RPC node.",
+                    self.accounts_to_query.len()
+                );
+            }
+
             return Ok(result);
         }
 
