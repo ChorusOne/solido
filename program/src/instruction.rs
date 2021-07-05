@@ -15,7 +15,7 @@ use spl_stake_pool::stake_program;
 use crate::{
     accounts_struct, accounts_struct_meta,
     error::LidoError,
-    state::RewardDistribution,
+    state::{RewardDistribution, Weight},
     token::{Lamports, StLamports},
 };
 
@@ -60,7 +60,10 @@ pub enum LidoInstruction {
         #[allow(dead_code)] // but it's not
         new_reward_distribution: RewardDistribution,
     },
-    AddValidator,
+    AddValidator {
+        #[allow(dead_code)] // but it's not
+        weight: Weight,
+    },
     RemoveValidator,
     AddMaintainer,
     RemoveMaintainer,
@@ -384,12 +387,13 @@ accounts_struct! {
 
 pub fn add_validator(
     program_id: &Pubkey,
+    weight: Weight,
     accounts: &AddValidatorMeta,
 ) -> Result<Instruction, ProgramError> {
     Ok(Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
-        data: LidoInstruction::AddValidator.try_to_vec()?,
+        data: LidoInstruction::AddValidator { weight }.try_to_vec()?,
     })
 }
 

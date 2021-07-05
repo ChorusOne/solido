@@ -1,4 +1,5 @@
 use clap::Clap;
+use lido::state::Weight;
 use serde::Deserialize;
 use serde_json::Value;
 use solana_sdk::pubkey::{ParsePubkeyError, Pubkey};
@@ -270,6 +271,12 @@ cli_opt_struct! {
         /// Address of the Multisig program.
         #[clap(long)]
         multisig_program_id: Pubkey,
+
+        /// Validator weight. Used when calculating the stake amount for keeping
+        /// a weighted balance, also defines the validator's share of fees.
+        /// Defaults to 1000.
+        #[clap(long)]
+        weight: Weight => Weight(1000),
     }
 }
 
