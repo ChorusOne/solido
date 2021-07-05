@@ -158,8 +158,14 @@ current_validators = json.loads(solana('validators', '--output', 'json'))
 
 # Filter out the validators that are actually voting. On a local testnet, this
 # will only contain the test validator, but on devnet or testnet, there can be
-# more validators.
-active_validators = [v for v in current_validators['validators'] if not v['delinquent']]
+# more validators. Only include validators with less than 50% commission. On the
+# devnet there are a few 100%-commission validators, but these are not
+# interesting to include for testing, because they don't generate rewards for us.
+active_validators = [
+    v
+    for v in current_validators['validators']
+    if (not v['delinquent']) and v['commission'] < 50
+]
 
 # Add up to 5 of the active validators. Locally there will only be one, but on
 # the devnet or testnet there can be more, and we don't want to add *all* of them.
