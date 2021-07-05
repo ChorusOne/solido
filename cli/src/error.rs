@@ -4,6 +4,7 @@ use solana_client::client_error::{ClientError, ClientErrorKind};
 use solana_client::rpc_request::{RpcError, RpcResponseErrorData};
 use solana_program::program_error::ProgramError;
 use solana_program::pubkey::PubkeyError;
+use solana_sdk::pubkey::Pubkey;
 use solana_sdk::transaction::TransactionError;
 
 /// Print the message in bold using ANSI escape sequences.
@@ -27,6 +28,7 @@ pub trait AsPrettyError {
 
 pub type Error = Box<dyn AsPrettyError + 'static>;
 
+/// Something went wrong while performing maintenance.
 pub struct MaintenanceError {
     pub message: String,
 }
@@ -35,6 +37,39 @@ impl AsPrettyError for MaintenanceError {
     fn print_pretty(&self) {
         print_red("Maintenance error:\n\n");
         println!("{}", self.message);
+    }
+}
+
+/// We expected to read from the following account, but it doesn't exist on the network.
+pub struct MissingAccountError {
+    pub missing_account: Pubkey,
+}
+
+impl AsPrettyError for MissingAccountError {
+    fn print_pretty(&self) {
+        print_red("Missing account error:\n");
+        println!(
+            "We tried to read the following account, but it does not exist: {}",
+            self.missing_account
+        );
+    }
+}
+
+pub struct SerializationError {
+    pub context: String,
+    pub cause: Error,
+    pub address: Pubkey,
+}
+
+impl AsPrettyError for SerializationError {
+    fn print_pretty(&self) {
+        print_red("Serialization error:\n\n");
+        print_key("Context:");
+        println!("{}", self.context);
+        print_key("Address:");
+        println!("{}", self.address);
+        print_key("Cause:");
+        self.cause.print_pretty();
     }
 }
 
@@ -169,7 +204,7 @@ pub trait Abort {
     fn ok_or_abort_with(self, message: &'static str) -> Self::Item;
 }
 
-impl<T, E: AsPrettyError> Abort for Result<T, E> {
+impl<T, E: AsPrettyError> Abort for std::result::Result<T, E> {
     type Item = T;
 
     fn ok_or_abort(self) -> T {

@@ -1,4 +1,5 @@
 extern crate spl_stake_pool;
+
 use std::fmt;
 use std::path::PathBuf;
 
@@ -10,16 +11,20 @@ use solana_remote_wallet::remote_keypair::generate_remote_keypair;
 use solana_remote_wallet::remote_wallet::maybe_wallet_manager;
 use solana_sdk::commitment_config::CommitmentConfig;
 use solana_sdk::derivation_path::DerivationPath;
+use solana_sdk::instruction::Instruction;
 use solana_sdk::signature::read_keypair_file;
 use solana_sdk::signer::Signer;
+use solana_sdk::signers::Signers;
+use solana_sdk::transaction::Transaction;
 
 use crate::config::*;
-use crate::error::Abort;
+use crate::error::{Abort, Error};
 use crate::helpers::command_add_maintainer;
 use crate::helpers::command_remove_maintainer;
 use crate::helpers::command_show_solido;
 use crate::helpers::{command_add_validator, command_create_solido};
 use crate::multisig::MultisigOpts;
+use crate::snapshot::{Snapshot, SnapshotClient};
 
 mod config;
 mod daemon;
@@ -28,8 +33,9 @@ mod helpers;
 mod maintenance;
 mod multisig;
 mod prometheus;
+mod snapshot;
 mod spl_token_utils;
-pub mod stake_account;
+mod stake_account;
 mod util;
 
 /// Solido -- Interact with Lido for Solana.
@@ -110,13 +116,79 @@ REWARDS
 }
 
 /// Determines which network to connect to, and who pays the fees.
-pub struct Config<'a> {
-    /// Program instance, so we can call RPC methods.
-    rpc: RpcClient,
+pub struct Config<'a, T> {
+    /// RPC client augmented with snapshot functionality.
+    client: T,
     /// Reference to a signer, can be a keypair or ledger device.
     signer: &'a dyn Signer,
     /// output mode, can be json or text.
     output_mode: OutputMode,
+}
+
+/// Program configuration, and a snapshot of accounts.
+///
+/// Accept this in functions that just want to read from a consistent chain
+/// state, without handling retry logic.
+pub type SnapshotConfig<'a> = Config<'a, Snapshot<'a>>;
+
+/// Program configuration, and a client for making snapshots.
+///
+/// Accept this in functions that need to take a snapshot of the on-chain state
+/// at different times. In practice, that's only the long-running maintenance
+/// daemon.
+pub type SnapshotClientConfig<'a> = Config<'a, SnapshotClient>;
+
+impl<'a> SnapshotClientConfig<'a> {
+    pub fn with_snapshot<F, T>(&mut self, mut f: F) -> Result<T, Error>
+    where
+        F: FnMut(&mut SnapshotConfig) -> snapshot::Result<T>,
+    {
+        let signer = self.signer;
+        let output_mode = self.output_mode;
+        self.client.with_snapshot(|snapshot| {
+            let mut config = SnapshotConfig {
+                client: snapshot,
+                signer,
+                output_mode,
+            };
+            f(&mut config)
+        })
+    }
+}
+
+impl<'a> SnapshotConfig<'a> {
+    pub fn sign_transaction<T: Signers>(
+        &mut self,
+        instructions: &[Instruction],
+        signers: &T,
+    ) -> snapshot::Result<Transaction> {
+        let mut tx = Transaction::new_with_payer(instructions, Some(&self.signer.pubkey()));
+        let recent_blockhash = self.client.get_recent_blockhash()?;
+        tx.sign(signers, recent_blockhash);
+        Ok(tx)
+    }
+
+    pub fn sign_and_send_transaction<T: Signers>(
+        &mut self,
+        instructions: &[Instruction],
+        signers: &T,
+    ) -> snapshot::Result<()> {
+        let transaction = self.sign_transaction(instructions, signers)?;
+        let _signature = match self.output_mode {
+            OutputMode::Text => {
+                // In text mode, we can display a spinner.
+                self.client
+                    .send_and_confirm_transaction_with_spinner(&transaction)?
+            }
+            OutputMode::Json => {
+                // In json mode, printing a spinner to stdout would break the
+                // json that we also print to stdout, so opt for the silent
+                // version.
+                self.client.send_and_confirm_transaction(&transaction)?
+            }
+        };
+        Ok(())
+    }
 }
 
 /// Resolve ~/.config/solana/id.json.
@@ -149,8 +221,11 @@ fn main() {
     let payer_keypair_path = opts.keypair_path.unwrap_or_else(get_default_keypair_path);
     let signer = &*get_signer(payer_keypair_path);
 
-    let config = Config {
-        rpc: RpcClient::new_with_commitment(opts.cluster, CommitmentConfig::confirmed()),
+    let rpc_client = RpcClient::new_with_commitment(opts.cluster, CommitmentConfig::confirmed());
+    let snapshot_client = SnapshotClient::new(rpc_client);
+
+    let mut config = Config {
+        client: snapshot_client,
         signer,
         output_mode: opts.output_mode,
     };
@@ -159,18 +234,16 @@ fn main() {
     merge_with_config(&mut opts.subcommand, config_file);
     match opts.subcommand {
         SubCommand::CreateSolido(cmd_opts) => {
-            let output = command_create_solido(&config, &cmd_opts)
-                .ok_or_abort_with("Failed to create Solido instance.");
+            let result = config.with_snapshot(|config| command_create_solido(config, &cmd_opts));
+            let output = result.ok_or_abort_with("Failed to create Solido instance.");
             print_output(output_mode, &output);
         }
-        SubCommand::Multisig(cmd_opts) => multisig::main(&config, output_mode, cmd_opts),
+        SubCommand::Multisig(cmd_opts) => multisig::main(&mut config, cmd_opts),
         SubCommand::PerformMaintenance(cmd_opts) => {
-            // For now, this does one maintenance iteration. In the future we
-            // might add a daemon mode that runs continuously, and which logs
-            // to stdout and exposes Prometheus metrics (also to monitor Solido,
-            // not just the maintenance itself).
-            let output = maintenance::run_perform_maintenance(&config, &cmd_opts)
-                .ok_or_abort_with("Failed to perform maintenance.");
+            // This command only performs one iteration, `RunMaintainer` runs continuously.
+            let result = config
+                .with_snapshot(|config| maintenance::run_perform_maintenance(config, &cmd_opts));
+            let output = result.ok_or_abort_with("Failed to perform maintenance.");
             match (output_mode, output) {
                 (OutputMode::Text, None) => {
                     println!("Nothing done, there was no maintenance to perform.")
@@ -190,26 +263,27 @@ fn main() {
             }
         }
         SubCommand::RunMaintainer(cmd_opts) => {
-            daemon::main(&config, &cmd_opts);
+            daemon::main(&mut config, &cmd_opts);
         }
         SubCommand::AddValidator(cmd_opts) => {
-            let output = command_add_validator(&config, &cmd_opts)
-                .ok_or_abort_with("Failed to add validator.");
+            let result = config.with_snapshot(|config| command_add_validator(config, &cmd_opts));
+            let output = result.ok_or_abort_with("Failed to add validator.");
             print_output(output_mode, &output);
         }
         SubCommand::AddMaintainer(cmd_opts) => {
-            let output = command_add_maintainer(&config, &cmd_opts)
-                .ok_or_abort_with("Failed to add maintainer.");
+            let result = config.with_snapshot(|config| command_add_maintainer(config, &cmd_opts));
+            let output = result.ok_or_abort_with("Failed to add maintainer.");
             print_output(output_mode, &output);
         }
         SubCommand::RemoveMaintainer(cmd_opts) => {
-            let output = command_remove_maintainer(&config, &cmd_opts)
-                .ok_or_abort_with("Failed to remove maintainer.");
+            let result =
+                config.with_snapshot(|config| command_remove_maintainer(config, &cmd_opts));
+            let output = result.ok_or_abort_with("Failed to remove maintainer.");
             print_output(output_mode, &output);
         }
         SubCommand::ShowSolido(cmd_opts) => {
-            let output = command_show_solido(&config, &cmd_opts)
-                .ok_or_abort_with("Failed to show Solido data.");
+            let result = config.with_snapshot(|config| command_show_solido(config, &cmd_opts));
+            let output = result.ok_or_abort_with("Failed to show Solido data.");
             print_output(output_mode, &output);
         }
     }

@@ -1,9 +1,10 @@
+use std::{path::PathBuf, str::FromStr};
+
 use clap::Clap;
 use lido::state::Weight;
 use serde::Deserialize;
 use serde_json::Value;
 use solana_sdk::pubkey::{ParsePubkeyError, Pubkey};
-use std::{path::PathBuf, str::FromStr};
 
 pub fn get_option_from_config<T: FromStr>(
     name: &'static str,

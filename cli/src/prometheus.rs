@@ -125,8 +125,9 @@ pub fn write_metric<W: Write>(out: &mut W, family: &MetricFamily) -> io::Result<
 
 #[cfg(test)]
 mod test {
-    use super::{write_metric, Metric, MetricFamily};
     use std::str;
+
+    use super::{write_metric, Metric, MetricFamily};
 
     #[test]
     fn write_metric_without_labels() {
