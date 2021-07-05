@@ -112,7 +112,14 @@ impl<T> std::ops::Deref for OrderedSet<T> {
 /// A snapshot of one or more accounts.
 pub struct Snapshot<'a> {
     /// Addresses, and their values, at the time of the snapshot.
-    accounts: &'a HashMap<Pubkey, Account>,
+    ///
+    /// The value holds an `Option`, so we can distinguish two "absent" cases:
+    ///
+    /// * The key is present but the value is `None`. This means that the
+    ///   account does not exist on the network, this is an error.
+    /// * The key is not present. This means that we did not include it in the
+    ///   snapshot, so we need to retry.
+    accounts: &'a HashMap<Pubkey, Option<Account>>,
 
     /// The accounts referenced so far, in the order of first reference.
     ///
@@ -140,9 +147,19 @@ pub struct Snapshot<'a> {
 impl<'a> Snapshot<'a> {
     pub fn get_account(&mut self, address: &Pubkey) -> Result<&'a Account> {
         self.accounts_referenced.push(*address);
-        self.accounts
-            .get(address)
-            .ok_or(SnapshotError::MissingAccount)
+        match self.accounts.get(address) {
+            Some(Some(account)) => Ok(account),
+            // The account was included in the snapshot, but it did not exist on
+            // the network at the time. This is a fatal error.
+            Some(None) => {
+                let error: Error = Box::new(MissingAccountError {
+                    missing_account: *address,
+                });
+                Err(error.into())
+            }
+            // The account was not included in the snapshot, we need to retry.
+            None => Err(SnapshotError::MissingAccount)
+        }
     }
 
     /// Read an account and immediately bincode-deserialize it.
@@ -359,22 +376,9 @@ impl SnapshotClient {
             let accounts: HashMap<_, _> = self
                 .accounts_to_query
                 .iter()
+                .cloned()
                 .zip(account_values)
-                // `get_multiple_accounts` returns None for non-existing accounts,
-                // filter those out.
-                .filter_map(|(k, opt_v)| opt_v.map(|v| (*k, v)))
                 .collect();
-
-            // Confirm that we did read all the accounts that we needed, and
-            // fail otherwise. Without this check, we could get stuck in an
-            // infinite loop, trying to read the same non-existing account.
-            for addr in self.accounts_to_query.iter() {
-                if !accounts.contains_key(addr) {
-                    return Err(Box::new(MissingAccountError {
-                        missing_account: *addr,
-                    }));
-                }
-            }
 
             let mut accounts_referenced = OrderedSet::new();
             let mut sent_transaction = false;
