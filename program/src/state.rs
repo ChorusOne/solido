@@ -126,7 +126,8 @@ impl ExchangeRate {
     /// Convert SOL to stSOL.
     pub fn exchange_sol(&self, amount: Lamports) -> Option<StLamports> {
         // The exchange rate starts out at 1:1, if there are no deposits yet.
-        if self.sol_balance == Lamports(0) {
+        // If we minted stSOL but there is no SOL, then also assume a 1:1 rate.
+        if self.st_sol_supply == StLamports(0) || self.sol_balance == Lamports(0) {
             return Some(StLamports(amount.0));
         }
 
@@ -708,8 +709,12 @@ mod test_lido {
     }
 
     #[test]
-    fn test_exchange_when_sol_balance_is_zero() {
-        let rate = ExchangeRate::default();
+    fn test_exchange_when_balance_and_supply_are_zero() {
+        let rate = ExchangeRate {
+            computed_in_epoch: 0,
+            sol_balance: Lamports(0),
+            st_sol_supply: StLamports(0),
+        };
         assert_eq!(rate.exchange_sol(Lamports(123)), Some(StLamports(123)));
     }
 
@@ -722,6 +727,30 @@ mod test_lido {
         };
         // If every stSOL is worth 1 SOL, I should get half my SOL amount in stSOL.
         assert_eq!(rate.exchange_sol(Lamports(44)), Some(StLamports(22)));
+    }
+
+    #[test]
+    fn test_exchange_when_one_balance_is_zero() {
+        // This case can occur when we donate some SOL to Lido, instead of
+        // depositing it. There will not be any stSOL, but there will be SOL.
+        // In this case it doesn't matter which exchange rate we use, the first
+        // deposits will mint some stSOL, and that stSOL will own all of the
+        // pool. The rate we choose is only nominal, it controls the initial
+        // stSOL:SOL rate, and we choose it to be 1:1.
+        let rate = ExchangeRate {
+            computed_in_epoch: 0,
+            sol_balance: Lamports(100),
+            st_sol_supply: StLamports(0),
+        };
+        assert_eq!(rate.exchange_sol(Lamports(123)), Some(StLamports(123)));
+
+        // This case should not occur in the wild, but in any case, use a 1:1 rate here too.
+        let rate = ExchangeRate {
+            computed_in_epoch: 0,
+            sol_balance: Lamports(0),
+            st_sol_supply: StLamports(100),
+        };
+        assert_eq!(rate.exchange_sol(Lamports(123)), Some(StLamports(123)));
     }
 
     #[test]
