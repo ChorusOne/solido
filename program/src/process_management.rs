@@ -147,24 +147,17 @@ pub fn _process_change_validator_fee_account(
     unimplemented!()
 }
 
-/// Merge two stake accounts.
+/// Merge two stake accounts from the beginning of the validator's stake
+/// accounts list.
 /// This function can be called by anybody.
-/// After this function, the validator's list of stake accounts contains no gaps,
-/// and all fully active stake accounts precede the activating stake accounts.
+/// After this function, the validator's `stake_accounts_seed_begin` ceases to
+/// exist and is merged with the stake defined by `stake_accounts_seed_begin +
+/// 1`.  All fully active stake accounts precede the activating stake accounts.
 ///
-/// `from_seed` can be the validator's `stake_accounts_seed_begin` and in that
-/// case `to_seed` should be `stake_accounts_seed_begin + 1`, or `from_seed` can
-/// be the validator's `stake_accounts_seed_end - 1` and in that case `to_seed`
-/// should be `stake_accounts_seed_end - 2`.
 /// Validator stakes should both be fully active or both inactive when merging
 /// stakes from the beginning, or both activating when merging stakes from the
 /// end.
-pub fn process_merge_stake(
-    program_id: &Pubkey,
-    from_seed: u64,
-    to_seed: u64,
-    accounts_raw: &[AccountInfo],
-) -> ProgramResult {
+pub fn process_merge_stake(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> ProgramResult {
     let accounts = MergeStakeInfo::try_from_slice(accounts_raw)?;
     let mut lido = deserialize_lido(program_id, accounts.lido)?;
     let clock = Clock::from_account_info(accounts.sysvar_clock)?;
@@ -174,40 +167,13 @@ pub fn process_merge_stake(
     let mut validator = lido
         .validators
         .get_mut(accounts.validator_vote_account.key)?;
+    let from_seed = validator.entry.stake_accounts_seed_begin;
+    let to_seed = validator.entry.stake_accounts_seed_begin + 1;
+
     // Check that there are at least two accounts to merge
     if validator.entry.stake_accounts_seed_begin + 1 >= validator.entry.stake_accounts_seed_end {
         msg!("Attempting to merge accounts in a validator that has fewer than two stake accounts.");
         return Err(LidoError::InvalidStakeAccount.into());
-    }
-
-    // check if merging from the beginning.
-    if from_seed == validator.entry.stake_accounts_seed_begin
-        && to_seed == validator.entry.stake_accounts_seed_begin + 1
-    {
-        // The stake accounts we try to merge are at the beginning, so the begin
-        // account will go away.
-        validator.entry.stake_accounts_seed_begin += 1;
-    } else if from_seed == validator.entry.stake_accounts_seed_end - 1
-        && to_seed == validator.entry.stake_accounts_seed_end - 2
-    {
-        // The stake accounts we try to merge are at the end, so the account
-        // with seed `end - 1` will go away.
-        validator.entry.stake_accounts_seed_end -= 1;
-    } else {
-        // The accounts to merge are not at the beginning or the end, we refuse
-        // to merge them, as it would create a hole in the list of stake
-        // accounts.
-        msg!(
-            "Attempting to merge stakes defined by {} and {}. 
-        Only stake that are in the boundary indexes can be merged. ({} and {}, or {} and {})",
-            from_seed,
-            to_seed,
-            validator.entry.stake_accounts_seed_begin,
-            validator.entry.stake_accounts_seed_begin + 1,
-            validator.entry.stake_accounts_seed_end - 1,
-            validator.entry.stake_accounts_seed_end - 2
-        );
-        return Err(LidoError::WrongStakeState.into());
     }
 
     // Recalculate the `from_stake`.
@@ -222,7 +188,7 @@ pub fn process_merge_stake(
         msg!(
             "Calculated from_stake {} for seed {} is different from received {}.",
             from_stake_addr,
-            from_seed,
+            validator.entry.stake_accounts_seed_begin,
             accounts.from_stake.key
         );
         return Err(LidoError::InvalidStakeAccount.into());
@@ -237,12 +203,12 @@ pub fn process_merge_stake(
         msg!(
             "Calculated to_stake {} for seed {} is different from received {}.",
             to_stake_addr,
-            to_seed,
+            validator.entry.stake_accounts_seed_begin + 1,
             accounts.to_stake.key
         );
         return Err(LidoError::InvalidStakeAccount.into());
     }
-
+    validator.entry.stake_accounts_seed_begin += 1;
     lido.check_reserve_account(program_id, accounts.lido.key, accounts.reserve_account)?;
     // Merge `from_stake_addr` to `to_stake_addr`, at the end of the
     // instruction, `from_stake_addr` ceases to exist.
@@ -310,5 +276,6 @@ pub fn process_merge_stake(
             ]],
         )?;
     }
+
     lido.save(accounts.lido)
 }

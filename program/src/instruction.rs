@@ -67,12 +67,7 @@ pub enum LidoInstruction {
     RemoveValidator,
     AddMaintainer,
     RemoveMaintainer,
-    MergeStake {
-        #[allow(dead_code)] // but it's not
-        from_seed: u64,
-        #[allow(dead_code)] // but it's not
-        to_seed: u64,
-    },
+    MergeStake,
 }
 
 accounts_struct! {
@@ -556,17 +551,10 @@ accounts_struct! {
     }
 }
 
-pub fn merge_stake(
-    program_id: &Pubkey,
-    from_seed: u64,
-    to_seed: u64,
-    accounts: &MergeStakeMeta,
-) -> Instruction {
+pub fn merge_stake(program_id: &Pubkey, accounts: &MergeStakeMeta) -> Instruction {
     Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
-        data: LidoInstruction::MergeStake { from_seed, to_seed }
-            .try_to_vec()
-            .unwrap(), // This should never fail.
+        data: LidoInstruction::MergeStake.try_to_vec().unwrap(), // This should never fail.
     }
 }

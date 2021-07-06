@@ -390,8 +390,6 @@ impl SolidoState {
         );
         lido::instruction::merge_stake(
             &self.solido_program_id,
-            from_seed,
-            to_seed,
             &lido::instruction::MergeStakeMeta {
                 lido: self.solido_address,
                 validator_vote_account: validator_vote_key,
@@ -403,8 +401,8 @@ impl SolidoState {
         )
     }
 
-    // Tries to merge either accounts from the beginning of the validator's
-    // stake accounts.  May return None, one or two instructions.
+    // Tries to merge accounts from the beginning of the validator's
+    // stake accounts.  May return None or one instruction.
     pub fn try_merge_on_all_stakes(&self) -> Option<Vec<(Instruction, MaintenanceOutput)>> {
         for (validator, stake_accounts) in self
             .solido
