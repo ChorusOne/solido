@@ -288,10 +288,9 @@ impl SolidoState {
             );
         let validator = &self.solido.validators.entries[validator_index];
 
-        let (stake_account_end, _bump_seed_end) = Validator::find_stake_account_address(
+        let (stake_account_end, _bump_seed_end) = validator.find_stake_account_address(
             &self.solido_program_id,
             &self.solido_address,
-            &validator.pubkey,
             validator.entry.stake_accounts_seed_end,
         );
 
@@ -313,6 +312,17 @@ impl SolidoState {
             return None;
         }
 
+        // When we stake a deposit, if possible, we create a new stake account
+        // temporarily, but then immediately merge it into the preceding account.
+        // This is possible if there is a preceding account, and if it was
+        // activated in the current epoch. If merging is not possible, then we
+        // set `account_before_end` to the same account as `end`, to signal that
+        // we shouldn't merge.
+        let account_before_end = match self.validator_stake_accounts[validator_index].last() {
+            Some((addr, account)) if account.activation_epoch == self.clock.epoch => *addr,
+            _ => stake_account_end,
+        };
+
         let instruction = lido::instruction::stake_deposit(
             &self.solido_program_id,
             &lido::instruction::StakeDepositAccountsMeta {
@@ -320,6 +330,7 @@ impl SolidoState {
                 maintainer: self.maintainer_address,
                 reserve: self.reserve_address,
                 validator_vote_account: validator.pubkey,
+                stake_account_before_end: account_before_end,
                 stake_account_end,
                 stake_authority: self.get_stake_authority(),
             },

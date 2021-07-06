@@ -186,9 +186,12 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
-        // Must be set to the program-derived stake account for the given
-        // validator, with seed `stake_accounts_seed_end - 1`, if the end seed
-        // is greater than 0, or 0 otherwise.
+        // For a `StakeDeposit` where we temporarily create an undelegated
+        // account at `stake_account_end`, but immediately merge it into
+        // `stake_account_before_end`, this must be set to the program-derived
+        // stake account for the validator, with seed `stake_accounts_seed_end
+        // - 1`. For a `StakeDeposit` where we create a new stake account, this
+        // should be set to the same value as `stake_account_end`.
         pub stake_account_before_end {
             is_signer: false,
             is_writable: true,
