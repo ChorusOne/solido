@@ -1,11 +1,12 @@
 #![cfg(feature = "test-bpf")]
 
-use crate::context::{Context, StakeDeposit};
+use crate::context::{Context, StakeDeposit, id};
 use crate::{assert_error_code, assert_solido_error};
 
 use lido::error::LidoError;
 use lido::token::Lamports;
 use solana_program_test::tokio;
+use solana_sdk::signer::Signer;
 
 pub const TEST_DEPOSIT_AMOUNT: Lamports = Lamports(100_000_000_000);
 pub const TEST_STAKE_DEPOSIT_AMOUNT: Lamports = Lamports(10_000_000_000);
@@ -136,4 +137,51 @@ async fn test_stake_deposit_merge() {
             TEST_STAKE_DEPOSIT_AMOUNT,
         )
         .await;
+}
+
+#[tokio::test]
+async fn test_stake_deposit_succeeds_despite_donation() {
+    let mut context = Context::new_with_maintainer().await;
+    let validator = context.add_validator().await;
+
+    let solido_before = context.get_solido().await;
+    let validator_before = &solido_before.validators.entries[0];
+
+    // Figure out what the next stake account is going to be.
+    let (stake_account_addr, _) = validator_before.find_stake_account_address(
+        &id(),
+        &context.solido.pubkey(),
+        0,
+    );
+
+    // Put some SOL in that account, so it is no longer non-existent.
+    context.fund(stake_account_addr, Lamports(107_000_000)).await;
+
+    // Now we make a deposit and stake it. Despite the stake account already
+    // existing (with SOL, but empty data), this should not fail.
+    context.deposit(TEST_DEPOSIT_AMOUNT).await;
+    context
+        .stake_deposit(
+            validator.vote_account,
+            StakeDeposit::Append,
+            TEST_STAKE_DEPOSIT_AMOUNT,
+        )
+        .await;
+
+    // The state does not record the additional balance yet though.
+    let solido = context.get_solido().await;
+    let validator_entry = &solido.validators.entries[0].entry;
+    assert_eq!(
+        validator_entry.stake_accounts_balance,
+        TEST_STAKE_DEPOSIT_AMOUNT
+    );
+
+    // After we update the balance, it should.
+    context.update_validator_balance(validator.vote_account).await;
+    let solido = context.get_solido().await;
+    let validator_entry = &solido.validators.entries[0].entry;
+    assert_eq!(
+        validator_entry.stake_accounts_balance,
+        (TEST_STAKE_DEPOSIT_AMOUNT + Lamports(107_000_000)).unwrap()
+    );
 }
