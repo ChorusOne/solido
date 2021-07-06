@@ -19,9 +19,12 @@ use solana_sdk::transport::TransportError;
 use solana_vote_program::vote_instruction;
 use solana_vote_program::vote_state::{VoteInit, VoteState};
 
-use lido::token::{Lamports, StLamports};
 use lido::{error::LidoError, RESERVE_ACCOUNT};
 use lido::{instruction, STAKE_AUTHORITY};
+use lido::{
+    state::Weight,
+    token::{Lamports, StLamports},
+};
 use lido::{
     state::{FeeRecipients, Lido, RewardDistribution, Validator},
     MINT_AUTHORITY,
