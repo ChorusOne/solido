@@ -168,7 +168,7 @@ pub fn process_merge_stake(program_id: &Pubkey, accounts_raw: &[AccountInfo]) ->
     let to_seed = validator.entry.stake_accounts_seed_begin + 1;
 
     // Check that there are at least two accounts to merge
-    if validator.entry.stake_accounts_seed_begin + 1 >= validator.entry.stake_accounts_seed_end {
+    if to_seed >= validator.entry.stake_accounts_seed_end {
         msg!("Attempting to merge accounts in a validator that has fewer than two stake accounts.");
         return Err(LidoError::InvalidStakeAccount.into());
     }
@@ -185,7 +185,7 @@ pub fn process_merge_stake(program_id: &Pubkey, accounts_raw: &[AccountInfo]) ->
         msg!(
             "Calculated from_stake {} for seed {} is different from received {}.",
             from_stake_addr,
-            validator.entry.stake_accounts_seed_begin,
+            from_seed,
             accounts.from_stake.key
         );
         return Err(LidoError::InvalidStakeAccount.into());
@@ -200,7 +200,7 @@ pub fn process_merge_stake(program_id: &Pubkey, accounts_raw: &[AccountInfo]) ->
         msg!(
             "Calculated to_stake {} for seed {} is different from received {}.",
             to_stake_addr,
-            validator.entry.stake_accounts_seed_begin + 1,
+            to_seed,
             accounts.to_stake.key
         );
         return Err(LidoError::InvalidStakeAccount.into());
