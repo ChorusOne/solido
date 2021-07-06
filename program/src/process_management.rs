@@ -152,11 +152,8 @@ pub fn _process_change_validator_fee_account(
 /// This function can be called by anybody.
 /// After this function, the validator's `stake_accounts_seed_begin` ceases to
 /// exist and is merged with the stake defined by `stake_accounts_seed_begin +
-/// 1`.  All fully active stake accounts precede the activating stake accounts.
-///
-/// Validator stakes should both be fully active or both inactive when merging
-/// stakes from the beginning, or both activating when merging stakes from the
-/// end.
+/// 1`, and `stake_accounts_seed_begin` is incremented by one.
+/// All fully active stake accounts precede the activating stake accounts.
 pub fn process_merge_stake(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> ProgramResult {
     let accounts = MergeStakeInfo::try_from_slice(accounts_raw)?;
     let mut lido = deserialize_lido(program_id, accounts.lido)?;
