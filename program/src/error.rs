@@ -120,12 +120,18 @@ pub enum LidoError {
     /// We observed a decrease in the balance of the validator's stake accounts.
     #[error("ValidatorBalanceDecreased")]
     ValidatorBalanceDecreased,
+
+    /// The provided stake authority does not match the one derived from Lido's state.
+    #[error("InvalidStakeAuthority")]
+    InvalidStakeAuthority,
 }
+
 impl From<LidoError> for ProgramError {
     fn from(e: LidoError) -> Self {
         ProgramError::Custom(e as u32)
     }
 }
+
 impl<T> DecodeError<T> for LidoError {
     fn type_of() -> &'static str {
         "Lido Error"

@@ -187,6 +187,13 @@ accounts_struct! {
             is_writable: false,
         },
         // Must be set to the program-derived stake account for the given
+        // validator, with seed `stake_accounts_seed_end - 1`, if the end seed
+        // is greater than 0, or 0 otherwise.
+        pub stake_account_before_end {
+            is_signer: false,
+            is_writable: true,
+        },
+        // Must be set to the program-derived stake account for the given
         // validator, with seed `stake_accounts_seed_end`.
         pub stake_account_end {
             is_signer: false,

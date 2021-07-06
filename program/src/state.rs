@@ -8,7 +8,7 @@ use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use solana_program::borsh::get_instance_packed_len;
 use solana_program::{
     account_info::AccountInfo, clock::Epoch, entrypoint::ProgramResult, msg,
-    program_error::ProgramError, program_pack::Pack, pubkey::Pubkey, rent::Rent,
+    program_error::ProgramError, program_pack::Pack, pubkey::Pubkey, rent::Rent, sysvar::Sysvar,
 };
 use spl_token::state::Mint;
 
@@ -16,10 +16,9 @@ use crate::error::LidoError;
 use crate::logic::get_reserve_available_balance;
 use crate::token::{Lamports, Rational, StLamports};
 use crate::util::serialize_b58;
-use crate::VALIDATOR_STAKE_ACCOUNT;
 use crate::{
     account_map::{AccountMap, AccountSet, EntryConstantSize, PubkeyAndEntry},
-    RESERVE_ACCOUNT,
+    MINIMUM_STAKE_ACCOUNT_BALANCE, RESERVE_ACCOUNT, STAKE_AUTHORITY, VALIDATOR_STAKE_ACCOUNT,
 };
 
 pub const LIDO_VERSION: u8 = 0;
@@ -349,6 +348,107 @@ impl Lido {
         Ok(reserve_id)
     }
 
+    /// Return the address of the stake authority, the program-derived address
+    /// that can sign staking instructions.
+    pub fn get_stake_authority(
+        &self,
+        program_id: &Pubkey,
+        solido_address: &Pubkey,
+    ) -> Result<Pubkey, ProgramError> {
+        Pubkey::create_program_address(
+            &[
+                &solido_address.to_bytes()[..],
+                STAKE_AUTHORITY,
+                &[self.stake_authority_bump_seed],
+            ],
+            program_id,
+        )
+        .map_err(|_| ProgramError::InvalidSeeds)
+    }
+
+    /// Confirm that the stake authority belongs to this Lido instance, return
+    /// the stake authority address.
+    pub fn check_stake_authority(
+        &self,
+        program_id: &Pubkey,
+        solido_address: &Pubkey,
+        stake_authority_account_info: &AccountInfo,
+    ) -> Result<Pubkey, ProgramError> {
+        let authority = self.get_stake_authority(program_id, solido_address)?;
+        if authority != *stake_authority_account_info.key {
+            msg!(
+                "Invalid stake authority, expected {} but got {}.",
+                authority,
+                stake_authority_account_info.key
+            );
+            return Err(LidoError::InvalidStakeAuthority.into());
+        }
+        Ok(authority)
+    }
+
+    /// Confirm that the amount to stake is more than the minimum stake amount,
+    /// and that we have sufficient SOL in the reserve.
+    pub fn check_can_stake_amount(
+        &self,
+        reserve: &AccountInfo,
+        sysvar_rent: &AccountInfo,
+        amount: Lamports,
+    ) -> Result<(), ProgramError> {
+        if amount < MINIMUM_STAKE_ACCOUNT_BALANCE {
+            msg!("Trying to stake less than the minimum stake account balance.");
+            msg!(
+                "Need as least {} but got {}.",
+                MINIMUM_STAKE_ACCOUNT_BALANCE,
+                amount
+            );
+            return Err(LidoError::InvalidAmount.into());
+        }
+
+        let rent: Rent = Rent::from_account_info(sysvar_rent)?;
+
+        let available_reserve_amount = get_reserve_available_balance(&rent, reserve)?;
+        if amount > available_reserve_amount {
+            msg!(
+                "The requested amount {} is greater than the available amount {}, \
+                considering rent-exemption",
+                amount,
+                available_reserve_amount
+            );
+            return Err(LidoError::AmountExceedsReserve.into());
+        }
+
+        Ok(())
+    }
+
+    /// Confirm that `stake_account` is the account at the given seed for the validator.
+    ///
+    /// Returns the bump seed for the derived address.
+    pub fn check_stake_account(
+        program_id: &Pubkey,
+        solido_address: &Pubkey,
+        validator: &PubkeyAndEntry<Validator>,
+        stake_account_seed: u64,
+        stake_account: &AccountInfo,
+    ) -> Result<u8, ProgramError> {
+        let (stake_addr, stake_addr_bump_seed) =
+            validator.find_stake_account_address(program_id, solido_address, stake_account_seed);
+        if &stake_addr != stake_account.key {
+            msg!(
+                "The derived stake address for seed {} is {}, \
+                but the instruction received {} instead.",
+                stake_account_seed,
+                stake_addr,
+                stake_account.key,
+            );
+            msg!(
+                "Note: this can happen during normal operation when instructions \
+                race, and one updates the validator's seeds before the other executes."
+            );
+            return Err(LidoError::InvalidStakeAccount.into());
+        }
+        Ok(stake_addr_bump_seed)
+    }
+
     pub fn save(&self, account: &AccountInfo) -> ProgramResult {
         // NOTE: If you ended up here because the tests are failing because the
         // runtime complained that an account's size was modified by a program
@@ -486,6 +586,17 @@ impl Validator {
             &seed.to_le_bytes()[..],
         ];
         Pubkey::find_program_address(&seeds, program_id)
+    }
+}
+
+impl PubkeyAndEntry<Validator> {
+    pub fn find_stake_account_address(
+        &self,
+        program_id: &Pubkey,
+        solido_account: &Pubkey,
+        seed: u64,
+    ) -> (Pubkey, u8) {
+        Validator::find_stake_account_address(program_id, solido_account, &self.pubkey, seed)
     }
 }
 
