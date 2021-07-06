@@ -244,8 +244,8 @@ pub fn process_merge_stake(
     }
 
     lido.check_reserve_authority(program_id, accounts.lido.key, accounts.reserve_account)?;
-    // Merge `from_stake` to `to_stake`, at the end of the instruction,
-    // `from_stake` ceases to exist.
+    // Merge `from_stake_addr` to `to_stake_addr`, at the end of the
+    // instruction, `from_stake_addr` ceases to exist.
     let merge_ix = stake_program::merge(
         &to_stake_addr,
         &from_stake_addr,
@@ -270,8 +270,8 @@ pub fn process_merge_stake(
     )?;
 
     let to_stake = StakeAccount::get_stake(accounts.to_stake)?;
-    // Try to get the rent paid in the `from_stake` or any other inactive stake.
-    // It will be added to the `to_stake` after the merge.
+    // Try to get the rent paid in the `from_stake_addr` or any other inactive
+    // stake.  It will be added to the `to_stake_addr` after the merge.
     let to_stake_account = StakeAccount::from_delegated_account(
         Lamports(accounts.to_stake.lamports()),
         &to_stake,
@@ -284,8 +284,11 @@ pub fn process_merge_stake(
     if to_stake_account.balance.inactive > stake_account_rent {
         // Get extra Lamports back to the reserve so it can be re-staked.
         let withdraw_ix = StakeAccount::stake_account_withdraw(
-            (to_stake_account.balance.inactive - stake_account_rent)
-                .expect("Should succeed because of the if condition."),
+            (to_stake_account.balance.inactive - stake_account_rent).expect(
+                "Should succeed because there was a previous check to
+                ensure that inactive balance is greater than stake account
+                rent.",
+            ),
             &to_stake_addr,
             accounts.reserve_account.key,
             accounts.stake_authority.key,
