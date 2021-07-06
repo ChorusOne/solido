@@ -267,8 +267,9 @@ pub fn process_stake_deposit(
         validator.entry.stake_accounts_seed_end += 1;
     } else {
         // Case 2: Merge the new undelegated stake account into the existing one.
-        if validator.entry.stake_accounts_seed_end > validator.entry.stake_accounts_seed_begin {
+        if validator.entry.stake_accounts_seed_end <= validator.entry.stake_accounts_seed_begin {
             msg!("Can only stake-merge if there is at least one stake account to merge into.");
+            return Err(LidoError::InvalidStakeAccount.into());
         }
         Lido::check_stake_account(
             program_id,

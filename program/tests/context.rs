@@ -625,7 +625,13 @@ impl Context {
             &validator_vote_account,
             match approach {
                 StakeDeposit::Append => validator_entry.entry.stake_accounts_seed_end,
-                StakeDeposit::Merge => validator_entry.entry.stake_accounts_seed_end - 1,
+                // We do a wrapping sub here, so we can call stake-merge initially,
+                // when end is 0, such that the account to merge into is not the
+                // same as the end account.
+                StakeDeposit::Merge => validator_entry
+                    .entry
+                    .stake_accounts_seed_end
+                    .wrapping_sub(1),
             },
         );
 
@@ -904,6 +910,33 @@ macro_rules! assert_solido_error {
                     "Expected {} error, not {:?}",
                     stringify!($error),
                     unexpected
+                ),
+            }
+        }
+    };
+}
+
+/// Like `assert_solido_error`, but instead of testing for a Solido error, it tests
+/// for a raw error code. Can be used to test for errors returned by different programs.
+#[macro_export]
+macro_rules! assert_error_code {
+    ($result:expr, $error_code:expr $(, /* Accept an optional trailing comma. */)?) => {
+        // Open a scope so the imports don't clash.
+        {
+            use solana_program::instruction::InstructionError;
+            use solana_sdk::transaction::TransactionError;
+            use solana_sdk::transport::TransportError;
+            match $result {
+                Err(TransportError::TransactionError(TransactionError::InstructionError(
+                    _,
+                    InstructionError::Custom(error_code),
+                ))) => assert_eq!(
+                    error_code, $error_code as u32,
+                    "Custom error has an unexpected error code.",
+                ),
+                unexpected => panic!(
+                    "Expected custom error with code {} error, not {:?}",
+                    $error_code, unexpected
                 ),
             }
         }

@@ -97,9 +97,11 @@ pub enum LidoError {
     /// There are no validators with an active stake account to delegate to.
     #[error("NoActiveValidators")]
     NoActiveValidators,
+
     /// When staking part of the reserve to a new stake account, the next
     /// program-derived address for the stake account associated with the given
-    /// validator, does not match the provided stake account.
+    /// validator, does not match the provided stake account, or the stake account
+    /// is not the right account to stake with at this time.
     #[error("InvalidStakeAccount")]
     InvalidStakeAccount,
 
