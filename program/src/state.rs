@@ -126,7 +126,8 @@ impl ExchangeRate {
     /// Convert SOL to stSOL.
     pub fn exchange_sol(&self, amount: Lamports) -> Option<StLamports> {
         // The exchange rate starts out at 1:1, if there are no deposits yet.
-        if self.sol_balance == Lamports(0) {
+        // If we minted stSOL but there is no SOL, then also assume a 1:1 rate.
+        if self.st_sol_supply == StLamports(0) || self.sol_balance == Lamports(0) {
             return Some(StLamports(amount.0));
         }
 
@@ -134,6 +135,7 @@ impl ExchangeRate {
             numerator: self.st_sol_supply.0,
             denominator: self.sol_balance.0,
         };
+
         // The result is in Lamports, because the type system considers Rational
         // dimensionless, but in this case `rate` has dimensions stSOL/SOL, so
         // we need to re-wrap the result in the right type.
@@ -151,6 +153,7 @@ impl ExchangeRate {
             numerator: self.sol_balance.0,
             denominator: self.st_sol_supply.0,
         };
+
         // The result is in StLamports, because the type system considers Rational
         // dimensionless, but in this case `rate` has dimensions SOL/stSOL, so
         // we need to re-wrap the result in the right type.
@@ -708,8 +711,12 @@ mod test_lido {
     }
 
     #[test]
-    fn test_exchange_when_sol_balance_is_zero() {
-        let rate = ExchangeRate::default();
+    fn test_exchange_when_balance_and_supply_are_zero() {
+        let rate = ExchangeRate {
+            computed_in_epoch: 0,
+            sol_balance: Lamports(0),
+            st_sol_supply: StLamports(0),
+        };
         assert_eq!(rate.exchange_sol(Lamports(123)), Some(StLamports(123)));
     }
 
@@ -722,6 +729,64 @@ mod test_lido {
         };
         // If every stSOL is worth 1 SOL, I should get half my SOL amount in stSOL.
         assert_eq!(rate.exchange_sol(Lamports(44)), Some(StLamports(22)));
+    }
+
+    #[test]
+    fn test_exchange_when_one_balance_is_zero() {
+        // This case can occur when we donate some SOL to Lido, instead of
+        // depositing it. There will not be any stSOL, but there will be SOL.
+        // In this case it doesn't matter which exchange rate we use, the first
+        // deposits will mint some stSOL, and that stSOL will own all of the
+        // pool. The rate we choose is only nominal, it controls the initial
+        // stSOL:SOL rate, and we choose it to be 1:1.
+        let rate = ExchangeRate {
+            computed_in_epoch: 0,
+            sol_balance: Lamports(100),
+            st_sol_supply: StLamports(0),
+        };
+        assert_eq!(rate.exchange_sol(Lamports(123)), Some(StLamports(123)));
+
+        // This case should not occur in the wild, but in any case, use a 1:1 rate here too.
+        let rate = ExchangeRate {
+            computed_in_epoch: 0,
+            sol_balance: Lamports(0),
+            st_sol_supply: StLamports(100),
+        };
+        assert_eq!(rate.exchange_sol(Lamports(123)), Some(StLamports(123)));
+    }
+
+    #[test]
+    fn test_exchange_sol_to_st_sol_to_sol_roundtrips() {
+        // There are many cases where depositing some amount of SOL and then
+        // exchanging it back, does not actually roundtrip. There can be small
+        // losses due to integer arithmetic rounding, but there can even be large
+        // losses, if the sol_balance and st_sol_supply are very different. For
+        // example, if sol_balance = 10, st_sol_supply = 1, then if you deposit
+        // 9 Lamports, you are entitled to 0.1 stLamports, which gets rounded
+        // down to 0, and you lose your full 9 Lamports.
+        // So here we test a few of those cases as a sanity check, but it's not
+        // a general roundtripping test.
+        let rate = ExchangeRate {
+            computed_in_epoch: 0,
+            sol_balance: Lamports(100),
+            st_sol_supply: StLamports(50),
+        };
+        let sol_1 = Lamports(10);
+        let st_sol = rate.exchange_sol(sol_1).unwrap();
+        let sol_2 = rate.exchange_st_sol(st_sol).unwrap();
+        assert_eq!(sol_2, sol_1);
+
+        // In this case, one Lamport is lost in a rounding error, because
+        // `amount * st_sol_supply` is not a multiple of `sol_balance`.
+        let rate = ExchangeRate {
+            computed_in_epoch: 0,
+            sol_balance: Lamports(110_000),
+            st_sol_supply: StLamports(100_000),
+        };
+        let sol_1 = Lamports(1_000);
+        let st_sol = rate.exchange_sol(sol_1).unwrap();
+        let sol_2 = rate.exchange_st_sol(st_sol).unwrap();
+        assert_eq!(sol_2, Lamports(999));
     }
 
     #[test]
