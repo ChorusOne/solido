@@ -144,6 +144,19 @@ pub async fn send_transaction(
     result
 }
 
+/// The different ways to stake some amount from the reserve.
+pub enum StakeDeposit {
+    /// Stake into a new stake account, and delegate the new account.
+    ///
+    /// This consumes the end seed of the validator's stake accounts.
+    Append,
+
+    /// Stake into temporary stake account, and immediately merge it.
+    ///
+    /// This merges into the stake account at `end_seed - 1`.
+    Merge,
+}
+
 impl Context {
     /// Set up a new test context with an initialized Solido instance.
     ///
@@ -277,7 +290,11 @@ impl Context {
         let mut stake_accounts = Vec::new();
         for _ in 0..2 {
             let stake_account = result
-                .stake_deposit(validator.vote_account, Lamports(10_000_000_000))
+                .stake_deposit(
+                    validator.vote_account,
+                    StakeDeposit::Append,
+                    Lamports(10_000_000_000),
+                )
                 .await;
 
             stake_accounts.push(stake_account);
@@ -585,6 +602,7 @@ impl Context {
     pub async fn try_stake_deposit(
         &mut self,
         validator_vote_account: Pubkey,
+        approach: StakeDeposit,
         amount: Lamports,
     ) -> transport::Result<Pubkey> {
         let solido = self.get_solido().await;
@@ -594,11 +612,21 @@ impl Context {
             .get(&validator_vote_account)
             .expect("Trying to stake with a non-member validator.");
 
-        let (stake_account, _) = Validator::find_stake_account_address(
+        let (stake_account_end, _) = Validator::find_stake_account_address(
             &id(),
             &self.solido.pubkey(),
             &validator_vote_account,
             validator_entry.entry.stake_accounts_seed_end,
+        );
+
+        let (stake_account_before_end, _) = Validator::find_stake_account_address(
+            &id(),
+            &self.solido.pubkey(),
+            &validator_vote_account,
+            match approach {
+                StakeDeposit::Append => validator_entry.entry.stake_accounts_seed_end,
+                StakeDeposit::Merge => validator_entry.entry.stake_accounts_seed_end - 1,
+            },
         );
 
         let maintainer = self
@@ -614,9 +642,10 @@ impl Context {
                 &instruction::StakeDepositAccountsMeta {
                     lido: self.solido.pubkey(),
                     maintainer: maintainer.pubkey(),
-                    validator_vote_account: validator_vote_account,
+                    validator_vote_account,
                     reserve: self.reserve_address,
-                    stake_account_end: stake_account,
+                    stake_account_before_end,
+                    stake_account_end,
                     stake_authority: self.stake_authority,
                 },
                 amount,
@@ -626,16 +655,17 @@ impl Context {
         )
         .await?;
 
-        Ok(stake_account)
+        Ok(stake_account_end)
     }
 
     /// Stake the given amount to the given validator, return the resulting stake account.
     pub async fn stake_deposit(
         &mut self,
         validator_vote_account: Pubkey,
+        approach: StakeDeposit,
         amount: Lamports,
     ) -> Pubkey {
-        self.try_stake_deposit(validator_vote_account, amount)
+        self.try_stake_deposit(validator_vote_account, approach, amount)
             .await
             .expect("Failed to call StakeDeposit on Solido instance.")
     }

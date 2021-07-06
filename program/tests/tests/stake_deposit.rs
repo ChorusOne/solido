@@ -1,6 +1,6 @@
 #![cfg(feature = "test-bpf")]
 
-use crate::context::Context;
+use crate::context::{Context, StakeDeposit};
 
 use lido::token::Lamports;
 use solana_program_test::tokio;
@@ -24,7 +24,11 @@ async fn test_successful_stake_deposit() {
     context.deposit(TEST_DEPOSIT_AMOUNT).await;
 
     let stake_account = context
-        .stake_deposit(validator.vote_account, TEST_STAKE_DEPOSIT_AMOUNT)
+        .stake_deposit(
+            validator.vote_account,
+            StakeDeposit::Append,
+            TEST_STAKE_DEPOSIT_AMOUNT,
+        )
         .await;
 
     // The amount that we staked, should now be in the stake account.
