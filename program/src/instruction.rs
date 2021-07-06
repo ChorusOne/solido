@@ -150,6 +150,10 @@ accounts_struct! {
             is_signer: false,
             is_writable: true,
         },
+        pub mint_authority {
+            is_signer: false,
+            is_writable: false,
+        },
         const spl_token = spl_token::id(),
         const system_program = system_program::id(),
     }
@@ -273,10 +277,8 @@ accounts_struct! {
             is_writable: true,
         },
 
-        // The reserve account doubles as the mint authority, we need it here so
-        // it can sign minting stSOL. It is not a signer of *this* transaction,
-        // but it will do a signed invoke for `spl_token::mint_to`.
-        pub reserve_authority {
+        // Mint authority is required to mint tokens.
+        pub mint_authority {
             is_signer: false,
             is_writable: false,
         },
@@ -437,7 +439,7 @@ accounts_struct! {
             is_signer: false,
             is_writable: true,
         },
-        pub reserve_authority {
+        pub mint_authority {
             is_signer: false,
             is_writable: false,
         },

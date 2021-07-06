@@ -12,20 +12,22 @@ use solana_program::{
 };
 use spl_token::state::Mint;
 
-use crate::account_map::{AccountMap, AccountSet, EntryConstantSize, PubkeyAndEntry};
 use crate::error::LidoError;
 use crate::logic::get_reserve_available_balance;
 use crate::token::{Lamports, Rational, StLamports};
 use crate::util::serialize_b58;
-use crate::RESERVE_AUTHORITY;
 use crate::VALIDATOR_STAKE_ACCOUNT;
+use crate::{
+    account_map::{AccountMap, AccountSet, EntryConstantSize, PubkeyAndEntry},
+    RESERVE_ACCOUNT,
+};
 
 pub const LIDO_VERSION: u8 = 0;
 
 /// Size of a serialized `Lido` struct excluding validators and maintainers.
 ///
 /// To update this, run the tests and replace the value here with the test output.
-pub const LIDO_CONSTANT_SIZE: usize = 171;
+pub const LIDO_CONSTANT_SIZE: usize = 172;
 pub const VALIDATOR_CONSTANT_SIZE: usize = 68;
 
 pub type Validators = AccountMap<Validator>;
@@ -176,8 +178,9 @@ pub struct Lido {
     pub exchange_rate: ExchangeRate,
 
     /// Bump seeds for signing messages on behalf of the authority
-    pub sol_reserve_authority_bump_seed: u8,
+    pub sol_reserve_account_bump_seed: u8,
     pub stake_authority_bump_seed: u8,
+    pub mint_authority_bump_seed: u8,
 
     /// How rewards are distributed.
     pub reward_distribution: RewardDistribution,
@@ -319,26 +322,26 @@ impl Lido {
         Pubkey::create_program_address(
             &[
                 &solido_address.to_bytes()[..],
-                RESERVE_AUTHORITY,
-                &[self.sol_reserve_authority_bump_seed],
+                RESERVE_ACCOUNT,
+                &[self.sol_reserve_account_bump_seed],
             ],
             program_id,
         )
-        .map_err(|_| LidoError::InvalidReserveAuthority.into())
+        .map_err(|_| LidoError::InvalidReserveAccount.into())
     }
 
-    /// Confirm that the reserve authority belongs to this Lido instance, return
+    /// Confirm that the reserve account belongs to this Lido instance, return
     /// the reserve address.
-    pub fn check_reserve_authority(
+    pub fn check_reserve_account(
         &self,
         program_id: &Pubkey,
         solido_address: &Pubkey,
-        reserve_authority_info: &AccountInfo,
+        reserve_account_info: &AccountInfo,
     ) -> Result<Pubkey, ProgramError> {
         let reserve_id = self.get_reserve_account(program_id, solido_address)?;
-        if reserve_id != *reserve_authority_info.key {
-            msg!("Invalid reserve authority");
-            return Err(LidoError::InvalidReserveAuthority.into());
+        if reserve_id != *reserve_account_info.key {
+            msg!("Invalid reserve account");
+            return Err(LidoError::InvalidReserveAccount.into());
         }
         Ok(reserve_id)
     }
@@ -674,8 +677,9 @@ mod test_lido {
                 sol_balance: Lamports(13),
                 st_sol_supply: StLamports(17),
             },
-            sol_reserve_authority_bump_seed: 1,
+            sol_reserve_account_bump_seed: 1,
             stake_authority_bump_seed: 2,
+            mint_authority_bump_seed: 3,
             reward_distribution: RewardDistribution {
                 treasury_fee: 2,
                 validation_fee: 3,

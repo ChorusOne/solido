@@ -22,7 +22,8 @@ use crate::{
         LIDO_VERSION,
     },
     token::{Lamports, StLamports},
-    MINIMUM_STAKE_ACCOUNT_BALANCE, RESERVE_AUTHORITY, STAKE_AUTHORITY, VALIDATOR_STAKE_ACCOUNT,
+    MINIMUM_STAKE_ACCOUNT_BALANCE, MINT_AUTHORITY, RESERVE_ACCOUNT, STAKE_AUTHORITY,
+    VALIDATOR_STAKE_ACCOUNT,
 };
 
 use {
@@ -75,7 +76,7 @@ pub fn process_initialize(
     };
 
     let (_, reserve_bump_seed) = Pubkey::find_program_address(
-        &[&accounts.lido.key.to_bytes(), RESERVE_AUTHORITY],
+        &[&accounts.lido.key.to_bytes(), RESERVE_ACCOUNT],
         program_id,
     );
 
@@ -84,12 +85,16 @@ pub fn process_initialize(
         program_id,
     );
 
+    let (_, mint_bump_seed) =
+        Pubkey::find_program_address(&[&accounts.lido.key.to_bytes(), MINT_AUTHORITY], program_id);
+
     lido.lido_version = version;
     lido.maintainers = Maintainers::new(max_maintainers);
     lido.validators = Validators::new(max_validators);
     lido.manager = *accounts.manager.key;
     lido.st_sol_mint = *accounts.st_sol_mint.key;
-    lido.sol_reserve_authority_bump_seed = reserve_bump_seed;
+    lido.sol_reserve_account_bump_seed = reserve_bump_seed;
+    lido.mint_authority_bump_seed = mint_bump_seed;
     lido.stake_authority_bump_seed = deposit_bump_seed;
     lido.reward_distribution = reward_distribution;
 
@@ -133,7 +138,7 @@ pub fn process_deposit(
         accounts.lido.key,
         accounts.spl_token,
         accounts.st_sol_mint,
-        accounts.reserve_account,
+        accounts.mint_authority,
         accounts.recipient,
         st_sol_amount,
     )?;
@@ -191,21 +196,21 @@ pub fn process_stake_deposit(
     }
 
     let solido_address_bytes = accounts.lido.key.to_bytes();
-    let reserve_authority_seed: &[&[_]] = &[&solido_address_bytes, RESERVE_AUTHORITY][..];
-    let (reserve_authority, _) = Pubkey::find_program_address(reserve_authority_seed, program_id);
+    let reserve_account_seed: &[&[_]] = &[&solido_address_bytes, RESERVE_ACCOUNT][..];
+    let (reserve_account, _) = Pubkey::find_program_address(reserve_account_seed, program_id);
 
-    if accounts.reserve.key != &reserve_authority {
-        return Err(LidoError::InvalidReserveAuthority.into());
+    if accounts.reserve.key != &reserve_account {
+        return Err(LidoError::InvalidReserveAccount.into());
     }
 
-    let reserve_account_bump_seed = [lido.sol_reserve_authority_bump_seed];
+    let reserve_account_bump_seed = [lido.sol_reserve_account_bump_seed];
     let stake_account_seed = validator.entry.stake_accounts_seed_end.to_le_bytes();
     let stake_account_bump_seed = [stake_addr_bump_seed];
     let validator_vote_account_bytes = accounts.validator_vote_account.key.to_bytes();
 
     let reserve_account_seeds = &[
         &solido_address_bytes,
-        RESERVE_AUTHORITY,
+        RESERVE_ACCOUNT,
         &reserve_account_bump_seed[..],
     ][..];
     let stake_account_seeds = &[
@@ -319,7 +324,7 @@ pub fn process_update_exchange_rate(
 ) -> ProgramResult {
     let accounts = UpdateExchangeRateAccountsInfo::try_from_slice(raw_accounts)?;
     let mut lido = deserialize_lido(program_id, accounts.lido)?;
-    lido.check_reserve_authority(program_id, accounts.lido.key, accounts.reserve)?;
+    lido.check_reserve_account(program_id, accounts.lido.key, accounts.reserve)?;
 
     let clock = Clock::from_account_info(accounts.sysvar_clock)?;
     let rent = Rent::from_account_info(accounts.sysvar_rent)?;

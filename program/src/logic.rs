@@ -10,7 +10,7 @@ use crate::{
     state::Fees,
     state::Lido,
     token::{Lamports, StLamports},
-    RESERVE_AUTHORITY,
+    MINT_AUTHORITY,
 };
 
 pub(crate) fn check_rent_exempt(
@@ -52,22 +52,18 @@ pub fn mint_st_sol_to<'a>(
     solido_address: &Pubkey,
     spl_token_program: &AccountInfo<'a>,
     st_sol_mint: &AccountInfo<'a>,
-    reserve_authority: &AccountInfo<'a>,
+    mint_authority: &AccountInfo<'a>,
     recipient: &AccountInfo<'a>,
     amount: StLamports,
 ) -> ProgramResult {
     solido.check_mint_is_st_sol_mint(st_sol_mint)?;
     solido.check_is_st_sol_account(recipient)?;
 
-    // The reserve authority is the account that stores deposited SOL, but
-    // it doubles as the mint authority for stSOL, and we sign the mint_to
-    // instruction on behalf of it.
-    let mint_authority = reserve_authority;
     let solido_address_bytes = solido_address.to_bytes();
     let authority_signature_seeds = [
         &solido_address_bytes[..],
-        RESERVE_AUTHORITY,
-        &[solido.sol_reserve_authority_bump_seed],
+        MINT_AUTHORITY,
+        &[solido.mint_authority_bump_seed],
     ];
     let signers = [&authority_signature_seeds[..]];
 
@@ -127,7 +123,7 @@ pub fn distribute_fees<'a, 'b>(
         accounts.lido.key,
         accounts.spl_token_program,
         accounts.st_sol_mint,
-        accounts.reserve_authority,
+        accounts.mint_authority,
         accounts.treasury_st_sol_account,
         treasury_amount,
     )?;
@@ -136,7 +132,7 @@ pub fn distribute_fees<'a, 'b>(
         accounts.lido.key,
         accounts.spl_token_program,
         accounts.st_sol_mint,
-        accounts.reserve_authority,
+        accounts.mint_authority,
         accounts.developer_st_sol_account,
         developer_amount,
     )?;

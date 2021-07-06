@@ -6,7 +6,7 @@ use solana_sdk::signature::{Keypair, Signer};
 
 use lido::{
     state::{Lido, RewardDistribution},
-    RESERVE_AUTHORITY, STAKE_AUTHORITY,
+    MINT_AUTHORITY, RESERVE_ACCOUNT, STAKE_AUTHORITY,
 };
 
 use crate::config::{AddRemoveMaintainerOpts, AddValidatorOpts, CreateSolidoOpts, ShowSolidoOpts};
@@ -23,8 +23,8 @@ pub struct CreateSolidoOutput {
     /// Account that stores the data for this Solido instance.
     pub solido_address: PubkeyBase58,
 
-    /// Manages the deposited sol and token minting.
-    pub reserve_authority: PubkeyBase58,
+    /// Manages the deposited sol.
+    pub reserve_account: PubkeyBase58,
 
     /// SPL token mint account for StSol tokens.
     pub st_sol_mint_address: PubkeyBase58,
@@ -34,6 +34,9 @@ pub struct CreateSolidoOutput {
 
     /// stSOL SPL token account that receives the developer fees.
     pub developer_account: PubkeyBase58,
+
+    /// Authority for the minting.
+    pub mint_authority: PubkeyBase58,
 }
 
 impl fmt::Display for CreateSolidoOutput {
@@ -46,8 +49,13 @@ impl fmt::Display for CreateSolidoOutput {
         )?;
         writeln!(
             f,
-            "  Reserve authority:             {}",
-            self.reserve_authority
+            "  Reserve account:               {}",
+            self.reserve_account
+        )?;
+        writeln!(
+            f,
+            "  Mint authority:                {}",
+            self.mint_authority
         )?;
         writeln!(
             f,
@@ -74,10 +82,16 @@ pub fn command_create_solido(
 ) -> Result<CreateSolidoOutput> {
     let lido_keypair = Keypair::new();
 
-    let (reserve_authority, _) = lido::find_authority_program_address(
+    let (reserve_account, _) = lido::find_authority_program_address(
         opts.solido_program_id(),
         &lido_keypair.pubkey(),
-        RESERVE_AUTHORITY,
+        RESERVE_ACCOUNT,
+    );
+
+    let (mint_authority, _) = lido::find_authority_program_address(
+        opts.solido_program_id(),
+        &lido_keypair.pubkey(),
+        MINT_AUTHORITY,
     );
 
     let (manager, _nonce) =
@@ -95,13 +109,13 @@ pub fn command_create_solido(
     let min_balance_empty_data_account = config.client.get_minimum_balance_for_rent_exemption(0)?;
     instructions.push(system_instruction::transfer(
         &config.signer.pubkey(),
-        &reserve_authority,
+        &reserve_account,
         min_balance_empty_data_account.0,
     ));
 
     // Set up the Lido stSOL SPL token mint account.
     let st_sol_mint_keypair =
-        push_create_spl_token_mint(config, &mut instructions, &reserve_authority)?;
+        push_create_spl_token_mint(config, &mut instructions, &mint_authority)?;
 
     // Ideally we would set up the entire instance in a single transaction, but
     // Solana transaction size limits are so low that we need to break our
@@ -157,7 +171,7 @@ pub fn command_create_solido(
             manager,
             treasury_account: treasury_keypair.pubkey(),
             developer_account: developer_keypair.pubkey(),
-            reserve_account: reserve_authority,
+            reserve_account,
         },
     )?);
 
@@ -166,7 +180,8 @@ pub fn command_create_solido(
 
     let result = CreateSolidoOutput {
         solido_address: lido_keypair.pubkey().into(),
-        reserve_authority: reserve_authority.into(),
+        reserve_account: reserve_account.into(),
+        mint_authority: mint_authority.into(),
         st_sol_mint_address: st_sol_mint_keypair.pubkey().into(),
         treasury_account: treasury_keypair.pubkey().into(),
         developer_account: developer_keypair.pubkey().into(),
@@ -251,8 +266,9 @@ pub struct ShowSolidoOutput {
     pub solido_program_id: PubkeyBase58,
     pub solido_address: PubkeyBase58,
     pub solido: Lido,
-    pub reserve_authority: PubkeyBase58,
+    pub reserve_account: PubkeyBase58,
     pub stake_authority: PubkeyBase58,
+    pub mint_authority: PubkeyBase58,
 }
 
 impl fmt::Display for ShowSolidoOutput {
@@ -284,13 +300,18 @@ impl fmt::Display for ShowSolidoOutput {
         writeln!(f, "\nAuthorities (public key, bump seed):")?;
         writeln!(
             f,
-            "Reserve:     {}, {}",
-            self.reserve_authority, self.solido.sol_reserve_authority_bump_seed
+            "Deposit authority:     {}, {}",
+            self.stake_authority, self.solido.stake_authority_bump_seed
         )?;
         writeln!(
             f,
-            "Deposit:     {}, {}",
-            self.stake_authority, self.solido.stake_authority_bump_seed
+            "Mint authority:        {}, {}",
+            self.mint_authority, self.solido.mint_authority_bump_seed
+        )?;
+        writeln!(
+            f,
+            "Reserve:               {}, {}",
+            self.reserve_account, self.solido.sol_reserve_account_bump_seed
         )?;
         writeln!(f, "\nReward distribution:")?;
         let mut print_reward = |name, get: fn(&RewardDistribution) -> u32| {
@@ -350,11 +371,11 @@ pub fn command_show_solido(
     opts: &ShowSolidoOpts,
 ) -> Result<ShowSolidoOutput> {
     let lido = config.client.get_solido(opts.solido_address())?;
-    let reserve_authority = Pubkey::create_program_address(
+    let reserve_account = Pubkey::create_program_address(
         &[
             &opts.solido_address().to_bytes(),
-            RESERVE_AUTHORITY,
-            &[lido.sol_reserve_authority_bump_seed],
+            RESERVE_ACCOUNT,
+            &[lido.sol_reserve_account_bump_seed],
         ],
         opts.solido_program_id(),
     )?;
@@ -368,11 +389,21 @@ pub fn command_show_solido(
         opts.solido_program_id(),
     )?;
 
+    let mint_authority = Pubkey::create_program_address(
+        &[
+            &opts.solido_address().to_bytes(),
+            MINT_AUTHORITY,
+            &[lido.mint_authority_bump_seed],
+        ],
+        opts.solido_program_id(),
+    )?;
+
     Ok(ShowSolidoOutput {
         solido_program_id: opts.solido_program_id().into(),
         solido_address: opts.solido_address().into(),
         solido: lido,
-        reserve_authority: reserve_authority.into(),
+        reserve_account: reserve_account.into(),
         stake_authority: stake_authority.into(),
+        mint_authority: mint_authority.into(),
     })
 }

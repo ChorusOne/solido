@@ -9,14 +9,13 @@ use solana_program::program_pack::Pack;
 use solana_program::{clock::Clock, pubkey::Pubkey, rent::Rent, stake_history::StakeHistory};
 use solana_sdk::{account::Account, borsh::try_from_slice_unchecked, instruction::Instruction};
 
-use lido::account_map::PubkeyAndEntry;
-use lido::token::StLamports;
-use lido::util::serialize_b58;
+use lido::{account_map::PubkeyAndEntry, MINT_AUTHORITY};
 use lido::{
     state::{Lido, Validator},
     token::Lamports,
     MINIMUM_STAKE_ACCOUNT_BALANCE, STAKE_AUTHORITY,
 };
+use lido::{token::StLamports, util::serialize_b58};
 use spl_stake_pool::stake_program::StakeState;
 use spl_token::state::Mint;
 
@@ -487,7 +486,7 @@ impl SolidoState {
                     &lido::instruction::UpdateValidatorBalanceMeta {
                         lido: self.solido_address,
                         validator_vote_account: validator.pubkey,
-                        reserve_authority: self.reserve_address,
+                        mint_authority: self.get_mint_authority(),
                         st_sol_mint: self.solido.st_sol_mint,
                         treasury_st_sol_account: self.solido.fee_recipients.treasury_account,
                         developer_st_sol_account: self.solido.fee_recipients.developer_account,
@@ -657,6 +656,15 @@ impl SolidoState {
             STAKE_AUTHORITY,
         );
         stake_authority
+    }
+
+    fn get_mint_authority(&self) -> Pubkey {
+        let (mint_authority, _bump_seed_authority) = lido::find_authority_program_address(
+            &self.solido_program_id,
+            &self.solido_address,
+            MINT_AUTHORITY,
+        );
+        mint_authority
     }
 }
 

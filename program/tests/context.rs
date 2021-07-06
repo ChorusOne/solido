@@ -19,10 +19,16 @@ use solana_sdk::transport::TransportError;
 use solana_vote_program::vote_instruction;
 use solana_vote_program::vote_state::{VoteInit, VoteState};
 
-use lido::state::{FeeRecipients, Lido, RewardDistribution, Validator};
-use lido::token::{Lamports, StLamports};
-use lido::{error::LidoError, state::Weight};
-use lido::{instruction, RESERVE_AUTHORITY, STAKE_AUTHORITY};
+use lido::{error::LidoError, RESERVE_ACCOUNT};
+use lido::{instruction, STAKE_AUTHORITY};
+use lido::{
+    state::Weight,
+    token::{Lamports, StLamports},
+};
+use lido::{
+    state::{FeeRecipients, Lido, RewardDistribution, Validator},
+    MINT_AUTHORITY,
+};
 use spl_stake_pool::stake_program::{Meta, Stake, StakeState};
 
 // This id is only used throughout these tests.
@@ -49,6 +55,7 @@ pub struct Context {
 
     pub reserve_address: Pubkey,
     pub stake_authority: Pubkey,
+    pub mint_authority: Pubkey,
 }
 
 pub struct ValidatorAccounts {
@@ -153,7 +160,7 @@ impl Context {
         };
 
         let (reserve_address, _) = Pubkey::find_program_address(
-            &[&solido.pubkey().to_bytes()[..], RESERVE_AUTHORITY],
+            &[&solido.pubkey().to_bytes()[..], RESERVE_ACCOUNT],
             &id(),
         );
 
@@ -161,6 +168,8 @@ impl Context {
             &[&solido.pubkey().to_bytes()[..], STAKE_AUTHORITY],
             &id(),
         );
+        let (mint_authority, _) =
+            Pubkey::find_program_address(&[&solido.pubkey().to_bytes()[..], MINT_AUTHORITY], &id());
 
         // Note: this name *must* match the name of the crate that contains the
         // program. If it does not, then it will still partially work, but we get
@@ -185,9 +194,10 @@ impl Context {
             reward_distribution,
             reserve_address,
             stake_authority,
+            mint_authority: mint_authority,
         };
 
-        result.st_sol_mint = result.create_mint(result.reserve_address).await;
+        result.st_sol_mint = result.create_mint(result.mint_authority).await;
 
         let treasury_owner = Keypair::new();
         result.treasury_st_sol_account =
@@ -558,6 +568,7 @@ impl Context {
                     recipient: recipient,
                     st_sol_mint: self.st_sol_mint,
                     reserve_account: self.reserve_address,
+                    mint_authority: self.mint_authority,
                 },
                 amount,
             )
@@ -760,7 +771,7 @@ impl Context {
                     lido: self.solido.pubkey(),
                     validator_vote_account: validator_vote_account,
                     st_sol_mint: self.st_sol_mint,
-                    reserve_authority: self.reserve_address,
+                    mint_authority: self.mint_authority,
                     treasury_st_sol_account: self.treasury_st_sol_account,
                     developer_st_sol_account: self.developer_st_sol_account,
                     stake_accounts: stake_account_addrs,
