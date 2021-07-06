@@ -316,9 +316,9 @@ impl SolidoState {
         // temporarily, but then immediately merge it into the preceding account.
         // This is possible if there is a preceding account, and if it was
         // activated in the current epoch. If merging is not possible, then we
-        // set `account_before_end` to the same account as `end`, to signal that
+        // set `account_merge_into` to the same account as `end`, to signal that
         // we shouldn't merge.
-        let account_before_end = match self.validator_stake_accounts[validator_index].last() {
+        let account_merge_into = match self.validator_stake_accounts[validator_index].last() {
             Some((addr, account)) if account.activation_epoch == self.clock.epoch => *addr,
             _ => stake_account_end,
         };
@@ -330,7 +330,7 @@ impl SolidoState {
                 maintainer: self.maintainer_address,
                 reserve: self.reserve_address,
                 validator_vote_account: validator.pubkey,
-                stake_account_before_end: account_before_end,
+                stake_account_merge_into: account_merge_into,
                 stake_account_end,
                 stake_authority: self.get_stake_authority(),
             },

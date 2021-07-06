@@ -234,9 +234,12 @@ pub fn process_stake_deposit(
     //    and we can merge into it. The number of stake accounts does not change.
     //
     // We assume that the maintainer checked this, and we are in case 2 if the
-    // accounts passed differ, and in case 1 if they don't.
-    if accounts.stake_account_end.key == accounts.stake_account_before_end.key {
-        // Case 1: we delegate, and we don't touch `stake_account_before_end`.
+    // accounts passed differ, and in case 1 if they don't. Note, if the
+    // maintainer incorrectly opted for merge, the transaction will fail. If the
+    // maintainer incorrectly opted for append, we will consume one stake account
+    // that could have been avoided, but it can still be merged after activation.
+    if accounts.stake_account_end.key == accounts.stake_account_merge_into.key {
+        // Case 1: we delegate, and we don't touch `stake_account_merge_into`.
         msg!(
             "Delegating stake account at seed {} ...",
             validator.entry.stake_accounts_seed_end
@@ -277,7 +280,7 @@ pub fn process_stake_deposit(
             &validator,
             // Does not underflow, because end > begin >= 0.
             validator.entry.stake_accounts_seed_end - 1,
-            accounts.stake_account_before_end,
+            accounts.stake_account_merge_into,
         )?;
         // The stake program checks that the two accounts can be merged; if we
         // tried to merge, but the epoch is different, then this will fail.
@@ -287,12 +290,12 @@ pub fn process_stake_deposit(
         );
         invoke_signed(
             &stake_program::merge(
-                accounts.stake_account_before_end.key,
+                accounts.stake_account_merge_into.key,
                 accounts.stake_account_end.key,
                 accounts.stake_authority.key,
             ),
             &[
-                accounts.stake_account_before_end.clone(),
+                accounts.stake_account_merge_into.clone(),
                 accounts.stake_account_end.clone(),
                 accounts.sysvar_clock.clone(),
                 accounts.stake_history.clone(),

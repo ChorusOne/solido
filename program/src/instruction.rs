@@ -188,11 +188,11 @@ accounts_struct! {
         },
         // For a `StakeDeposit` where we temporarily create an undelegated
         // account at `stake_account_end`, but immediately merge it into
-        // `stake_account_before_end`, this must be set to the program-derived
+        // `stake_account_merge_into`, this must be set to the program-derived
         // stake account for the validator, with seed `stake_accounts_seed_end
         // - 1`. For a `StakeDeposit` where we create a new stake account, this
         // should be set to the same value as `stake_account_end`.
-        pub stake_account_before_end {
+        pub stake_account_merge_into {
             is_signer: false,
             is_writable: true,
         },

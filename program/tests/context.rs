@@ -619,7 +619,7 @@ impl Context {
             validator_entry.entry.stake_accounts_seed_end,
         );
 
-        let (stake_account_before_end, _) = Validator::find_stake_account_address(
+        let (stake_account_merge_into, _) = Validator::find_stake_account_address(
             &id(),
             &self.solido.pubkey(),
             &validator_vote_account,
@@ -650,7 +650,7 @@ impl Context {
                     maintainer: maintainer.pubkey(),
                     validator_vote_account,
                     reserve: self.reserve_address,
-                    stake_account_before_end,
+                    stake_account_merge_into,
                     stake_account_end,
                     stake_authority: self.stake_authority,
                 },
