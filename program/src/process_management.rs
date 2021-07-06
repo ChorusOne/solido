@@ -243,7 +243,7 @@ pub fn process_merge_stake(
         return Err(LidoError::InvalidStakeAccount.into());
     }
 
-    lido.check_reserve_authority(program_id, accounts.lido.key, accounts.reserve_account)?;
+    lido.check_reserve_account(program_id, accounts.lido.key, accounts.reserve_account)?;
     // Merge `from_stake_addr` to `to_stake_addr`, at the end of the
     // instruction, `from_stake_addr` ceases to exist.
     let merge_ix = stake_program::merge(
