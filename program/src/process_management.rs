@@ -1,6 +1,9 @@
 use solana_program::program::invoke_signed;
-use solana_program::{account_info::AccountInfo, entrypoint::ProgramResult, msg, pubkey::Pubkey};
-use spl_stake_pool::stake_program;
+use solana_program::{
+    account_info::AccountInfo, clock::Clock, entrypoint::ProgramResult, msg, pubkey::Pubkey,
+    rent::Rent, stake_history::StakeHistory, sysvar::Sysvar,
+};
+use spl_stake_pool::stake_program::{self};
 
 use crate::{
     error::LidoError,
@@ -9,6 +12,7 @@ use crate::{
         MergeStakeInfo, RemoveMaintainerInfo, RemoveValidatorInfo,
     },
     logic::{deserialize_lido, mint_st_sol_to},
+    stake_account::StakeAccount,
     state::{RewardDistribution, Validator, Weight},
     token::{Lamports, StLamports},
     STAKE_AUTHORITY,
@@ -163,6 +167,9 @@ pub fn process_merge_stake(
 ) -> ProgramResult {
     let accounts = MergeStakeInfo::try_from_slice(accounts_raw)?;
     let mut lido = deserialize_lido(program_id, accounts.lido)?;
+    let clock = Clock::from_account_info(accounts.sysvar_clock)?;
+    let stake_history = StakeHistory::from_account_info(accounts.stake_history)?;
+    let rent = Rent::from_account_info(accounts.sysvar_rent)?;
     // Get validator.
     let mut validator = lido
         .validators
@@ -204,44 +211,47 @@ pub fn process_merge_stake(
     }
 
     // Recalculate the `from_stake`.
-    let (from_stake, _) = Validator::find_stake_account_address(
+    let (from_stake_addr, _) = Validator::find_stake_account_address(
         program_id,
         accounts.lido.key,
         accounts.validator_vote_account.key,
         from_seed,
     );
     // Compare with the stake passed in `accounts`.
-    if &from_stake != accounts.from_stake.key {
+    if &from_stake_addr != accounts.from_stake.key {
         msg!(
             "Calculated from_stake {} for seed {} is different from received {}.",
-            from_stake,
+            from_stake_addr,
             from_seed,
             accounts.from_stake.key
         );
         return Err(LidoError::InvalidStakeAccount.into());
     }
-    let (to_stake, _) = Validator::find_stake_account_address(
+    let (to_stake_addr, _) = Validator::find_stake_account_address(
         program_id,
         accounts.lido.key,
         accounts.validator_vote_account.key,
         to_seed,
     );
-    if &to_stake != accounts.to_stake.key {
+    if &to_stake_addr != accounts.to_stake.key {
         msg!(
             "Calculated to_stake {} for seed {} is different from received {}.",
-            to_stake,
+            to_stake_addr,
             to_seed,
             accounts.to_stake.key
         );
         return Err(LidoError::InvalidStakeAccount.into());
     }
-    // Merge `from_stake` to `to_stake`, at the end of the instruction,
-    // `from_stake` ceases to exist.
-    let merge_ix = stake_program::merge(&to_stake, &from_stake, &accounts.stake_authority.key);
-    let lamports_from_stake_before = accounts.from_stake.lamports();
-    let lamports_to_stake_before = accounts.to_stake.lamports();
-    let sum_stakes = (Lamports(lamports_from_stake_before) + Lamports(lamports_to_stake_before))
-        .expect("Summing lamports shouldn't overflow.");
+
+    lido.check_reserve_account(program_id, accounts.lido.key, accounts.reserve_account)?;
+    // Merge `from_stake_addr` to `to_stake_addr`, at the end of the
+    // instruction, `from_stake_addr` ceases to exist.
+    let merge_ix = stake_program::merge(
+        &to_stake_addr,
+        &from_stake_addr,
+        &accounts.stake_authority.key,
+    );
+
     invoke_signed(
         &merge_ix,
         &[
@@ -258,9 +268,47 @@ pub fn process_merge_stake(
             &[lido.stake_authority_bump_seed],
         ]],
     )?;
-    if Lamports(accounts.to_stake.lamports()) != sum_stakes {
-        msg!("Something went wrong when merging the stakes, total amount in stake {} should be from_stake's Lamports ({}) + to_stake's Lamports ({}) = {}, is {} instead", accounts.to_stake.key, Lamports(lamports_from_stake_before), Lamports(lamports_to_stake_before), sum_stakes, Lamports(accounts.to_stake.lamports()));
-        return Err(LidoError::CalculationFailure.into());
+
+    let to_stake = StakeAccount::get_stake(accounts.to_stake)?;
+    // Try to get the rent paid in the `from_stake_addr` or any other inactive
+    // stake.  It will be added to the `to_stake_addr` after the merge.
+    let to_stake_account = StakeAccount::from_delegated_account(
+        Lamports(accounts.to_stake.lamports()),
+        &to_stake,
+        &clock,
+        &stake_history,
+        to_seed,
+    );
+
+    let stake_account_rent = Lamports(rent.minimum_balance(accounts.to_stake.data_len()));
+    if to_stake_account.balance.inactive > stake_account_rent {
+        // Get extra Lamports back to the reserve so it can be re-staked.
+        let withdraw_ix = StakeAccount::stake_account_withdraw(
+            (to_stake_account.balance.inactive - stake_account_rent).expect(
+                "Should succeed because there was a previous check to
+                ensure that inactive balance is greater than stake account
+                rent.",
+            ),
+            &to_stake_addr,
+            accounts.reserve_account.key,
+            accounts.stake_authority.key,
+        );
+        invoke_signed(
+            &withdraw_ix,
+            &[
+                accounts.to_stake.clone(),
+                accounts.reserve_account.clone(),
+                accounts.sysvar_clock.clone(),
+                accounts.stake_history.clone(),
+                accounts.stake_authority.clone(),
+                accounts.stake_program.clone(),
+            ],
+            &[&[
+                &accounts.lido.key.to_bytes(),
+                STAKE_AUTHORITY,
+                &[lido.stake_authority_bump_seed],
+            ]],
+        )?;
     }
     lido.save(accounts.lido)
 }

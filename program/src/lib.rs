@@ -11,6 +11,7 @@ pub mod instruction;
 pub(crate) mod logic;
 pub(crate) mod process_management;
 pub mod processor;
+pub mod stake_account;
 pub mod state;
 pub mod token;
 pub mod util;

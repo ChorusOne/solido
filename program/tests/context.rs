@@ -720,6 +720,7 @@ impl Context {
                     stake_authority: self.stake_authority,
                     from_stake: from_stake_account,
                     to_stake: to_stake_account,
+                    reserve_account: self.reserve_address,
                 },
             )],
             vec![],
