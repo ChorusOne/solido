@@ -495,8 +495,6 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
         LidoInstruction::RemoveValidator => process_remove_validator(program_id, accounts),
         LidoInstruction::AddMaintainer => process_add_maintainer(program_id, accounts),
         LidoInstruction::RemoveMaintainer => process_remove_maintainer(program_id, accounts),
-        LidoInstruction::MergeStake { from_seed, to_seed } => {
-            process_merge_stake(program_id, from_seed, to_seed, accounts)
-        }
+        LidoInstruction::MergeStake => process_merge_stake(program_id, accounts),
     }
 }

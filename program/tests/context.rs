@@ -712,8 +712,6 @@ impl Context {
             &mut self.nonce,
             &[instruction::merge_stake(
                 &id(),
-                from_seed,
-                to_seed,
                 &instruction::MergeStakeMeta {
                     lido: self.solido.pubkey(),
                     validator_vote_account: validator_vote_account,
