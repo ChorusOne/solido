@@ -21,7 +21,7 @@ async fn test_successful_merge_activating_stake() {
     let account = context.try_get_account(stake_account_pubkeys[0]).await;
     assert!(account.is_none());
 
-    let (meta, _stake) = context.get_stake_state(stake_account_pubkeys[1]).await;
+    let (meta, stake) = context.get_stake_state(stake_account_pubkeys[1]).await;
     let sum = 20_000_000_000 - meta.rent_exempt_reserve;
     assert_eq!(
         stake.delegation.stake, sum,
@@ -201,14 +201,14 @@ async fn test_merge_with_donated_stake() {
         0,
     );
     context
-        .fund(from_stake_account, Lamports(1_000_000_000))
+        .fund(from_stake_account, Lamports(100_000_000_000))
         .await;
 
     let reserve_balance_before = context.get_sol_balance(context.reserve_address).await;
     context.merge_stake(validator_vote_account, 0, 1).await;
     let reserve_balance_after = context.get_sol_balance(context.reserve_address).await;
     assert_eq!(
-        (reserve_balance_before + Lamports(1_000_000_000)).unwrap(),
+        (reserve_balance_before + Lamports(100_000_000_000)).unwrap(),
         reserve_balance_after
     );
 }
