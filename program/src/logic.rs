@@ -45,7 +45,7 @@ pub fn get_reserve_available_balance(
     }
 }
 
-pub struct CreateAccountOptions<'a> {
+pub struct CreateAccountOptions<'a, 'b> {
     /// The amount to transfer from the reserve to the new account.
     pub fund_amount: Lamports,
     /// The size of the data section of the account.
@@ -54,6 +54,8 @@ pub struct CreateAccountOptions<'a> {
     pub owner: Pubkey,
     /// Seeds needed to sign on behalf of the new account.
     pub sign_seeds: &'a [&'a [u8]],
+    /// The account to initialize.
+    pub account: &'a AccountInfo<'b>,
 }
 
 /// Create a new account and fund it from the reserve.
@@ -63,13 +65,12 @@ pub struct CreateAccountOptions<'a> {
 /// stake accounts, then someone could transfer a small amount to the next stake
 /// account for a validator, and that would prevent us from delegating more stake
 /// to that validator.
-pub fn create_account_overwrite_if_exists<'a>(
+pub fn create_account_overwrite_if_exists<'a, 'b>(
     solido_address: &Pubkey,
-    options: CreateAccountOptions,
-    account: &AccountInfo<'a>,
-    reserve: &AccountInfo<'a>,
+    options: CreateAccountOptions<'a, 'b>,
+    reserve: &AccountInfo<'b>,
     reserve_account_bump_seed: u8,
-    system_program: &AccountInfo<'a>,
+    system_program: &AccountInfo<'b>,
 ) -> ProgramResult {
     let reserve_account_bump_seed = [reserve_account_bump_seed];
     let reserve_account_seeds = &[
@@ -82,18 +83,22 @@ pub fn create_account_overwrite_if_exists<'a>(
     // do below, but it additionally has a check to prevent creating an account
     // that has a nonzero balance, which we omit here.
     invoke_signed(
-        &system_instruction::allocate(account.key, options.data_size),
-        &[account.clone(), system_program.clone()],
+        &system_instruction::allocate(options.account.key, options.data_size),
+        &[options.account.clone(), system_program.clone()],
         &[options.sign_seeds],
     )?;
     invoke_signed(
-        &system_instruction::assign(account.key, &options.owner),
-        &[account.clone(), system_program.clone()],
+        &system_instruction::assign(options.account.key, &options.owner),
+        &[options.account.clone(), system_program.clone()],
         &[options.sign_seeds],
     )?;
     invoke_signed(
-        &system_instruction::transfer(reserve.key, account.key, options.fund_amount.0),
-        &[reserve.clone(), account.clone(), system_program.clone()],
+        &system_instruction::transfer(reserve.key, options.account.key, options.fund_amount.0),
+        &[
+            reserve.clone(),
+            options.account.clone(),
+            system_program.clone(),
+        ],
         &[&reserve_account_seeds, options.sign_seeds],
     )?;
     Ok(())
