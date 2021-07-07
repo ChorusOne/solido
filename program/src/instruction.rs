@@ -297,12 +297,34 @@ accounts_struct! {
             is_writable: true,
         },
 
+        // This instruction withdraws any excess stake from the stake accounts
+        // back to the reserve. The stake authority needs to sign off on those
+        // (but program-derived, so it is not a signer here), and we need access
+        // to the reserve.
+        pub stake_authority {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub reserve {
+            is_signer: false,
+            is_writable: true,
+        },
+
         // We only allow updating balances if the exchange rate is up to date,
         // so we need to know the current epoch.
         const sysvar_clock = sysvar::clock::id(),
 
+        // Needed to determine if there is excess balance in a stake account.
+        const sysvar_rent = sysvar::rent::id(),
+
+        // Needed for the stake program, to withdraw from stake accounts.
+        const sysvar_stake_history = sysvar::stake_history::id(),
+
         // Needed for minting rewards.
         const spl_token_program = spl_token::id(),
+
+        // Needed to withdraw from stake accounts.
+        const stake_program = stake_program::id(),
 
         // The validator's stake accounts, from the begin seed until (but
         // excluding) the end seed.
@@ -548,14 +570,7 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
-        // The reserve account is used to transfer the inactive stake when
-        // merging accounts, so it can be staked later.
-        pub reserve_account {
-            is_signer: false,
-            is_writable: true,
-        },
         const sysvar_clock = sysvar::clock::id(),
-        const sysvar_rent = sysvar::rent::id(),
         const stake_history = stake_history::id(),
         const stake_program = stake_program::id(),
     }

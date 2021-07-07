@@ -1,8 +1,5 @@
 use solana_program::program::invoke_signed;
-use solana_program::{
-    account_info::AccountInfo, clock::Clock, entrypoint::ProgramResult, msg, pubkey::Pubkey,
-    rent::Rent, stake_history::StakeHistory, sysvar::Sysvar,
-};
+use solana_program::{account_info::AccountInfo, entrypoint::ProgramResult, msg, pubkey::Pubkey};
 use spl_stake_pool::stake_program::{self};
 
 use crate::{
@@ -12,9 +9,8 @@ use crate::{
         MergeStakeInfo, RemoveMaintainerInfo, RemoveValidatorInfo,
     },
     logic::{deserialize_lido, mint_st_sol_to},
-    stake_account::StakeAccount,
     state::{RewardDistribution, Validator, Weight},
-    token::{Lamports, StLamports},
+    token::StLamports,
     STAKE_AUTHORITY,
 };
 
@@ -157,11 +153,6 @@ pub fn _process_change_validator_fee_account(
 pub fn process_merge_stake(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> ProgramResult {
     let accounts = MergeStakeInfo::try_from_slice(accounts_raw)?;
     let mut lido = deserialize_lido(program_id, accounts.lido)?;
-    lido.check_reserve_account(program_id, accounts.lido.key, accounts.reserve_account)?;
-
-    let clock = Clock::from_account_info(accounts.sysvar_clock)?;
-    let stake_history = StakeHistory::from_account_info(accounts.stake_history)?;
-    let rent = Rent::from_account_info(accounts.sysvar_rent)?;
 
     let mut validator = lido
         .validators
@@ -232,55 +223,6 @@ pub fn process_merge_stake(program_id: &Pubkey, accounts_raw: &[AccountInfo]) ->
             &[lido.stake_authority_bump_seed],
         ]],
     )?;
-
-    let to_stake = StakeAccount::get_stake(accounts.to_stake)?;
-    // Try to get the rent paid in the `from_stake_addr` or any other inactive
-    // stake.  It will be added to the `to_stake_addr` after the merge.
-    let to_stake_account = StakeAccount::from_delegated_account(
-        Lamports(accounts.to_stake.lamports()),
-        &to_stake,
-        &clock,
-        &stake_history,
-        to_seed,
-    );
-
-    let stake_account_rent = Lamports(rent.minimum_balance(accounts.to_stake.data_len()));
-    if to_stake_account.balance.inactive > stake_account_rent {
-        // Get extra Lamports back to the reserve so it can be re-staked.
-        let amount_to_withdraw = (to_stake_account.balance.inactive - stake_account_rent).expect(
-            "Should succeed because there was a previous check to ensure that inactive balance is \
-            greater than stake account rent.",
-        );
-        let withdraw_ix = StakeAccount::stake_account_withdraw(
-            amount_to_withdraw,
-            &to_stake_addr,
-            accounts.reserve_account.key,
-            accounts.stake_authority.key,
-        );
-        invoke_signed(
-            &withdraw_ix,
-            &[
-                accounts.to_stake.clone(),
-                accounts.reserve_account.clone(),
-                accounts.sysvar_clock.clone(),
-                accounts.stake_history.clone(),
-                accounts.stake_authority.clone(),
-                accounts.stake_program.clone(),
-            ],
-            &[&[
-                &accounts.lido.key.to_bytes(),
-                STAKE_AUTHORITY,
-                &[lido.stake_authority_bump_seed],
-            ]],
-        )?;
-        validator.entry.stake_accounts_balance = (validator.entry.stake_accounts_balance
-            - amount_to_withdraw)
-            .expect("We could not have withdrawn more than we had in the first place.");
-        msg!(
-            "Withdrew {} inactive stake back to the reserve.",
-            amount_to_withdraw
-        );
-    }
 
     lido.save(accounts.lido)
 }

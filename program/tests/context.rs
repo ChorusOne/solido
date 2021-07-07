@@ -725,12 +725,14 @@ impl Context {
     }
 
     /// Merge two accounts of a given validator.
+    ///
+    /// Returns the address that stake was merged into.
     pub async fn try_merge_stake(
         &mut self,
         validator_vote_account: Pubkey,
         from_seed: u64,
         to_seed: u64,
-    ) -> transport::Result<()> {
+    ) -> transport::Result<Pubkey> {
         let (from_stake_account, _) = Validator::find_stake_account_address(
             &id(),
             &self.solido.pubkey(),
@@ -756,12 +758,13 @@ impl Context {
                     stake_authority: self.stake_authority,
                     from_stake: from_stake_account,
                     to_stake: to_stake_account,
-                    reserve_account: self.reserve_address,
                 },
             )],
             vec![],
         )
-        .await
+        .await?;
+
+        Ok(to_stake_account)
     }
 
     /// Merge two accounts of a given validator.
@@ -770,7 +773,7 @@ impl Context {
         validator_vote_account: Pubkey,
         from_seed: u64,
         to_seed: u64,
-    ) {
+    ) -> Pubkey {
         self.try_merge_stake(validator_vote_account, from_seed, to_seed)
             .await
             .expect("Failed to call MergeStake on Solido instance.")
@@ -812,6 +815,8 @@ impl Context {
                     treasury_st_sol_account: self.treasury_st_sol_account,
                     developer_st_sol_account: self.developer_st_sol_account,
                     stake_accounts: stake_account_addrs,
+                    reserve: self.reserve_address,
+                    stake_authority: self.stake_authority,
                 },
             )],
             vec![],

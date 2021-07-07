@@ -204,11 +204,12 @@ async fn test_merge_with_donated_stake() {
         .fund(from_stake_account, Lamports(100_000_000_000))
         .await;
 
-    let reserve_balance_before = context.get_sol_balance(context.reserve_address).await;
-    context.merge_stake(validator_vote_account, 0, 1).await;
-    let reserve_balance_after = context.get_sol_balance(context.reserve_address).await;
+    let to_account = context.merge_stake(validator_vote_account, 0, 1).await;
+    let to_balance = context.get_sol_balance(to_account).await;
+
     assert_eq!(
-        (reserve_balance_before + Lamports(100_000_000_000)).unwrap(),
-        reserve_balance_after
+        to_balance,
+        // The initial two accounts had 10 SOL each, and we added a donation of 100.
+        Lamports(120_000_000_000),
     );
 }

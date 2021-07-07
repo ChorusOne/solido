@@ -17,6 +17,7 @@ use crate::{
         process_claim_validator_fee, process_merge_stake, process_remove_maintainer,
         process_remove_validator,
     },
+    stake_account::StakeAccount,
     state::{
         FeeRecipients, Lido, Maintainers, RewardDistribution, Validator, Validators,
         LIDO_CONSTANT_SIZE, LIDO_VERSION,
@@ -25,6 +26,7 @@ use crate::{
     MINT_AUTHORITY, RESERVE_ACCOUNT, STAKE_AUTHORITY, VALIDATOR_STAKE_ACCOUNT,
 };
 
+use solana_program::stake_history::StakeHistory;
 use {
     borsh::BorshDeserialize,
     solana_program::{
@@ -338,18 +340,81 @@ pub fn process_update_exchange_rate(
     lido.save(accounts.lido)
 }
 
+/// If a stake account contains more inactive SOL than needed to make it rent-exempt,
+/// withdraw the excess back to the reserve. Returns how much SOL was withdrawn.
+pub fn withdraw_excess_inactive_sol<'a, 'b>(
+    accounts: &UpdateValidatorBalanceInfo<'a, 'b>,
+    clock: &Clock,
+    rent: &Rent,
+    stake_history: &StakeHistory,
+    stake_account: &AccountInfo<'b>,
+    stake_account_seed: u64,
+    stake_authority_bump_seed: u8,
+) -> Result<Lamports, ProgramError> {
+    let stake_account_rent = Lamports(rent.minimum_balance(stake_account.data_len()));
+    let stake = StakeAccount::get_stake(stake_account)?;
+    let stake_info = StakeAccount::from_delegated_account(
+        Lamports(stake_account.lamports()),
+        &stake,
+        &clock,
+        &stake_history,
+        stake_account_seed,
+    );
+    let excess_balance = Lamports(
+        stake_info
+            .balance
+            .inactive
+            .0
+            .saturating_sub(stake_account_rent.0),
+    );
+    if excess_balance > Lamports(0) {
+        let withdraw_instruction = StakeAccount::stake_account_withdraw(
+            excess_balance,
+            stake_account.key,
+            accounts.reserve.key,
+            accounts.stake_authority.key,
+        );
+        invoke_signed(
+            &withdraw_instruction,
+            &[
+                stake_account.clone(),
+                accounts.reserve.clone(),
+                accounts.sysvar_clock.clone(),
+                accounts.sysvar_stake_history.clone(),
+                accounts.stake_authority.clone(),
+                accounts.stake_program.clone(),
+            ],
+            &[&[
+                accounts.lido.key.as_ref(),
+                STAKE_AUTHORITY,
+                &[stake_authority_bump_seed],
+            ]],
+        )?;
+        msg!(
+            "Withdrew {} inactive stake back to the reserve at seed {}.",
+            excess_balance,
+            stake_account_seed
+        );
+    }
+
+    Ok(excess_balance)
+}
+
 pub fn process_update_validator_balance(
     program_id: &Pubkey,
     raw_accounts: &[AccountInfo],
 ) -> ProgramResult {
     let accounts = UpdateValidatorBalanceInfo::try_from_slice(raw_accounts)?;
     let mut lido = deserialize_lido(program_id, accounts.lido)?;
+    let rent = Rent::from_account_info(accounts.sysvar_rent)?;
+    let stake_history = StakeHistory::from_account_info(accounts.sysvar_stake_history)?;
 
     // Confirm that the passed accounts are the ones configured in the state,
     // and confirm that they can receive stSOL.
     lido.check_mint_is_st_sol_mint(accounts.st_sol_mint)?;
     lido.check_treasury_fee_st_sol_account(accounts.treasury_st_sol_account)?;
     lido.check_developer_fee_st_sol_account(accounts.developer_st_sol_account)?;
+    lido.check_reserve_account(program_id, accounts.lido.key, accounts.reserve)?;
 
     let clock = Clock::from_account_info(accounts.sysvar_clock)?;
     if lido.exchange_rate.computed_in_epoch < clock.epoch {
@@ -368,6 +433,7 @@ pub fn process_update_validator_balance(
         .get_mut(accounts.validator_vote_account.key)?;
 
     let mut observed_total = Lamports(0);
+    let mut excess_removed = Lamports(0);
     let mut stake_accounts = accounts.stake_accounts.iter();
     let begin = validator.entry.stake_accounts_seed_begin;
     let end = validator.entry.stake_accounts_seed_end;
@@ -409,6 +475,18 @@ pub fn process_update_validator_balance(
             account_balance
         );
 
+        let excess_removed_here = withdraw_excess_inactive_sol(
+            &accounts,
+            &clock,
+            &rent,
+            &stake_history,
+            stake_account,
+            seed,
+            lido.stake_authority_bump_seed,
+        )?;
+
+        excess_removed =
+            (excess_removed + excess_removed_here).ok_or(LidoError::CalculationFailure)?;
         observed_total = (observed_total + account_balance).ok_or(LidoError::CalculationFailure)?;
     }
 
@@ -432,8 +510,11 @@ pub fn process_update_validator_balance(
         .expect("Does not underflow because observed_total >= stake_accounts_balance.");
     msg!("{} in rewards observed.", rewards);
 
-    // Store the new total, so we only distribute these rewards once.
-    validator.entry.stake_accounts_balance = observed_total;
+    // Store the new total, so we only distribute these rewards once. If we
+    // withdrew any inactive stake back to the reserve, that is now no longer
+    // part of the stake accounts, so subtract that.
+    validator.entry.stake_accounts_balance =
+        (observed_total - excess_removed).expect("Does not underflow, because excess <= total.");
 
     let fees = lido
         .reward_distribution
