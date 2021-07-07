@@ -375,7 +375,7 @@ impl Lido {
         stake_authority_account_info: &AccountInfo,
     ) -> Result<Pubkey, ProgramError> {
         let authority = self.get_stake_authority(program_id, solido_address)?;
-        if authority != *stake_authority_account_info.key {
+        if &authority != stake_authority_account_info.key {
             msg!(
                 "Invalid stake authority, expected {} but got {}.",
                 authority,
