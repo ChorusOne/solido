@@ -1,15 +1,15 @@
 //! Holds a test context, which makes it easier to test with a Solido instance set up.
 
 use num_traits::cast::FromPrimitive;
-use solana_program::borsh::try_from_slice_unchecked;
-use solana_program::instruction::Instruction;
-use solana_program::instruction::InstructionError;
 use solana_program::program_pack::Pack;
 use solana_program::rent::Rent;
 use solana_program::system_instruction;
 use solana_program::system_program;
+use solana_program::{borsh::try_from_slice_unchecked, sysvar};
+use solana_program::{clock::Clock, instruction::Instruction};
+use solana_program::{instruction::InstructionError, stake_history::StakeHistory};
 use solana_program_test::{processor, ProgramTest, ProgramTestContext};
-use solana_sdk::account::Account;
+use solana_sdk::account::{from_account, Account};
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::{Keypair, Signer};
 use solana_sdk::transaction::Transaction;
@@ -876,6 +876,26 @@ impl Context {
             .get_rent()
             .await
             .expect("Failed to get rent.")
+    }
+    pub async fn get_clock(&mut self) -> Clock {
+        let account = self
+            .context
+            .banks_client
+            .get_account(sysvar::clock::id())
+            .await
+            .expect("Clock account should exist.")
+            .expect("Clock account should exist.");
+        from_account(&account).expect("Could not get Clock from account.")
+    }
+    pub async fn get_stake_history(&mut self) -> StakeHistory {
+        let account = self
+            .context
+            .banks_client
+            .get_account(sysvar::stake_history::id())
+            .await
+            .expect("Stake History account should exist.")
+            .expect("Stake History account should exist.");
+        from_account(&account).expect("Could not get Stake History from account.")
     }
     pub async fn get_stake_state(&mut self, stake_account: Pubkey) -> (Meta, Stake) {
         let account = self.get_account(stake_account).await;
