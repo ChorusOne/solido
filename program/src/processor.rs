@@ -9,7 +9,7 @@ use crate::{
         UpdateExchangeRateAccountsInfo, UpdateValidatorBalanceInfo,
     },
     logic::{
-        check_rent_exempt, create_account_overwrite_if_exists, deserialize_lido, distribute_fees,
+        CreateAccountOptions, check_rent_exempt, create_account_overwrite_if_exists, deserialize_lido, distribute_fees,
         initialize_stake_account_undelegated, mint_st_sol_to,
     },
     process_management::{
@@ -191,18 +191,18 @@ pub fn process_stake_deposit(
 
     // Create the account that is going to hold the new stake account data.
     // Even if it was already funded.
-    let account_data_size = std::mem::size_of::<stake_program::StakeState>();
-    let account_owner = stake_program::id();
     create_account_overwrite_if_exists(
         &accounts.lido.key,
-        amount,
-        account_data_size as u64,
-        &account_owner,
+        CreateAccountOptions {
+            fund_amount: amount,
+            data_size: std::mem::size_of::<stake_program::StakeState>() as u64,
+            owner: stake_program::id(),
+            sign_seeds: stake_account_seeds,
+        },
         accounts.stake_account_end,
         accounts.reserve,
         lido.sol_reserve_account_bump_seed,
         accounts.system_program,
-        stake_account_seeds,
     )?;
 
     // Now initialize the stake, but do not yet delegate it.
