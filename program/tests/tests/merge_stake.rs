@@ -9,7 +9,7 @@ use solana_sdk::signer::Signer;
 
 // TODO(#226): We test only merging inactive stake accounts, test also other combinations.
 #[tokio::test]
-async fn test_successful_merge_activating_activating_stake() {
+async fn test_successful_merge_activating_stake() {
     let (mut context, stake_account_pubkeys) = Context::new_with_two_stake_accounts().await;
     let solido_before = context.get_solido().await;
     let validator_vote_account = context.validator.as_ref().unwrap().vote_account;
@@ -50,14 +50,11 @@ async fn test_successful_merge_activating_activating_stake() {
     );
 }
 
-fn advance_epoch(context: &mut Context, current_slot: u64) -> u64 {
+fn advance_epoch(context: &mut Context, current_slot: &mut u64) {
     let epoch_schedule = context.context.genesis_config().epoch_schedule;
     let slots_per_epoch = epoch_schedule.slots_per_epoch;
-    context
-        .context
-        .warp_to_slot(current_slot + slots_per_epoch)
-        .unwrap();
-    current_slot + slots_per_epoch
+    *current_slot = *current_slot + slots_per_epoch;
+    context.context.warp_to_slot(*current_slot).unwrap();
 }
 
 async fn get_stake_account_from_seed(
@@ -75,30 +72,37 @@ async fn get_stake_account_from_seed(
     let clock = context.get_clock().await;
     let stake_history = context.get_stake_history().await;
     let stake_balance = context.get_sol_balance(stake_address).await;
-    let (_, stake_active) = context.get_stake_state(stake_address).await;
-    StakeAccount::from_delegated_account(stake_balance, &stake_active, &clock, &stake_history, seed)
+    let (_, stake) = context.get_stake_state(stake_address).await;
+    StakeAccount::from_delegated_account(stake_balance, &stake, &clock, &stake_history, seed)
 }
 // Test merging active to activating: should fail.
 // Test merging two activated stake accounts: should succeed.
 #[tokio::test]
 async fn test_merge_stake_combinations() {
-    let deposit_amount = Lamports(2_000_000_000); // 2 Sol
+    let stake_deposit_amount = Lamports(2_000_000_000); // 2 Sol
     let mut context = Context::new_with_maintainer_and_validator().await;
 
     let validator_vote_account = context.validator.as_ref().unwrap().vote_account;
-    context.deposit(deposit_amount).await;
+    context.deposit(Lamports(100_000_000_000)).await;
     context
-        .stake_deposit(validator_vote_account, StakeDeposit::Append, deposit_amount)
+        .stake_deposit(
+            validator_vote_account,
+            StakeDeposit::Append,
+            stake_deposit_amount,
+        )
         .await;
 
     let mut current_slot = 0;
     // Skip ahead 1 epoch
-    current_slot += advance_epoch(&mut context, current_slot);
+    advance_epoch(&mut context, &mut current_slot);
 
     // Create an activating stake account.
-    context.deposit(deposit_amount).await;
     context
-        .stake_deposit(validator_vote_account, StakeDeposit::Append, deposit_amount)
+        .stake_deposit(
+            validator_vote_account,
+            StakeDeposit::Append,
+            stake_deposit_amount,
+        )
         .await;
 
     let active_stake_account =
@@ -112,7 +116,7 @@ async fn test_merge_stake_combinations() {
     let result = context.try_merge_stake(validator_vote_account, 0, 1).await;
     // Merging active to activating should fail.
     assert_solido_error!(result, LidoError::WrongStakeState);
-    advance_epoch(&mut context, current_slot);
+    advance_epoch(&mut context, &mut current_slot);
 
     let now_active_stake_account =
         get_stake_account_from_seed(&mut context, &validator_vote_account, 1).await;
