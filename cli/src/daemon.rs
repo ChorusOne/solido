@@ -136,18 +136,23 @@ fn run_main_loop(
                     // Nothing to be done, try again later.
                     do_wait = true;
                 }
-                Some(maintenance_output) => match maintenance_output {
-                    MaintenanceOutput::StakeDeposit { .. } => {
-                        metrics.transactions_stake_deposit += 1;
+                Some(maintenance_output) => {
+                    println!("{}", maintenance_output);
+                    match maintenance_output {
+                        MaintenanceOutput::StakeDeposit { .. } => {
+                            metrics.transactions_stake_deposit += 1;
+                        }
+                        MaintenanceOutput::UpdateExchangeRate => {
+                            metrics.transactions_update_exchange_rate += 1;
+                        }
+                        MaintenanceOutput::UpdateValidatorBalance { .. } => {
+                            metrics.transactions_update_validator_balance += 1;
+                        }
+                        MaintenanceOutput::MergeStake { .. } => {
+                            metrics.transactions_merge_stake += 1
+                        }
                     }
-                    MaintenanceOutput::UpdateExchangeRate => {
-                        metrics.transactions_update_exchange_rate += 1;
-                    }
-                    MaintenanceOutput::UpdateValidatorBalance { .. } => {
-                        metrics.transactions_update_validator_balance += 1;
-                    }
-                    MaintenanceOutput::MergeStake { .. } => metrics.transactions_merge_stake += 1,
-                },
+                }
             }
 
             Ok(state)
