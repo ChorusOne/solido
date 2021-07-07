@@ -60,7 +60,7 @@ pub struct CreateAccountOptions<'a> {
 ///
 /// Unlike `system_instruction::create_account`, this will not fail if the account
 /// already exists. This is important, because if account creation would fail for
-/// stake accounts, then some joker could transfer a small amount to the next stake
+/// stake accounts, then someone could transfer a small amount to the next stake
 /// account for a validator, and that would prevent us from delegating more stake
 /// to that validator.
 pub fn create_account_overwrite_if_exists<'a>(

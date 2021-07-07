@@ -215,7 +215,7 @@ pub fn process_stake_deposit(
 
     // Update the amount staked for this validator. Note that it could happen
     // that there is now more SOL in the account than what we put in there, if
-    // some joker deposited into the account before we started using it. We don't
+    // someone deposited into the account before we started using it. We don't
     // record that here; we will discover it later in `UpdateValidatorBalance`,
     // and then it will be treated in the same way as a validation reward.
     msg!("Staked {} out of the reserve.", amount);
