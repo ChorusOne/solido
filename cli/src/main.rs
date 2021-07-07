@@ -248,17 +248,8 @@ fn main() {
                     println!("Nothing done, there was no maintenance to perform.")
                 }
                 (OutputMode::Json, None) => println!("null"),
-                (OutputMode::Json, Some(output)) => println!(
-                    "{}",
-                    serde_json::to_string_pretty(&output)
-                        .expect("Failed to serialize output as json.")
-                ),
-                (OutputMode::Text, Some(output)) => {
-                    for (i, mo) in output.iter().enumerate() {
-                        println!("Instruction {}/{}", i, output.len());
-                        print_output(OutputMode::Text, mo);
-                    }
-                }
+
+                (mode, Some(output)) => print_output(mode, &output),
             }
         }
         SubCommand::RunMaintainer(cmd_opts) => {
