@@ -157,10 +157,12 @@ pub fn _process_change_validator_fee_account(
 pub fn process_merge_stake(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> ProgramResult {
     let accounts = MergeStakeInfo::try_from_slice(accounts_raw)?;
     let mut lido = deserialize_lido(program_id, accounts.lido)?;
+    lido.check_reserve_account(program_id, accounts.lido.key, accounts.reserve_account)?;
+
     let clock = Clock::from_account_info(accounts.sysvar_clock)?;
     let stake_history = StakeHistory::from_account_info(accounts.stake_history)?;
     let rent = Rent::from_account_info(accounts.sysvar_rent)?;
-    // Get validator.
+
     let mut validator = lido
         .validators
         .get_mut(accounts.validator_vote_account.key)?;
@@ -206,7 +208,6 @@ pub fn process_merge_stake(program_id: &Pubkey, accounts_raw: &[AccountInfo]) ->
         return Err(LidoError::InvalidStakeAccount.into());
     }
     validator.entry.stake_accounts_seed_begin += 1;
-    lido.check_reserve_account(program_id, accounts.lido.key, accounts.reserve_account)?;
     // Merge `from_stake_addr` to `to_stake_addr`, at the end of the
     // instruction, `from_stake_addr` ceases to exist.
     let merge_ix = stake_program::merge(
@@ -246,12 +247,12 @@ pub fn process_merge_stake(program_id: &Pubkey, accounts_raw: &[AccountInfo]) ->
     let stake_account_rent = Lamports(rent.minimum_balance(accounts.to_stake.data_len()));
     if to_stake_account.balance.inactive > stake_account_rent {
         // Get extra Lamports back to the reserve so it can be re-staked.
+        let amount_to_withdraw = (to_stake_account.balance.inactive - stake_account_rent).expect(
+            "Should succeed because there was a previous check to ensure that inactive balance is \
+            greater than stake account rent.",
+        );
         let withdraw_ix = StakeAccount::stake_account_withdraw(
-            (to_stake_account.balance.inactive - stake_account_rent).expect(
-                "Should succeed because there was a previous check to
-                ensure that inactive balance is greater than stake account
-                rent.",
-            ),
+            amount_to_withdraw,
             &to_stake_addr,
             accounts.reserve_account.key,
             accounts.stake_authority.key,
@@ -272,6 +273,13 @@ pub fn process_merge_stake(program_id: &Pubkey, accounts_raw: &[AccountInfo]) ->
                 &[lido.stake_authority_bump_seed],
             ]],
         )?;
+        validator.entry.stake_accounts_balance = (validator.entry.stake_accounts_balance
+            - amount_to_withdraw)
+            .expect("We could not have withdrawn more than we had in the first place.");
+        msg!(
+            "Withdrew {} inactive stake back to the reserve.",
+            amount_to_withdraw
+        );
     }
 
     lido.save(accounts.lido)

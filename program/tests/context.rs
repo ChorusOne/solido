@@ -29,6 +29,7 @@ use lido::{
     state::{FeeRecipients, Lido, RewardDistribution, Validator},
     MINT_AUTHORITY,
 };
+use solana_sdk::account_info::AccountInfo;
 use spl_stake_pool::stake_program::{Meta, Stake, StakeState};
 
 // This id is only used throughout these tests.
@@ -286,6 +287,7 @@ impl Context {
     pub async fn new_with_two_stake_accounts() -> (Context, Vec<Pubkey>) {
         let mut result = Context::new_with_maintainer().await;
         let validator = result.add_validator().await;
+
         result.deposit(Lamports(20_000_000_000)).await;
         let mut stake_accounts = Vec::new();
         for _ in 0..2 {
@@ -906,6 +908,23 @@ impl Context {
             panic!("Stake state should have been StakeState::Stake.");
         }
     }
+}
+
+/// Return an `AccountInfo` for the given account, with `is_signer` and `is_writable` set to false.
+pub fn get_account_info<'a>(address: &'a Pubkey, account: &'a mut Account) -> AccountInfo<'a> {
+    let is_signer = false;
+    let is_writable = false;
+    let is_executable = false;
+    AccountInfo::new(
+        address,
+        is_signer,
+        is_writable,
+        &mut account.lamports,
+        &mut account.data,
+        &account.owner,
+        is_executable,
+        account.rent_epoch,
+    )
 }
 
 #[macro_export]
