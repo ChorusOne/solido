@@ -10,6 +10,7 @@ pub mod error;
 pub mod instruction;
 pub(crate) mod logic;
 pub(crate) mod process_management;
+pub mod metrics;
 pub mod processor;
 pub mod stake_account;
 pub mod state;
