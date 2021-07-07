@@ -7,7 +7,6 @@ use solana_program::pubkey::Pubkey;
 use solana_program_test::tokio;
 use solana_sdk::signer::Signer;
 
-// TODO(#226): We test only merging inactive stake accounts, test also other combinations.
 #[tokio::test]
 async fn test_successful_merge_activating_stake() {
     let (mut context, stake_account_pubkeys) = Context::new_with_two_stake_accounts().await;
