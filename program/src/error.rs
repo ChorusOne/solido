@@ -97,9 +97,11 @@ pub enum LidoError {
     /// There are no validators with an active stake account to delegate to.
     #[error("NoActiveValidators")]
     NoActiveValidators,
+
     /// When staking part of the reserve to a new stake account, the next
     /// program-derived address for the stake account associated with the given
-    /// validator, does not match the provided stake account.
+    /// validator, does not match the provided stake account, or the stake account
+    /// is not the right account to stake with at this time.
     #[error("InvalidStakeAccount")]
     InvalidStakeAccount,
 
@@ -120,12 +122,18 @@ pub enum LidoError {
     /// We observed a decrease in the balance of the validator's stake accounts.
     #[error("ValidatorBalanceDecreased")]
     ValidatorBalanceDecreased,
+
+    /// The provided stake authority does not match the one derived from Lido's state.
+    #[error("InvalidStakeAuthority")]
+    InvalidStakeAuthority,
 }
+
 impl From<LidoError> for ProgramError {
     fn from(e: LidoError) -> Self {
         ProgramError::Custom(e as u32)
     }
 }
+
 impl<T> DecodeError<T> for LidoError {
     fn type_of() -> &'static str {
         "Lido Error"

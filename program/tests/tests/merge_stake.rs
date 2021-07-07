@@ -1,7 +1,7 @@
 #![cfg(feature = "test-bpf")]
 
 use crate::assert_solido_error;
-use crate::context::Context;
+use crate::context::{Context, StakeDeposit};
 use lido::{error::LidoError, state::Validator, token::Lamports};
 use solana_program_test::tokio;
 use solana_sdk::signer::Signer;
@@ -60,7 +60,11 @@ async fn test_merge_validator_with_zero_and_one_stake_account() {
     assert_solido_error!(result, LidoError::InvalidStakeAccount);
 
     context
-        .stake_deposit(validator.vote_account, Lamports(10_000_000_000))
+        .stake_deposit(
+            validator.vote_account,
+            StakeDeposit::Append,
+            Lamports(10_000_000_000),
+        )
         .await;
 
     // Try to merge stake on a validator that has 1 stake account.

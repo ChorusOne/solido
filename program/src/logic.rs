@@ -1,8 +1,10 @@
 use solana_program::entrypoint::ProgramResult;
 use solana_program::{
-    account_info::AccountInfo, borsh::try_from_slice_unchecked, msg, program::invoke_signed,
-    program_error::ProgramError, pubkey::Pubkey, rent::Rent,
+    account_info::AccountInfo, borsh::try_from_slice_unchecked, msg, program::invoke,
+    program::invoke_signed, program_error::ProgramError, pubkey::Pubkey, rent::Rent,
+    system_instruction,
 };
+use spl_stake_pool::stake_program;
 
 use crate::{
     error::LidoError,
@@ -10,7 +12,7 @@ use crate::{
     state::Fees,
     state::Lido,
     token::{Lamports, StLamports},
-    MINT_AUTHORITY,
+    MINT_AUTHORITY, RESERVE_ACCOUNT,
 };
 
 pub(crate) fn check_rent_exempt(
@@ -41,6 +43,89 @@ pub fn get_reserve_available_balance(
             Err(LidoError::ReserveIsNotRentExempt)
         }
     }
+}
+
+pub struct CreateAccountOptions<'a, 'b> {
+    /// The amount to transfer from the reserve to the new account.
+    pub fund_amount: Lamports,
+    /// The size of the data section of the account.
+    pub data_size: u64,
+    /// Owner of the new account.
+    pub owner: Pubkey,
+    /// Seeds needed to sign on behalf of the new account.
+    pub sign_seeds: &'a [&'a [u8]],
+    /// The account to initialize.
+    pub account: &'a AccountInfo<'b>,
+}
+
+/// Create a new account and fund it from the reserve.
+///
+/// Unlike `system_instruction::create_account`, this will not fail if the account
+/// already exists. This is important, because if account creation would fail for
+/// stake accounts, then someone could transfer a small amount to the next stake
+/// account for a validator, and that would prevent us from delegating more stake
+/// to that validator.
+pub fn create_account_overwrite_if_exists<'a, 'b>(
+    solido_address: &Pubkey,
+    options: CreateAccountOptions<'a, 'b>,
+    reserve: &AccountInfo<'b>,
+    reserve_account_bump_seed: u8,
+    system_program: &AccountInfo<'b>,
+) -> ProgramResult {
+    let reserve_account_bump_seed = [reserve_account_bump_seed];
+    let reserve_account_seeds = &[
+        solido_address.as_ref(),
+        RESERVE_ACCOUNT,
+        &reserve_account_bump_seed[..],
+    ][..];
+
+    // `system_instruction::create_account` performs the same three steps as we
+    // do below, but it additionally has a check to prevent creating an account
+    // that has a nonzero balance, which we omit here.
+    invoke_signed(
+        &system_instruction::allocate(options.account.key, options.data_size),
+        &[options.account.clone(), system_program.clone()],
+        &[options.sign_seeds],
+    )?;
+    invoke_signed(
+        &system_instruction::assign(options.account.key, &options.owner),
+        &[options.account.clone(), system_program.clone()],
+        &[options.sign_seeds],
+    )?;
+    invoke_signed(
+        &system_instruction::transfer(reserve.key, options.account.key, options.fund_amount.0),
+        &[
+            reserve.clone(),
+            options.account.clone(),
+            system_program.clone(),
+        ],
+        &[&reserve_account_seeds, options.sign_seeds],
+    )?;
+    Ok(())
+}
+
+/// Call the stake program to initialize the account, but do not yet delegate it.
+pub fn initialize_stake_account_undelegated<'a>(
+    stake_authority: &Pubkey,
+    stake_account: &AccountInfo<'a>,
+    sysvar_rent: &AccountInfo<'a>,
+    stake_program: &AccountInfo<'a>,
+) -> ProgramResult {
+    invoke(
+        &stake_program::initialize(
+            stake_account.key,
+            &stake_program::Authorized {
+                staker: *stake_authority,
+                withdrawer: *stake_authority,
+            },
+            &stake_program::Lockup::default(),
+        ),
+        &[
+            stake_account.clone(),
+            sysvar_rent.clone(),
+            stake_program.clone(),
+        ],
+    )
 }
 
 /// Mint the given amount of stSOL and put it in the recipient's account.

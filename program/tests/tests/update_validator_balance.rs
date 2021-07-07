@@ -1,7 +1,7 @@
 #![cfg(feature = "test-bpf")]
 
 use crate::assert_solido_error;
-use crate::context::Context;
+use crate::context::{Context, StakeDeposit};
 
 use lido::error::LidoError;
 use lido::token::{Lamports, StLamports};
@@ -25,7 +25,7 @@ async fn test_update_validator_balance() {
     let initial_amount = Lamports(1_000_000_000);
     context.deposit(initial_amount).await;
     let stake_account = context
-        .stake_deposit(validator.vote_account, initial_amount)
+        .stake_deposit(validator.vote_account, StakeDeposit::Append, initial_amount)
         .await;
 
     // We should be able to update the validator balance. It should be a no-op,
@@ -191,7 +191,7 @@ async fn test_update_validator_balance() {
     let extra_amount = Lamports(150_000_000_000);
     context.deposit(extra_amount).await;
     let stake_account_2 = context
-        .stake_deposit(validator.vote_account, extra_amount)
+        .stake_deposit(validator.vote_account, StakeDeposit::Append, extra_amount)
         .await;
 
     // Donate into both stake accounts, so we have some change to observe.
