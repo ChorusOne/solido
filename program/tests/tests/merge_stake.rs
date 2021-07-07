@@ -110,8 +110,8 @@ async fn test_merge_stake_combinations() {
     let activating_stake_account =
         get_stake_account_from_seed(&mut context, &validator_vote_account, 1).await;
 
-    assert_eq!(active_stake_account.is_active(), true);
-    assert_eq!(activating_stake_account.is_activating(), true);
+    assert!(active_stake_account.is_active());
+    assert!(activating_stake_account.is_activating());
     let result = context.try_merge_stake(validator_vote_account, 0, 1).await;
     // Merging active to activating should fail.
     assert_solido_error!(result, LidoError::WrongStakeState);
@@ -119,8 +119,8 @@ async fn test_merge_stake_combinations() {
 
     let now_active_stake_account =
         get_stake_account_from_seed(&mut context, &validator_vote_account, 1).await;
-    assert_eq!(active_stake_account.is_active(), true);
-    assert_eq!(now_active_stake_account.is_active(), true);
+    assert!(active_stake_account.is_active());
+    assert!(now_active_stake_account.is_active());
     // Merging two activated stake accounts should succeed.
     context.merge_stake(validator_vote_account, 0, 1).await;
 }
