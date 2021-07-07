@@ -53,7 +53,7 @@ pub struct CreateAccountOptions<'a> {
     /// Owner of the new account.
     pub owner: Pubkey,
     /// Seeds needed to sign on behalf of the new account.
-    pub sign_seeds: &'a [&'a [u8]]
+    pub sign_seeds: &'a [&'a [u8]],
 }
 
 /// Create a new account and fund it from the reserve.

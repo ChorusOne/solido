@@ -9,8 +9,8 @@ use crate::{
         UpdateExchangeRateAccountsInfo, UpdateValidatorBalanceInfo,
     },
     logic::{
-        CreateAccountOptions, check_rent_exempt, create_account_overwrite_if_exists, deserialize_lido, distribute_fees,
-        initialize_stake_account_undelegated, mint_st_sol_to,
+        check_rent_exempt, create_account_overwrite_if_exists, deserialize_lido, distribute_fees,
+        initialize_stake_account_undelegated, mint_st_sol_to, CreateAccountOptions,
     },
     process_management::{
         process_add_maintainer, process_add_validator, process_change_reward_distribution,
@@ -213,16 +213,14 @@ pub fn process_stake_deposit(
         accounts.stake_program,
     )?;
 
-
     // Update the amount staked for this validator. Note that it could happen
     // that there is now more SOL in the account than what we put in there, if
     // some joker deposited into the account before we started using it. We don't
     // record that here; we will discover it later in `UpdateValidatorBalance`,
     // and then it will be treated in the same way as a validation reward.
     msg!("Staked {} out of the reserve.", amount);
-    validator.entry.stake_accounts_balance = (validator.entry.stake_accounts_balance
-        + amount)
-        .ok_or(LidoError::CalculationFailure)?;
+    validator.entry.stake_accounts_balance =
+        (validator.entry.stake_accounts_balance + amount).ok_or(LidoError::CalculationFailure)?;
 
     // Now we have two options:
     //

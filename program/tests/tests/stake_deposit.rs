@@ -1,6 +1,6 @@
 #![cfg(feature = "test-bpf")]
 
-use crate::context::{Context, StakeDeposit, id};
+use crate::context::{id, Context, StakeDeposit};
 use crate::{assert_error_code, assert_solido_error};
 
 use lido::error::LidoError;
@@ -148,14 +148,13 @@ async fn test_stake_deposit_succeeds_despite_donation() {
     let validator_before = &solido_before.validators.entries[0];
 
     // Figure out what the next stake account is going to be.
-    let (stake_account_addr, _) = validator_before.find_stake_account_address(
-        &id(),
-        &context.solido.pubkey(),
-        0,
-    );
+    let (stake_account_addr, _) =
+        validator_before.find_stake_account_address(&id(), &context.solido.pubkey(), 0);
 
     // Put some SOL in that account, so it is no longer non-existent.
-    context.fund(stake_account_addr, Lamports(107_000_000)).await;
+    context
+        .fund(stake_account_addr, Lamports(107_000_000))
+        .await;
 
     // Now we make a deposit and stake it. Despite the stake account already
     // existing (with SOL, but empty data), this should not fail.
@@ -177,7 +176,9 @@ async fn test_stake_deposit_succeeds_despite_donation() {
     );
 
     // After we update the balance, it should.
-    context.update_validator_balance(validator.vote_account).await;
+    context
+        .update_validator_balance(validator.vote_account)
+        .await;
     let solido = context.get_solido().await;
     let validator_entry = &solido.validators.entries[0].entry;
     assert_eq!(
