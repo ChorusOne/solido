@@ -45,7 +45,7 @@ macro_rules! accounts_struct_meta {
 ///     ExampleAccountsMeta, ExampleAccountsInfo {
 ///         pub frobnicator { is_signer: true, is_writable: false, },
 ///         const sysvar_rent = sysvar::rent::id(),
-///         pub ...widgets { is_signer: false, is_writable: false, },
+///         pub ...widgets { is_signer: false, is_writable: true, },
 ///     }
 /// }
 /// ```
@@ -105,11 +105,11 @@ macro_rules! accounts_struct {
             $(
                 ,
                 pub ... $multi_account:ident {
-                    // For now, only allow non-signer non-writable accounts in
+                    // For now, only allow non-signer writable accounts in
                     // the variadic parts, so we don't have to implement
                     // verification checks. We can add that when we need it.
                     is_signer: false,
-                    is_writable: false,
+                    is_writable: true,
                 }
             )?
             // Require a trailing comma.
@@ -174,7 +174,7 @@ macro_rules! accounts_struct {
                         result.push(accounts_struct_meta!(
                             *pubkey,
                             is_signer: false,
-                            is_writable: false,
+                            is_writable: true,
                         ));
                     }
                 )?
@@ -313,6 +313,19 @@ macro_rules! accounts_struct {
                 $(
                     // Collect all remaining AccountInfos in a slice.
                     let $multi_account = accounts_iter.as_slice();
+
+                    // Confirm that they are writable.
+                    for account in $multi_account {
+                        if !account.is_writable {
+                            msg!(
+                                "Account {} ({}) should have been writable.",
+                                stringify!($multi_account),
+                                account.key,
+                            );
+                            return Err(LidoError::InvalidAccountInfo.into());
+                        }
+                    }
+
                     // Also consume the iterator, so the no-excess-accounts check
                     // below does not trigger.
                     for _ in 0..$multi_account.len() {
@@ -529,7 +542,7 @@ mod test {
         accounts_struct! {
             TestAccountsMeta, TestAccountsInfo {
                 pub single { is_signer: false, is_writable: false, },
-                pub ...remainder { is_signer: false, is_writable: false, },
+                pub ...remainder { is_signer: false, is_writable: true, },
             }
         }
 
@@ -565,7 +578,7 @@ mod test {
             Pubkey::new_unique(),
         ];
         let is_signer = false;
-        let is_writable = false;
+        let is_writable = true;
         let mut lamports = vec![0; 3];
         let mut datas = vec![vec![]; 3];
         let owner = Pubkey::new_unique();

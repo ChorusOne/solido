@@ -330,7 +330,7 @@ accounts_struct! {
         // excluding) the end seed.
         pub ...stake_accounts {
             is_signer: false,
-            is_writable: false,
+            is_writable: true,
         },
     }
 }

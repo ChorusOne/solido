@@ -391,7 +391,7 @@ pub fn withdraw_excess_inactive_sol<'a, 'b>(
             ]],
         )?;
         msg!(
-            "Withdrew {} inactive stake back to the reserve at seed {}.",
+            "Withdrew {} inactive stake back to the reserve from stake account at seed {}.",
             excess_balance,
             stake_account_seed
         );
