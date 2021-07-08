@@ -111,6 +111,10 @@ async fn test_update_validator_balance() {
         .exchange_st_sol(treasury_fee)
         .unwrap();
     assert_eq!(treasury_fee_sol, Lamports(rewards.0 / 100 * 3));
+    // This was our first fee payment, so the total fees should equal the fees
+    // gained in this update.
+    assert_eq!(solido_after.metrics.fee_treasury_st_sol_total, treasury_fee);
+    assert_eq!(solido_after.metrics.fee_treasury_sol_total, treasury_fee_sol);
 
     // The developer balance increase, when converted back to SOL, should be equal
     // to 2% of the rewards.
@@ -120,6 +124,8 @@ async fn test_update_validator_balance() {
         .exchange_st_sol(developer_fee)
         .unwrap();
     assert_eq!(developer_fee_sol, Lamports(rewards.0 / 100 * 2));
+    assert_eq!(solido_after.metrics.fee_developer_st_sol_total, developer_fee);
+    assert_eq!(solido_after.metrics.fee_developer_sol_total, developer_fee_sol);
 
     // The validator balance increase, when converted back to SOL, should be equal
     // to 5% of the rewards.
@@ -129,6 +135,8 @@ async fn test_update_validator_balance() {
         .exchange_st_sol(validator_fee)
         .unwrap();
     assert_eq!(validator_fee_sol, Lamports(rewards.0 / 100 * 5));
+    assert_eq!(solido_after.metrics.fee_validation_st_sol_total, validator_fee);
+    assert_eq!(solido_after.metrics.fee_validation_sol_total, validator_fee_sol);
 
     // Finally, create a second deposit and stake account, so we also test that
     // `UpdateValidatorBalance` works when multiple stake accounts are
@@ -223,6 +231,11 @@ async fn test_update_validator_balance_withdraws_donations_to_the_reserve() {
         solido_after.validators.entries[0].entry.fee_credit,
         StLamports(5_000)
     );
+
+    // Furthermore, the donation minus fees should have been recorded as stSOL
+    // appreciation. 10% of the 100_000 lamports went to fees, so 90_000 went
+    // to stSOL appreciation.
+    assert_eq!(solido_after.metrics.st_sol_appreciation_sol_total, Lamports(90_000));
 }
 
 /// Test how many stake accounts per validator we can support.

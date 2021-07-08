@@ -694,10 +694,13 @@ impl RewardDistribution {
             .add((reward_per_validator * num_validators)?)?;
         assert!(total_fees <= amount);
 
+        let st_sol_appreciation_amount = (amount - total_fees)?;
+
         let result = Fees {
             treasury_amount,
             reward_per_validator,
             developer_amount,
+            st_sol_appreciation_amount,
         };
 
         Some(result)
@@ -713,6 +716,12 @@ pub struct Fees {
     pub treasury_amount: Lamports,
     pub reward_per_validator: Lamports,
     pub developer_amount: Lamports,
+
+    /// Remainder of the reward.
+    ///
+    /// This is not a fee, and it is not paid out explicitly, but when summed
+    /// with the other fields in this struct, that totals the input amount.
+    pub st_sol_appreciation_amount: Lamports,
 }
 
 #[cfg(test)]
@@ -1073,6 +1082,7 @@ mod test_lido {
                 treasury_amount: Lamports(300),
                 reward_per_validator: Lamports(200),
                 developer_amount: Lamports(100),
+                st_sol_appreciation_amount: Lamports(0),
             },
         );
 
@@ -1084,6 +1094,7 @@ mod test_lido {
                 treasury_amount: Lamports(500),
                 reward_per_validator: Lamports(83),
                 developer_amount: Lamports(166),
+                st_sol_appreciation_amount: Lamports(2),
             },
         );
 
@@ -1096,6 +1107,7 @@ mod test_lido {
                 treasury_amount: Lamports(3),
                 reward_per_validator: Lamports(2),
                 developer_amount: Lamports(1),
+                st_sol_appreciation_amount: Lamports(94),
             },
         );
 
@@ -1111,6 +1123,7 @@ mod test_lido {
                 treasury_amount: Lamports(288),
                 reward_per_validator: Lamports(389),
                 developer_amount: Lamports(322),
+                st_sol_appreciation_amount: Lamports(1),
             },
         );
     }
