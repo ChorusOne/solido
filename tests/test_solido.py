@@ -377,6 +377,7 @@ expected_result = {
     }
 }
 
+stake_account_address = result['StakeDeposit']['stake_account']
 del result['StakeDeposit'][
     'stake_account'
 ]  # This one we can't easily predict, don't compare it.
@@ -402,3 +403,26 @@ result = solido(
 )
 assert result is None, f'Huh, perform-maintenance performed {result}'
 print('> There was nothing to do, as expected.')
+
+
+# By donating to the stake account, we trigger maintenance to run UpdateValidatorBalance.
+print(
+    f'\nDonating to stake account {stake_account_address}, then running maintenance ...'
+)
+solana('transfer', stake_account_address, '0.1')
+
+result = solido(
+    'perform-maintenance',
+    '--solido-address',
+    solido_address,
+    '--solido-program-id',
+    solido_program_id,
+    keypair_path=maintainer.keypair_path,
+)
+assert 'UpdateValidatorBalance' in result
+assert result['UpdateValidatorBalance'] == {
+    'validator_vote_account': validator_vote_account.pubkey,
+    'expected_difference_lamports': 100_000_000,  # We donated 0.1 SOL.
+}
+
+print('> Performed UpdateValidatorBalance as expected.')
