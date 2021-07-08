@@ -3,7 +3,7 @@
 [![codecov](https://codecov.io/gh/ChorusOne/solido/branch/main/graph/badge.svg?token=USB921ZL6B)](https://codecov.io/gh/ChorusOne/solido)
 
 
-'Lido for Solana' is a Lido-DAO governed liquid staking protocol for the Solana blockchain. Anyone who stakes their SOL tokens with Lido will be issued an on-chain representation of SOL staking position with Lido validators, called stSOL. We will work to integrate stSOL widely into the Solana DeFi ecosystem to enable stSOL users to make use of their staked assets in a variety of applications.
+'Lido for Solana' is a Lido-DAO governed liquid staking protocol for the Solana blockchain. Anyone who stakes their SOL tokens with Lido will be issued an on-chain representation of SOL staking position with Lido validators, called stSOL.
 
 Lido for Solana gives you:
 
