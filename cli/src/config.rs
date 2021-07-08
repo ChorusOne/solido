@@ -83,7 +83,7 @@ pub fn get_option_from_env<T: FromStr>(str_key: &str) -> Option<T> {
 /// }
 /// ```
 /// When `merge_with_config(config_file)` is called, it will set the fields of
-/// the config file respecting the order from high to low:
+/// the config file respecting the order:
 ///     1. Set by passing `--foo-arg <arg>`.
 ///     2. Search the `config_file` for a key where all symbols "-" are
 ///        substituted with "_" from the argument before, e.g., "foo_arg".
@@ -206,11 +206,19 @@ impl FromStr for OutputMode {
     }
 }
 
+/// Resolve ~/.config/solana/id.json.
+fn get_default_keypair_path() -> PathBuf {
+    let home = std::env::var("HOME").expect("Expected $HOME to be set.");
+    let mut path = PathBuf::from(home);
+    path.push(".config/solana/id.json");
+    path
+}
+
 cli_opt_struct! {
     GeneralOpts {
         /// The keypair to sign and pay with. [default: ~/.config/solana/id.json]
         #[clap(long)]
-        keypair_path: PathBuf => PathBuf::default(),
+        keypair_path: PathBuf => get_default_keypair_path(),
 
         /// URL of cluster to connect to (e.g., https://api.devnet.solana.com for solana devnet)
         #[clap(long)]

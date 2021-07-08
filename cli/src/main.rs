@@ -47,17 +47,17 @@ mod util;
 // we write the default values so Clap can print them in help messages.
 #[derive(Clap, Debug)]
 struct Opts {
-    /// The keypair to sign and pay with.
-    #[clap(long, default_value = "~/.config/solana/id.json")]
-    keypair_path: PathBuf,
+    /// The keypair to sign and pay with. [default: ~/.config/solana/id.json]
+    #[clap(long)]
+    keypair_path: Option<PathBuf>,
 
-    /// URL of cluster to connect to (e.g., https://api.devnet.solana.com for solana devnet)
-    #[clap(long, default_value = "http://127.0.0.1:8899")]
-    cluster: String,
+    /// URL of cluster to connect to (e.g., https://api.devnet.solana.com for solana devnet) [default: http://127.0.0.1:8899]
+    #[clap(long)]
+    cluster: Option<String>,
 
-    /// Whether to output text or json.
-    #[clap(long = "output", default_value = "text", possible_values = &["text", "json"])]
-    output_mode: OutputMode,
+    /// Whether to output text or json. [default: "text"]
+    #[clap(long = "output", possible_values = &["text", "json"])]
+    output_mode: Option<OutputMode>,
 
     #[clap(subcommand)]
     subcommand: SubCommand,
@@ -68,16 +68,23 @@ struct Opts {
 }
 
 impl Opts {
-    fn merge(&mut self, general_opts: &mut GeneralOpts) -> Option<ConfigFile> {
+    fn merge(&mut self) -> Option<ConfigFile> {
+        let mut general_opts = GeneralOpts::default();
         let config_file = self.config.as_ref().map(|p| read_config(p.as_path()));
         general_opts.merge_with_config(config_file.as_ref());
 
-        self.keypair_path = general_opts.keypair_path().to_owned();
-        if self.keypair_path == PathBuf::default() {
-            self.keypair_path = get_default_keypair_path();
-        }
-        self.cluster = general_opts.cluster().to_owned();
-        self.output_mode = general_opts.output_mode().to_owned();
+        self.keypair_path = self
+            .keypair_path
+            .take()
+            .or(Some(general_opts.keypair_path().to_owned()));
+        self.cluster = self
+            .cluster
+            .take()
+            .or(Some(general_opts.cluster().to_owned()));
+        self.output_mode = self
+            .output_mode
+            .take()
+            .or(Some(general_opts.output_mode().to_owned()));
         config_file
     }
 }
@@ -212,14 +219,6 @@ impl<'a> SnapshotConfig<'a> {
     }
 }
 
-/// Resolve ~/.config/solana/id.json.
-fn get_default_keypair_path() -> PathBuf {
-    let home = std::env::var("HOME").expect("Expected $HOME to be set.");
-    let mut path = PathBuf::from(home);
-    path.push(".config/solana/id.json");
-    path
-}
-
 fn print_output<Output: fmt::Display + Serialize>(mode: OutputMode, output: &Output) {
     match mode {
         OutputMode::Text => println!("{}", output),
@@ -233,24 +232,23 @@ fn print_output<Output: fmt::Display + Serialize>(mode: OutputMode, output: &Out
 
 fn main() {
     let mut opts = Opts::parse();
-
-    let mut general_opts = GeneralOpts::default();
-    let config_file = opts.merge(&mut general_opts);
+    let config_file = opts.merge();
 
     solana_logger::setup_with_default("solana=info");
 
     let payer_keypair_path = opts.keypair_path;
-    let signer = &*get_signer(payer_keypair_path);
+    let signer = &*get_signer(payer_keypair_path.unwrap());
 
-    let rpc_client = RpcClient::new_with_commitment(opts.cluster, CommitmentConfig::confirmed());
+    let rpc_client =
+        RpcClient::new_with_commitment(opts.cluster.unwrap(), CommitmentConfig::confirmed());
     let snapshot_client = SnapshotClient::new(rpc_client);
 
+    let output_mode = opts.output_mode.unwrap();
     let mut config = Config {
         client: snapshot_client,
         signer,
-        output_mode: opts.output_mode,
+        output_mode: output_mode,
     };
-    let output_mode = opts.output_mode;
 
     merge_with_config(&mut opts.subcommand, config_file.as_ref());
     match opts.subcommand {
