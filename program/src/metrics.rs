@@ -152,3 +152,69 @@ impl LamportsHistogram {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    fn test_metrics_observe_fee_treasury() {
+        let mut m = Metrics::new();
+        m.observe_fee_treasury(Lamports(100), StLamports(100)).unwrap();
+        m.observe_fee_treasury(Lamports(100), StLamports(80)).unwrap();
+        assert_eq!(m.fee_treasury_sol_total, Lamports(200));
+        assert_eq!(m.fee_treasury_st_sol_total, StLamports(180));
+    }
+
+    fn test_metrics_observe_fee_validation() {
+        let mut m = Metrics::new();
+        m.observe_fee_validation(Lamports(100), StLamports(100)).unwrap();
+        m.observe_fee_validation(Lamports(100), StLamports(80)).unwrap();
+        assert_eq!(m.fee_validation_sol_total, Lamports(200));
+        assert_eq!(m.fee_validation_st_sol_total, StLamports(180));
+    }
+
+    fn test_metrics_observe_fee_developer() {
+        let mut m = Metrics::new();
+        m.observe_fee_developer(Lamports(100), StLamports(100)).unwrap();
+        m.observe_fee_developer(Lamports(100), StLamports(80)).unwrap();
+        assert_eq!(m.fee_developer_sol_total, Lamports(200));
+        assert_eq!(m.fee_developer_st_sol_total, StLamports(180));
+    }
+
+    fn test_metrics_observe_reward_st_sol_appreciation() {
+        let mut m = Metrics::new();
+        m.observe_reward_st_sol_appreciation(Lamports(100)).unwrap();
+        m.observe_reward_st_sol_appreciation(Lamports(200)).unwrap();
+        assert_eq!(m.st_sol_appreciation_sol_total, Lamports(300));
+    }
+
+    fn test_metrics_observe_deposit() {
+        let mut m = Metrics::new();
+
+        // 0.000_000_100 SOL, falls in bucket 0 (<= 0.000_1 SOL).
+        m.observe_deposit(Lamports(100)).unwrap();
+
+        // 1 SOL, falls in bucket 4. (<= 1 SOL)
+        m.observe_deposit(Lamports(1_000_000_000)).unwrap();
+
+        // 57 SOL, falls in bucket 6. (<= 100 SOL)
+        m.observe_deposit(Lamports(57_000_000_000)).unwrap();
+
+        // 21M SOL, falls in bucket 11. (<= u64::MAX SOL).
+        m.observe_deposit(Lamports(21_000_000_000_000_000)).unwrap();
+
+        assert_eq!(m.deposit_amount_sol.counts[0], 1);
+        assert_eq!(m.deposit_amount_sol.counts[1], 1);
+        assert_eq!(m.deposit_amount_sol.counts[2], 1);
+        assert_eq!(m.deposit_amount_sol.counts[3], 1);
+        assert_eq!(m.deposit_amount_sol.counts[4], 2);
+        assert_eq!(m.deposit_amount_sol.counts[5], 2);
+        assert_eq!(m.deposit_amount_sol.counts[6], 3);
+        assert_eq!(m.deposit_amount_sol.counts[7], 3);
+        assert_eq!(m.deposit_amount_sol.counts[8], 3);
+        assert_eq!(m.deposit_amount_sol.counts[9], 3);
+        assert_eq!(m.deposit_amount_sol.counts[10], 3);
+        assert_eq!(m.deposit_amount_sol.counts[11], 4);
+        assert_eq!(m.deposit_amount_sol.total, Lamports(21_000_058_000_000_100));
+    }
+}
