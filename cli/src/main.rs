@@ -80,15 +80,15 @@ impl Opts {
         self.keypair_path = self
             .keypair_path
             .take()
-            .or(Some(general_opts.keypair_path().to_owned()));
+            .or_else(|| Some(general_opts.keypair_path().to_owned()));
         self.cluster = self
             .cluster
             .take()
-            .or(Some(general_opts.cluster().to_owned()));
+            .or_else(|| Some(general_opts.cluster().to_owned()));
         self.output_mode = self
             .output_mode
             .take()
-            .or(Some(general_opts.output_mode().to_owned()));
+            .or_else(|| Some(general_opts.output_mode().to_owned()));
         config_file
     }
 }
@@ -251,7 +251,7 @@ fn main() {
     let mut config = Config {
         client: snapshot_client,
         signer,
-        output_mode: output_mode,
+        output_mode,
     };
 
     merge_with_config(&mut opts.subcommand, config_file.as_ref());
