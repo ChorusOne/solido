@@ -43,8 +43,9 @@ mod util;
 // in the `GeneralOpts` struct, we use a function to merge this from our own
 // struct.
 // This is due to the inability of our structs to handle Clap's sub-commands.
-// Some default values are going to be overwritten by `GeneralOpts`, but
-// we write the default values so Clap can print them in help messages.
+// Some values are going to be overwritten by `GeneralOpts`, but
+// we write the default values on the rustdoc so Clap can print them in help
+// messages.
 #[derive(Clap, Debug)]
 struct Opts {
     /// The keypair to sign and pay with. [default: ~/.config/solana/id.json]
