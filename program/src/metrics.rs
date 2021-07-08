@@ -10,8 +10,8 @@ use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use serde::Serialize;
 use solana_program::entrypoint::ProgramResult;
 
-use crate::token::{Lamports, StLamports};
 use crate::error::LidoError;
+use crate::token::{Lamports, StLamports};
 
 #[repr(C)]
 #[derive(
@@ -82,19 +82,31 @@ impl Metrics {
         }
     }
 
-    pub fn observe_fee_treasury(&mut self, amount_sol: Lamports, amount_st_sol: StLamports) -> Option<()> {
+    pub fn observe_fee_treasury(
+        &mut self,
+        amount_sol: Lamports,
+        amount_st_sol: StLamports,
+    ) -> Option<()> {
         self.fee_treasury_sol_total = (self.fee_treasury_sol_total + amount_sol)?;
         self.fee_treasury_st_sol_total = (self.fee_treasury_st_sol_total + amount_st_sol)?;
         Some(())
     }
 
-    pub fn observe_fee_validation(&mut self, amount_sol: Lamports, amount_st_sol: StLamports) -> Option<()> {
+    pub fn observe_fee_validation(
+        &mut self,
+        amount_sol: Lamports,
+        amount_st_sol: StLamports,
+    ) -> Option<()> {
         self.fee_validation_sol_total = (self.fee_validation_sol_total + amount_sol)?;
         self.fee_validation_st_sol_total = (self.fee_validation_st_sol_total + amount_st_sol)?;
         Some(())
     }
 
-    pub fn observe_fee_developer(&mut self, amount_sol: Lamports, amount_st_sol: StLamports) -> Option<()> {
+    pub fn observe_fee_developer(
+        &mut self,
+        amount_sol: Lamports,
+        amount_st_sol: StLamports,
+    ) -> Option<()> {
         self.fee_developer_sol_total = (self.fee_developer_sol_total + amount_sol)?;
         self.fee_developer_st_sol_total = (self.fee_developer_st_sol_total + amount_st_sol)?;
         Some(())
@@ -131,11 +143,11 @@ pub struct LamportsHistogram {
 
     /// Sum of all observations.
     #[serde(rename = "total_lamports")]
-    pub total: Lamports
+    pub total: Lamports,
 }
 
 impl LamportsHistogram {
-    // fmt: off
+    #[rustfmt::skip]
     pub const BUCKET_UPPER_BOUNDS: [Lamports; 12] = [
         Lamports(              100_000),   // 0.000_1 SOL
         Lamports(            1_000_000),     // 0.001 SOL
@@ -150,7 +162,6 @@ impl LamportsHistogram {
         Lamports(1_000_000_000_000_000), // 1_000_000 SOL
         Lamports(u64::MAX),
     ];
-    // fmt: on
 
     pub fn new() -> Self {
         Self {
@@ -184,24 +195,30 @@ mod test {
 
     fn test_metrics_observe_fee_treasury() {
         let mut m = Metrics::new();
-        m.observe_fee_treasury(Lamports(100), StLamports(100)).unwrap();
-        m.observe_fee_treasury(Lamports(100), StLamports(80)).unwrap();
+        m.observe_fee_treasury(Lamports(100), StLamports(100))
+            .unwrap();
+        m.observe_fee_treasury(Lamports(100), StLamports(80))
+            .unwrap();
         assert_eq!(m.fee_treasury_sol_total, Lamports(200));
         assert_eq!(m.fee_treasury_st_sol_total, StLamports(180));
     }
 
     fn test_metrics_observe_fee_validation() {
         let mut m = Metrics::new();
-        m.observe_fee_validation(Lamports(100), StLamports(100)).unwrap();
-        m.observe_fee_validation(Lamports(100), StLamports(80)).unwrap();
+        m.observe_fee_validation(Lamports(100), StLamports(100))
+            .unwrap();
+        m.observe_fee_validation(Lamports(100), StLamports(80))
+            .unwrap();
         assert_eq!(m.fee_validation_sol_total, Lamports(200));
         assert_eq!(m.fee_validation_st_sol_total, StLamports(180));
     }
 
     fn test_metrics_observe_fee_developer() {
         let mut m = Metrics::new();
-        m.observe_fee_developer(Lamports(100), StLamports(100)).unwrap();
-        m.observe_fee_developer(Lamports(100), StLamports(80)).unwrap();
+        m.observe_fee_developer(Lamports(100), StLamports(100))
+            .unwrap();
+        m.observe_fee_developer(Lamports(100), StLamports(80))
+            .unwrap();
         assert_eq!(m.fee_developer_sol_total, Lamports(200));
         assert_eq!(m.fee_developer_st_sol_total, StLamports(180));
     }

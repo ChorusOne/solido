@@ -231,24 +231,28 @@ pub fn distribute_fees<'a, 'b>(
         validator.fee_credit =
             (validator.fee_credit + per_validator_amount).ok_or(LidoError::CalculationFailure)?;
 
-        fee_validation_sol = (fee_validation_sol + fees.reward_per_validator).ok_or(LidoError::CalculationFailure)?;
-        fee_validation_st_sol = (fee_validation_st_sol + per_validator_amount).ok_or(LidoError::CalculationFailure)?;
+        fee_validation_sol = (fee_validation_sol + fees.reward_per_validator)
+            .ok_or(LidoError::CalculationFailure)?;
+        fee_validation_st_sol =
+            (fee_validation_st_sol + per_validator_amount).ok_or(LidoError::CalculationFailure)?;
     }
 
     // Also record our rewards in the metrics.
-    solido.metrics.observe_fee_treasury(
-        fees.treasury_amount,
-        treasury_amount,
-    ).ok_or(LidoError::CalculationFailure)?;
-    solido.metrics.observe_fee_validation(
-        fee_validation_sol,
-        fee_validation_st_sol,
-    ).ok_or(LidoError::CalculationFailure)?;
-    solido.metrics.observe_fee_developer(
-        fees.developer_amount,
-        developer_amount,
-    ).ok_or(LidoError::CalculationFailure)?;
-    solido.metrics.observe_reward_st_sol_appreciation(fees.st_sol_appreciation_amount)
+    solido
+        .metrics
+        .observe_fee_treasury(fees.treasury_amount, treasury_amount)
+        .ok_or(LidoError::CalculationFailure)?;
+    solido
+        .metrics
+        .observe_fee_validation(fee_validation_sol, fee_validation_st_sol)
+        .ok_or(LidoError::CalculationFailure)?;
+    solido
+        .metrics
+        .observe_fee_developer(fees.developer_amount, developer_amount)
+        .ok_or(LidoError::CalculationFailure)?;
+    solido
+        .metrics
+        .observe_reward_st_sol_appreciation(fees.st_sol_appreciation_amount)
         .ok_or(LidoError::CalculationFailure)?;
 
     Ok(())
