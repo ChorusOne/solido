@@ -340,6 +340,41 @@ impl fmt::Display for ShowSolidoOutput {
             self.solido.fee_recipients.developer_account
         )?;
 
+        writeln!(f, "\nMetrics:")?;
+        writeln!(
+            f,
+            "  Total treasury fee:       {}, valued at {} when it was paid",
+            self.solido.metrics.fee_treasury_st_sol_total,
+            self.solido.metrics.fee_treasury_sol_total,
+        )?;
+        writeln!(
+            f,
+            "  Total validation fee:     {}, valued at {} when it was paid",
+            self.solido.metrics.fee_validation_st_sol_total,
+            self.solido.metrics.fee_validation_sol_total,
+        )?;
+        writeln!(
+            f,
+            "  Total developer fee:      {}, valued at {} when it was paid",
+            self.solido.metrics.fee_developer_st_sol_total,
+            self.solido.metrics.fee_developer_sol_total,
+        )?;
+        writeln!(
+            f,
+            "  Total stSOL appreciation: {}",
+            self.solido.metrics.st_sol_appreciation_sol_total
+        )?;
+        writeln!(
+            f,
+            "  Total deposited:          {}",
+            self.solido.metrics.deposit_amount.total
+        )?;
+        writeln!(
+            f,
+            "  Number of deposits:       {}",
+            self.solido.metrics.deposit_amount.num_observations()
+        )?;
+
         writeln!(
             f,
             "\nValidators: {} in use out of {} that the instance can support",
