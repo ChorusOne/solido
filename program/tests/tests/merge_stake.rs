@@ -1,7 +1,7 @@
 #![cfg(feature = "test-bpf")]
 
 use crate::assert_solido_error;
-use crate::context::{Context, StakeDeposit};
+use crate::context::{get_account_info, Context, StakeDeposit};
 use lido::{error::LidoError, stake_account::StakeAccount, state::Validator, token::Lamports};
 use solana_program::pubkey::Pubkey;
 use solana_program_test::tokio;
@@ -10,12 +10,17 @@ use solana_sdk::signer::Signer;
 #[tokio::test]
 async fn test_successful_merge_activating_stake() {
     let (mut context, stake_account_pubkeys) = Context::new_with_two_stake_accounts().await;
+
+    let rent = context.get_rent().await;
     let solido_before = context.get_solido().await;
     let validator_vote_account = context.validator.as_ref().unwrap().vote_account;
+    let mut reserve_before = context.get_account(context.reserve_address).await;
+
     context.merge_stake(validator_vote_account, 0, 1).await;
 
     let account = context.try_get_account(stake_account_pubkeys[0]).await;
     assert!(account.is_none());
+
     let (meta, stake) = context.get_stake_state(stake_account_pubkeys[1]).await;
     let sum = 20_000_000_000 - meta.rent_exempt_reserve;
     assert_eq!(
@@ -25,6 +30,7 @@ async fn test_successful_merge_activating_stake() {
     );
 
     let solido_after = context.get_solido().await;
+    let mut reserve_after = context.get_account(context.reserve_address).await;
     assert_eq!(
         solido_after
             .validators
@@ -46,6 +52,19 @@ async fn test_successful_merge_activating_stake() {
     assert_eq!(
         validator_after.entry.stake_accounts_seed_begin,
         validator_before.entry.stake_accounts_seed_begin + 1,
+    );
+
+    let sol_before = solido_before.get_sol_balance(
+        &rent,
+        &get_account_info(&context.reserve_address, &mut reserve_before),
+    );
+    let sol_after = solido_after.get_sol_balance(
+        &rent,
+        &get_account_info(&context.reserve_address, &mut reserve_after),
+    );
+    assert_eq!(
+        sol_before, sol_after,
+        "Merging should not change the total amount of SOL."
     );
 }
 
@@ -74,6 +93,7 @@ async fn get_stake_account_from_seed(
     let (_, stake) = context.get_stake_state(stake_address).await;
     StakeAccount::from_delegated_account(stake_balance, &stake, &clock, &stake_history, seed)
 }
+
 // Test merging active to activating: should fail.
 // Test merging two activated stake accounts: should succeed.
 #[tokio::test]
@@ -121,8 +141,30 @@ async fn test_merge_stake_combinations() {
         get_stake_account_from_seed(&mut context, &validator_vote_account, 1).await;
     assert!(active_stake_account.is_active());
     assert!(now_active_stake_account.is_active());
+
+    let rent = context.get_rent().await;
+    let solido_before = context.get_solido().await;
+    let validator_vote_account = context.validator.as_ref().unwrap().vote_account;
+    let mut reserve_before = context.get_account(context.reserve_address).await;
+
     // Merging two activated stake accounts should succeed.
     context.merge_stake(validator_vote_account, 0, 1).await;
+
+    let solido_after = context.get_solido().await;
+    let mut reserve_after = context.get_account(context.reserve_address).await;
+
+    let sol_before = solido_before.get_sol_balance(
+        &rent,
+        &get_account_info(&context.reserve_address, &mut reserve_before),
+    );
+    let sol_after = solido_after.get_sol_balance(
+        &rent,
+        &get_account_info(&context.reserve_address, &mut reserve_after),
+    );
+    assert_eq!(
+        sol_before, sol_after,
+        "Merging should not change the total amount of SOL."
+    );
 }
 
 #[tokio::test]
@@ -159,14 +201,15 @@ async fn test_merge_with_donated_stake() {
         0,
     );
     context
-        .fund(from_stake_account, Lamports(1_000_000_000))
+        .fund(from_stake_account, Lamports(100_000_000_000))
         .await;
 
-    let reserve_balance_before = context.get_sol_balance(context.reserve_address).await;
-    context.merge_stake(validator_vote_account, 0, 1).await;
-    let reserve_balance_after = context.get_sol_balance(context.reserve_address).await;
+    let to_account = context.merge_stake(validator_vote_account, 0, 1).await;
+    let to_balance = context.get_sol_balance(to_account).await;
+
     assert_eq!(
-        (reserve_balance_before + Lamports(1_000_000_000)).unwrap(),
-        reserve_balance_after
+        to_balance,
+        // The initial two accounts had 10 SOL each, and we added a donation of 100.
+        Lamports(120_000_000_000),
     );
 }

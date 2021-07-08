@@ -37,61 +37,6 @@ async fn test_update_validator_balance() {
     let solido_after = context.get_solido().await;
     assert_eq!(solido_before, solido_after);
 
-    // Put additional SOL into the stake account, outside of Solido.
-    let donation = Lamports(100_000);
-    context.fund(stake_account, donation).await;
-
-    // If we now update the validator balance, we *should* see changes.
-    let treasury_before = context
-        .get_st_sol_balance(context.treasury_st_sol_account)
-        .await;
-    let developer_before = context
-        .get_st_sol_balance(context.developer_st_sol_account)
-        .await;
-    let solido_before = context.get_solido().await;
-
-    context
-        .update_validator_balance(validator.vote_account)
-        .await;
-    let solido_after = context.get_solido().await;
-    let treasury_after = context
-        .get_st_sol_balance(context.treasury_st_sol_account)
-        .await;
-    let developer_after = context
-        .get_st_sol_balance(context.developer_st_sol_account)
-        .await;
-
-    // For one, we expect the balance to be updated.
-    assert_eq!(
-        solido_before.validators.entries[0]
-            .entry
-            .stake_accounts_balance,
-        initial_amount
-    );
-    assert_eq!(
-        solido_after.validators.entries[0]
-            .entry
-            .stake_accounts_balance,
-        (initial_amount + donation).unwrap(),
-    );
-
-    // Aside from that, the additional amount should have caused fees to be paid.
-    // This is still the initial epoch, so the exchange rate is 1:1.
-    // The test context sets up the fee to be 10%, and that 10% is split into
-    // 5% validation, 3% treasury, and 2% developer.
-    assert_eq!(treasury_before, StLamports(0));
-    assert_eq!(developer_before, StLamports(0));
-    assert_eq!(
-        solido_before.validators.entries[0].entry.fee_credit,
-        StLamports(0)
-    );
-    assert_eq!(treasury_after, StLamports(3_000));
-    assert_eq!(developer_after, StLamports(2_000));
-    assert_eq!(
-        solido_after.validators.entries[0].entry.fee_credit,
-        StLamports(5_000)
-    );
-
     // Skip ahead a number of epochs.
     let epoch_schedule = context.context.genesis_config().epoch_schedule;
     let start_slot = epoch_schedule.first_normal_slot;
@@ -156,34 +101,34 @@ async fn test_update_validator_balance() {
     // arbitrary, but this is the amount that the current reward configuration
     // yields, so we have to deal with it.
     let rewards = (stake_after - stake_before).unwrap();
-    assert_eq!(rewards, Lamports(1246_030_107_208));
+    assert_eq!(rewards, Lamports(1246_030_107_210));
 
     // The treasury balance increase, when converted back to SOL, should be equal
-    // to 3% of the rewards. One lamport is lost due to rounding.
+    // to 3% of the rewards.
     let treasury_fee = (treasury_after - treasury_before).unwrap();
     let treasury_fee_sol = solido_after
         .exchange_rate
         .exchange_st_sol(treasury_fee)
         .unwrap();
-    assert_eq!(treasury_fee_sol, Lamports(rewards.0 / 100 * 3 - 1));
+    assert_eq!(treasury_fee_sol, Lamports(rewards.0 / 100 * 3));
 
     // The developer balance increase, when converted back to SOL, should be equal
-    // to 2% of the rewards. One lamport is lost due to rounding.
+    // to 2% of the rewards.
     let developer_fee = (developer_after - developer_before).unwrap();
     let developer_fee_sol = solido_after
         .exchange_rate
         .exchange_st_sol(developer_fee)
         .unwrap();
-    assert_eq!(developer_fee_sol, Lamports(rewards.0 / 100 * 2 - 1));
+    assert_eq!(developer_fee_sol, Lamports(rewards.0 / 100 * 2));
 
     // The validator balance increase, when converted back to SOL, should be equal
-    // to 5% of the rewards. One lamport is lost due to rounding.
+    // to 5% of the rewards.
     let validator_fee = (validator_after - validator_before).unwrap();
     let validator_fee_sol = solido_after
         .exchange_rate
         .exchange_st_sol(validator_fee)
         .unwrap();
-    assert_eq!(validator_fee_sol, Lamports(rewards.0 / 100 * 5 - 1));
+    assert_eq!(validator_fee_sol, Lamports(rewards.0 / 100 * 5));
 
     // Finally, create a second deposit and stake account, so we also test that
     // `UpdateValidatorBalance` works when multiple stake accounts are
@@ -199,18 +144,83 @@ async fn test_update_validator_balance() {
     context.fund(stake_account, donation).await;
     context.fund(stake_account_2, donation).await;
 
-    let solido_before = context.get_solido().await;
+    let reserve_before = context.get_sol_balance(context.reserve_address).await;
     context
         .update_validator_balance(validator.vote_account)
         .await;
-    let solido_after = context.get_solido().await;
+    let reserve_after = context.get_sol_balance(context.reserve_address).await;
 
-    let increase = (solido_after.validators.entries[0]
-        .entry
-        .stake_accounts_balance
-        - solido_before.validators.entries[0]
-            .entry
-            .stake_accounts_balance)
-        .unwrap();
+    // The donation should have been withdrawn back to the reserve.
+    let increase = (reserve_after - reserve_before).unwrap();
     assert_eq!(increase, (donation * 2).unwrap());
+}
+
+#[tokio::test]
+async fn test_update_validator_balance_withdraws_donations_to_the_reserve() {
+    let mut context = Context::new_with_maintainer().await;
+    let validator = context.add_validator().await;
+
+    let initial_amount = Lamports(2_000_000_000);
+    context.deposit(initial_amount).await;
+    let stake_account = context
+        .stake_deposit(validator.vote_account, StakeDeposit::Append, initial_amount)
+        .await;
+
+    // Donate to the stake account.
+    let donation = Lamports(100_000);
+    context.fund(stake_account, donation).await;
+
+    let reserve_before = context.get_sol_balance(context.reserve_address).await;
+    let treasury_before = context
+        .get_st_sol_balance(context.treasury_st_sol_account)
+        .await;
+    let developer_before = context
+        .get_st_sol_balance(context.developer_st_sol_account)
+        .await;
+    let solido_before = context.get_solido().await;
+
+    context
+        .update_validator_balance(validator.vote_account)
+        .await;
+
+    let reserve_after = context.get_sol_balance(context.reserve_address).await;
+    let stake_after = context.get_sol_balance(stake_account).await;
+
+    // The donation should have been withdrawn back to the reserve.
+    assert_eq!(reserve_after, (reserve_before + donation).unwrap());
+    assert_eq!(stake_after, initial_amount);
+
+    // The validator balance should match, even though just before `UpdateValidatorBalance`
+    // ran, there was also the donation in the account.
+    let solido_after = context.get_solido().await;
+    assert_eq!(
+        solido_after.validators.entries[0]
+            .entry
+            .stake_accounts_balance,
+        stake_after,
+    );
+
+    let treasury_after = context
+        .get_st_sol_balance(context.treasury_st_sol_account)
+        .await;
+    let developer_after = context
+        .get_st_sol_balance(context.developer_st_sol_account)
+        .await;
+
+    // The additional amount should have caused fees to be paid. This is still
+    // the initial epoch, so the exchange rate is 1:1. The test context sets up
+    // the fee to be 10%, and that 10% is split into 5% validation, 3% treasury,
+    // and 2% developer.
+    assert_eq!(treasury_before, StLamports(0));
+    assert_eq!(developer_before, StLamports(0));
+    assert_eq!(
+        solido_before.validators.entries[0].entry.fee_credit,
+        StLamports(0)
+    );
+    assert_eq!(treasury_after, StLamports(3_000));
+    assert_eq!(developer_after, StLamports(2_000));
+    assert_eq!(
+        solido_after.validators.entries[0].entry.fee_credit,
+        StLamports(5_000)
+    );
 }

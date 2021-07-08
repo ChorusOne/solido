@@ -374,7 +374,6 @@ impl SolidoState {
                 from_stake,
                 to_stake,
                 stake_authority: self.get_stake_authority(),
-                reserve_account: self.reserve_address,
             },
         )
     }
@@ -466,6 +465,8 @@ impl SolidoState {
                         treasury_st_sol_account: self.solido.fee_recipients.treasury_account,
                         developer_st_sol_account: self.solido.fee_recipients.developer_account,
                         stake_accounts: stake_account_addrs,
+                        reserve: self.reserve_address,
+                        stake_authority: self.get_stake_authority(),
                     },
                 );
                 let task = MaintenanceOutput::UpdateValidatorBalance {

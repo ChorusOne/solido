@@ -29,6 +29,7 @@ use lido::{
     state::{FeeRecipients, Lido, RewardDistribution, Validator},
     MINT_AUTHORITY,
 };
+use solana_sdk::account_info::AccountInfo;
 use spl_stake_pool::stake_program::{Meta, Stake, StakeState};
 
 // This id is only used throughout these tests.
@@ -286,6 +287,7 @@ impl Context {
     pub async fn new_with_two_stake_accounts() -> (Context, Vec<Pubkey>) {
         let mut result = Context::new_with_maintainer().await;
         let validator = result.add_validator().await;
+
         result.deposit(Lamports(20_000_000_000)).await;
         let mut stake_accounts = Vec::new();
         for _ in 0..2 {
@@ -723,12 +725,14 @@ impl Context {
     }
 
     /// Merge two accounts of a given validator.
+    ///
+    /// Returns the address that stake was merged into.
     pub async fn try_merge_stake(
         &mut self,
         validator_vote_account: Pubkey,
         from_seed: u64,
         to_seed: u64,
-    ) -> transport::Result<()> {
+    ) -> transport::Result<Pubkey> {
         let (from_stake_account, _) = Validator::find_stake_account_address(
             &id(),
             &self.solido.pubkey(),
@@ -754,12 +758,13 @@ impl Context {
                     stake_authority: self.stake_authority,
                     from_stake: from_stake_account,
                     to_stake: to_stake_account,
-                    reserve_account: self.reserve_address,
                 },
             )],
             vec![],
         )
-        .await
+        .await?;
+
+        Ok(to_stake_account)
     }
 
     /// Merge two accounts of a given validator.
@@ -768,7 +773,7 @@ impl Context {
         validator_vote_account: Pubkey,
         from_seed: u64,
         to_seed: u64,
-    ) {
+    ) -> Pubkey {
         self.try_merge_stake(validator_vote_account, from_seed, to_seed)
             .await
             .expect("Failed to call MergeStake on Solido instance.")
@@ -810,6 +815,8 @@ impl Context {
                     treasury_st_sol_account: self.treasury_st_sol_account,
                     developer_st_sol_account: self.developer_st_sol_account,
                     stake_accounts: stake_account_addrs,
+                    reserve: self.reserve_address,
+                    stake_authority: self.stake_authority,
                 },
             )],
             vec![],
@@ -906,6 +913,23 @@ impl Context {
             panic!("Stake state should have been StakeState::Stake.");
         }
     }
+}
+
+/// Return an `AccountInfo` for the given account, with `is_signer` and `is_writable` set to false.
+pub fn get_account_info<'a>(address: &'a Pubkey, account: &'a mut Account) -> AccountInfo<'a> {
+    let is_signer = false;
+    let is_writable = false;
+    let is_executable = false;
+    AccountInfo::new(
+        address,
+        is_signer,
+        is_writable,
+        &mut account.lamports,
+        &mut account.data,
+        &account.owner,
+        is_executable,
+        account.rent_epoch,
+    )
 }
 
 #[macro_export]
