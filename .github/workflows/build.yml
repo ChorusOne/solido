@@ -49,10 +49,19 @@ jobs:
       with:
         path: |
           ~/.rustup/toolchains
-          ~/.cargo
+          ~/.cargo/
+          # If we only cache ~/.cargo, for some reason Cargo still downloads crates later,
+          # so also include individual subdirectories. We do need the top-level .cargo dir
+          # as well because it holds some metadata files that make "cargo install" work.
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
           target/
-        key: build-1.7.3-v1-${{ hashFiles('Cargo.lock') }}
-        restore-keys: build-1.7.3-v1
+        key: build-1.7.3-v2-${{ hashFiles('Cargo.lock') }}
+        restore-keys: |
+          build-1.7.3-v2
+          build-1.7.3-v1
 
     - name: Install development tools
       run: |
@@ -121,10 +130,19 @@ jobs:
       with:
         path: |
           ~/.rustup/toolchains
-          ~/.cargo
+          ~/.cargo/
+          # If we only cache ~/.cargo, for some reason Cargo still downloads crates later,
+          # so also include individual subdirectories. We do need the top-level .cargo dir
+          # as well because it holds some metadata files that make "cargo install" work.
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
           target/
-        key: lint-1.7.3-v1-${{ hashFiles('Cargo.lock') }}
-        restore-keys: lint-1.7.3-v1
+        key: lint-1.7.3-v2-${{ hashFiles('Cargo.lock') }}
+        restore-keys: |
+          lint-1.7.3-v2
+          lint-1.7.3-v1
 
     - name: Install linters
       run: |
@@ -161,10 +179,19 @@ jobs:
         with:
           path: |
             ~/.rustup/toolchains
-            ~/.cargo
+            ~/.cargo/
+            # If we only cache ~/.cargo, for some reason Cargo still downloads crates later,
+            # so also include individual subdirectories. We do need the top-level .cargo dir
+            # as well because it holds some metadata files that make "cargo install" work.
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
             target/
-          key: coverage-1.7.3-v1-${{ hashFiles('Cargo.lock') }}
-          restore-keys: coverage-1.7.3-v1
+          key: coverage-1.7.3-v2-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            coverage-1.7.3-v2
+            coverage-1.7.3-v1
 
       - name: Install development tools
         run: |
