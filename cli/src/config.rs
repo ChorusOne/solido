@@ -1,4 +1,7 @@
-use std::{path::PathBuf, str::FromStr};
+use std::{
+    path::{Path, PathBuf},
+    str::FromStr,
+};
 
 use clap::Clap;
 use lido::state::Weight;
@@ -176,7 +179,7 @@ pub struct ConfigFile {
     pub values: Value,
 }
 
-pub fn read_config(config_path: &PathBuf) -> ConfigFile {
+pub fn read_config(config_path: &Path) -> ConfigFile {
     let file_content = std::fs::read(config_path).expect("Failed to open config file.");
     let values: Value = serde_json::from_slice(&file_content).expect("Error while reading config.");
     ConfigFile { values }

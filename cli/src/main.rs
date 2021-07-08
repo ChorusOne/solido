@@ -69,7 +69,7 @@ struct Opts {
 
 impl Opts {
     fn merge(&mut self, general_opts: &mut GeneralOpts) -> Option<ConfigFile> {
-        let config_file = self.config.as_ref().map(read_config);
+        let config_file = self.config.as_ref().map(|p| read_config(p.as_path()));
         general_opts.merge_with_config(config_file.as_ref());
 
         self.keypair_path = general_opts.keypair_path().to_owned();
