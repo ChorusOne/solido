@@ -170,6 +170,12 @@ impl LamportsHistogram {
         self.total = (self.total + amount).ok_or(LidoError::CalculationFailure)?;
         Ok(())
     }
+
+    pub fn num_observations(&self) -> u64 {
+        // Every observation falls in the last bucket, so it contains the total
+        // number of observations.
+        self.counts[self.counts.len() - 1]
+    }
 }
 
 #[cfg(test)]
@@ -234,6 +240,8 @@ mod test {
         assert_eq!(m.deposit_amount.counts[9], 3);
         assert_eq!(m.deposit_amount.counts[10], 3);
         assert_eq!(m.deposit_amount.counts[11], 4);
+
+        assert_eq!(m.deposit_amount.num_observations(), 4);
         assert_eq!(m.deposit_amount.total, Lamports(21_000_058_000_000_100));
     }
 }
