@@ -200,7 +200,6 @@ async fn test_update_validator_balance_withdraws_donations_to_the_reserve() {
         stake_after,
     );
 
-    // Our donation should have caused fees to be minted.
     let treasury_after = context
         .get_st_sol_balance(context.treasury_st_sol_account)
         .await;
@@ -208,10 +207,10 @@ async fn test_update_validator_balance_withdraws_donations_to_the_reserve() {
         .get_st_sol_balance(context.developer_st_sol_account)
         .await;
 
-    // Aside from that, the additional amount should have caused fees to be paid.
-    // This is still the initial epoch, so the exchange rate is 1:1.
-    // The test context sets up the fee to be 10%, and that 10% is split into
-    // 5% validation, 3% treasury, and 2% developer.
+    // The additional amount should have caused fees to be paid. This is still
+    // the initial epoch, so the exchange rate is 1:1. The test context sets up
+    // the fee to be 10%, and that 10% is split into 5% validation, 3% treasury,
+    // and 2% developer.
     assert_eq!(treasury_before, StLamports(0));
     assert_eq!(developer_before, StLamports(0));
     assert_eq!(
