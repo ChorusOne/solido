@@ -6,25 +6,36 @@
 //! anything useful from there is even harder. So what we do instead is embed
 //! counters in the on-chain state for the metrics that we are interested in.
 
-use crate::token::{Lamports, StLamports};
-use crate::error::LidoError;
+use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use serde::Serialize;
 use solana_program::entrypoint::ProgramResult;
 
-struct Metrics {
+use crate::token::{Lamports, StLamports};
+use crate::error::LidoError;
+
+#[repr(C)]
+#[derive(
+    Clone, Debug, Default, BorshDeserialize, BorshSerialize, BorshSchema, Eq, PartialEq, Serialize,
+)]
+pub struct Metrics {
     /// Fees paid to the treasury, in total since we started tracking, before conversion to stSOL.
     ///
     /// Note: rewards are paid in stSOL, so the treasury did not actually receive
     /// this SOL; it is the SOL that the treasury would have, if it could convert
     /// its fees into SOL immediately after receiving them.
+    #[serde(rename = "fee_treasury_total_lamports")]
     pub fee_treasury_sol_total: Lamports,
 
     /// Fees paid to validators, in total since we started tracking, before conversion to stSOL.
+    #[serde(rename = "fee_validation_total_lamports")]
     pub fee_validation_sol_total: Lamports,
 
     /// Fees paid to the developer, in total since we started tracking, before conversion to stSOL.
+    #[serde(rename = "fee_developer_total_lamports")]
     pub fee_developer_sol_total: Lamports,
 
     /// Total rewards that benefited stSOL holders, in total, since we started tracking.
+    #[serde(rename = "st_sol_appreciation_total_lamports")]
     pub st_sol_appreciation_sol_total: Lamports,
 
     /// Fees paid to the treasury, in total since we started tracking.
@@ -32,6 +43,7 @@ struct Metrics {
     /// The current value of this stSOL will be different than the value at the
     /// that the fees were paid; [`fee_treasury_sol_total`] tracks the SOL at the
     /// time the fees were paid.
+    #[serde(rename = "fee_treasury_total_st_lamports")]
     pub fee_treasury_st_sol_total: StLamports,
 
     /// Fees paid to validators, in total since we started tracking.
@@ -39,6 +51,7 @@ struct Metrics {
     /// The current value of this stSOL will be different than the value at the
     /// that the fees were paid; [`fee_validation_sol_total`] tracks the SOL at the
     /// time the fees were paid.
+    #[serde(rename = "fee_validation_total_st_lamports")]
     pub fee_validation_st_sol_total: StLamports,
 
     /// Fees paid to the developer, in total since we started tracking.
@@ -46,10 +59,11 @@ struct Metrics {
     /// The current value of this stSOL will be different than the value at the
     /// that the fees were paid; [`fee_developer_sol_total`] tracks the SOL at the
     /// time the fees were paid.
+    #[serde(rename = "fee_developer_total_st_lamports")]
     pub fee_developer_st_sol_total: StLamports,
 
     /// Histogram of deposits, including the total amount deposited since we started tracking.
-    pub deposit_amount_sol: LamportsHistogram,
+    pub deposit_amount: LamportsHistogram,
 }
 
 impl Metrics {
@@ -64,7 +78,7 @@ impl Metrics {
             fee_validation_st_sol_total: StLamports(0),
             fee_developer_st_sol_total: StLamports(0),
 
-            deposit_amount_sol: LamportsHistogram::new(),
+            deposit_amount: LamportsHistogram::new(),
         }
     }
 
@@ -92,7 +106,7 @@ impl Metrics {
     }
 
     pub fn observe_deposit(&mut self, amount: Lamports) -> ProgramResult {
-        self.deposit_amount_sol.observe(amount)
+        self.deposit_amount.observe(amount)
     }
 }
 
@@ -104,7 +118,11 @@ impl Metrics {
 /// more on the fee than the amount to move. The largest bucket is 1e6 SOL,
 /// as the largest validators currently have around 10x that amount of SOL
 /// staked, so we are unlikely to see that much deposited in a single transaction.
-struct LamportsHistogram {
+#[repr(C)]
+#[derive(
+    Clone, Debug, Default, BorshDeserialize, BorshSerialize, BorshSchema, Eq, PartialEq, Serialize,
+)]
+pub struct LamportsHistogram {
     /// Histogram buckets.
     ///
     /// `counts[i]` counts how many times a value less than or equal to
@@ -112,6 +130,7 @@ struct LamportsHistogram {
     pub counts: [u64; 12],
 
     /// Sum of all observations.
+    #[serde(rename = "total_lamports")]
     pub total: Lamports
 }
 
@@ -203,18 +222,18 @@ mod test {
         // 21M SOL, falls in bucket 11. (<= u64::MAX SOL).
         m.observe_deposit(Lamports(21_000_000_000_000_000)).unwrap();
 
-        assert_eq!(m.deposit_amount_sol.counts[0], 1);
-        assert_eq!(m.deposit_amount_sol.counts[1], 1);
-        assert_eq!(m.deposit_amount_sol.counts[2], 1);
-        assert_eq!(m.deposit_amount_sol.counts[3], 1);
-        assert_eq!(m.deposit_amount_sol.counts[4], 2);
-        assert_eq!(m.deposit_amount_sol.counts[5], 2);
-        assert_eq!(m.deposit_amount_sol.counts[6], 3);
-        assert_eq!(m.deposit_amount_sol.counts[7], 3);
-        assert_eq!(m.deposit_amount_sol.counts[8], 3);
-        assert_eq!(m.deposit_amount_sol.counts[9], 3);
-        assert_eq!(m.deposit_amount_sol.counts[10], 3);
-        assert_eq!(m.deposit_amount_sol.counts[11], 4);
-        assert_eq!(m.deposit_amount_sol.total, Lamports(21_000_058_000_000_100));
+        assert_eq!(m.deposit_amount.counts[0], 1);
+        assert_eq!(m.deposit_amount.counts[1], 1);
+        assert_eq!(m.deposit_amount.counts[2], 1);
+        assert_eq!(m.deposit_amount.counts[3], 1);
+        assert_eq!(m.deposit_amount.counts[4], 2);
+        assert_eq!(m.deposit_amount.counts[5], 2);
+        assert_eq!(m.deposit_amount.counts[6], 3);
+        assert_eq!(m.deposit_amount.counts[7], 3);
+        assert_eq!(m.deposit_amount.counts[8], 3);
+        assert_eq!(m.deposit_amount.counts[9], 3);
+        assert_eq!(m.deposit_amount.counts[10], 3);
+        assert_eq!(m.deposit_amount.counts[11], 4);
+        assert_eq!(m.deposit_amount.total, Lamports(21_000_058_000_000_100));
     }
 }
