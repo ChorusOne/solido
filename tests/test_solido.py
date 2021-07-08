@@ -349,7 +349,7 @@ if solido_instance['solido']['exchange_rate']['computed_in_epoch'] == current_ep
     assert result is None, f'Huh, perform-maintenance performed {result}'
     print('> There was nothing to do, as expected.')
 else:
-    update_exchange_rate_result = ['UpdateExchangeRate']
+    update_exchange_rate_result = 'UpdateExchangeRate'
     # Epoch is likely to be > 0 for the test-net runs
     assert (
         result == update_exchange_rate_result
