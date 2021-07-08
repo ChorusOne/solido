@@ -38,11 +38,18 @@ mod spl_token_utils;
 mod util;
 
 /// Solido -- Interact with Lido for Solana.
+// While it is nice to have Clap handle all inputs, we also want to read
+// from a config file and environmental variables. This fields are duplicated
+// in the `GeneralOpts` struct, we use a function to merge this from our own
+// struct.
+// This is due to the inability of our structs to handle Clap's sub-commands.
+// Some default values are going to be overwritten by `GeneralOpts`, but
+// we write the default values so Clap can print them in help messages.
 #[derive(Clap, Debug)]
 struct Opts {
-    /// The keypair to sign and pay with. [default: ~/.config/solana/id.json]
-    #[clap(long)]
-    keypair_path: Option<PathBuf>,
+    /// The keypair to sign and pay with.
+    #[clap(long, default_value = "~/.config/solana/id.json")]
+    keypair_path: PathBuf,
 
     /// URL of cluster to connect to (e.g., https://api.devnet.solana.com for solana devnet)
     #[clap(long, default_value = "http://127.0.0.1:8899")]
@@ -58,6 +65,21 @@ struct Opts {
     /// Optional config path
     #[clap(long)]
     config: Option<PathBuf>,
+}
+
+impl Opts {
+    fn merge(&mut self, general_opts: &mut GeneralOpts) -> Option<ConfigFile> {
+        let config_file = self.config.as_ref().map(read_config);
+        general_opts.merge_with_config(config_file.as_ref());
+
+        self.keypair_path = general_opts.keypair_path().to_owned();
+        if self.keypair_path == PathBuf::default() {
+            self.keypair_path = get_default_keypair_path();
+        }
+        self.cluster = general_opts.cluster().to_owned();
+        self.output_mode = general_opts.output_mode().to_owned();
+        config_file
+    }
 }
 
 #[derive(Clap, Debug)]
@@ -212,12 +234,12 @@ fn print_output<Output: fmt::Display + Serialize>(mode: OutputMode, output: &Out
 fn main() {
     let mut opts = Opts::parse();
 
-    // Read from config file
-    let config_file = opts.config.map(read_config);
-    let config_file = config_file.as_ref();
+    let mut general_opts = GeneralOpts::default();
+    let config_file = opts.merge(&mut general_opts);
+
     solana_logger::setup_with_default("solana=info");
 
-    let payer_keypair_path = opts.keypair_path.unwrap_or_else(get_default_keypair_path);
+    let payer_keypair_path = opts.keypair_path;
     let signer = &*get_signer(payer_keypair_path);
 
     let rpc_client = RpcClient::new_with_commitment(opts.cluster, CommitmentConfig::confirmed());
@@ -230,7 +252,7 @@ fn main() {
     };
     let output_mode = opts.output_mode;
 
-    merge_with_config(&mut opts.subcommand, config_file);
+    merge_with_config(&mut opts.subcommand, config_file.as_ref());
     match opts.subcommand {
         SubCommand::CreateSolido(cmd_opts) => {
             let result = config.with_snapshot(|config| command_create_solido(config, &cmd_opts));
