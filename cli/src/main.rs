@@ -49,14 +49,17 @@ mod util;
 #[derive(Clap, Debug)]
 struct Opts {
     /// The keypair to sign and pay with. [default: ~/.config/solana/id.json]
+    // Overwritten by `GeneralOpts`
     #[clap(long)]
     keypair_path: Option<PathBuf>,
 
     /// URL of cluster to connect to (e.g., https://api.devnet.solana.com for solana devnet) [default: http://127.0.0.1:8899]
+    // Overwritten by `GeneralOpts`
     #[clap(long)]
     cluster: Option<String>,
 
     /// Whether to output text or json. [default: "text"]
+    // Overwritten by `GeneralOpts`
     #[clap(long = "output", possible_values = &["text", "json"])]
     output_mode: Option<OutputMode>,
 
