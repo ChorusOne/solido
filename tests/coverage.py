@@ -32,12 +32,7 @@ def build_binaries(command: List[str]) -> Iterable[str]:
     new_env = dict(os.environ)
     new_env['RUSTFLAGS'] = '-Z instrument-coverage=except-unused-generics'
     result = subprocess.run(
-        [
-            'cargo',
-            NIGHTLY,
-            *command,
-            '--message-format=json'
-        ],
+        ['cargo', NIGHTLY, *command, '--message-format=json'],
         encoding='utf-8',
         capture_output=True,
         check=True,
@@ -102,7 +97,9 @@ def generate_report(executables: List[str]) -> None:
     # to get that to work, it interprets them as object files and says:
     # "Failed to load coverage: The file was not recognized as a valid
     # object file".
-    ignore_regex = '-ignore-filename-regex=\\.cargo/registry|solana-program-library|rustc/'
+    ignore_regex = (
+        '-ignore-filename-regex=\\.cargo/registry|solana-program-library|rustc/'
+    )
 
     # Export in "lcov" format for codecov.io to parse.
     cmd_lcov = [
@@ -122,7 +119,9 @@ def generate_report(executables: List[str]) -> None:
     # "llvm-cov export" does not support passing a demangler, so we need to pull
     # it through rustfilt manually. You can install "rustfilt" with
     # "cargo install rustfilt".
-    result = subprocess.run(['rustfilt'], check=True, capture_output=True, input=result_mangled.stdout)
+    result = subprocess.run(
+        ['rustfilt'], check=True, capture_output=True, input=result_mangled.stdout
+    )
 
     # Then write it with a magic name that codecov.io recognizes.
     with open('coverage/lcov.info', 'wb') as f:
