@@ -43,3 +43,7 @@ locally. Both are written to the `coverage` directory in the repository root.
 
 Collecting coverage requires a nightly Rust compiler and a few other tools, see
 `coverage.py` itself for details.
+
+Note that this script does not measure coverage of the `solana_program_test`
+tests in `program/tests`, as those tests run the BPF programs, and we don’t have
+a way to instrument those.
