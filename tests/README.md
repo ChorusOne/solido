@@ -33,3 +33,13 @@ disabled by default because some calls fail intentionally in the tests.
 Set the `NETWORK` environment variable to `https://api.testnet.solana.com` or
 devnet respectively, to run the tests against testnet or devnet. Beware of
 rate limits and airdrop limitations on these networks.
+
+## Coverage
+
+`coverage.py` will compile the tests and the CLI with coverage instrumentation,
+and then run the unit tests, and the test scripts in this directory. It outputs
+lcov files that are used for codecov.io, and an html report that you can browse
+locally. Both are written to the `coverage` directory in the repository root.
+
+Collecting coverage requires a nightly Rust compiler and a few other tools, see
+`coverage.py` itself for details.

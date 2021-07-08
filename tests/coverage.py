@@ -4,6 +4,13 @@
 Run the tests with coverage instrumentation, and collect the results.
 Most of this is based on [1].
 
+Requires the following programs:
+
+ * rustfilt (available on crates.io)
+ * cargo-cov, cargo-profdata (available on crates.io in cargo-binutils)
+ * llvm-cov, llvm-profdata (available as rustup component "llvm-tools-preview")
+ * A nightly rustc, see `NIGHTLY` below for the exact version.
+
 [1]: https://doc.rust-lang.org/beta/unstable-book/compiler-flags/instrument-coverage.html.
 """
 
