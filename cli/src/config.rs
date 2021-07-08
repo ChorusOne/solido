@@ -1,4 +1,7 @@
-use std::{path::PathBuf, str::FromStr};
+use std::{
+    path::{Path, PathBuf},
+    str::FromStr,
+};
 
 use clap::Clap;
 use lido::state::Weight;
@@ -76,11 +79,16 @@ pub fn get_option_from_env<T: FromStr>(str_key: &str) -> Option<T> {
 /// }
 ///
 /// impl FooOpts {
-///     pub fn merge_with_config(&mut self, config_file: &Option<ConfigFile>);
+///     pub fn merge_with_config_and_environment(&mut self, config_file: &Option<ConfigFile>);
 /// }
 /// ```
-/// When `merge_with_config(config_file)` is called, if the `foo` field has a
-/// value (set by passing `--foo-arg <pubkey>`) it does nothing, otherwise,
+/// When `merge_with_config(config_file)` is called, it will set the fields of
+/// the config file respecting the order:
+///     1. Set by passing `--foo-arg <arg>`.
+///     2. Search the `config_file` for a key where all symbols "-" are
+///        substituted with "_" from the argument before, e.g., "foo_arg".
+///     3. Search for an environmental variable where all the letters of the
+///        argument before are capitalized, e.g., "FOO_ARG".
 /// search `config_file` for the key 'foo_arg' and sets the field accordingly.
 /// The type must implement the `FromStr` trait.
 /// In the example, `def_arg` will have value 3 if not present in the config file.
@@ -98,7 +106,7 @@ macro_rules! cli_opt_struct {
             $(,)?
         }
     } => {
-        #[derive(Debug, Clap)]
+        #[derive(Debug, Clap, Default)]
         pub struct $name {
             $(
                 $(#[$attr])*
@@ -112,7 +120,7 @@ macro_rules! cli_opt_struct {
             /// present in the config file. When failing, prints all the missing
             /// fields.
             #[allow(dead_code)]
-            pub fn merge_with_config(&mut self, config_file: Option<&ConfigFile>) {
+            pub fn merge_with_config_and_environment(&mut self, config_file: Option<&ConfigFile>) {
                 let mut failed = false;
                 $(
                     let from_cli = self.$field.take();
@@ -171,7 +179,7 @@ pub struct ConfigFile {
     pub values: Value,
 }
 
-pub fn read_config(config_path: PathBuf) -> ConfigFile {
+pub fn read_config(config_path: &Path) -> ConfigFile {
     let file_content = std::fs::read(config_path).expect("Failed to open config file.");
     let values: Value = serde_json::from_slice(&file_content).expect("Error while reading config.");
     ConfigFile { values }
@@ -195,6 +203,34 @@ impl FromStr for OutputMode {
             "json" => Ok(OutputMode::Json),
             _ => Err("Invalid output mode, expected 'text' or 'json'."),
         }
+    }
+}
+
+/// Resolve ~/.config/solana/id.json.
+fn get_default_keypair_path() -> PathBuf {
+    let home = std::env::var("HOME").expect("Expected $HOME to be set.");
+    let mut path = PathBuf::from(home);
+    path.push(".config/solana/id.json");
+    path
+}
+
+cli_opt_struct! {
+    GeneralOpts {
+        /// The keypair to sign and pay with. [default: ~/.config/solana/id.json]
+        #[clap(long)]
+        keypair_path: PathBuf => get_default_keypair_path(),
+
+        /// URL of cluster to connect to (e.g., https://api.devnet.solana.com for solana devnet)
+        #[clap(long)]
+        cluster: String => "http://127.0.0.1:8899".to_owned(),
+
+        /// Whether to output text or json.
+        #[clap(long = "output", possible_values = &["text", "json"])]
+        output_mode: OutputMode => OutputMode::Text,
+
+        /// Optional config path
+        #[clap(long)]
+        config: PathBuf => PathBuf::default(),
     }
 }
 

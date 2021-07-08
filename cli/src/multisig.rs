@@ -43,15 +43,21 @@ pub struct MultisigOpts {
 }
 
 impl MultisigOpts {
-    pub fn merge_with_config(&mut self, config_file: Option<&ConfigFile>) {
+    pub fn merge_with_config_and_environment(&mut self, config_file: Option<&ConfigFile>) {
         match &mut self.subcommand {
-            SubCommand::CreateMultisig(opts) => opts.merge_with_config(config_file),
-            SubCommand::ShowMultisig(opts) => opts.merge_with_config(config_file),
-            SubCommand::ShowTransaction(opts) => opts.merge_with_config(config_file),
-            SubCommand::ProposeUpgrade(opts) => opts.merge_with_config(config_file),
-            SubCommand::ProposeChangeMultisig(opts) => opts.merge_with_config(config_file),
-            SubCommand::Approve(opts) => opts.merge_with_config(config_file),
-            SubCommand::ExecuteTransaction(opts) => opts.merge_with_config(config_file),
+            SubCommand::CreateMultisig(opts) => opts.merge_with_config_and_environment(config_file),
+            SubCommand::ShowMultisig(opts) => opts.merge_with_config_and_environment(config_file),
+            SubCommand::ShowTransaction(opts) => {
+                opts.merge_with_config_and_environment(config_file)
+            }
+            SubCommand::ProposeUpgrade(opts) => opts.merge_with_config_and_environment(config_file),
+            SubCommand::ProposeChangeMultisig(opts) => {
+                opts.merge_with_config_and_environment(config_file)
+            }
+            SubCommand::Approve(opts) => opts.merge_with_config_and_environment(config_file),
+            SubCommand::ExecuteTransaction(opts) => {
+                opts.merge_with_config_and_environment(config_file)
+            }
         }
     }
 }

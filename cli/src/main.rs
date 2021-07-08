@@ -38,19 +38,30 @@ mod spl_token_utils;
 mod util;
 
 /// Solido -- Interact with Lido for Solana.
+// While it is nice to have Clap handle all inputs, we also want to read
+// from a config file and environmental variables. This fields are duplicated
+// in the `GeneralOpts` struct, we use a function to merge this from our own
+// struct.
+// This is due to the inability of our structs to handle Clap's sub-commands.
+// Some values are going to be overwritten by `GeneralOpts`, but
+// we write the default values on the rustdoc so Clap can print them in help
+// messages.
 #[derive(Clap, Debug)]
 struct Opts {
     /// The keypair to sign and pay with. [default: ~/.config/solana/id.json]
+    // Overwritten by `GeneralOpts` if None.
     #[clap(long)]
     keypair_path: Option<PathBuf>,
 
-    /// URL of cluster to connect to (e.g., https://api.devnet.solana.com for solana devnet)
-    #[clap(long, default_value = "http://127.0.0.1:8899")]
-    cluster: String,
+    /// URL of cluster to connect to (e.g., https://api.devnet.solana.com for solana devnet) [default: http://127.0.0.1:8899]
+    // Overwritten by `GeneralOpts` if None.
+    #[clap(long)]
+    cluster: Option<String>,
 
-    /// Whether to output text or json.
-    #[clap(long = "output", default_value = "text", possible_values = &["text", "json"])]
-    output_mode: OutputMode,
+    /// Whether to output text or json. [default: "text"]
+    // Overwritten by `GeneralOpts` if None.
+    #[clap(long = "output", possible_values = &["text", "json"])]
+    output_mode: Option<OutputMode>,
 
     #[clap(subcommand)]
     subcommand: SubCommand,
@@ -58,6 +69,28 @@ struct Opts {
     /// Optional config path
     #[clap(long)]
     config: Option<PathBuf>,
+}
+
+impl Opts {
+    fn merge_with_config_and_environment(&mut self) -> Option<ConfigFile> {
+        let mut general_opts = GeneralOpts::default();
+        let config_file = self.config.as_ref().map(|p| read_config(p.as_path()));
+        general_opts.merge_with_config_and_environment(config_file.as_ref());
+
+        self.keypair_path = self
+            .keypair_path
+            .take()
+            .or_else(|| Some(general_opts.keypair_path().to_owned()));
+        self.cluster = self
+            .cluster
+            .take()
+            .or_else(|| Some(general_opts.cluster().to_owned()));
+        self.output_mode = self
+            .output_mode
+            .take()
+            .or_else(|| Some(general_opts.output_mode().to_owned()));
+        config_file
+    }
 }
 
 #[derive(Clap, Debug)]
@@ -190,14 +223,6 @@ impl<'a> SnapshotConfig<'a> {
     }
 }
 
-/// Resolve ~/.config/solana/id.json.
-fn get_default_keypair_path() -> PathBuf {
-    let home = std::env::var("HOME").expect("Expected $HOME to be set.");
-    let mut path = PathBuf::from(home);
-    path.push(".config/solana/id.json");
-    path
-}
-
 fn print_output<Output: fmt::Display + Serialize>(mode: OutputMode, output: &Output) {
     match mode {
         OutputMode::Text => println!("{}", output),
@@ -211,26 +236,25 @@ fn print_output<Output: fmt::Display + Serialize>(mode: OutputMode, output: &Out
 
 fn main() {
     let mut opts = Opts::parse();
+    let config_file = opts.merge_with_config_and_environment();
 
-    // Read from config file
-    let config_file = opts.config.map(read_config);
-    let config_file = config_file.as_ref();
     solana_logger::setup_with_default("solana=info");
 
-    let payer_keypair_path = opts.keypair_path.unwrap_or_else(get_default_keypair_path);
-    let signer = &*get_signer(payer_keypair_path);
+    let payer_keypair_path = opts.keypair_path;
+    let signer = &*get_signer(payer_keypair_path.unwrap());
 
-    let rpc_client = RpcClient::new_with_commitment(opts.cluster, CommitmentConfig::confirmed());
+    let rpc_client =
+        RpcClient::new_with_commitment(opts.cluster.unwrap(), CommitmentConfig::confirmed());
     let snapshot_client = SnapshotClient::new(rpc_client);
 
+    let output_mode = opts.output_mode.unwrap();
     let mut config = Config {
         client: snapshot_client,
         signer,
-        output_mode: opts.output_mode,
+        output_mode,
     };
-    let output_mode = opts.output_mode;
 
-    merge_with_config(&mut opts.subcommand, config_file);
+    merge_with_config_and_environment(&mut opts.subcommand, config_file.as_ref());
     match opts.subcommand {
         SubCommand::CreateSolido(cmd_opts) => {
             let result = config.with_snapshot(|config| command_create_solido(config, &cmd_opts));
@@ -279,17 +303,20 @@ fn main() {
     }
 }
 
-fn merge_with_config(subcommand: &mut SubCommand, config_file: Option<&ConfigFile>) {
+fn merge_with_config_and_environment(
+    subcommand: &mut SubCommand,
+    config_file: Option<&ConfigFile>,
+) {
     match subcommand {
-        SubCommand::CreateSolido(opts) => opts.merge_with_config(config_file),
-        SubCommand::AddValidator(opts) => opts.merge_with_config(config_file),
+        SubCommand::CreateSolido(opts) => opts.merge_with_config_and_environment(config_file),
+        SubCommand::AddValidator(opts) => opts.merge_with_config_and_environment(config_file),
         SubCommand::AddMaintainer(opts) | SubCommand::RemoveMaintainer(opts) => {
-            opts.merge_with_config(config_file)
+            opts.merge_with_config_and_environment(config_file)
         }
-        SubCommand::ShowSolido(opts) => opts.merge_with_config(config_file),
-        SubCommand::PerformMaintenance(opts) => opts.merge_with_config(config_file),
-        SubCommand::Multisig(opts) => opts.merge_with_config(config_file),
-        SubCommand::RunMaintainer(opts) => opts.merge_with_config(config_file),
+        SubCommand::ShowSolido(opts) => opts.merge_with_config_and_environment(config_file),
+        SubCommand::PerformMaintenance(opts) => opts.merge_with_config_and_environment(config_file),
+        SubCommand::Multisig(opts) => opts.merge_with_config_and_environment(config_file),
+        SubCommand::RunMaintainer(opts) => opts.merge_with_config_and_environment(config_file),
     }
 }
 
