@@ -49,13 +49,10 @@ jobs:
       with:
         path: |
           ~/.rustup/toolchains
-          ~/.cargo/bin/
-          ~/.cargo/registry/index/
-          ~/.cargo/registry/cache/
-          ~/.cargo/git/db/
+          ~/.cargo
           target/
-        key: build-1.7.3-v0-${{ hashFiles('Cargo.lock') }}
-        restore-keys: build-1.7.3-v0
+        key: build-1.7.3-v1-${{ hashFiles('Cargo.lock') }}
+        restore-keys: build-1.7.3-v1
 
     - name: Install development tools
       run: |
@@ -124,13 +121,10 @@ jobs:
       with:
         path: |
           ~/.rustup/toolchains
-          ~/.cargo/bin/
-          ~/.cargo/registry/index/
-          ~/.cargo/registry/cache/
-          ~/.cargo/git/db/
+          ~/.cargo
           target/
-        key: lint-1.7.3-v0-${{ hashFiles('Cargo.lock') }}
-        restore-keys: lint-1.7.3-v0
+        key: lint-1.7.3-v1-${{ hashFiles('Cargo.lock') }}
+        restore-keys: lint-1.7.3-v1
 
     - name: Install linters
       run: |
@@ -167,13 +161,10 @@ jobs:
         with:
           path: |
             ~/.rustup/toolchains
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
+            ~/.cargo
             target/
-          key: coverage-1.7.3-v0-${{ hashFiles('Cargo.lock') }}
-          restore-keys: coverage-1.7.3-v0
+          key: coverage-1.7.3-v1-${{ hashFiles('Cargo.lock') }}
+          restore-keys: coverage-1.7.3-v1
 
       - name: Install development tools
         run: |
