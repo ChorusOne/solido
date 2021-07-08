@@ -79,7 +79,7 @@ pub fn get_option_from_env<T: FromStr>(str_key: &str) -> Option<T> {
 /// }
 ///
 /// impl FooOpts {
-///     pub fn merge_with_config(&mut self, config_file: &Option<ConfigFile>);
+///     pub fn merge_with_config_and_environment(&mut self, config_file: &Option<ConfigFile>);
 /// }
 /// ```
 /// When `merge_with_config(config_file)` is called, it will set the fields of
@@ -120,7 +120,7 @@ macro_rules! cli_opt_struct {
             /// present in the config file. When failing, prints all the missing
             /// fields.
             #[allow(dead_code)]
-            pub fn merge_with_config(&mut self, config_file: Option<&ConfigFile>) {
+            pub fn merge_with_config_and_environment(&mut self, config_file: Option<&ConfigFile>) {
                 let mut failed = false;
                 $(
                     let from_cli = self.$field.take();

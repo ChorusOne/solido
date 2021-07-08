@@ -49,17 +49,17 @@ mod util;
 #[derive(Clap, Debug)]
 struct Opts {
     /// The keypair to sign and pay with. [default: ~/.config/solana/id.json]
-    // Overwritten by `GeneralOpts`
+    // Overwritten by `GeneralOpts` if None.
     #[clap(long)]
     keypair_path: Option<PathBuf>,
 
     /// URL of cluster to connect to (e.g., https://api.devnet.solana.com for solana devnet) [default: http://127.0.0.1:8899]
-    // Overwritten by `GeneralOpts`
+    // Overwritten by `GeneralOpts` if None.
     #[clap(long)]
     cluster: Option<String>,
 
     /// Whether to output text or json. [default: "text"]
-    // Overwritten by `GeneralOpts`
+    // Overwritten by `GeneralOpts` if None.
     #[clap(long = "output", possible_values = &["text", "json"])]
     output_mode: Option<OutputMode>,
 
@@ -72,10 +72,10 @@ struct Opts {
 }
 
 impl Opts {
-    fn merge(&mut self) -> Option<ConfigFile> {
+    fn merge_with_config_and_environment(&mut self) -> Option<ConfigFile> {
         let mut general_opts = GeneralOpts::default();
         let config_file = self.config.as_ref().map(|p| read_config(p.as_path()));
-        general_opts.merge_with_config(config_file.as_ref());
+        general_opts.merge_with_config_and_environment(config_file.as_ref());
 
         self.keypair_path = self
             .keypair_path
@@ -236,7 +236,7 @@ fn print_output<Output: fmt::Display + Serialize>(mode: OutputMode, output: &Out
 
 fn main() {
     let mut opts = Opts::parse();
-    let config_file = opts.merge();
+    let config_file = opts.merge_with_config_and_environment();
 
     solana_logger::setup_with_default("solana=info");
 
@@ -254,7 +254,7 @@ fn main() {
         output_mode,
     };
 
-    merge_with_config(&mut opts.subcommand, config_file.as_ref());
+    merge_with_config_and_environment(&mut opts.subcommand, config_file.as_ref());
     match opts.subcommand {
         SubCommand::CreateSolido(cmd_opts) => {
             let result = config.with_snapshot(|config| command_create_solido(config, &cmd_opts));
@@ -303,17 +303,20 @@ fn main() {
     }
 }
 
-fn merge_with_config(subcommand: &mut SubCommand, config_file: Option<&ConfigFile>) {
+fn merge_with_config_and_environment(
+    subcommand: &mut SubCommand,
+    config_file: Option<&ConfigFile>,
+) {
     match subcommand {
-        SubCommand::CreateSolido(opts) => opts.merge_with_config(config_file),
-        SubCommand::AddValidator(opts) => opts.merge_with_config(config_file),
+        SubCommand::CreateSolido(opts) => opts.merge_with_config_and_environment(config_file),
+        SubCommand::AddValidator(opts) => opts.merge_with_config_and_environment(config_file),
         SubCommand::AddMaintainer(opts) | SubCommand::RemoveMaintainer(opts) => {
-            opts.merge_with_config(config_file)
+            opts.merge_with_config_and_environment(config_file)
         }
-        SubCommand::ShowSolido(opts) => opts.merge_with_config(config_file),
-        SubCommand::PerformMaintenance(opts) => opts.merge_with_config(config_file),
-        SubCommand::Multisig(opts) => opts.merge_with_config(config_file),
-        SubCommand::RunMaintainer(opts) => opts.merge_with_config(config_file),
+        SubCommand::ShowSolido(opts) => opts.merge_with_config_and_environment(config_file),
+        SubCommand::PerformMaintenance(opts) => opts.merge_with_config_and_environment(config_file),
+        SubCommand::Multisig(opts) => opts.merge_with_config_and_environment(config_file),
+        SubCommand::RunMaintainer(opts) => opts.merge_with_config_and_environment(config_file),
     }
 }
 
