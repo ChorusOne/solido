@@ -48,11 +48,14 @@ jobs:
       uses: actions/cache@v2
       with:
         path: |
-          target
-          multisig/target
-        key: cargo-bpf-1.7.3-${{ hashFiles('Cargo.lock') }}
-        restore-keys: |
-          cargo-bpf-1.7.3
+          ~/.rustup/toolchains
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          target/
+        key: build-1.7.3-v0-${{ hashFiles('Cargo.lock') }}
+        restore-keys: build-1.7.3-v0
 
     - name: Install development tools
       run: |
@@ -119,10 +122,15 @@ jobs:
     - name: cache-build-artifacts
       uses: actions/cache@v2
       with:
-        path: target
-        key: cargo-clippy-1.7.3-${{ hashFiles('Cargo.lock') }}
-        restore-keys: |
-          cargo-clippy-1.7.3
+        path: |
+          ~/.rustup/toolchains
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          target/
+        key: lint-1.7.3-v0-${{ hashFiles('Cargo.lock') }}
+        restore-keys: lint-1.7.3-v0
 
     - name: Install linters
       run: |
