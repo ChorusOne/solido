@@ -116,3 +116,104 @@ macro_rules! impl_token {
 
 impl_token!(Lamports, "SOL");
 impl_token!(StLamports, "stSOL");
+
+/// Parse a numeric string as an amount of SOL.
+///
+/// Note that this parses the SOL, which can include a decimal point. It does
+/// not parse the number of lamports! This makes this function the semi-inverse
+/// of `Display` (only `Display` adds the "SOL" suffix, and we do not expect that
+/// here).
+impl std::str::FromStr for Lamports {
+    type Err = &'static str;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut value = 0_u64;
+        let mut is_after_decimal = false;
+        let mut exponent = 9_i32;
+        let mut had_digit = false;
+
+        // Walk the bytes one by one, we only expect ASCII digits or '.', so bytes
+        // suffice. We build up the value as we go, and if we get past the decimal
+        // point, we also track how far we are past it.
+        for ch in s.as_bytes() {
+            match ch {
+                b'0'..=b'9' => {
+                    value = value * 10 + ((ch - b'0') as u64);
+                    if is_after_decimal {
+                        exponent -= 1;
+                    }
+                    had_digit = true;
+                },
+                b'.' if !is_after_decimal => is_after_decimal = true,
+                b'.' => return Err("A SOL value can contain at most one '.' (decimal point)."),
+                b'_' => { /* As a courtesy, allow numeric underscores for readability. */ },
+                _ => return Err("Invalid SOL value, only digits, '_', and '.' are allowed."),
+            }
+
+            if exponent < 0 {
+                return Err("A SOL value can contain at most 9 digits after the decimal point.");
+            }
+        }
+
+        if !had_digit {
+            return Err("A SOL value must contain at least one digit.");
+        }
+
+        // If the value contained fewer than 9 digits behind the decimal point
+        // (or no decimal point at all), scale up the value so it is measured
+        // in lamports.
+        while exponent > 0 {
+            value = value * 10;
+            exponent -= 1;
+        }
+
+        Ok(Lamports(value))
+    }
+}
+
+#[cfg(test)]
+pub mod test {
+    use super::*;
+    use std::str::FromStr;
+
+    #[test]
+    fn test_lamports_from_str_roundtrip() {
+        let mut x = 0;
+        while x < u64::MAX / 17 {
+            let orig = Lamports(x);
+            let s = format!("{}", orig);
+            // Cut off the " SOL" suffix.
+            let without_suffix = &s[..s.len() - 4];
+            let reconstructed = Lamports::from_str(without_suffix).unwrap();
+            assert_eq!(reconstructed, orig);
+
+            x += 1;
+            x *= 17;
+        }
+    }
+
+    #[test]
+    fn test_lamports_from_str_examples() {
+        assert_eq!(Lamports::from_str("1_000"), Ok(Lamports(1_000_000_000_000)));
+        assert_eq!(Lamports::from_str("1"), Ok(Lamports(1_000_000_000)));
+        assert_eq!(Lamports::from_str("1."), Ok(Lamports(1_000_000_000)));
+        assert_eq!(Lamports::from_str("1.0"), Ok(Lamports(1_000_000_000)));
+        assert_eq!(Lamports::from_str("1.02"), Ok(Lamports(1_020_000_000)));
+        assert_eq!(Lamports::from_str("1.000_000_001"), Ok(Lamports(1_000_000_001)));
+        assert_eq!(Lamports::from_str(".1"), Ok(Lamports(100_000_000)));
+
+        // No digits.
+        assert!(Lamports::from_str("").is_err());
+        assert!(Lamports::from_str(".").is_err());
+        assert!(Lamports::from_str("_").is_err());
+        assert!(Lamports::from_str("_._").is_err());
+
+        // Too many digits after decimal point
+        assert!(Lamports::from_str("0.000_000_000_1").is_err());
+
+        // More than one decimal point.
+        assert!(Lamports::from_str("0.0.0").is_err());
+
+        // Invalid character.
+        assert!(Lamports::from_str("lol, sol").is_err());
+    }
+}
