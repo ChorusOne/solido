@@ -224,3 +224,49 @@ async fn test_update_validator_balance_withdraws_donations_to_the_reserve() {
         StLamports(5_000)
     );
 }
+
+/// Test how many stake accounts per validator we can support.
+///
+/// This test is mostly for informational purposes, if it fails, adjust the
+/// expected `max_accounts` below. We do need at least ~3 stake accounts per
+/// validator (one activating, one active but unmergeable due to a Solana bug,
+/// and one active and mergeable).
+#[tokio::test]
+async fn test_update_validator_balance_max_accounts() {
+    let mut context = Context::new_with_maintainer().await;
+    let validator = context.add_validator().await;
+
+    // The maximum number of stake accounts per validator that we can support,
+    // before UpdateValidatorBalance fails.
+    let max_accounts = 8;
+
+    for i in 0..=max_accounts {
+        let amount = Lamports(2_000_000_000);
+        context.deposit(amount).await;
+        let stake_account = context
+            .stake_deposit(validator.vote_account, StakeDeposit::Append, amount)
+            .await;
+
+        // Put some additional SOL in the stake account, so `UpdateValidatorBalance`
+        // has rewards to mint tokens for; this consumes more compute units than
+        // a no-op update, so we actually test the worst case.
+        context.fund(stake_account, Lamports(100_000)).await;
+
+        let result = context
+            .try_update_validator_balance(validator.vote_account)
+            .await;
+
+        if i < max_accounts {
+            assert!(
+                result.is_ok(),
+                "UpdateValidatorBalance should succeed with {} out of max {} stake accounts.",
+                i + 1,
+                max_accounts,
+            );
+        } else {
+            // One more account should fail. At the time of writing, it fails
+            // because it runs into the compute unit limit.
+            assert!(result.is_err());
+        }
+    }
+}
