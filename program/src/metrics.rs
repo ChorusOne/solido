@@ -41,7 +41,7 @@ pub struct Metrics {
     /// Fees paid to the treasury, in total since we started tracking.
     ///
     /// The current value of this stSOL will be different than the value at the
-    /// that the fees were paid; [`fee_treasury_sol_total`] tracks the SOL at the
+    /// time the fees were paid; [`fee_treasury_sol_total`] tracks the SOL at the
     /// time the fees were paid.
     #[serde(rename = "fee_treasury_total_st_lamports")]
     pub fee_treasury_st_sol_total: StLamports,
@@ -49,7 +49,7 @@ pub struct Metrics {
     /// Fees paid to validators, in total since we started tracking.
     ///
     /// The current value of this stSOL will be different than the value at the
-    /// that the fees were paid; [`fee_validation_sol_total`] tracks the SOL at the
+    /// time the fees were paid; [`fee_validation_sol_total`] tracks the SOL at the
     /// time the fees were paid.
     #[serde(rename = "fee_validation_total_st_lamports")]
     pub fee_validation_st_sol_total: StLamports,
@@ -57,7 +57,7 @@ pub struct Metrics {
     /// Fees paid to the developer, in total since we started tracking.
     ///
     /// The current value of this stSOL will be different than the value at the
-    /// that the fees were paid; [`fee_developer_sol_total`] tracks the SOL at the
+    /// time the fees were paid; [`fee_developer_sol_total`] tracks the SOL at the
     /// time the fees were paid.
     #[serde(rename = "fee_developer_total_st_lamports")]
     pub fee_developer_st_sol_total: StLamports,
