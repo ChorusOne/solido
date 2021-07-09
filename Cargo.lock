@@ -3648,6 +3648,7 @@ dependencies = [
  "solana-sdk",
  "solana-stake-program",
  "solana-vote-program",
+ "spl-associated-token-account",
  "spl-token",
  "tiny_http",
 ]

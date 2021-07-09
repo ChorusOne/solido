@@ -22,9 +22,12 @@
 use std::collections::{HashMap, HashSet};
 
 use anchor_lang::AccountDeserialize;
+use solana_client::client_error::{ClientError, ClientErrorKind};
 use solana_client::rpc_client::RpcClient;
+use solana_client::rpc_request::RpcError;
 use solana_sdk::account::Account;
 use solana_sdk::borsh::try_from_slice_unchecked;
+use solana_sdk::program_pack::{IsInitialized, Pack};
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::Signature;
 use solana_sdk::sysvar::stake_history::StakeHistory;
@@ -38,8 +41,6 @@ use lido::token::Lamports;
 use spl_token::solana_program::hash::Hash;
 
 use crate::error::{Error, MissingAccountError, SerializationError};
-use solana_client::client_error::{ClientError, ClientErrorKind};
-use solana_client::rpc_request::RpcError;
 
 pub enum SnapshotError {
     /// We tried to access an account, but it was not present in the snapshot.
@@ -145,6 +146,21 @@ pub struct Snapshot<'a> {
 }
 
 impl<'a> Snapshot<'a> {
+    /// Return whether an account with the given address exists.
+    pub fn account_exists(&mut self, address: &Pubkey) -> Result<bool> {
+        match self.accounts.get(address) {
+            // The account was included in the snapshot, and if it is Some, it
+            // did exist.
+            Some(account) => Ok(account.is_some()),
+            // The account was not included in the snapshot, we do not know if
+            // it existed.
+            None => Err(SnapshotError::MissingAccount),
+        }
+    }
+
+    /// Return the account at the given address.
+    ///
+    /// Fails with `MissingAccountError` if the account does not exist.
     pub fn get_account(&mut self, address: &Pubkey) -> Result<&'a Account> {
         self.accounts_referenced.push(*address);
         match self.accounts.get(address) {
@@ -177,6 +193,13 @@ impl<'a> Snapshot<'a> {
         let account = self.get_account(address)?;
         let mut data_ref = &account.data[..];
         let result = T::try_deserialize(&mut data_ref)?;
+        Ok(result)
+    }
+
+    /// Read an account, deserialize it with `solana_program_pack`.
+    pub fn get_unpack<T: Pack + IsInitialized>(&mut self, address: &Pubkey) -> Result<T> {
+        let account = self.get_account(address)?;
+        let result = T::unpack(&account.data[..])?;
         Ok(result)
     }
 
@@ -230,6 +253,12 @@ impl<'a> Snapshot<'a> {
                 Err(error.into())
             }
         }
+    }
+
+    /// Return the amount in an SPL token account.
+    pub fn get_spl_token_balance(&mut self, address: &Pubkey) -> Result<u64> {
+        let account: spl_token::state::Account = self.get_unpack(address)?;
+        Ok(account.amount)
     }
 
     /// Send a transaction without printing to stdout.

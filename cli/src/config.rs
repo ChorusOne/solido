@@ -4,10 +4,12 @@ use std::{
 };
 
 use clap::Clap;
-use lido::state::Weight;
 use serde::Deserialize;
 use serde_json::Value;
 use solana_sdk::pubkey::{ParsePubkeyError, Pubkey};
+
+use lido::state::Weight;
+use lido::token::Lamports;
 
 pub fn get_option_from_config<T: FromStr>(
     name: &'static str,
@@ -281,6 +283,22 @@ cli_opt_struct! {
         /// Address of the Multisig program.
         #[clap(long)]
         multisig_program_id: Pubkey,
+    }
+}
+
+cli_opt_struct! {
+    DepositOpts {
+        /// Address of the Solido program.
+        #[clap(long, value_name = "address")]
+        solido_program_id: Pubkey,
+
+        /// Account that stores the data for this Solido instance.
+        #[clap(long, value_name = "address")]
+        solido_address: Pubkey,
+
+        /// Amount to deposit, in SOL, using . as decimal separator.
+        #[clap(long, value_name = "sol")]
+        amount_sol: Lamports,
     }
 }
 

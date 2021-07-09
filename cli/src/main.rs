@@ -17,10 +17,10 @@ use solana_sdk::transaction::Transaction;
 
 use crate::config::*;
 use crate::error::{Abort, Error};
-use crate::helpers::command_add_maintainer;
-use crate::helpers::command_remove_maintainer;
-use crate::helpers::command_show_solido;
-use crate::helpers::{command_add_validator, command_create_solido};
+use crate::helpers::{
+    command_add_maintainer, command_add_validator, command_create_solido, command_deposit,
+    command_remove_maintainer, command_show_solido,
+};
 use crate::multisig::MultisigOpts;
 use crate::snapshot::{Snapshot, SnapshotClient};
 
@@ -124,10 +124,18 @@ REWARDS
 
     /// Adds a new validator
     AddValidator(AddValidatorOpts),
+
     /// Adds a maintainer to the Solido instance
     AddMaintainer(AddRemoveMaintainerOpts),
+
     /// Adds a maintainer to the Solido instance
     RemoveMaintainer(AddRemoveMaintainerOpts),
+
+    /// Deposit some SOL, receive stSOL in return.
+    ///
+    /// The recipient will be set to the associated token account for the signer.
+    /// If the associated token account does not yet exist, it will be created.
+    Deposit(DepositOpts),
 
     /// Show an instance of solido in detail
     ShowSolido(ShowSolidoOpts),
@@ -298,6 +306,11 @@ fn main() {
             let output = result.ok_or_abort_with("Failed to show Solido data.");
             print_output(output_mode, &output);
         }
+        SubCommand::Deposit(cmd_opts) => {
+            let result = command_deposit(&mut config, &cmd_opts);
+            let output = result.ok_or_abort_with("Failed to deposit.");
+            print_output(output_mode, &output);
+        }
     }
 }
 
@@ -311,6 +324,7 @@ fn merge_with_config_and_environment(
         SubCommand::AddMaintainer(opts) | SubCommand::RemoveMaintainer(opts) => {
             opts.merge_with_config_and_environment(config_file)
         }
+        SubCommand::Deposit(opts) => opts.merge_with_config_and_environment(config_file),
         SubCommand::ShowSolido(opts) => opts.merge_with_config_and_environment(config_file),
         SubCommand::PerformMaintenance(opts) => opts.merge_with_config_and_environment(config_file),
         SubCommand::Multisig(opts) => opts.merge_with_config_and_environment(config_file),

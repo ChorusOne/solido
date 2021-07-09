@@ -20,7 +20,8 @@ use crate::util::serialize_b58;
 use crate::REWARDS_WITHDRAW_AUTHORITY;
 use crate::{
     account_map::{AccountMap, AccountSet, EntryConstantSize, PubkeyAndEntry},
-    MINIMUM_STAKE_ACCOUNT_BALANCE, RESERVE_ACCOUNT, STAKE_AUTHORITY, VALIDATOR_STAKE_ACCOUNT,
+    MINIMUM_STAKE_ACCOUNT_BALANCE, MINT_AUTHORITY, RESERVE_ACCOUNT, STAKE_AUTHORITY,
+    VALIDATOR_STAKE_ACCOUNT,
 };
 
 pub const LIDO_VERSION: u8 = 0;
@@ -435,6 +436,22 @@ impl Lido {
             return Err(LidoError::InvalidRewardsWithdrawAuthority.into());
         }
         Ok(authority)
+    }
+
+    pub fn get_mint_authority(
+        &self,
+        program_id: &Pubkey,
+        solido_address: &Pubkey,
+    ) -> Result<Pubkey, ProgramError> {
+        Pubkey::create_program_address(
+            &[
+                &solido_address.to_bytes()[..],
+                MINT_AUTHORITY,
+                &[self.mint_authority_bump_seed],
+            ],
+            program_id,
+        )
+        .map_err(|_| ProgramError::InvalidSeeds)
     }
 
     /// Confirm that the amount to stake is more than the minimum stake amount,

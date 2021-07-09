@@ -142,10 +142,10 @@ impl std::str::FromStr for Lamports {
                         exponent -= 1;
                     }
                     had_digit = true;
-                },
+                }
                 b'.' if !is_after_decimal => is_after_decimal = true,
                 b'.' => return Err("A SOL value can contain at most one '.' (decimal point)."),
-                b'_' => { /* As a courtesy, allow numeric underscores for readability. */ },
+                b'_' => { /* As a courtesy, allow numeric underscores for readability. */ }
                 _ => return Err("Invalid SOL value, only digits, '_', and '.' are allowed."),
             }
 
@@ -198,7 +198,10 @@ pub mod test {
         assert_eq!(Lamports::from_str("1."), Ok(Lamports(1_000_000_000)));
         assert_eq!(Lamports::from_str("1.0"), Ok(Lamports(1_000_000_000)));
         assert_eq!(Lamports::from_str("1.02"), Ok(Lamports(1_020_000_000)));
-        assert_eq!(Lamports::from_str("1.000_000_001"), Ok(Lamports(1_000_000_001)));
+        assert_eq!(
+            Lamports::from_str("1.000_000_001"),
+            Ok(Lamports(1_000_000_001))
+        );
         assert_eq!(Lamports::from_str(".1"), Ok(Lamports(100_000_000)));
 
         // No digits.

@@ -154,8 +154,18 @@ impl AsPrettyError for ClientError {
 
 impl AsPrettyError for ProgramError {
     fn print_pretty(&self) {
-        println!("TODO: Add a nicer print_pretty impl for ProgramError.");
-        println!("Program error:\n{:?}", self);
+        print_red("Program error:");
+        match self {
+            ProgramError::Custom(error_code) => {
+                println!(" Custom error {} (0x{:x})", error_code, error_code);
+                println!("Note: ");
+                match LidoError::from_u32(*error_code) {
+                    Some(err) => println!("Solido error {} is {:?}", error_code, err),
+                    None => println!("This error is not a known Solido error."),
+                }
+            }
+            predefined_error => println!(" {:?}", predefined_error),
+        }
     }
 }
 

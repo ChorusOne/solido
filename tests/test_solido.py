@@ -358,8 +358,19 @@ else:
     ), f'\nExpected: {update_exchange_rate_result}\nActual:   {result}'
     print('> Updated the exchange rate, as expected in a change of Epoch.')
 
+print('\nDepositing 1 SOL ...')
+result = solido(
+    'deposit'
+    '--solido-address',
+    solido_address,
+    '--solido-program-id',
+    solido_program_id,
+    '--amount-sol',
+    '1.0'
+)
+print(result)
+
 print('\nSimulating 1 SOL deposit, then running maintenance ...')
-# TODO(#154): Perform an actual deposit here.
 reserve_account: str = solido_instance['reserve_account']
 solana('transfer', '--allow-unfunded-recipient', reserve_account, '1.0')
 print(f'> Funded reserve {reserve_account} with 1.0 SOL')
