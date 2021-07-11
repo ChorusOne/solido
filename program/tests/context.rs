@@ -394,7 +394,6 @@ impl Context {
             size_bytes,
             &system_program::id(),
         )];
-        println!("AUTH KEY: {}", node_key.pubkey());
         instructions.extend(vote_instruction::create_account(
             &payer,
             &vote_account.pubkey(),
@@ -403,7 +402,6 @@ impl Context {
                 authorized_voter: node_key.pubkey(),
                 authorized_withdrawer: id(),
                 commission: 100,
-                // ..VoteInit::default()
             },
             rent_voter,
         ));
@@ -415,22 +413,6 @@ impl Context {
         )
         .await
         .expect("Failed to create vote account.");
-
-        let acc = self
-            .context
-            .banks_client
-            .get_account(vote_account.pubkey())
-            .await
-            .unwrap()
-            .unwrap();
-        // let vote_acc = VoteState::deserialize(&acc.data).unwrap();
-        let vote_acc = bincode::deserialize::<VoteStateVersions>(&acc.data).unwrap();
-        if let VoteStateVersions::Current(v) = vote_acc {
-            println!("Auth withdrawer: {:?}", v.authorized_withdrawer);
-        }
-
-        println!("VOTE Bytes: {:?}", acc.data);
-
         vote_account.pubkey()
     }
 
