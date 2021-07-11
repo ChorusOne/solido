@@ -1,6 +1,7 @@
 use solana_program::program::invoke_signed;
 use solana_program::{account_info::AccountInfo, entrypoint::ProgramResult, msg, pubkey::Pubkey};
 
+use crate::vote_state::PartialVoteState;
 use crate::{
     error::LidoError,
     instruction::{
@@ -46,6 +47,12 @@ pub fn process_add_validator(
         *accounts.validator_vote_account.key,
         Validator::new(*accounts.validator_fee_st_sol_account.key, weight),
     )?;
+
+    // Deserialize also checks if the vote account is a valid Solido vote
+    // account: The withdraw authority should be set to the program_id, and it
+    // should have 100% commission.
+    let partial_vote_state =
+        PartialVoteState::deserialize(program_id, &accounts.validator_vote_account.data.borrow())?;
 
     lido.save(accounts.lido)
 }

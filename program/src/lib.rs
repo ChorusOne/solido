@@ -17,6 +17,8 @@ pub mod state;
 pub mod token;
 pub mod util;
 
+mod vote_state;
+
 /// Seed for reserve account that holds SOL.
 pub const RESERVE_ACCOUNT: &[u8] = b"reserve_account";
 

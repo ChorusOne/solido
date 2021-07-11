@@ -1741,6 +1741,7 @@ dependencies = [
  "arrayref",
  "bincode",
  "borsh",
+ "byteorder",
  "num-derive",
  "num-traits",
  "num_enum",
