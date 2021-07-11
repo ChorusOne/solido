@@ -28,7 +28,9 @@ impl PartialVoteState {
         if data.len() <= 69 {
             return Err(LidoError::InvalidVoteAccount);
         }
-        let version = (&data[0..4]).read_u32::<LittleEndian>().unwrap();
+        let version = (&data[0..4])
+            .read_u32::<LittleEndian>()
+            .map_err(|_| LidoError::InvalidVoteAccount)?;
         if version != 1 {
             msg!(
                 "Vote State account version should be 1, it's {} instead.",
@@ -43,7 +45,7 @@ impl PartialVoteState {
         let authorized_withdrawer = Pubkey::new_from_array(pubkey_buf);
         if &authorized_withdrawer != program_id {
             msg!(
-                "Vote Account's withdrawer from should be {}, is {} instead.",
+                "Vote Account's withdrawer should be {}, is {} instead.",
                 program_id,
                 authorized_withdrawer
             );
@@ -66,7 +68,7 @@ impl PartialVoteState {
     }
 }
 
-mod tests {
+mod test {
     use super::*;
     use std::str::FromStr;
 
