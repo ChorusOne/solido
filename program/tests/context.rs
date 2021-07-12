@@ -1,5 +1,7 @@
 //! Holds a test context, which makes it easier to test with a Solido instance set up.
 
+use lido::find_authority_program_address;
+use lido::REWARDS_WITHDRAW_AUTHORITY;
 use num_traits::cast::FromPrimitive;
 use solana_program::program_pack::Pack;
 use solana_program::rent::Rent;
@@ -394,13 +396,19 @@ impl Context {
             size_bytes,
             &system_program::id(),
         )];
+
+        let (withdraw_authority, _) = find_authority_program_address(
+            &id(),
+            &self.solido.pubkey(),
+            REWARDS_WITHDRAW_AUTHORITY,
+        );
         instructions.extend(vote_instruction::create_account(
             &payer,
             &vote_account.pubkey(),
             &VoteInit {
                 node_pubkey: node_key.pubkey(),
                 authorized_voter: node_key.pubkey(),
-                authorized_withdrawer: id(),
+                authorized_withdrawer: withdraw_authority,
                 commission: 100,
             },
             rent_voter,

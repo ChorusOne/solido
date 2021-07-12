@@ -43,16 +43,19 @@ pub fn process_add_validator(
     lido.check_manager(accounts.manager)?;
     lido.check_is_st_sol_account(&accounts.validator_fee_st_sol_account)?;
 
+    // Deserialize also checks if the vote account is a valid Solido vote
+    // account: The withdraw authority should be set to the program_id, and it
+    // should have 100% commission.
+    let partial_vote_state = PartialVoteState::deserialize(
+        program_id,
+        accounts.lido.key,
+        &accounts.validator_vote_account.data.borrow(),
+    )?;
+
     lido.validators.add(
         *accounts.validator_vote_account.key,
         Validator::new(*accounts.validator_fee_st_sol_account.key, weight),
     )?;
-
-    // Deserialize also checks if the vote account is a valid Solido vote
-    // account: The withdraw authority should be set to the program_id, and it
-    // should have 100% commission.
-    let partial_vote_state =
-        PartialVoteState::deserialize(program_id, &accounts.validator_vote_account.data.borrow())?;
 
     lido.save(accounts.lido)
 }

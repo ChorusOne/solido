@@ -1,4 +1,4 @@
-use crate::error::LidoError;
+use crate::{error::LidoError, find_authority_program_address, REWARDS_WITHDRAW_AUTHORITY};
 use byteorder::{LittleEndian, ReadBytesExt};
 use solana_program::{msg, pubkey::Pubkey};
 
@@ -24,7 +24,11 @@ impl PartialVoteState {
     /// Deserialize and test if a Vote Account is a Solido valid account.
     /// Solido vote accounts must have a 100% fee and have the withdraw
     /// authority set to the Solido program specified as `program_id`.
-    pub fn deserialize(program_id: &Pubkey, data: &[u8]) -> Result<Self, LidoError> {
+    pub fn deserialize(
+        program_id: &Pubkey,
+        lido_address: &Pubkey,
+        data: &[u8],
+    ) -> Result<Self, LidoError> {
         if data.len() <= 69 {
             return Err(LidoError::InvalidVoteAccount);
         }
@@ -43,10 +47,13 @@ impl PartialVoteState {
         let node_pubkey = Pubkey::new_from_array(pubkey_buf);
         pubkey_buf.copy_from_slice(&data[36..68]);
         let authorized_withdrawer = Pubkey::new_from_array(pubkey_buf);
-        if &authorized_withdrawer != program_id {
+
+        let (lido_withdraw_authority, _) =
+            find_authority_program_address(program_id, lido_address, REWARDS_WITHDRAW_AUTHORITY);
+        if authorized_withdrawer != lido_withdraw_authority {
             msg!(
                 "Vote Account's withdrawer should be {}, is {} instead.",
-                program_id,
+                lido_withdraw_authority,
                 authorized_withdrawer
             );
             return Err(LidoError::InvalidVoteAccount);
@@ -77,21 +84,26 @@ mod test {
     fn test_deserialize() {
         // excerpt from actual vote account
         let data = [
-            1, 0, 0, 0, 136, 99, 107, 146, 135, 142, 122, 24, 197, 142, 180, 124, 58, 189, 20, 89,
-            26, 0, 48, 141, 5, 176, 45, 58, 21, 245, 13, 42, 159, 41, 182, 16, 40, 202, 229, 244,
-            110, 43, 210, 6, 237, 212, 51, 217, 178, 201, 8, 236, 142, 194, 236, 247, 58, 237, 60,
-            218, 112, 49, 21, 0, 122, 105, 36, 135, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 136, 99, 107, 146, 135, 142, 122, 24, 197, 142, 180,
-            124, 58, 189, 20, 89, 26, 0, 48, 141, 5, 176, 45, 58, 21, 245, 13, 42, 159, 41, 182,
-            16, 0, 0, 0, 0, 0,
+            1, 0, 0, 0, 180, 53, 218, 159, 38, 49, 69, 73, 80, 121, 168, 248, 205, 118, 6, 230,
+            209, 124, 181, 128, 20, 104, 14, 54, 240, 62, 196, 143, 243, 28, 96, 243, 103, 85, 133,
+            162, 105, 18, 173, 186, 226, 83, 7, 70, 80, 145, 100, 154, 49, 103, 152, 90, 87, 169,
+            112, 255, 7, 37, 148, 29, 13, 170, 162, 35, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 180, 53, 218, 159, 38, 49, 69, 73, 80, 121, 168,
+            248, 205, 118, 6, 230, 209, 124, 181, 128, 20, 104, 14, 54, 240, 62, 196, 143, 243, 28,
+            96, 243, 0, 0, 0, 0, 0,
         ];
-
         let program_id = Pubkey::from_str("3kEkdGe68DuTKg6FhVrLPZ3Wm8EcUPCPjhCeu8WrGDoc").unwrap();
-        let partial_vote = PartialVoteState::deserialize(&program_id, &data).unwrap();
+        let lido_address =
+            Pubkey::from_str("HrdD6QcHDXadFe8EQjcGu45GvmnM7ZRuMzpdGz4WtaiN").unwrap();
+        let (lido_withdraw_authority, _) =
+            find_authority_program_address(&program_id, &lido_address, REWARDS_WITHDRAW_AUTHORITY);
+
+        let partial_vote =
+            PartialVoteState::deserialize(&program_id, &lido_address, &data).unwrap();
         let expected_partial_result = PartialVoteState {
             version: 1,
-            node_pubkey: Pubkey::from_str("ABQNjFWnmifA9qjRRtMjN2Ftzbma3gbSVY6sNPNFYtmM").unwrap(),
-            authorized_withdrawer: program_id,
+            node_pubkey: Pubkey::from_str("D8U1qEq5DeFTUsHpviJvnKjJBzuhqqJPCGFk85DRTz74").unwrap(),
+            authorized_withdrawer: lido_withdraw_authority,
             commission: 100,
         };
         assert_eq!(expected_partial_result, partial_vote);
@@ -101,16 +113,18 @@ mod test {
     fn test_less_commission() {
         // excerpt from actual vote account
         let data = [
-            1, 0, 0, 0, 136, 99, 107, 146, 135, 142, 122, 24, 197, 142, 180, 124, 58, 189, 20, 89,
-            26, 0, 48, 141, 5, 176, 45, 58, 21, 245, 13, 42, 159, 41, 182, 16, 40, 202, 229, 244,
-            110, 43, 210, 6, 237, 212, 51, 217, 178, 201, 8, 236, 142, 194, 236, 247, 58, 237, 60,
-            218, 112, 49, 21, 0, 122, 105, 36, 135, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 136, 99, 107, 146, 135, 142, 122, 24, 197, 142, 180,
-            124, 58, 189, 20, 89, 26, 0, 48, 141, 5, 176, 45, 58, 21, 245, 13, 42, 159, 41, 182,
-            16, 0, 0, 0, 0, 0,
+            1, 0, 0, 0, 180, 53, 218, 159, 38, 49, 69, 73, 80, 121, 168, 248, 205, 118, 6, 230,
+            209, 124, 181, 128, 20, 104, 14, 54, 240, 62, 196, 143, 243, 28, 96, 243, 103, 85, 133,
+            162, 105, 18, 173, 186, 226, 83, 7, 70, 80, 145, 100, 154, 49, 103, 152, 90, 87, 169,
+            112, 255, 7, 37, 148, 29, 13, 170, 162, 35, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 180, 53, 218, 159, 38, 49, 69, 73, 80, 121, 168,
+            248, 205, 118, 6, 230, 209, 124, 181, 128, 20, 104, 14, 54, 240, 62, 196, 143, 243, 28,
+            96, 243, 0, 0, 0, 0, 0,
         ];
 
         let program_id = Pubkey::from_str("3kEkdGe68DuTKg6FhVrLPZ3Wm8EcUPCPjhCeu8WrGDoc").unwrap();
-        assert!(PartialVoteState::deserialize(&program_id, &data).is_err());
+        let lido_address =
+            Pubkey::from_str("HrdD6QcHDXadFe8EQjcGu45GvmnM7ZRuMzpdGz4WtaiN").unwrap();
+        assert!(PartialVoteState::deserialize(&program_id, &lido_address, &data).is_err());
     }
 }
