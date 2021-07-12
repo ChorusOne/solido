@@ -181,9 +181,13 @@ macro_rules! accounts_struct {
                 result
             }
 
-            // The `AccountsMeta::try_from_slice` function is not always used, we
-            // have the pair of `AccountsMeta::to_vec` and `AccountsInfo::try_from_slice`
-            // that should always be used. This one doesn’t have to be used.
+            // The `AccountsMeta::try_from_slice` function is not always used,
+            // so we put an allow(dead_code) on it. For the accounts structs to
+            // be useful, the pair of `AccountsMeta::to_vec` and
+            // `AccountsInfo::try_from_slice` are used, so these do not have an
+            // allow(dead_code) annotation. But this `try_from_slice` is not
+            // always used, and since we can either generate it for all or not
+            // at all, allow it to be dead code.
             #[allow(dead_code)]
             pub fn try_from_slice(accounts: &[AccountMeta]) -> Result<$NameAccountMeta, ProgramError> {
                 let mut accounts_iter = accounts.iter();
