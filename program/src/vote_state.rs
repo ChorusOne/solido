@@ -5,6 +5,8 @@ use solana_program::{msg, pubkey::Pubkey};
 /// Structure used to read the first 3 fields of a Solana `VoteAccount`.
 /// The original `VoteAccount` structure cannot be used in a Solana
 /// program due to size constrains.
+
+const PARTIAL_VOTE_STATE_LEN: usize = 69;
 #[derive(Debug, PartialEq)]
 pub struct PartialVoteState {
     /// comes from an enum inside the `VoteState` structure
@@ -29,9 +31,10 @@ impl PartialVoteState {
         lido_address: &Pubkey,
         data: &[u8],
     ) -> Result<Self, LidoError> {
-        if data.len() <= 69 {
+        if data.len() <= PARTIAL_VOTE_STATE_LEN {
             return Err(LidoError::InvalidVoteAccount);
         }
+        // Read 4 bytes for u32.
         let version = (&data[0..4])
             .read_u32::<LittleEndian>()
             .map_err(|_| LidoError::InvalidVoteAccount)?;
@@ -43,8 +46,10 @@ impl PartialVoteState {
             return Err(LidoError::InvalidVoteAccount);
         }
         let mut pubkey_buf: [u8; 32] = Default::default();
+        // Read 32 bytes for Pubkey.
         pubkey_buf.copy_from_slice(&data[4..36]);
         let node_pubkey = Pubkey::new_from_array(pubkey_buf);
+        // Read 32 bytes for Pubkey.
         pubkey_buf.copy_from_slice(&data[36..68]);
         let authorized_withdrawer = Pubkey::new_from_array(pubkey_buf);
 
@@ -58,6 +63,7 @@ impl PartialVoteState {
             );
             return Err(LidoError::InvalidVoteAccount);
         }
+        // Read 1 byte for u8.
         let commission = data[68];
         if commission != 100 {
             msg!(
