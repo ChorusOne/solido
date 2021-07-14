@@ -407,7 +407,7 @@ assert result is None, f'Huh, perform-maintenance performed {result}'
 print('> There was nothing to do, as expected.')
 
 
-# By donating to the stake account, we trigger maintenance to run UpdateValidatorBalance.
+# By donating to the stake account, we trigger maintenance to run WithdrawInactiveStake.
 print(
     f'\nDonating to stake account {stake_account_address}, then running maintenance ...'
 )
@@ -421,10 +421,10 @@ result = solido(
     solido_program_id,
     keypair_path=maintainer.keypair_path,
 )
-assert 'UpdateValidatorBalance' in result
-assert result['UpdateValidatorBalance'] == {
+assert 'WithdrawInactiveStake' in result
+assert result['WithdrawInactiveStake'] == {
     'validator_vote_account': validator_vote_account.pubkey,
     'expected_difference_lamports': 100_000_000,  # We donated 0.1 SOL.
 }
 
-print('> Performed UpdateValidatorBalance as expected.')
+print('> Performed WithdrawInactiveStake as expected.')

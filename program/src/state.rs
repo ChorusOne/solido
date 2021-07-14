@@ -84,20 +84,20 @@ impl EntryConstantSize for () {
 /// modifications (validation rewards paid into stake accounts) that were not
 /// yet observed at the time of the update.
 ///
-/// When we observe the actual validator balance in `UpdateValidatorBalance`,
+/// When we observe the actual validator balance in `WithdrawInactiveStake`,
 /// the difference between the tracked balance and the observed balance, is the
 /// reward. We split this reward into a fee part, and a donation part, and
 /// update the tracked balances accordingly. This does not by itself change the
 /// exchange rate, but the new values will be used in the next exchange rate
 /// update.
 ///
-/// `UpdateValidatorBalance` is blocked in a given epoch, until we update the
+/// `WithdrawInactiveStake` is blocked in a given epoch, until we update the
 /// exchange rate in that epoch. Validation rewards are distributed at the start
 /// of the epoch. This means that in epoch `i`:
 ///
 /// 1. `UpdateExchangeRate` updates the exchange rate to what it was at the end
 ///    of epoch `i - 1`.
-/// 2. `UpdateValidatorBalance` runs for every validator, and observes the
+/// 2. `WithdrawInactiveStake` runs for every validator, and observes the
 ///    rewards. Deposits (including those for fees) in epoch `i` therefore use
 ///    the exchange rate at the end of epoch `i - 1`, so deposits in epoch `i`
 ///    do not benefit from rewards received in epoch `i`.

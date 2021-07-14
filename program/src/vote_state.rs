@@ -2,7 +2,7 @@ use crate::{error::LidoError, find_authority_program_address, REWARDS_WITHDRAW_A
 use byteorder::{LittleEndian, ReadBytesExt};
 use solana_program::{msg, pubkey::Pubkey};
 
-/// Structure used to read the first 3 fields of a Solana `VoteAccount`.
+/// Structure used to read the first 4 fields of a Solana `VoteAccount`.
 /// The original `VoteAccount` structure cannot be used in a Solana
 /// program due to size constrains.
 

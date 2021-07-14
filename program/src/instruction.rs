@@ -50,7 +50,7 @@ pub enum LidoInstruction {
     /// This can be called by anybody.
     UpdateExchangeRate,
     /// Observe any external changes in the balances of a validator's stake accounts.
-    UpdateValidatorBalance,
+    WithdrawInactiveStake,
     /// Claim rewards from the validator account and distribute rewards.
     CollectValidatorFee,
     Withdraw {
@@ -265,7 +265,7 @@ pub fn update_exchange_rate(
 accounts_struct! {
     // Note: there are no signers among these accounts, updating validator
     // balance is permissionless, anybody can do it.
-    UpdateValidatorBalanceMeta, UpdateValidatorBalanceInfo {
+    WithdrawInactiveStakeMeta, WithdrawInactiveStakeInfo {
         pub lido {
             is_signer: false,
             is_writable: true,
@@ -299,9 +299,6 @@ accounts_struct! {
         // Needed for the stake program, to withdraw from stake accounts.
         const sysvar_stake_history = sysvar::stake_history::id(),
 
-        // Needed for minting rewards.
-        const spl_token_program = spl_token::id(),
-
         // Needed to withdraw from stake accounts.
         const stake_program = stake_program::program::id(),
 
@@ -314,14 +311,12 @@ accounts_struct! {
     }
 }
 
-pub fn update_validator_balance(
+pub fn withdraw_from_inactive_stake(
     program_id: &Pubkey,
-    accounts: &UpdateValidatorBalanceMeta,
+    accounts: &WithdrawInactiveStakeMeta,
 ) -> Instruction {
     // There is no reason why `try_to_vec` should fail here.
-    let data = LidoInstruction::UpdateValidatorBalance
-        .try_to_vec()
-        .unwrap();
+    let data = LidoInstruction::WithdrawInactiveStake.try_to_vec().unwrap();
     Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),

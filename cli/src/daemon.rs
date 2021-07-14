@@ -36,8 +36,8 @@ struct MaintenanceMetrics {
     /// Number of times we performed `UpdateExchangeRate`.
     transactions_update_exchange_rate: u64,
 
-    /// Number of times we performed `UpdateValidatorBalance`.
-    transactions_update_validator_balance: u64,
+    /// Number of times we performed `WithdrawInactiveStake`.
+    transactions_withdraw_inactive_stake: u64,
 
     /// Number of times we performed `CollectValidatorFee`
     transactions_collect_validator_fee: u64,
@@ -79,8 +79,8 @@ impl MaintenanceMetrics {
                         .with_label("operation", "StakeDeposit".to_string()),
                     Metric::new(self.transactions_update_exchange_rate)
                         .with_label("operation", "UpdateExchangeRate".to_string()),
-                    Metric::new(self.transactions_update_validator_balance)
-                        .with_label("operation", "UpdateValidatorBalance".to_string()),
+                    Metric::new(self.transactions_withdraw_inactive_stake)
+                        .with_label("operation", "WithdrawInactiveStake".to_string()),
                     Metric::new(self.transactions_collect_validator_fee)
                         .with_label("operation", "CollectValidatorFee".to_string()),
                     Metric::new(self.transactions_merge_stake)
@@ -123,7 +123,7 @@ fn run_main_loop(
         errors: 0,
         transactions_stake_deposit: 0,
         transactions_update_exchange_rate: 0,
-        transactions_update_validator_balance: 0,
+        transactions_withdraw_inactive_stake: 0,
         transactions_collect_validator_fee: 0,
         transactions_merge_stake: 0,
     };
@@ -151,8 +151,8 @@ fn run_main_loop(
                         MaintenanceOutput::UpdateExchangeRate => {
                             metrics.transactions_update_exchange_rate += 1;
                         }
-                        MaintenanceOutput::UpdateValidatorBalance { .. } => {
-                            metrics.transactions_update_validator_balance += 1;
+                        MaintenanceOutput::WithdrawInactiveStake { .. } => {
+                            metrics.transactions_withdraw_inactive_stake += 1;
                         }
                         MaintenanceOutput::CollectValidatorFee { .. } => {
                             metrics.transactions_collect_validator_fee += 1

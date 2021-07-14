@@ -9,7 +9,7 @@ use lido::token::{Lamports, StLamports};
 use solana_program_test::tokio;
 
 #[tokio::test]
-async fn test_update_validator_balance() {
+async fn test_withdraw_inactive_stake() {
     let mut context = Context::new_with_maintainer().await;
     let validator = context.add_validator().await;
 
@@ -85,7 +85,7 @@ async fn test_update_validator_balance() {
     let rewards = context.collect_validator_fee(validator.vote_account).await;
     assert_eq!(rewards, Lamports(1246_030_107_210));
     context
-        .update_validator_balance(validator.vote_account)
+        .withdraw_inactive_stake(validator.vote_account)
         .await;
     let treasury_after = context
         .get_st_sol_balance(context.treasury_st_sol_account)
@@ -147,7 +147,7 @@ async fn test_update_validator_balance() {
     );
 
     // Finally, create a second deposit and stake account, so we also test that
-    // `UpdateValidatorBalance` works when multiple stake accounts are
+    // `WithdrawInactiveStake` works when multiple stake accounts are
     // involved.
     let extra_amount = Lamports(150_000_000_000);
     context.deposit(extra_amount).await;
@@ -162,7 +162,7 @@ async fn test_update_validator_balance() {
 
     let reserve_before = context.get_sol_balance(context.reserve_address).await;
     context
-        .update_validator_balance(validator.vote_account)
+        .withdraw_inactive_stake(validator.vote_account)
         .await;
     let reserve_after = context.get_sol_balance(context.reserve_address).await;
 
@@ -172,7 +172,7 @@ async fn test_update_validator_balance() {
 }
 
 #[tokio::test]
-async fn test_update_validator_balance_withdraws_donations_to_the_reserve() {
+async fn test_withdraw_inactive_stake_withdraws_donations_to_the_reserve() {
     let mut context = Context::new_with_maintainer().await;
     let validator = context.add_validator().await;
 
@@ -199,7 +199,7 @@ async fn test_update_validator_balance_withdraws_donations_to_the_reserve() {
     let vote_donation = context.collect_validator_fee(validator.vote_account).await;
     let donations = (vote_donation + donation).unwrap();
     context
-        .update_validator_balance(validator.vote_account)
+        .withdraw_inactive_stake(validator.vote_account)
         .await;
 
     let reserve_after = context.get_sol_balance(context.reserve_address).await;
@@ -209,7 +209,7 @@ async fn test_update_validator_balance_withdraws_donations_to_the_reserve() {
     assert_eq!(reserve_after, (reserve_before + donations).unwrap());
     assert_eq!(stake_after, initial_amount);
 
-    // The validator balance should match, even though just before `UpdateValidatorBalance`
+    // The validator balance should match, even though just before `WithdrawInactiveStake`
     // ran, there was also the donation in the account.
     let solido_after = context.get_solido().await;
     assert_eq!(
@@ -259,12 +259,12 @@ async fn test_update_validator_balance_withdraws_donations_to_the_reserve() {
 /// validator (one activating, one active but unmergeable due to a Solana bug,
 /// and one active and mergeable).
 #[tokio::test]
-async fn test_update_validator_balance_max_accounts() {
+async fn test_withdraw_inactive_stake_max_accounts() {
     let mut context = Context::new_with_maintainer().await;
     let validator = context.add_validator().await;
 
     // The maximum number of stake accounts per validator that we can support,
-    // before UpdateValidatorBalance fails.
+    // before WithdrawInactiveStake fails.
     let max_accounts = 9;
 
     for i in 0..=max_accounts {
@@ -274,19 +274,19 @@ async fn test_update_validator_balance_max_accounts() {
             .stake_deposit(validator.vote_account, StakeDeposit::Append, amount)
             .await;
 
-        // Put some additional SOL in the stake account, so `UpdateValidatorBalance`
+        // Put some additional SOL in the stake account, so `WithdrawInactiveStake`
         // has rewards to mint tokens for; this consumes more compute units than
         // a no-op update, so we actually test the worst case.
         context.fund(stake_account, Lamports(100_000)).await;
 
         let result = context
-            .try_update_validator_balance(validator.vote_account)
+            .try_withdraw_inactive_stake(validator.vote_account)
             .await;
 
         if i < max_accounts {
             assert!(
                 result.is_ok(),
-                "UpdateValidatorBalance should succeed with {} out of max {} stake accounts.",
+                "WithdrawInactiveStake should succeed with {} out of max {} stake accounts.",
                 i + 1,
                 max_accounts,
             );

@@ -5,4 +5,4 @@ pub mod maintainers;
 pub mod merge_stake;
 pub mod stake_deposit;
 pub mod update_exchange_rate;
-pub mod update_validator_balance;
+pub mod withdraw_inactive_stake;

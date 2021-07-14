@@ -790,7 +790,7 @@ impl Context {
 
     /// Observe the new validator balance and write it ot the state,
     /// distribute any rewards received.
-    pub async fn try_update_validator_balance(
+    pub async fn try_withdraw_inactive_stake(
         &mut self,
         validator_vote_account: Pubkey,
     ) -> transport::Result<()> {
@@ -814,9 +814,9 @@ impl Context {
         send_transaction(
             &mut self.context,
             &mut self.nonce,
-            &[instruction::update_validator_balance(
+            &[instruction::withdraw_from_inactive_stake(
                 &id(),
-                &instruction::UpdateValidatorBalanceMeta {
+                &instruction::WithdrawInactiveStakeMeta {
                     lido: self.solido.pubkey(),
                     validator_vote_account: validator_vote_account,
                     stake_accounts: stake_account_addrs,
@@ -829,8 +829,8 @@ impl Context {
         .await
     }
 
-    pub async fn update_validator_balance(&mut self, validator_vote_account: Pubkey) {
-        self.try_update_validator_balance(validator_vote_account)
+    pub async fn withdraw_inactive_stake(&mut self, validator_vote_account: Pubkey) {
+        self.try_withdraw_inactive_stake(validator_vote_account)
             .await
             .expect("Failed to update validator balance.");
     }
