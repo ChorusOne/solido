@@ -148,6 +148,7 @@ pub struct Snapshot<'a> {
 impl<'a> Snapshot<'a> {
     /// Return whether an account with the given address exists.
     pub fn account_exists(&mut self, address: &Pubkey) -> Result<bool> {
+        self.accounts_referenced.push(*address);
         match self.accounts.get(address) {
             // The account was included in the snapshot, and if it is Some, it
             // did exist.

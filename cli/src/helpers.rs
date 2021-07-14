@@ -502,8 +502,6 @@ pub fn command_deposit(
         );
 
         if !config.client.account_exists(&recipient)? {
-            let solido = config.client.get_solido(opts.solido_address())?;
-
             let instr = spl_associated_token_account::create_associated_token_account(
                 &config.signer.pubkey(),
                 &config.signer.pubkey(),

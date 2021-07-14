@@ -360,7 +360,7 @@ else:
 
 print('\nDepositing 1 SOL ...')
 result = solido(
-    'deposit'
+    'deposit',
     '--solido-address',
     solido_address,
     '--solido-program-id',
