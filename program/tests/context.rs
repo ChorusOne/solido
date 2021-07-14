@@ -819,10 +819,6 @@ impl Context {
                 &instruction::UpdateValidatorBalanceMeta {
                     lido: self.solido.pubkey(),
                     validator_vote_account: validator_vote_account,
-                    st_sol_mint: self.st_sol_mint,
-                    mint_authority: self.mint_authority,
-                    treasury_st_sol_account: self.treasury_st_sol_account,
-                    developer_st_sol_account: self.developer_st_sol_account,
                     stake_accounts: stake_account_addrs,
                     reserve: self.reserve_address,
                     stake_authority: self.stake_authority,

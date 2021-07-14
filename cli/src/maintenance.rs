@@ -757,8 +757,10 @@ pub fn try_perform_maintenance(
         // as possible.
         .or_else(|| state.try_merge_on_all_stakes())
         .or_else(|| state.try_update_exchange_rate())
-        // Updating validator balance goes after updating the exchange rate,
+        // Collecting validator fees goes after updating the exchange rate,
         // because it may be rejected if the exchange rate is outdated.
+        .or_else(|| state.try_collect_validator_fee())
+        // Same for updating the validator balance.
         .or_else(|| state.try_update_validator_balance())
         .or_else(|| state.try_stake_deposit());
 
