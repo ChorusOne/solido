@@ -166,7 +166,9 @@ print(f'> Validator token account owner: {validator_fee_account_owner}')
 validator = create_test_account('tests/.keys/validator-account-key.json')
 
 validator_vote_account = create_vote_account(
-    'tests/.keys/validator-vote-account-key.json', validator.keypair_path
+    'tests/.keys/validator-vote-account-key.json',
+    validator.keypair_path,
+    solido_instance['rewards_withdraw_authority'],
 )
 print(f'> Creating validator vote account {validator_vote_account}')
 

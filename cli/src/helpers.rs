@@ -7,7 +7,7 @@ use solana_sdk::signature::{Keypair, Signer};
 use lido::{
     metrics::LamportsHistogram,
     state::{Lido, RewardDistribution},
-    MINT_AUTHORITY, RESERVE_ACCOUNT, STAKE_AUTHORITY,
+    MINT_AUTHORITY, RESERVE_ACCOUNT, REWARDS_WITHDRAW_AUTHORITY, STAKE_AUTHORITY,
 };
 
 use crate::config::{AddRemoveMaintainerOpts, AddValidatorOpts, CreateSolidoOpts, ShowSolidoOpts};
@@ -270,6 +270,7 @@ pub struct ShowSolidoOutput {
     pub reserve_account: PubkeyBase58,
     pub stake_authority: PubkeyBase58,
     pub mint_authority: PubkeyBase58,
+    pub rewards_withdraw_authority: PubkeyBase58,
 }
 
 impl fmt::Display for ShowSolidoOutput {
@@ -439,6 +440,15 @@ pub fn command_show_solido(
         opts.solido_program_id(),
     )?;
 
+    let rewards_withdraw_authority = Pubkey::create_program_address(
+        &[
+            &opts.solido_address().to_bytes(),
+            REWARDS_WITHDRAW_AUTHORITY,
+            &[lido.rewards_withdraw_bump_seed],
+        ],
+        opts.solido_program_id(),
+    )?;
+
     Ok(ShowSolidoOutput {
         solido_program_id: opts.solido_program_id().into(),
         solido_address: opts.solido_address().into(),
@@ -446,5 +456,6 @@ pub fn command_show_solido(
         reserve_account: reserve_account.into(),
         stake_authority: stake_authority.into(),
         mint_authority: mint_authority.into(),
+        rewards_withdraw_authority: rewards_withdraw_authority.into(),
     })
 }
