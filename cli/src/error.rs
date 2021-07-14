@@ -1,11 +1,14 @@
 //! Error type for use throughout the CLI program and daemon.
 
+use num_traits::cast::FromPrimitive;
 use solana_client::client_error::{ClientError, ClientErrorKind};
 use solana_client::rpc_request::{RpcError, RpcResponseErrorData};
 use solana_program::program_error::ProgramError;
 use solana_program::pubkey::PubkeyError;
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::transaction::TransactionError;
+
+use lido::error::LidoError;
 
 /// Print the message in bold using ANSI escape sequences.
 fn print_key(message: &'static str) {
