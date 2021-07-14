@@ -39,6 +39,9 @@ struct MaintenanceMetrics {
     /// Number of times we performed `UpdateValidatorBalance`.
     transactions_update_validator_balance: u64,
 
+    /// Number of times we performed `CollectValidatorFee`
+    transactions_collect_validator_fee: u64,
+
     /// Number of times we performed a `MergeStake`.
     transactions_merge_stake: u64,
     // TODO(#96#issuecomment-859388866): Track how much the daemon spends on transaction fees,
@@ -78,6 +81,8 @@ impl MaintenanceMetrics {
                         .with_label("operation", "UpdateExchangeRate".to_string()),
                     Metric::new(self.transactions_update_validator_balance)
                         .with_label("operation", "UpdateValidatorBalance".to_string()),
+                    Metric::new(self.transactions_collect_validator_fee)
+                        .with_label("operation", "CollectValidatorFee".to_string()),
                     Metric::new(self.transactions_merge_stake)
                         .with_label("operation", "MergeStake".to_string()),
                 ],
@@ -119,6 +124,7 @@ fn run_main_loop(
         transactions_stake_deposit: 0,
         transactions_update_exchange_rate: 0,
         transactions_update_validator_balance: 0,
+        transactions_collect_validator_fee: 0,
         transactions_merge_stake: 0,
     };
     let mut rng = rand::thread_rng();
@@ -147,6 +153,9 @@ fn run_main_loop(
                         }
                         MaintenanceOutput::UpdateValidatorBalance { .. } => {
                             metrics.transactions_update_validator_balance += 1;
+                        }
+                        MaintenanceOutput::CollectValidatorFee { .. } => {
+                            metrics.transactions_collect_validator_fee += 1
                         }
                         MaintenanceOutput::MergeStake { .. } => {
                             metrics.transactions_merge_stake += 1

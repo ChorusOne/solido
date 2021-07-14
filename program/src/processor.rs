@@ -426,9 +426,6 @@ pub fn process_update_validator_balance(
 
     // Confirm that the passed accounts are the ones configured in the state,
     // and confirm that they can receive stSOL.
-    lido.check_mint_is_st_sol_mint(accounts.st_sol_mint)?;
-    lido.check_treasury_fee_st_sol_account(accounts.treasury_st_sol_account)?;
-    lido.check_developer_fee_st_sol_account(accounts.developer_st_sol_account)?;
     lido.check_reserve_account(program_id, accounts.lido.key, accounts.reserve)?;
 
     let clock = Clock::from_account_info(accounts.sysvar_clock)?;
@@ -535,6 +532,7 @@ pub fn process_update_validator_balance(
 /// Collects the validator fee from the validator vote account and distributes
 /// this fee across the specified participants. It transfers the collected
 /// Lamports to the reserve account, where they can be re-staked.
+/// This function is permissionless and can be called by anyone.
 pub fn process_collect_validator_fee(
     program_id: &Pubkey,
     raw_accounts: &[AccountInfo],

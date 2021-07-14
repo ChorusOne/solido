@@ -276,28 +276,6 @@ accounts_struct! {
             is_writable: false,
         },
 
-        // Updating balances also immediately mints rewards, so we need the stSOL
-        // mint, and the fee accounts to deposit the stSOL into.
-        pub st_sol_mint {
-            is_signer: false,
-            is_writable: true,
-        },
-
-        // Mint authority is required to mint tokens.
-        pub mint_authority {
-            is_signer: false,
-            is_writable: false,
-        },
-
-        pub treasury_st_sol_account {
-            is_signer: false,
-            is_writable: true,
-        },
-        pub developer_st_sol_account {
-            is_signer: false,
-            is_writable: true,
-        },
-
         // This instruction withdraws any excess stake from the stake accounts
         // back to the reserve. The stake authority needs to sign off on those
         // (but program-derived, so it is not a signer here), and we need access
