@@ -1,5 +1,6 @@
 pub mod add_remove_validator;
 pub mod change_reward_distribution;
+pub mod collect_validator_fee;
 pub mod deposit;
 pub mod maintainers;
 pub mod merge_stake;

@@ -851,7 +851,6 @@ impl Context {
             .await
             .minimum_balance(vote_account.data.len());
         let reward = vote_account.lamports() - vote_account_rent;
-
         send_transaction(
             &mut self.context,
             &mut self.nonce,
