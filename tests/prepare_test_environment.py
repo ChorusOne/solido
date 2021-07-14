@@ -124,9 +124,18 @@ def add_validator(index: int, vote_account: Optional[str]) -> str:
     print(f'> Validator stSOL token account: {validator_fee_st_sol_account}')
 
     if vote_account is None:
+        solido_instance = solido(
+            'show-solido',
+            '--solido-program-id',
+            solido_program_id,
+            '--solido-address',
+            solido_address,
+        )
         validator = create_test_account(f'tests/.keys/validator-{index}-account.json')
         validator_vote_account = create_vote_account(
-            f'tests/.keys/validator-{index}-vote-account.json', validator.keypair_path
+            f'tests/.keys/validator-{index}-vote-account.json',
+            validator.keypair_path,
+            solido_instance['rewards_withdraw_authority'],
         )
         vote_account = validator_vote_account.pubkey
 
