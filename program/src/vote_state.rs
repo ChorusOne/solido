@@ -90,17 +90,17 @@ mod test {
     fn test_deserialize() {
         // excerpt from actual vote account
         let data = [
-            1, 0, 0, 0, 180, 53, 218, 159, 38, 49, 69, 73, 80, 121, 168, 248, 205, 118, 6, 230,
-            209, 124, 181, 128, 20, 104, 14, 54, 240, 62, 196, 143, 243, 28, 96, 243, 103, 85, 133,
-            162, 105, 18, 173, 186, 226, 83, 7, 70, 80, 145, 100, 154, 49, 103, 152, 90, 87, 169,
-            112, 255, 7, 37, 148, 29, 13, 170, 162, 35, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 180, 53, 218, 159, 38, 49, 69, 73, 80, 121, 168,
-            248, 205, 118, 6, 230, 209, 124, 181, 128, 20, 104, 14, 54, 240, 62, 196, 143, 243, 28,
-            96, 243, 0, 0, 0, 0, 0,
+            1, 0, 0, 0, 186, 184, 236, 203, 192, 204, 36, 2, 192, 179, 250, 41, 63, 131, 130, 170,
+            227, 31, 172, 215, 203, 45, 217, 159, 149, 38, 254, 230, 96, 89, 100, 169, 44, 222, 22,
+            204, 119, 148, 166, 154, 32, 195, 245, 215, 117, 57, 183, 164, 68, 73, 97, 66, 223,
+            214, 169, 126, 8, 230, 204, 87, 3, 19, 162, 46, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 186, 184, 236, 203, 192, 204, 36, 2, 192,
+            179, 250, 41, 63, 131, 130, 170, 227, 31, 172, 215, 203, 45, 217, 159, 149, 38, 254,
+            230, 96, 89, 100, 169, 0, 0, 0, 0, 0, 0, 0, 0,
         ];
         let program_id = Pubkey::from_str("3kEkdGe68DuTKg6FhVrLPZ3Wm8EcUPCPjhCeu8WrGDoc").unwrap();
         let lido_address =
-            Pubkey::from_str("HrdD6QcHDXadFe8EQjcGu45GvmnM7ZRuMzpdGz4WtaiN").unwrap();
+            Pubkey::from_str("6ZSSitQ4RqxUcspvS4J1x76J3dAURjU93d3TKU8HSYxs").unwrap();
         let (lido_withdraw_authority, _) =
             find_authority_program_address(&program_id, &lido_address, REWARDS_WITHDRAW_AUTHORITY);
 
@@ -108,7 +108,7 @@ mod test {
             PartialVoteState::deserialize(&program_id, &lido_address, &data).unwrap();
         let expected_partial_result = PartialVoteState {
             version: 1,
-            node_pubkey: Pubkey::from_str("D8U1qEq5DeFTUsHpviJvnKjJBzuhqqJPCGFk85DRTz74").unwrap(),
+            node_pubkey: Pubkey::from_str("DZtP4b6tZSY3XWBQDpuATc2mxB8LUh4Pp5t8Jnz9HLWC").unwrap(),
             authorized_withdrawer: lido_withdraw_authority,
             commission: 100,
         };
@@ -119,18 +119,18 @@ mod test {
     fn test_less_commission() {
         // excerpt from actual vote account
         let data = [
-            1, 0, 0, 0, 180, 53, 218, 159, 38, 49, 69, 73, 80, 121, 168, 248, 205, 118, 6, 230,
-            209, 124, 181, 128, 20, 104, 14, 54, 240, 62, 196, 143, 243, 28, 96, 243, 103, 85, 133,
-            162, 105, 18, 173, 186, 226, 83, 7, 70, 80, 145, 100, 154, 49, 103, 152, 90, 87, 169,
-            112, 255, 7, 37, 148, 29, 13, 170, 162, 35, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 180, 53, 218, 159, 38, 49, 69, 73, 80, 121, 168,
-            248, 205, 118, 6, 230, 209, 124, 181, 128, 20, 104, 14, 54, 240, 62, 196, 143, 243, 28,
-            96, 243, 0, 0, 0, 0, 0,
+            1, 0, 0, 0, 186, 184, 236, 203, 192, 204, 36, 2, 192, 179, 250, 41, 63, 131, 130, 170,
+            227, 31, 172, 215, 203, 45, 217, 159, 149, 38, 254, 230, 96, 89, 100, 169, 44, 222, 22,
+            204, 119, 148, 166, 154, 32, 195, 245, 215, 117, 57, 183, 164, 68, 73, 97, 66, 223,
+            214, 169, 126, 8, 230, 204, 87, 3, 19, 162, 46, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 186, 184, 236, 203, 192, 204, 36, 2, 192, 179,
+            250, 41, 63, 131, 130, 170, 227, 31, 172, 215, 203, 45, 217, 159, 149, 38, 254, 230,
+            96, 89, 100, 169, 0, 0, 0, 0, 0, 0, 0, 0,
         ];
 
         let program_id = Pubkey::from_str("3kEkdGe68DuTKg6FhVrLPZ3Wm8EcUPCPjhCeu8WrGDoc").unwrap();
         let lido_address =
-            Pubkey::from_str("HrdD6QcHDXadFe8EQjcGu45GvmnM7ZRuMzpdGz4WtaiN").unwrap();
+            Pubkey::from_str("DZtP4b6tZSY3XWBQDpuATc2mxB8LUh4Pp5t8Jnz9HLWC").unwrap();
         assert!(PartialVoteState::deserialize(&program_id, &lido_address, &data).is_err());
     }
 }

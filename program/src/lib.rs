@@ -17,6 +17,7 @@ pub mod state;
 pub mod token;
 pub mod util;
 
+mod vote_instruction;
 mod vote_state;
 
 /// Seed for reserve account that holds SOL.
@@ -32,7 +33,7 @@ pub const STAKE_AUTHORITY: &[u8] = b"stake_authority";
 pub const VALIDATOR_STAKE_ACCOUNT: &[u8] = b"validator_stake_account";
 
 /// Authority responsible for withdrawing the stake rewards.
-pub const REWARDS_WITHDRAW_AUTHORITY: &[u8] = b"rewards_withdraw_auuthority";
+pub const REWARDS_WITHDRAW_AUTHORITY: &[u8] = b"rewards_withdraw_authority";
 
 /// Finds the public key and bump seed for a given authority.  Since this
 /// function can take some time to run, it's preferred to use

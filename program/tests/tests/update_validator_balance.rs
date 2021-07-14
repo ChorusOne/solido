@@ -15,9 +15,7 @@ async fn test_update_validator_balance() {
 
     // If we try to update initially, that should work, but there is nothing to update.
     let solido_before = context.get_solido().await;
-    context
-        .update_validator_balance(validator.vote_account)
-        .await;
+    context.collect_validator_fee(validator.vote_account).await;
     let solido_after = context.get_solido().await;
     assert_eq!(solido_before, solido_after);
 
@@ -31,9 +29,7 @@ async fn test_update_validator_balance() {
     // We should be able to update the validator balance. It should be a no-op,
     // because we already knew the current validator's balance.
     let solido_before = context.get_solido().await;
-    context
-        .update_validator_balance(validator.vote_account)
-        .await;
+    context.collect_validator_fee(validator.vote_account).await;
     let solido_after = context.get_solido().await;
     assert_eq!(solido_before, solido_after);
 
@@ -46,15 +42,13 @@ async fn test_update_validator_balance() {
     // In this new epoch, we should not be allowed to update the validator balance
     // yet, because we haven’t updated the exchange rate yet.
     let result = context
-        .try_update_validator_balance(validator.vote_account)
+        .try_collect_validator_fee(validator.vote_account)
         .await;
     assert_solido_error!(result, LidoError::ExchangeRateNotUpdatedInThisEpoch);
 
     // So after we update the exchange rate, we should be allowed to update the balance.
     context.update_exchange_rate().await;
-    context
-        .update_validator_balance(validator.vote_account)
-        .await;
+    context.collect_validator_fee(validator.vote_account).await;
 
     // Increment the vote account credits, to simulate the validator voting in
     // this epoch, which means it will receive rewards at the start of the next
@@ -85,6 +79,11 @@ async fn test_update_validator_balance() {
     let stake_after = context.get_sol_balance(stake_account).await;
 
     context.update_exchange_rate().await;
+    // The rewards received is the difference in stake balance. The number looks
+    // arbitrary, but this is the amount that the current reward configuration
+    // yields, so we have to deal with it.
+    let rewards = context.collect_validator_fee(validator.vote_account).await;
+    assert_eq!(rewards, Lamports(1246_030_107_210));
     context
         .update_validator_balance(validator.vote_account)
         .await;
@@ -96,12 +95,6 @@ async fn test_update_validator_balance() {
         .await;
     let solido_after = context.get_solido().await;
     let validator_after = solido_after.validators.entries[0].entry.fee_credit;
-
-    // The rewards received is the difference in stake balance. The number looks
-    // arbitrary, but this is the amount that the current reward configuration
-    // yields, so we have to deal with it.
-    let rewards = (stake_after - stake_before).unwrap();
-    assert_eq!(rewards, Lamports(1246_030_107_210));
 
     // The treasury balance increase, when converted back to SOL, should be equal
     // to 3% of the rewards.
@@ -192,6 +185,7 @@ async fn test_update_validator_balance_withdraws_donations_to_the_reserve() {
     // Donate to the stake account.
     let donation = Lamports(100_000);
     context.fund(stake_account, donation).await;
+    context.fund(validator.vote_account, donation).await;
 
     let reserve_before = context.get_sol_balance(context.reserve_address).await;
     let treasury_before = context
@@ -202,6 +196,8 @@ async fn test_update_validator_balance_withdraws_donations_to_the_reserve() {
         .await;
     let solido_before = context.get_solido().await;
 
+    let vote_donation = context.collect_validator_fee(validator.vote_account).await;
+    let donations = (vote_donation + donation).unwrap();
     context
         .update_validator_balance(validator.vote_account)
         .await;
@@ -210,7 +206,7 @@ async fn test_update_validator_balance_withdraws_donations_to_the_reserve() {
     let stake_after = context.get_sol_balance(stake_account).await;
 
     // The donation should have been withdrawn back to the reserve.
-    assert_eq!(reserve_after, (reserve_before + donation).unwrap());
+    assert_eq!(reserve_after, (reserve_before + donations).unwrap());
     assert_eq!(stake_after, initial_amount);
 
     // The validator balance should match, even though just before `UpdateValidatorBalance`

@@ -12,6 +12,7 @@ use solana_program::{borsh::try_from_slice_unchecked, sysvar};
 use solana_program::{clock::Clock, instruction::Instruction};
 use solana_program::{instruction::InstructionError, stake_history::StakeHistory};
 use solana_program_test::{processor, ProgramTest, ProgramTestContext};
+use solana_sdk::account::ReadableAccount;
 use solana_sdk::account::{from_account, Account};
 use solana_sdk::account_info::AccountInfo;
 use solana_sdk::pubkey::Pubkey;
@@ -21,7 +22,6 @@ use solana_sdk::transaction::TransactionError;
 use solana_sdk::transport;
 use solana_sdk::transport::TransportError;
 use solana_vote_program::vote_instruction;
-use solana_vote_program::vote_state::VoteStateVersions;
 use solana_vote_program::vote_state::{VoteInit, VoteState};
 
 use lido::{error::LidoError, RESERVE_ACCOUNT};
@@ -837,6 +837,54 @@ impl Context {
         self.try_update_validator_balance(validator_vote_account)
             .await
             .expect("Failed to update validator balance.");
+    }
+
+    /// Observe the new validator balance and write it ot the state,
+    /// distribute any rewards received.
+    pub async fn try_collect_validator_fee(
+        &mut self,
+        validator_vote_account: Pubkey,
+    ) -> transport::Result<Lamports> {
+        let solido = self.get_solido().await;
+        let rewards_withdraw_authority = solido
+            .get_rewards_withdraw_authority(&id(), &self.solido.pubkey())
+            .unwrap();
+        let vote_account = self.get_account(validator_vote_account).await;
+        let vote_account_rent = self
+            .get_rent()
+            .await
+            .minimum_balance(vote_account.data.len());
+        let reward = vote_account.lamports() - vote_account_rent;
+
+        send_transaction(
+            &mut self.context,
+            &mut self.nonce,
+            &[instruction::collect_validator_fee(
+                &id(),
+                &instruction::CollectValidatorFeeMeta {
+                    lido: self.solido.pubkey(),
+                    validator_vote_account: validator_vote_account,
+                    st_sol_mint: self.st_sol_mint,
+                    mint_authority: self.mint_authority,
+                    treasury_st_sol_account: self.treasury_st_sol_account,
+                    developer_st_sol_account: self.developer_st_sol_account,
+                    reserve: self.reserve_address,
+                    rewards_withdraw_authority,
+                },
+            )],
+            vec![],
+        )
+        .await?;
+        let vote_account = self.get_account(validator_vote_account).await;
+        assert_eq!(vote_account.lamports(), vote_account_rent);
+
+        Ok(Lamports(reward))
+    }
+
+    pub async fn collect_validator_fee(&mut self, validator_vote_account: Pubkey) -> Lamports {
+        self.try_collect_validator_fee(validator_vote_account)
+            .await
+            .expect("Failed to update validator balance.")
     }
 
     pub async fn try_get_account(&mut self, address: Pubkey) -> Option<Account> {

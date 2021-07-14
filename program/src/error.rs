@@ -126,6 +126,11 @@ pub enum LidoError {
     /// The provided stake authority does not match the one derived from Lido's state.
     #[error("InvalidStakeAuthority")]
     InvalidStakeAuthority,
+
+    /// The provided rewards withdraw authority does not match the one derived from Lido's state.
+    #[error("InvalidRewardsWithdrawAuthority")]
+    InvalidRewardsWithdrawAuthority,
+
     /// The provided Vote Account is invalid or corrupted.
     #[error("InvalidVoteAccount")]
     InvalidVoteAccount,
