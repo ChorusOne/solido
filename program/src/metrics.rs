@@ -193,6 +193,7 @@ impl LamportsHistogram {
 mod test {
     use super::*;
 
+    #[test]
     fn test_metrics_observe_fee_treasury() {
         let mut m = Metrics::new();
         m.observe_fee_treasury(Lamports(100), StLamports(100))
@@ -203,6 +204,7 @@ mod test {
         assert_eq!(m.fee_treasury_st_sol_total, StLamports(180));
     }
 
+    #[test]
     fn test_metrics_observe_fee_validation() {
         let mut m = Metrics::new();
         m.observe_fee_validation(Lamports(100), StLamports(100))
@@ -213,6 +215,7 @@ mod test {
         assert_eq!(m.fee_validation_st_sol_total, StLamports(180));
     }
 
+    #[test]
     fn test_metrics_observe_fee_developer() {
         let mut m = Metrics::new();
         m.observe_fee_developer(Lamports(100), StLamports(100))
@@ -223,6 +226,7 @@ mod test {
         assert_eq!(m.fee_developer_st_sol_total, StLamports(180));
     }
 
+    #[test]
     fn test_metrics_observe_reward_st_sol_appreciation() {
         let mut m = Metrics::new();
         m.observe_reward_st_sol_appreciation(Lamports(100)).unwrap();
@@ -230,6 +234,7 @@ mod test {
         assert_eq!(m.st_sol_appreciation_sol_total, Lamports(300));
     }
 
+    #[test]
     fn test_metrics_observe_deposit() {
         let mut m = Metrics::new();
 
