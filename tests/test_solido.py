@@ -368,7 +368,7 @@ def deposit(lamports: int, expect_created_token_account: bool = False) -> None:
         '--solido-program-id',
         solido_program_id,
         '--amount-sol',
-        f'{lamports / 1_000_000_000}'
+        f'{lamports / 1_000_000_000}',
     )
     # The recipient address depends on the signer, it does not have a fixed expectation.
     del deposit_result['recipient']
@@ -378,7 +378,9 @@ def deposit(lamports: int, expect_created_token_account: bool = False) -> None:
         'created_associated_st_sol_account': expect_created_token_account,
     }
     assert deposit_result == expected, f'{deposit_result} == {expected}'
-    print(f'> Got {deposit_result["st_lamports_balance_increase"]/1_000_000_000} stSOL.')
+    print(
+        f'> Got {deposit_result["st_lamports_balance_increase"]/1_000_000_000} stSOL.'
+    )
 
 
 deposit(lamports=1_000_000_000, expect_created_token_account=True)
