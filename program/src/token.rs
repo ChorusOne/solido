@@ -162,7 +162,7 @@ impl std::str::FromStr for Lamports {
         // (or no decimal point at all), scale up the value so it is measured
         // in lamports.
         while exponent > 0 {
-            value = value * 10;
+            value *= 10;
             exponent -= 1;
         }
 

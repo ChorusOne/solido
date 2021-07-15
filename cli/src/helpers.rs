@@ -555,7 +555,7 @@ pub fn command_deposit(
     let st_sol_balance_increase = StLamports(balance_after.0.saturating_sub(balance_before.0));
     let expected_st_sol = exchange_rate
         .exchange_sol(*opts.amount_sol())
-        .ok_or(ProgramError::from(LidoError::CalculationFailure))?;
+        .ok_or_else(|| ProgramError::from(LidoError::CalculationFailure))?;
 
     let result = DepositOutput {
         recipient,
