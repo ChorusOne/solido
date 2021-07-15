@@ -5,6 +5,7 @@ use solana_program::{pubkey::Pubkey, system_instruction};
 use solana_sdk::signature::{Keypair, Signer};
 
 use lido::{
+    metrics::LamportsHistogram,
     state::{Lido, RewardDistribution},
     MINT_AUTHORITY, RESERVE_ACCOUNT, STAKE_AUTHORITY,
 };
@@ -369,11 +370,16 @@ impl fmt::Display for ShowSolidoOutput {
             "  Total deposited:          {}",
             self.solido.metrics.deposit_amount.total
         )?;
-        writeln!(
-            f,
-            "  Number of deposits:       {}",
-            self.solido.metrics.deposit_amount.num_observations()
-        )?;
+        for (count, upper_bound) in self
+            .solido
+            .metrics
+            .deposit_amount
+            .counts
+            .iter()
+            .zip(&LamportsHistogram::BUCKET_UPPER_BOUNDS)
+        {
+            writeln!(f, "  Number of deposits ≤ {}: {}", upper_bound, count)?;
+        }
 
         writeln!(
             f,
