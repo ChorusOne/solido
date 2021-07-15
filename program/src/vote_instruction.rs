@@ -1,7 +1,13 @@
-//! FIXME copied from the solana stake program
-// Since the solana vote program cannot be included in a Solana program, for now
+//! FIXME copied from the Solana stake program.
+//
+// Since the Solana vote program cannot be included in a Solana program, for now
 // we copy the necessary parts that we need to deal with vote accounts in this
 // file.
+//
+// Solana is licensed under the Apache, version 2, which can be found
+// at https://www.apache.org/licenses/LICENSE-2.0.html.
+// We copied only the parts that we use, and do not alter the original file in
+// any meaningful way.
 
 use serde_derive::{Deserialize, Serialize};
 use solana_program::{

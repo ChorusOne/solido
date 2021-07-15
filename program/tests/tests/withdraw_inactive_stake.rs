@@ -14,10 +14,13 @@ async fn test_withdraw_inactive_stake() {
     let validator = context.add_validator().await;
 
     // If we try to withdraw initially, that should work, but there is nothing to withdraw.
+    // The 2nd time it runs, should succeed, but nothing should change
     let solido_before = context.get_solido().await;
-    context
-        .withdraw_inactive_stake(validator.vote_account)
-        .await;
+    for _ in 0..2 {
+        context
+            .withdraw_inactive_stake(validator.vote_account)
+            .await;
+    }
     let solido_after = context.get_solido().await;
     assert_eq!(solido_before, solido_after);
 
@@ -41,13 +44,6 @@ async fn test_withdraw_inactive_stake() {
     let epoch_schedule = context.context.genesis_config().epoch_schedule;
     let start_slot = epoch_schedule.first_normal_slot;
     context.context.warp_to_slot(start_slot).unwrap();
-
-    // In this new epoch, we should not be allowed to withdraw the inactive stake
-    // yet, because we haven’t updated the exchange rate yet.
-    let result = context
-        .try_withdraw_inactive_stake(validator.vote_account)
-        .await;
-    assert_solido_error!(result, LidoError::ExchangeRateNotUpdatedInThisEpoch);
 
     // So after we update the exchange rate, we should be allowed to withdraw the inactive stake.
     context.update_exchange_rate().await;

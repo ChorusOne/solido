@@ -311,7 +311,7 @@ accounts_struct! {
     }
 }
 
-pub fn withdraw_from_inactive_stake(
+pub fn withdraw_inactive_stake(
     program_id: &Pubkey,
     accounts: &WithdrawInactiveStakeMeta,
 ) -> Instruction {

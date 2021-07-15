@@ -814,7 +814,7 @@ impl Context {
         send_transaction(
             &mut self.context,
             &mut self.nonce,
-            &[instruction::withdraw_from_inactive_stake(
+            &[instruction::withdraw_inactive_stake(
                 &id(),
                 &instruction::WithdrawInactiveStakeMeta {
                     lido: self.solido.pubkey(),
@@ -832,7 +832,7 @@ impl Context {
     pub async fn withdraw_inactive_stake(&mut self, validator_vote_account: Pubkey) {
         self.try_withdraw_inactive_stake(validator_vote_account)
             .await
-            .expect("Failed to update validator balance.");
+            .expect("Failed to withdraw inactive stake.");
     }
 
     /// Observe the new validator balance and write it ot the state,
@@ -842,6 +842,7 @@ impl Context {
         validator_vote_account: Pubkey,
     ) -> transport::Result<Lamports> {
         let solido = self.get_solido().await;
+        let reserve_balance_before = self.get_sol_balance(self.reserve_address).await;
         let rewards_withdraw_authority = solido
             .get_rewards_withdraw_authority(&id(), &self.solido.pubkey())
             .unwrap();
@@ -870,16 +871,18 @@ impl Context {
             vec![],
         )
         .await?;
+        let reserve_balance_after = self.get_sol_balance(self.reserve_address).await;
         let vote_account = self.get_account(validator_vote_account).await;
         assert_eq!(vote_account.lamports(), vote_account_rent);
 
-        Ok(Lamports(reward))
+        Ok((reserve_balance_after - reserve_balance_before)
+            .expect("Reserve balance should have increased after validator fee collection."))
     }
 
     pub async fn collect_validator_fee(&mut self, validator_vote_account: Pubkey) -> Lamports {
         self.try_collect_validator_fee(validator_vote_account)
             .await
-            .expect("Failed to update validator balance.")
+            .expect("Failed to collect validator fee.")
     }
 
     pub async fn try_get_account(&mut self, address: Pubkey) -> Option<Account> {

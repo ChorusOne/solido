@@ -22,7 +22,6 @@ serde_derive = "1.0.103"
 solana-program = "1.7.3"
 spl-token = { version = "3.1.1", features = ["no-entrypoint"] }
 thiserror = "1.0"
-byteorder = "1.4.3"
 
 [dev-dependencies]
 proptest = "0.10"

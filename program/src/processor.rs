@@ -89,7 +89,7 @@ pub fn process_initialize(
     let (_, mint_bump_seed) =
         Pubkey::find_program_address(&[&accounts.lido.key.to_bytes(), MINT_AUTHORITY], program_id);
 
-    let (_, rewards_withdraw_bump_seed) = Pubkey::find_program_address(
+    let (_, rewards_withdraw_authority_bump_seed) = Pubkey::find_program_address(
         &[&accounts.lido.key.to_bytes(), REWARDS_WITHDRAW_AUTHORITY],
         program_id,
     );
@@ -102,7 +102,7 @@ pub fn process_initialize(
     lido.sol_reserve_account_bump_seed = reserve_bump_seed;
     lido.mint_authority_bump_seed = mint_bump_seed;
     lido.stake_authority_bump_seed = deposit_bump_seed;
-    lido.rewards_withdraw_bump_seed = rewards_withdraw_bump_seed;
+    lido.rewards_withdraw_authority_bump_seed = rewards_withdraw_authority_bump_seed;
     lido.reward_distribution = reward_distribution;
 
     // Confirm that the fee recipients are actually stSOL accounts.
@@ -414,13 +414,11 @@ pub fn withdraw_excess_inactive_sol<'a, 'b>(
     Ok(excess_balance)
 }
 
-/// Recover any inactive balance from the validator's stake accounts to re
+/// Recover any inactive balance from the validator's stake accounts to the
 /// reserve account.
-/// This function can only be called after the exchange rate is updated with
-/// `process_update_exchange_rate`.
 /// Updates the validator's balance.
 /// This function is permissionless and can be called by anyone.
-pub fn process_withdraw_from_inactive_stake(
+pub fn process_withdraw_inactive_stake(
     program_id: &Pubkey,
     raw_accounts: &[AccountInfo],
 ) -> ProgramResult {
@@ -428,22 +426,11 @@ pub fn process_withdraw_from_inactive_stake(
     let mut lido = deserialize_lido(program_id, accounts.lido)?;
     let rent = Rent::from_account_info(accounts.sysvar_rent)?;
     let stake_history = StakeHistory::from_account_info(accounts.sysvar_stake_history)?;
+    let clock = Clock::from_account_info(accounts.sysvar_clock)?;
 
     // Confirm that the passed accounts are the ones configured in the state,
     // and confirm that they can receive stSOL.
     lido.check_reserve_account(program_id, accounts.lido.key, accounts.reserve)?;
-
-    let clock = Clock::from_account_info(accounts.sysvar_clock)?;
-    if lido.exchange_rate.computed_in_epoch < clock.epoch {
-        msg!(
-            "The exchange rate is outdated, it was last computed in epoch {}, \
-            but now it is epoch {}.",
-            lido.exchange_rate.computed_in_epoch,
-            clock.epoch,
-        );
-        msg!("Please call UpdateExchangeRate before calling WithdrawInactiveStake.");
-        return Err(LidoError::ExchangeRateNotUpdatedInThisEpoch.into());
-    }
 
     let validator = lido
         .validators
@@ -563,7 +550,7 @@ pub fn process_collect_validator_fee(
             lido.exchange_rate.computed_in_epoch,
             clock.epoch,
         );
-        msg!("Please call UpdateExchangeRate before calling WithdrawInactiveStake.");
+        msg!("Please call UpdateExchangeRate before calling CollectValidatorFee.");
         return Err(LidoError::ExchangeRateNotUpdatedInThisEpoch.into());
     }
 
@@ -604,7 +591,7 @@ pub fn process_collect_validator_fee(
         &[&[
             accounts.lido.key.as_ref(),
             REWARDS_WITHDRAW_AUTHORITY,
-            &[lido.rewards_withdraw_bump_seed],
+            &[lido.rewards_withdraw_authority_bump_seed],
         ]],
     )?;
     lido.save(accounts.lido)
@@ -641,7 +628,7 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
         }
         LidoInstruction::UpdateExchangeRate => process_update_exchange_rate(program_id, accounts),
         LidoInstruction::WithdrawInactiveStake => {
-            process_withdraw_from_inactive_stake(program_id, accounts)
+            process_withdraw_inactive_stake(program_id, accounts)
         }
         LidoInstruction::CollectValidatorFee => process_collect_validator_fee(program_id, accounts),
         LidoInstruction::Withdraw { amount } => process_withdraw(program_id, amount, accounts),

@@ -444,7 +444,7 @@ pub fn command_show_solido(
         &[
             &opts.solido_address().to_bytes(),
             REWARDS_WITHDRAW_AUTHORITY,
-            &[lido.rewards_withdraw_bump_seed],
+            &[lido.rewards_withdraw_authority_bump_seed],
         ],
         opts.solido_program_id(),
     )?;

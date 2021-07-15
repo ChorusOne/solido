@@ -84,24 +84,27 @@ impl EntryConstantSize for () {
 /// modifications (validation rewards paid into stake accounts) that were not
 /// yet observed at the time of the update.
 ///
-/// When we observe the actual validator balance in `WithdrawInactiveStake`,
-/// the difference between the tracked balance and the observed balance, is the
-/// reward. We split this reward into a fee part, and a donation part, and
-/// update the tracked balances accordingly. This does not by itself change the
-/// exchange rate, but the new values will be used in the next exchange rate
-/// update.
+/// When we observe the actual validator balance in `WithdrawInactiveStake`, the
+/// difference between the tracked balance and the observed balance, is a
+/// donation that will be returned to the reserve account.
 ///
-/// `WithdrawInactiveStake` is blocked in a given epoch, until we update the
+/// We collect the rewards accumulated by a validator with the
+/// `CollectValidatorFee` instruction. This function distributes the accrued
+/// rewards paid to the Solido program (as we enforce that 100% of the fees goes
+/// to the Solido program).
+///
+/// `CollectValidatorFee` is blocked in a given epoch, until we update the
 /// exchange rate in that epoch. Validation rewards are distributed at the start
 /// of the epoch. This means that in epoch `i`:
 ///
 /// 1. `UpdateExchangeRate` updates the exchange rate to what it was at the end
 ///    of epoch `i - 1`.
-/// 2. `WithdrawInactiveStake` runs for every validator, and observes the
+/// 2. `CollectValidatorFee` runs for every validator, and observes the
 ///    rewards. Deposits (including those for fees) in epoch `i` therefore use
 ///    the exchange rate at the end of epoch `i - 1`, so deposits in epoch `i`
 ///    do not benefit from rewards received in epoch `i`.
-/// 3. Epoch `i + 1` starts, and validation rewards are paid into stake accounts.
+/// 3. Epoch `i + 1` starts, and validation rewards are paid into validator's
+/// vote accounts.
 /// 4. `UpdateExchangeRate` updates the exchange rate to what it was at the end
 ///    of epoch `i`. Everybody who deposited in epoch `i` (users, as well as fee
 ///    recipients) now benefit from the validation rewards received in epoch `i`.
@@ -185,7 +188,7 @@ pub struct Lido {
     pub sol_reserve_account_bump_seed: u8,
     pub stake_authority_bump_seed: u8,
     pub mint_authority_bump_seed: u8,
-    pub rewards_withdraw_bump_seed: u8,
+    pub rewards_withdraw_authority_bump_seed: u8,
 
     /// How rewards are distributed.
     pub reward_distribution: RewardDistribution,
@@ -407,7 +410,7 @@ impl Lido {
             &[
                 &solido_address.to_bytes()[..],
                 REWARDS_WITHDRAW_AUTHORITY,
-                &[self.rewards_withdraw_bump_seed],
+                &[self.rewards_withdraw_authority_bump_seed],
             ],
             program_id,
         )
@@ -851,7 +854,7 @@ mod test_lido {
             sol_reserve_account_bump_seed: 1,
             stake_authority_bump_seed: 2,
             mint_authority_bump_seed: 3,
-            rewards_withdraw_bump_seed: 4,
+            rewards_withdraw_authority_bump_seed: 4,
             reward_distribution: RewardDistribution {
                 treasury_fee: 2,
                 validation_fee: 3,

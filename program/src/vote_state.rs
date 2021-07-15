@@ -1,6 +1,6 @@
 use crate::{error::LidoError, find_authority_program_address, REWARDS_WITHDRAW_AUTHORITY};
-use byteorder::{LittleEndian, ReadBytesExt};
 use solana_program::{msg, pubkey::Pubkey};
+use std::convert::TryInto;
 
 /// Structure used to read the first 4 fields of a Solana `VoteAccount`.
 /// The original `VoteAccount` structure cannot be used in a Solana
@@ -35,9 +35,11 @@ impl PartialVoteState {
             return Err(LidoError::InvalidVoteAccount);
         }
         // Read 4 bytes for u32.
-        let version = (&data[0..4])
-            .read_u32::<LittleEndian>()
-            .map_err(|_| LidoError::InvalidVoteAccount)?;
+        let version = u32::from_le_bytes(
+            data[0..4]
+                .try_into()
+                .map_err(|_| LidoError::InvalidVoteAccount)?,
+        );
         if version != 1 {
             msg!(
                 "Vote State account version should be 1, it's {} instead.",
@@ -47,10 +49,10 @@ impl PartialVoteState {
         }
         let mut pubkey_buf: [u8; 32] = Default::default();
         // Read 32 bytes for Pubkey.
-        pubkey_buf.copy_from_slice(&data[4..36]);
+        pubkey_buf.copy_from_slice(&data[4..][..32]);
         let node_pubkey = Pubkey::new_from_array(pubkey_buf);
         // Read 32 bytes for Pubkey.
-        pubkey_buf.copy_from_slice(&data[36..68]);
+        pubkey_buf.copy_from_slice(&data[36..][..32]);
         let authorized_withdrawer = Pubkey::new_from_array(pubkey_buf);
 
         let (lido_withdraw_authority, _) =
