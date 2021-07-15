@@ -1,7 +1,7 @@
 #![cfg(feature = "test-bpf")]
 
 use crate::assert_solido_error;
-use crate::context::Context;
+use crate::context::{Context, StakeDeposit};
 
 use lido::error::LidoError;
 use lido::token::{Lamports, StLamports};
@@ -22,6 +22,9 @@ async fn test_collect_validator_fee() {
     // Deposit and stake the deposit with the validator. This creates one stake account.
     let initial_amount = Lamports(1_000_000_000);
     context.deposit(initial_amount).await;
+    context
+        .stake_deposit(validator.vote_account, StakeDeposit::Append, initial_amount)
+        .await;
 
     // We should be able to collect validator's fees. It should be a no-op,
     // because there were no rewards.
