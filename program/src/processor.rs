@@ -118,7 +118,7 @@ pub fn process_deposit(
         return Err(ProgramError::InvalidArgument);
     }
 
-    let lido = deserialize_lido(program_id, accounts.lido)?;
+    let mut lido = deserialize_lido(program_id, accounts.lido)?;
 
     invoke(
         &system_instruction::transfer(accounts.user.key, accounts.reserve_account.key, amount.0),
@@ -144,7 +144,8 @@ pub fn process_deposit(
         st_sol_amount,
     )?;
 
-    Ok(())
+    lido.metrics.deposit_amount.observe(amount)?;
+    lido.save(accounts.lido)
 }
 
 pub fn process_stake_deposit(

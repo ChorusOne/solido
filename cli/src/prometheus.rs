@@ -2,6 +2,7 @@
 //!
 //! See also <https://prometheus.io/docs/instrumenting/exposition_formats/#text-based-format>.
 
+use lido::metrics::{LamportsHistogram, Metrics};
 use std::io;
 use std::io::Write;
 use std::time::SystemTime;
@@ -61,7 +62,6 @@ impl<'a> Metric<'a> {
     }
 
     /// Set the suffix.
-    #[allow(dead_code)] // We will need this once we use histograms.
     pub fn with_suffix(mut self, suffix: &'a str) -> Metric<'a> {
         self.suffix = suffix;
         self
@@ -121,6 +121,131 @@ pub fn write_metric<W: Write>(out: &mut W, family: &MetricFamily) -> io::Result<
 
     // Add a blank line for readability by humans.
     writeln!(out)
+}
+
+pub fn solido_histogram_to_metrics(at: SystemTime, histogram: &LamportsHistogram) -> Vec<Metric> {
+    let mut metrics = Vec::with_capacity(histogram.counts.len() + 2);
+
+    // Add the histogram buckets, these have an "le" label (less than or equal)
+    // to specify the bound, which we measure in SOL.
+    for (&count, &upper_bound) in histogram
+        .counts
+        .iter()
+        .zip(LamportsHistogram::BUCKET_UPPER_BOUNDS.iter())
+    {
+        let le = match upper_bound.0 {
+            u64::MAX => "+Inf".to_string(),
+            n => format!("{}.{:09}", n / 1_000_000_000, n % 1_000_000_000),
+        };
+        metrics.push(
+            Metric::new(count)
+                .with_suffix("_bucket")
+                .with_label("le", le)
+                .at(at),
+        );
+    }
+
+    // Aside from the buckets, histograms should have two additional metrics:
+    // a _sum, and a _count (which is the same as the +Inf bucket).
+    metrics.push(
+        Metric::new(histogram.total.0)
+            .nano()
+            .with_suffix("_sum")
+            .at(at),
+    );
+    metrics.push(
+        Metric::new(histogram.num_observations())
+            .with_suffix("_count")
+            .at(at),
+    );
+
+    metrics
+}
+
+pub fn write_solido_metrics_as_prometheus<W: io::Write>(
+    metrics: &Metrics,
+    at: SystemTime,
+    out: &mut W,
+) -> io::Result<()> {
+    write_metric(
+        out,
+        &MetricFamily {
+            name: "solido_fee_treasury_sol_total",
+            help: "Total fees paid to the treasury, in SOL value before conversion to stSOL.",
+            type_: "counter",
+            metrics: vec![Metric::new(metrics.fee_treasury_sol_total.0).nano().at(at)],
+        },
+    )?;
+    write_metric(
+        out,
+        &MetricFamily {
+            name: "solido_fee_treasury_st_sol_total",
+            help: "Total fees paid to the treasury.",
+            type_: "counter",
+            metrics: vec![Metric::new(metrics.fee_treasury_st_sol_total.0)
+                .nano()
+                .at(at)],
+        },
+    )?;
+    write_metric(
+        out,
+        &MetricFamily {
+            name: "solido_fee_validation_sol_total",
+            help: "Total validation fees paid to validators (excluding commission they took), in SOL value before conversion to stSOL.",
+            type_: "counter",
+            metrics: vec![Metric::new(metrics.fee_validation_sol_total.0).nano().at(at)],
+        },
+    )?;
+    write_metric(
+        out,
+        &MetricFamily {
+            name: "solido_fee_validation_st_sol_total",
+            help: "Total validation fees paid to validators as stSOL (excluding commission they took).",
+            type_: "counter",
+            metrics: vec![Metric::new(metrics.fee_validation_st_sol_total.0).nano().at(at)],
+        },
+    )?;
+    write_metric(
+        out,
+        &MetricFamily {
+            name: "solido_fee_developer_sol_total",
+            help: "Total fees paid to the developer, in SOL value before conversion to stSOL.",
+            type_: "counter",
+            metrics: vec![Metric::new(metrics.fee_developer_sol_total.0).nano().at(at)],
+        },
+    )?;
+    write_metric(
+        out,
+        &MetricFamily {
+            name: "solido_fee_developer_st_sol_total",
+            help: "Total fees paid to the developer.",
+            type_: "counter",
+            metrics: vec![Metric::new(metrics.fee_developer_st_sol_total.0)
+                .nano()
+                .at(at)],
+        },
+    )?;
+    write_metric(
+        out,
+        &MetricFamily {
+            name: "solido_st_sol_appreciation_sol_total",
+            help: "Total SOL that went to benefit stSOL holders, i.e. rewards gained by users.",
+            type_: "counter",
+            metrics: vec![Metric::new(metrics.st_sol_appreciation_sol_total.0)
+                .nano()
+                .at(at)],
+        },
+    )?;
+    write_metric(
+        out,
+        &MetricFamily {
+            name: "solido_deposit_amount_sol",
+            help: "Total amount of SOL deposited by users.",
+            type_: "histogram",
+            metrics: solido_histogram_to_metrics(at, &metrics.deposit_amount),
+        },
+    )?;
+    Ok(())
 }
 
 #[cfg(test)]

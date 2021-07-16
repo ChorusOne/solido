@@ -125,9 +125,8 @@ accounts_struct! {
     DepositAccountsMeta, DepositAccountsInfo {
         pub lido {
             is_signer: false,
-            // TODO(glottologist): This will need to be writable again once we
-            // start storing metrics about deposits in the Solido state.
-            is_writable: false,
+            // Needs to be writable for us to update the metrics.
+            is_writable: true,
         },
         pub user {
             is_signer: true,

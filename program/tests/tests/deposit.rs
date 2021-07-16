@@ -24,4 +24,8 @@ async fn test_successful_deposit() {
     // but initially, the exchange rate is 1, so this holds.
     let st_sol_balance = context.get_st_sol_balance(recipient).await;
     assert_eq!(st_sol_balance.0, TEST_DEPOSIT_AMOUNT.0);
+
+    let solido = context.get_solido().await;
+    assert_eq!(solido.metrics.deposit_amount.total, TEST_DEPOSIT_AMOUNT);
+    assert_eq!(solido.metrics.deposit_amount.num_observations(), 1);
 }

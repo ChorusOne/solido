@@ -14,6 +14,7 @@ use spl_token::state::Mint;
 
 use crate::error::LidoError;
 use crate::logic::get_reserve_available_balance;
+use crate::metrics::Metrics;
 use crate::token::{Lamports, Rational, StLamports};
 use crate::util::serialize_b58;
 use crate::{
@@ -26,7 +27,7 @@ pub const LIDO_VERSION: u8 = 0;
 /// Size of a serialized `Lido` struct excluding validators and maintainers.
 ///
 /// To update this, run the tests and replace the value here with the test output.
-pub const LIDO_CONSTANT_SIZE: usize = 172;
+pub const LIDO_CONSTANT_SIZE: usize = 332;
 pub const VALIDATOR_CONSTANT_SIZE: usize = 68;
 
 pub type Validators = AccountMap<Validator>;
@@ -189,6 +190,13 @@ pub struct Lido {
 
     /// Accounts of the fee recipients.
     pub fee_recipients: FeeRecipients,
+
+    /// Metrics for informational purposes.
+    ///
+    /// Metrics are only written to, no program logic should depend on these values.
+    /// An off-chain program can load a snapshot of the `Lido` struct, and expose
+    /// these metrics.
+    pub metrics: Metrics,
 
     /// Map of enrolled validators, maps their vote account to `Validator` details.
     pub validators: Validators,
@@ -686,10 +694,13 @@ impl RewardDistribution {
             .add((reward_per_validator * num_validators)?)?;
         assert!(total_fees <= amount);
 
+        let st_sol_appreciation_amount = (amount - total_fees)?;
+
         let result = Fees {
             treasury_amount,
             reward_per_validator,
             developer_amount,
+            st_sol_appreciation_amount,
         };
 
         Some(result)
@@ -705,6 +716,12 @@ pub struct Fees {
     pub treasury_amount: Lamports,
     pub reward_per_validator: Lamports,
     pub developer_amount: Lamports,
+
+    /// Remainder of the reward.
+    ///
+    /// This is not a fee, and it is not paid out explicitly, but when summed
+    /// with the other fields in this struct, that totals the input amount.
+    pub st_sol_appreciation_amount: Lamports,
 }
 
 #[cfg(test)]
@@ -804,6 +821,7 @@ mod test_lido {
                 treasury_account: Pubkey::new_unique(),
                 developer_account: Pubkey::new_unique(),
             },
+            metrics: Metrics::new(),
             validators: validators,
             maintainers: maintainers,
         };
@@ -1064,6 +1082,7 @@ mod test_lido {
                 treasury_amount: Lamports(300),
                 reward_per_validator: Lamports(200),
                 developer_amount: Lamports(100),
+                st_sol_appreciation_amount: Lamports(0),
             },
         );
 
@@ -1075,6 +1094,7 @@ mod test_lido {
                 treasury_amount: Lamports(500),
                 reward_per_validator: Lamports(83),
                 developer_amount: Lamports(166),
+                st_sol_appreciation_amount: Lamports(2),
             },
         );
 
@@ -1087,6 +1107,7 @@ mod test_lido {
                 treasury_amount: Lamports(3),
                 reward_per_validator: Lamports(2),
                 developer_amount: Lamports(1),
+                st_sol_appreciation_amount: Lamports(94),
             },
         );
 
@@ -1102,6 +1123,7 @@ mod test_lido {
                 treasury_amount: Lamports(288),
                 reward_per_validator: Lamports(389),
                 developer_amount: Lamports(322),
+                st_sol_appreciation_amount: Lamports(1),
             },
         );
     }

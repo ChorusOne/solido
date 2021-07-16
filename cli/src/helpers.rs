@@ -5,6 +5,7 @@ use solana_program::{pubkey::Pubkey, system_instruction};
 use solana_sdk::signature::{Keypair, Signer};
 
 use lido::{
+    metrics::LamportsHistogram,
     state::{Lido, RewardDistribution},
     MINT_AUTHORITY, RESERVE_ACCOUNT, STAKE_AUTHORITY,
 };
@@ -339,6 +340,46 @@ impl fmt::Display for ShowSolidoOutput {
             "Developer fee SPL token account: {}",
             self.solido.fee_recipients.developer_account
         )?;
+
+        writeln!(f, "\nMetrics:")?;
+        writeln!(
+            f,
+            "  Total treasury fee:       {}, valued at {} when it was paid",
+            self.solido.metrics.fee_treasury_st_sol_total,
+            self.solido.metrics.fee_treasury_sol_total,
+        )?;
+        writeln!(
+            f,
+            "  Total validation fee:     {}, valued at {} when it was paid",
+            self.solido.metrics.fee_validation_st_sol_total,
+            self.solido.metrics.fee_validation_sol_total,
+        )?;
+        writeln!(
+            f,
+            "  Total developer fee:      {}, valued at {} when it was paid",
+            self.solido.metrics.fee_developer_st_sol_total,
+            self.solido.metrics.fee_developer_sol_total,
+        )?;
+        writeln!(
+            f,
+            "  Total stSOL appreciation: {}",
+            self.solido.metrics.st_sol_appreciation_sol_total
+        )?;
+        writeln!(
+            f,
+            "  Total deposited:          {}",
+            self.solido.metrics.deposit_amount.total
+        )?;
+        for (count, upper_bound) in self
+            .solido
+            .metrics
+            .deposit_amount
+            .counts
+            .iter()
+            .zip(&LamportsHistogram::BUCKET_UPPER_BOUNDS)
+        {
+            writeln!(f, "  Number of deposits ≤ {}: {}", upper_bound, count)?;
+        }
 
         writeln!(
             f,

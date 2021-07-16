@@ -225,10 +225,35 @@ pub fn distribute_fees<'a, 'b>(
     // For the validators, as there can be many of them, we can't pay all of
     // them in a single transaction. Instead, we store how much they are
     // entitled to, and they can later claim it themselves with `ClaimValidatorFees`.
+    let mut fee_validation_sol = Lamports(0);
+    let mut fee_validation_st_sol = StLamports(0);
     for validator in solido.validators.iter_entries_mut() {
         validator.fee_credit =
             (validator.fee_credit + per_validator_amount).ok_or(LidoError::CalculationFailure)?;
+
+        fee_validation_sol = (fee_validation_sol + fees.reward_per_validator)
+            .ok_or(LidoError::CalculationFailure)?;
+        fee_validation_st_sol =
+            (fee_validation_st_sol + per_validator_amount).ok_or(LidoError::CalculationFailure)?;
     }
+
+    // Also record our rewards in the metrics.
+    solido
+        .metrics
+        .observe_fee_treasury(fees.treasury_amount, treasury_amount)
+        .ok_or(LidoError::CalculationFailure)?;
+    solido
+        .metrics
+        .observe_fee_validation(fee_validation_sol, fee_validation_st_sol)
+        .ok_or(LidoError::CalculationFailure)?;
+    solido
+        .metrics
+        .observe_fee_developer(fees.developer_amount, developer_amount)
+        .ok_or(LidoError::CalculationFailure)?;
+    solido
+        .metrics
+        .observe_reward_st_sol_appreciation(fees.st_sol_appreciation_amount)
+        .ok_or(LidoError::CalculationFailure)?;
 
     Ok(())
 }

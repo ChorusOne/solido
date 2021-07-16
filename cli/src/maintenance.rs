@@ -483,7 +483,9 @@ impl SolidoState {
 
     /// Write metrics about the current Solido instance in Prometheus format.
     pub fn write_prometheus<W: io::Write>(&self, out: &mut W) -> io::Result<()> {
-        use crate::prometheus::{write_metric, Metric, MetricFamily};
+        use crate::prometheus::{
+            write_metric, write_solido_metrics_as_prometheus, Metric, MetricFamily,
+        };
 
         write_metric(
             out,
@@ -622,6 +624,8 @@ impl SolidoState {
                 ],
             },
         )?;
+
+        write_solido_metrics_as_prometheus(&self.solido.metrics, self.produced_at, out)?;
 
         Ok(())
     }
