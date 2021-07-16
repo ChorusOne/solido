@@ -1,6 +1,5 @@
 //! Holds a test context, which makes it easier to test with a Solido instance set up.
 
-use lido::find_authority_program_address;
 use num_traits::cast::FromPrimitive;
 use solana_program::program_pack::Pack;
 use solana_program::rent::Rent;
@@ -853,7 +852,6 @@ impl Context {
             .get_rent()
             .await
             .minimum_balance(vote_account.data.len());
-        let reward = vote_account.lamports() - vote_account_rent;
         send_transaction(
             &mut self.context,
             &mut self.nonce,

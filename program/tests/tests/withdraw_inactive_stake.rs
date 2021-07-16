@@ -1,11 +1,7 @@
 #![cfg(feature = "test-bpf")]
 
-use crate::assert_solido_error;
 use crate::context::{Context, StakeDeposit};
-
-use lido::error::LidoError;
 use lido::token::Lamports;
-
 use solana_program_test::tokio;
 
 #[tokio::test]
