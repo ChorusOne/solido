@@ -116,7 +116,9 @@ pub fn deserialize_rent_exempt_reserve(account_data: &[u8]) -> Result<Lamports, 
 pub fn deserialize_stake_account(account_data: &[u8]) -> Result<Stake, ProgramError> {
     let data = account_data;
 
-    if data.len() < 100 {
+    // We read 196 bytes from the data, so check that up front, so that bounds
+    // checks can be optimized away below.
+    if data.len() < 196 {
         return Err(LidoError::InvalidStakeAccount.into());
     }
 
@@ -291,5 +293,68 @@ impl Sum for StakeBalance {
             )
         }
         accumulator
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use solana_program::rent::Rent;
+    use solana_program::stake::state::Delegation;
+    use std::str::FromStr;
+
+    #[test]
+    fn test_deserialize_stake_account() {
+        // Actual stake account, printed from one of the `solana_program_test` tests.
+        let stake_account_data = [
+            2_u8, 0, 0, 0, 128, 213, 34, 0, 0, 0, 0, 0, 109, 205, 23, 189, 77, 39, 158, 172, 203,
+            232, 104, 67, 226, 58, 21, 243, 188, 167, 146, 138, 219, 130, 169, 165, 102, 229, 186,
+            26, 37, 216, 129, 239, 109, 205, 23, 189, 77, 39, 158, 172, 203, 232, 104, 67, 226, 58,
+            21, 243, 188, 167, 146, 138, 219, 130, 169, 165, 102, 229, 186, 26, 37, 216, 129, 239,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 123, 78, 181, 133, 59, 177,
+            25, 168, 47, 189, 98, 97, 72, 40, 220, 29, 58, 189, 47, 120, 44, 190, 215, 164, 200,
+            134, 123, 116, 72, 25, 135, 124, 202, 134, 166, 88, 34, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 208, 63, 1, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0,
+        ];
+
+        let actual = deserialize_stake_account(&stake_account_data).unwrap();
+        let expected = Stake {
+            delegation: Delegation {
+                voter_pubkey: Pubkey::from_str("9JLkwJFXQL548xYfspjaZQws9MCXAF3NYYux9AxUxEfd")
+                    .unwrap(),
+                stake: 1_247_027_824_330,
+                activation_epoch: 0,
+                deactivation_epoch: u64::MAX,
+                warmup_cooldown_rate: 0.25,
+            },
+            credits_observed: 1,
+        };
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_deserialize_rent_exempt_reserve() {
+        // Actual stake account, printed from one of the `solana_program_test` tests. Therefore, its
+        // rent-exempt balance stored in the account, should be equal to the rent-exempt balance for
+        // an account of that size.
+        let stake_account_data = [
+            2_u8, 0, 0, 0, 128, 213, 34, 0, 0, 0, 0, 0, 109, 205, 23, 189, 77, 39, 158, 172, 203,
+            232, 104, 67, 226, 58, 21, 243, 188, 167, 146, 138, 219, 130, 169, 165, 102, 229, 186,
+            26, 37, 216, 129, 239, 109, 205, 23, 189, 77, 39, 158, 172, 203, 232, 104, 67, 226, 58,
+            21, 243, 188, 167, 146, 138, 219, 130, 169, 165, 102, 229, 186, 26, 37, 216, 129, 239,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 123, 78, 181, 133, 59, 177,
+            25, 168, 47, 189, 98, 97, 72, 40, 220, 29, 58, 189, 47, 120, 44, 190, 215, 164, 200,
+            134, 123, 116, 72, 25, 135, 124, 202, 134, 166, 88, 34, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 208, 63, 1, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0,
+        ];
+
+        let actual = deserialize_rent_exempt_reserve(&stake_account_data).unwrap();
+        let rent = Rent::default();
+        let expected = rent.minimum_balance(stake_account_data.len());
+        assert_eq!(actual, Lamports(expected));
     }
 }
