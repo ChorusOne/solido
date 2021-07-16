@@ -133,6 +133,9 @@ mod test {
         let program_id = Pubkey::from_str("3kEkdGe68DuTKg6FhVrLPZ3Wm8EcUPCPjhCeu8WrGDoc").unwrap();
         let lido_address =
             Pubkey::from_str("DZtP4b6tZSY3XWBQDpuATc2mxB8LUh4Pp5t8Jnz9HLWC").unwrap();
-        assert!(PartialVoteState::deserialize(&program_id, &lido_address, &data).is_err());
+        assert_eq!(
+            PartialVoteState::deserialize(&program_id, &lido_address, &data),
+            Err(LidoError::InvalidVoteAccount)
+        );
     }
 }
