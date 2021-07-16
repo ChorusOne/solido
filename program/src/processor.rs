@@ -226,7 +226,7 @@ pub fn process_stake_deposit(
     // that there is now more SOL in the account than what we put in there, if
     // someone deposited into the account before we started using it. We don't
     // record that here; we will discover it later in `WithdrawInactiveStake`,
-    // and then it will be treated in the same way as a validation reward.
+    // and then it will be treated as a donation.
     msg!("Staked {} out of the reserve.", amount);
     validator.entry.stake_accounts_balance =
         (validator.entry.stake_accounts_balance + amount).ok_or(LidoError::CalculationFailure)?;
