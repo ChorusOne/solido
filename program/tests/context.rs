@@ -1,7 +1,6 @@
 //! Holds a test context, which makes it easier to test with a Solido instance set up.
 
 use lido::find_authority_program_address;
-use lido::REWARDS_WITHDRAW_AUTHORITY;
 use num_traits::cast::FromPrimitive;
 use solana_program::program_pack::Pack;
 use solana_program::rent::Rent;
@@ -24,8 +23,9 @@ use solana_sdk::transport::TransportError;
 use solana_vote_program::vote_instruction;
 use solana_vote_program::vote_state::{VoteInit, VoteState};
 
-use lido::{error::LidoError, RESERVE_ACCOUNT};
-use lido::{instruction, STAKE_AUTHORITY};
+use lido::{
+    error::LidoError, instruction, RESERVE_ACCOUNT, REWARDS_WITHDRAW_AUTHORITY, STAKE_AUTHORITY,
+};
 use lido::{
     state::Weight,
     token::{Lamports, StLamports},
@@ -60,6 +60,7 @@ pub struct Context {
     pub reserve_address: Pubkey,
     pub stake_authority: Pubkey,
     pub mint_authority: Pubkey,
+    pub withdraw_authority: Pubkey,
 }
 
 pub struct ValidatorAccounts {
@@ -188,6 +189,11 @@ impl Context {
         let (mint_authority, _) =
             Pubkey::find_program_address(&[&solido.pubkey().to_bytes()[..], MINT_AUTHORITY], &id());
 
+        let (withdraw_authority, _) = Pubkey::find_program_address(
+            &[&solido.pubkey().to_bytes()[..], REWARDS_WITHDRAW_AUTHORITY],
+            &id(),
+        );
+
         // Note: this name *must* match the name of the crate that contains the
         // program. If it does not, then it will still partially work, but we get
         // weird errors about resizing accounts.
@@ -211,7 +217,8 @@ impl Context {
             reward_distribution,
             reserve_address,
             stake_authority,
-            mint_authority: mint_authority,
+            mint_authority,
+            withdraw_authority,
         };
 
         result.st_sol_mint = result.create_mint(result.mint_authority).await;
@@ -397,18 +404,13 @@ impl Context {
             &system_program::id(),
         )];
 
-        let (withdraw_authority, _) = find_authority_program_address(
-            &id(),
-            &self.solido.pubkey(),
-            REWARDS_WITHDRAW_AUTHORITY,
-        );
         instructions.extend(vote_instruction::create_account(
             &payer,
             &vote_account.pubkey(),
             &VoteInit {
                 node_pubkey: node_key.pubkey(),
                 authorized_voter: node_key.pubkey(),
-                authorized_withdrawer: withdraw_authority,
+                authorized_withdrawer: self.withdraw_authority,
                 commission: 100,
             },
             rent_voter,
@@ -788,7 +790,7 @@ impl Context {
             .expect("Failed to call MergeStake on Solido instance.")
     }
 
-    /// Observe the new validator balance and write it ot the state,
+    /// Observe the new validator balance and write it to the state,
     /// distribute any rewards received.
     pub async fn try_withdraw_inactive_stake(
         &mut self,

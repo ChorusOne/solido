@@ -28,10 +28,8 @@ async fn test_collect_validator_fee() {
 
     // We should be able to collect validator's fees. It should be a no-op,
     // because there were no rewards.
-    let solido_before = context.get_solido().await;
-    context.collect_validator_fee(validator.vote_account).await;
-    let solido_after = context.get_solido().await;
-    assert_eq!(solido_before, solido_after);
+    let fees = context.collect_validator_fee(validator.vote_account).await;
+    assert_eq!(fees, Lamports(0));
 
     // Skip ahead a number of epochs.
     let epoch_schedule = context.context.genesis_config().epoch_schedule;
@@ -48,7 +46,8 @@ async fn test_collect_validator_fee() {
 
     // So after we update the exchange rate, we should be allowed to collect the validator's fee,
     context.update_exchange_rate().await;
-    context.collect_validator_fee(validator.vote_account).await;
+    let fees = context.collect_validator_fee(validator.vote_account).await;
+    assert_eq!(fees, Lamports(0));
 
     // Increment the vote account credits, to simulate the validator voting in
     // this epoch, which means it will receive rewards at the start of the next
@@ -148,6 +147,7 @@ async fn test_collect_validator_fee_withdraws_donations_to_the_reserve() {
 
     // The donation should have been withdrawn back to the reserve.
     assert_eq!(reserve_after, (reserve_before + vote_donation).unwrap());
+    assert_eq!(vote_donation, donation);
 
     let solido_after = context.get_solido().await;
     let treasury_after = context
