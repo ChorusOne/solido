@@ -15,7 +15,7 @@ use crate::{
         process_claim_validator_fee, process_merge_stake, process_remove_maintainer,
         process_remove_validator,
     },
-    stake_account::StakeAccount,
+    stake_account::{deserialize_stake_account, StakeAccount},
     state::{
         FeeRecipients, Lido, Maintainers, RewardDistribution, Validator, Validators,
         LIDO_CONSTANT_SIZE, LIDO_VERSION,
@@ -24,8 +24,8 @@ use crate::{
     MINT_AUTHORITY, RESERVE_ACCOUNT, STAKE_AUTHORITY, VALIDATOR_STAKE_ACCOUNT,
 };
 
-use solana_program::stake_history::StakeHistory;
 use solana_program::stake as stake_program;
+use solana_program::stake_history::StakeHistory;
 use {
     borsh::BorshDeserialize,
     solana_program::{
@@ -359,7 +359,7 @@ pub fn withdraw_excess_inactive_sol<'a, 'b>(
     stake_authority_bump_seed: u8,
 ) -> Result<Lamports, ProgramError> {
     let stake_account_rent = Lamports(rent.minimum_balance(stake_account.data_len()));
-    let stake = StakeAccount::get_stake(stake_account)?;
+    let stake = deserialize_stake_account(&stake_account.data.borrow())?;
     let stake_info = StakeAccount::from_delegated_account(
         Lamports(stake_account.lamports()),
         &stake,

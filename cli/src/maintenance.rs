@@ -6,14 +6,16 @@ use std::time::SystemTime;
 
 use serde::Serialize;
 use solana_program::program_pack::Pack;
-use solana_program::stake::state::StakeState;
 use solana_program::{clock::Clock, pubkey::Pubkey, rent::Rent, stake_history::StakeHistory};
-use solana_sdk::{account::Account, borsh::try_from_slice_unchecked, instruction::Instruction};
+use solana_sdk::{account::Account, instruction::Instruction};
 use spl_token::state::Mint;
 
 use lido::token::StLamports;
 use lido::{account_map::PubkeyAndEntry, stake_account::StakeAccount, MINT_AUTHORITY};
-use lido::{stake_account::StakeBalance, util::serialize_b58};
+use lido::{
+    stake_account::{deserialize_stake_account, StakeBalance},
+    util::serialize_b58,
+};
 use lido::{
     state::{Lido, Validator},
     token::Lamports,
@@ -174,14 +176,8 @@ fn get_validator_stake_accounts(
             seed,
         );
         let account = config.client.get_account(&addr)?;
-        let stake_state: StakeState = try_from_slice_unchecked(&account.data)
+        let stake = deserialize_stake_account(&account.data)
             .expect("Derived stake account contains invalid data.");
-
-        let stake = if let StakeState::Stake(_, stake) = stake_state {
-            stake
-        } else {
-            panic!("Stake state should have been StakeState::Stake")
-        };
 
         assert_eq!(
             stake.delegation.voter_pubkey, validator.pubkey,

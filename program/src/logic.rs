@@ -2,8 +2,7 @@ use solana_program::entrypoint::ProgramResult;
 use solana_program::{
     account_info::AccountInfo, borsh::try_from_slice_unchecked, msg, program::invoke,
     program::invoke_signed, program_error::ProgramError, pubkey::Pubkey, rent::Rent,
-    system_instruction,
-    stake as stake_program,
+    stake as stake_program, system_instruction,
 };
 
 use crate::{

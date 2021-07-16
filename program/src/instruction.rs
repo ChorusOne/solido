@@ -7,9 +7,8 @@ use solana_program::{
     instruction::{AccountMeta, Instruction},
     program_error::ProgramError,
     pubkey::Pubkey,
-    system_program,
+    stake as stake_program, system_program,
     sysvar::{self, stake_history},
-    stake as stake_program,
 };
 
 use crate::{
