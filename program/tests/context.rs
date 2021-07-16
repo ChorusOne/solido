@@ -836,7 +836,7 @@ impl Context {
             .expect("Failed to withdraw inactive stake.");
     }
 
-    /// Observe the new validator balance and write it ot the state,
+    /// Observe the new validator balance and write it to the state,
     /// distribute any rewards received.
     pub async fn try_collect_validator_fee(
         &mut self,
