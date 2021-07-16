@@ -477,8 +477,9 @@ impl SolidoState {
 
     /// Check if any validator's balance is outdated, and if so, update it.
     ///
-    /// If some joker donates to one of the stake accounts we have this function
-    /// to get these funds back to the reserve account. Thanks 🤡.
+    /// Merging stakes generates inactive stake that could be withdrawn with this transaction,
+    /// or if some joker donates to one of the stake accounts we can use the same function
+    /// to claim these rewards back to the reserve account so they can be re-staked.
     pub fn try_withdraw_inactive_stake(&self) -> Option<(Instruction, MaintenanceOutput)> {
         for (validator, stake_accounts) in self
             .solido
