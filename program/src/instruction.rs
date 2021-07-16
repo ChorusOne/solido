@@ -9,8 +9,8 @@ use solana_program::{
     pubkey::Pubkey,
     system_program,
     sysvar::{self, stake_history},
+    stake as stake_program,
 };
-use spl_stake_pool::stake_program;
 
 use crate::{
     accounts_struct, accounts_struct_meta,
@@ -208,9 +208,9 @@ accounts_struct! {
         const sysvar_clock = sysvar::clock::id(),
         const system_program = system_program::id(),
         const sysvar_rent = sysvar::rent::id(),
-        const stake_program = stake_program::id(),
+        const stake_program = stake_program::program::id(),
         const stake_history = stake_history::id(),
-        const stake_program_config = stake_program::config_id(),
+        const stake_program_config = stake_program::config::id(),
     }
 }
 
@@ -323,7 +323,7 @@ accounts_struct! {
         const spl_token_program = spl_token::id(),
 
         // Needed to withdraw from stake accounts.
-        const stake_program = stake_program::id(),
+        const stake_program = stake_program::program::id(),
 
         // The validator's stake accounts, from the begin seed until (but
         // excluding) the end seed.
@@ -409,7 +409,7 @@ accounts_struct! {
         },
         const sysvar_clock = sysvar::clock::id(),
         const sysvar_stake_history = sysvar::stake_history::id(),
-        const sysvar_stake_program = stake_program::id(),
+        const sysvar_stake_program = stake_program::program::id(),
     }
 }
 
@@ -440,7 +440,7 @@ accounts_struct! {
             is_writable: false,
         },
         const sysvar_clock = sysvar::clock::id(),
-        const sysvar_stake_program = stake_program::id(),
+        const sysvar_stake_program = stake_program::program::id(),
     }
 }
 
@@ -571,7 +571,7 @@ accounts_struct! {
         },
         const sysvar_clock = sysvar::clock::id(),
         const stake_history = stake_history::id(),
-        const stake_program = stake_program::id(),
+        const stake_program = stake_program::program::id(),
     }
 }
 

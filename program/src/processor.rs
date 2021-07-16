@@ -1,7 +1,5 @@
 //! Program state processor
 
-use spl_stake_pool::stake_program;
-
 use crate::{
     error::LidoError,
     instruction::{
@@ -27,6 +25,7 @@ use crate::{
 };
 
 use solana_program::stake_history::StakeHistory;
+use solana_program::stake as stake_program;
 use {
     borsh::BorshDeserialize,
     solana_program::{
@@ -198,8 +197,8 @@ pub fn process_stake_deposit(
         &accounts.lido.key,
         CreateAccountOptions {
             fund_amount: amount,
-            data_size: std::mem::size_of::<stake_program::StakeState>() as u64,
-            owner: stake_program::id(),
+            data_size: std::mem::size_of::<stake_program::state::StakeState>() as u64,
+            owner: stake_program::program::id(),
             sign_seeds: stake_account_seeds,
             account: accounts.stake_account_end,
         },
@@ -246,7 +245,7 @@ pub fn process_stake_deposit(
             validator.entry.stake_accounts_seed_end
         );
         invoke_signed(
-            &stake_program::delegate_stake(
+            &stake_program::instruction::delegate_stake(
                 accounts.stake_account_end.key,
                 accounts.stake_authority.key,
                 accounts.validator_vote_account.key,
@@ -289,12 +288,19 @@ pub fn process_stake_deposit(
             "Merging into existing stake account at seed {} ...",
             validator.entry.stake_accounts_seed_end - 1
         );
+        let merge_instructions = stake_program::instruction::merge(
+            accounts.stake_account_merge_into.key,
+            accounts.stake_account_end.key,
+            accounts.stake_authority.key,
+        );
+        // For some reason, `merge` returns a `Vec` of instructions, but when
+        // you look at the implementation, it unconditionally returns a single
+        // instruction.
+        assert_eq!(merge_instructions.len(), 1);
+        let merge_instruction = &merge_instructions[0];
+
         invoke_signed(
-            &stake_program::merge(
-                accounts.stake_account_merge_into.key,
-                accounts.stake_account_end.key,
-                accounts.stake_authority.key,
-            ),
+            merge_instruction,
             &[
                 accounts.stake_account_merge_into.clone(),
                 accounts.stake_account_end.clone(),

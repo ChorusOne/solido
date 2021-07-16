@@ -1,6 +1,3 @@
 [submodule "multisig"]
 	path = multisig
 	url = https://github.com/chorusone/multisig
-[submodule "solana-program-library"]
-	path = solana-program-library
-	url = https://github.com/chorusone/solana-program-library

@@ -5,8 +5,11 @@ use std::io;
 use std::time::SystemTime;
 
 use serde::Serialize;
+use solana_program::program_pack::Pack;
+use solana_program::stake::state::StakeState;
 use solana_program::{clock::Clock, pubkey::Pubkey, rent::Rent, stake_history::StakeHistory};
 use solana_sdk::{account::Account, borsh::try_from_slice_unchecked, instruction::Instruction};
+use spl_token::state::Mint;
 
 use lido::token::StLamports;
 use lido::{account_map::PubkeyAndEntry, stake_account::StakeAccount, MINT_AUTHORITY};
@@ -16,13 +19,10 @@ use lido::{
     token::Lamports,
     MINIMUM_STAKE_ACCOUNT_BALANCE, STAKE_AUTHORITY,
 };
-use spl_stake_pool::stake_program::StakeState;
-use spl_token::state::Mint;
 
 use crate::error::MaintenanceError;
 use crate::snapshot::Result;
 use crate::{config::PerformMaintenanceOpts, SnapshotConfig};
-use solana_program::program_pack::Pack;
 
 /// A brief description of the maintenance performed. Not relevant functionally,
 /// but helpful for automated testing, and just for info.

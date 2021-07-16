@@ -61,7 +61,7 @@ mod test {
     fn minimum_stake_account_balance_is_at_least_rent_exempt() {
         use crate::token::Lamports;
         use solana_program::rent::Rent;
-        use spl_stake_pool::stake_program::StakeState;
+        use solana_program::stake::state::StakeState;
 
         let rent = Rent::default();
         let minimum_rent_exempt_balance =

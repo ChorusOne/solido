@@ -15,7 +15,11 @@ use solana_program::{
     sysvar,
 };
 use solana_program::{instruction::Instruction, stake_history::StakeHistory};
-use spl_stake_pool::stake_program::{self, Stake, StakeInstruction, StakeState};
+use solana_program::stake::{
+    state::{StakeState, Stake},
+    instruction::StakeInstruction,
+    self as stake_program,
+};
 
 /// The balance of a stake account, split into the four states that stake can be in.
 ///
@@ -87,7 +91,7 @@ impl StakeAccount {
         ];
 
         Instruction::new_with_bincode(
-            stake_program::id(),
+            stake_program::program::id(),
             &StakeInstruction::Withdraw(amount.0),
             account_metas,
         )

@@ -1,6 +1,5 @@
 use solana_program::program::invoke_signed;
 use solana_program::{account_info::AccountInfo, entrypoint::ProgramResult, msg, pubkey::Pubkey};
-use spl_stake_pool::stake_program::{self};
 
 use crate::{
     error::LidoError,
@@ -201,14 +200,19 @@ pub fn process_merge_stake(program_id: &Pubkey, accounts_raw: &[AccountInfo]) ->
     validator.entry.stake_accounts_seed_begin += 1;
     // Merge `from_stake_addr` to `to_stake_addr`, at the end of the
     // instruction, `from_stake_addr` ceases to exist.
-    let merge_ix = stake_program::merge(
+    let merge_instructions = solana_program::stake::instruction::merge(
         &to_stake_addr,
         &from_stake_addr,
         &accounts.stake_authority.key,
     );
 
+    // For some reason, `merge` returns a `Vec`, but when we look at the
+    // implementation, we can see that it always returns a single instruction.
+    assert_eq!(merge_instructions.len(), 1);
+    let merge_instruction = &merge_instructions[0];
+
     invoke_signed(
-        &merge_ix,
+        merge_instruction,
         &[
             accounts.from_stake.clone(),
             accounts.to_stake.clone(),

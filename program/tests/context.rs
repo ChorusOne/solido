@@ -8,6 +8,7 @@ use solana_program::system_program;
 use solana_program::{borsh::try_from_slice_unchecked, sysvar};
 use solana_program::{clock::Clock, instruction::Instruction};
 use solana_program::{instruction::InstructionError, stake_history::StakeHistory};
+use solana_program::stake::state::{Meta, Stake, StakeState};
 use solana_program_test::{processor, ProgramTest, ProgramTestContext};
 use solana_sdk::account::{from_account, Account};
 use solana_sdk::pubkey::Pubkey;
@@ -16,6 +17,7 @@ use solana_sdk::transaction::Transaction;
 use solana_sdk::transaction::TransactionError;
 use solana_sdk::transport;
 use solana_sdk::transport::TransportError;
+use solana_sdk::account_info::AccountInfo;
 use solana_vote_program::vote_instruction;
 use solana_vote_program::vote_state::{VoteInit, VoteState};
 
@@ -29,8 +31,6 @@ use lido::{
     state::{FeeRecipients, Lido, RewardDistribution, Validator},
     MINT_AUTHORITY,
 };
-use solana_sdk::account_info::AccountInfo;
-use spl_stake_pool::stake_program::{Meta, Stake, StakeState};
 
 // This id is only used throughout these tests.
 solana_program::declare_id!("3kEkdGe68DuTKg6FhVrLPZ3Wm8EcUPCPjhCeu8WrGDoc");
