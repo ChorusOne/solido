@@ -5,12 +5,12 @@ use solana_program::{program_error::ProgramError, pubkey::Pubkey, system_instruc
 use solana_sdk::signature::{Keypair, Signer};
 
 use lido::{
-    MINT_AUTHORITY, RESERVE_ACCOUNT, REWARDS_WITHDRAW_AUTHORITY, STAKE_AUTHORITY,
     error::LidoError,
     metrics::LamportsHistogram,
     state::{Lido, RewardDistribution},
     token::StLamports,
     util::serialize_b58,
+    MINT_AUTHORITY, RESERVE_ACCOUNT, REWARDS_WITHDRAW_AUTHORITY,
 };
 
 use crate::config::{
