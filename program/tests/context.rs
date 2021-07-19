@@ -11,7 +11,7 @@ use solana_program::system_program;
 use solana_program::{borsh::try_from_slice_unchecked, sysvar};
 use solana_program::{clock::Clock, instruction::Instruction};
 use solana_program::{instruction::InstructionError, stake_history::StakeHistory};
-use solana_program_test::{processor, ProgramTest, ProgramTestContext};
+use solana_program_test::{processor, ProgramTest, ProgramTestBanksClientExt, ProgramTestContext};
 use solana_sdk::account::ReadableAccount;
 use solana_sdk::account::{from_account, Account};
 use solana_sdk::account_info::AccountInfo;
@@ -126,6 +126,20 @@ pub async fn send_transaction(
     let memo = spl_memo::build_memo(&format!("nonce={}", *nonce).as_bytes(), &[]);
     instructions_mut.push(memo);
     *nonce += 1;
+
+    // However, if we execute many transactions and don't request a new block
+    // hash, the block hash will eventually be too old. `solana_program_test`
+    // doesn’t tell you that this is the problem, instead `process_transaction`
+    // will fail with a timeout `IoError`. So do refresh the block hash every
+    // 300 transactions.
+    if *nonce % 300 == 299 {
+        context.last_blockhash = context
+            .banks_client
+            .get_new_blockhash(&context.last_blockhash)
+            .await
+            .expect("Failed to get a new blockhash.")
+            .0;
+    }
 
     // Change this to true to enable more verbose test output.
     if false {
@@ -344,6 +358,16 @@ impl Context {
         }
         result.validator = Some(validator);
         (result, stake_accounts)
+    }
+
+    /// Send a memo transaction. This can be used for printf debugging, because
+    /// the memo will show up in the test logs, between the other transaction
+    /// logs.
+    pub async fn memo(&mut self, message: &str) {
+        let memo_instr = spl_memo::build_memo(message.as_bytes(), &[]);
+        send_transaction(&mut self.context, &mut self.nonce, &[memo_instr], vec![])
+            .await
+            .expect("Failed to send memo transaction.")
     }
 
     /// Initialize a new SPL token mint, return its instance address.
