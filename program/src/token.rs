@@ -192,6 +192,20 @@ pub mod test {
     }
 
     #[test]
+    fn test_lamports_from_str_handles_more_than_f64() {
+        let x = "9007199.254740993";
+        let expected = Lamports(9007199_254740993);
+
+        // Parsing as integer from the start should work.
+        assert_eq!(Lamports::from_str(x), Ok(expected));
+
+        // Parsing as float and casting to int does not work for this number,
+        // because it doesn’t fit the f64 mantissa. If we would parse as f64,
+        // we would lose one lamport.
+        assert_eq!((f64::from_str(x).unwrap() * 1e9) as u64, expected.0 - 1);
+    }
+
+    #[test]
     fn test_lamports_from_str_examples() {
         assert_eq!(Lamports::from_str("1_000"), Ok(Lamports(1_000_000_000_000)));
         assert_eq!(Lamports::from_str("1"), Ok(Lamports(1_000_000_000)));
