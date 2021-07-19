@@ -1,6 +1,8 @@
 //! Holds a test context, which makes it easier to test with a Solido instance set up.
 
 use num_traits::cast::FromPrimitive;
+use rand::prelude::StdRng;
+use rand::SeedableRng;
 use solana_program::program_pack::Pack;
 use solana_program::rent::Rent;
 use solana_program::stake::state::Stake;
@@ -34,10 +36,34 @@ use lido::{
     MINT_AUTHORITY,
 };
 
+pub struct DeterministicKeypair {
+    rng: StdRng,
+}
+
+impl DeterministicKeypair {
+    fn new() -> Self {
+        let rng = StdRng::seed_from_u64(0);
+        DeterministicKeypair { rng }
+    }
+    pub fn new_keypair(&mut self) -> Keypair {
+        Keypair::generate(&mut self.rng)
+    }
+}
+
+#[test]
+fn test_deterministic_key() {
+    let mut deterministic_keypair = DeterministicKeypair::new();
+    let kp1 = deterministic_keypair.new_keypair();
+    let kp2 = deterministic_keypair.new_keypair();
+    let kp3 = deterministic_keypair.new_keypair();
+    println!("{:?} {:?} {:?}", kp1, kp2, kp3);
+}
+
 // This id is only used throughout these tests.
 solana_program::declare_id!("3kEkdGe68DuTKg6FhVrLPZ3Wm8EcUPCPjhCeu8WrGDoc");
 
 pub struct Context {
+    pub deterministic_keypair: DeterministicKeypair,
     /// Inner test context that contains the banks client and recent block hash.
     pub context: ProgramTestContext,
 
@@ -166,8 +192,9 @@ impl Context {
     ///
     /// The instance contains no maintainers yet.
     pub async fn new_empty() -> Context {
-        let manager = Keypair::new();
-        let solido = Keypair::new();
+        let mut deterministic_keypair = DeterministicKeypair::new();
+        let manager = deterministic_keypair.new_keypair();
+        let solido = deterministic_keypair.new_keypair();
 
         let reward_distribution = RewardDistribution {
             validation_fee: 5,
@@ -218,15 +245,16 @@ impl Context {
             stake_authority,
             mint_authority,
             withdraw_authority,
+            deterministic_keypair: deterministic_keypair,
         };
 
         result.st_sol_mint = result.create_mint(result.mint_authority).await;
 
-        let treasury_owner = Keypair::new();
+        let treasury_owner = result.deterministic_keypair.new_keypair();
         result.treasury_st_sol_account =
             result.create_st_sol_account(treasury_owner.pubkey()).await;
 
-        let developer_owner = Keypair::new();
+        let developer_owner = result.deterministic_keypair.new_keypair();
         result.developer_st_sol_account =
             result.create_st_sol_account(developer_owner.pubkey()).await;
 
@@ -316,7 +344,7 @@ impl Context {
 
     /// Initialize a new SPL token mint, return its instance address.
     pub async fn create_mint(&mut self, mint_authority: Pubkey) -> Pubkey {
-        let mint = Keypair::new();
+        let mint = self.deterministic_keypair.new_keypair();
 
         let rent = self.context.banks_client.get_rent().await.unwrap();
         let mint_rent = rent.minimum_balance(spl_token::state::Mint::LEN);
@@ -354,7 +382,7 @@ impl Context {
     pub async fn create_st_sol_account(&mut self, owner: Pubkey) -> Pubkey {
         let rent = self.context.banks_client.get_rent().await.unwrap();
         let account_rent = rent.minimum_balance(spl_token::state::Account::LEN);
-        let account = Keypair::new();
+        let account = self.deterministic_keypair.new_keypair();
 
         let payer = self.context.payer.pubkey();
         send_transaction(
@@ -392,7 +420,7 @@ impl Context {
         let initial_balance = Lamports(42);
         let size_bytes = 0;
 
-        let vote_account = Keypair::new();
+        let vote_account = self.deterministic_keypair.new_keypair();
 
         let payer = self.context.payer.pubkey();
         let mut instructions = vec![system_instruction::create_account(
@@ -490,7 +518,7 @@ impl Context {
 
     /// Create a new key pair and add it as maintainer.
     pub async fn add_maintainer(&mut self) -> Keypair {
-        let maintainer = Keypair::new();
+        let maintainer = self.deterministic_keypair.new_keypair();
         self.try_add_maintainer(maintainer.pubkey())
             .await
             .expect("Failed to add maintainer.");
@@ -540,7 +568,7 @@ impl Context {
 
     /// Create a new key pair and add it as maintainer.
     pub async fn add_validator(&mut self) -> ValidatorAccounts {
-        let node_account = Keypair::new();
+        let node_account = self.deterministic_keypair.new_keypair();
         let fee_account = self.create_st_sol_account(node_account.pubkey()).await;
         let vote_account = self.create_vote_account(&node_account).await;
 
@@ -580,7 +608,7 @@ impl Context {
         // Create a new user who is going to do the deposit. The user's account
         // will hold the SOL to deposit, and it will also be the owner of the
         // stSOL account that holds the proceeds.
-        let user = Keypair::new();
+        let user = self.deterministic_keypair.new_keypair();
         let recipient = self.create_st_sol_account(user.pubkey()).await;
 
         // Fund the user account, so the user can deposit that into Solido.

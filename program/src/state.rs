@@ -771,7 +771,6 @@ pub struct Fees {
 mod test_lido {
     use super::*;
     use solana_program::program_error::ProgramError;
-    use solana_sdk::signature::{Keypair, Signer};
 
     #[test]
     fn test_account_map_required_bytes_relates_to_maximum_entries() {
@@ -965,10 +964,9 @@ mod test_lido {
     #[test]
     fn test_lido_for_deposit_wrong_mint() {
         let mut lido = Lido::default();
-        lido.st_sol_mint = Keypair::new().pubkey();
+        lido.st_sol_mint = Pubkey::new_unique();
 
-        let other_mint = Keypair::new();
-        let pubkey = other_mint.pubkey();
+        let pubkey = Pubkey::new_unique();
         let mut lamports = 100;
         let mut data = [0_u8];
         let is_signer = false;
