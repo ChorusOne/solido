@@ -85,9 +85,15 @@ async fn test_withdraw_inactive_stake_max_accounts() {
 
     // The maximum number of stake accounts per validator that we can support,
     // before WithdrawInactiveStake fails.
-    let max_accounts = 9;
+    let max_accounts: u32 = 9;
 
-    for i in 0..=max_accounts {
+    // The amount of compute units used by the program is not deterministic,
+    // possibly due to string formatting pubkeys. Therefore, the number of
+    // accounts we support varies. Test for `max_accounts ± slack` passes,
+    // followed by one fail.
+    let slack: u32 = 1;
+
+    for n in 1..=max_accounts + slack + 1 {
         let amount = Lamports(2_000_000_000);
         context.deposit(amount).await;
         let stake_account = context
@@ -103,17 +109,26 @@ async fn test_withdraw_inactive_stake_max_accounts() {
             .try_withdraw_inactive_stake(validator.vote_account)
             .await;
 
-        if i < max_accounts {
-            assert!(
+        match n {
+            // At the max, or `slack` below, we should still succeed.
+            _ if n <= max_accounts - slack => assert!(
                 result.is_ok(),
-                "WithdrawInactiveStake should succeed with {} out of max {} stake accounts.",
-                i + 1,
+                "WithdrawInactiveStake should succeed with {} out of max {} ± {} stake accounts.",
+                n,
                 max_accounts,
-            );
-        } else {
-            // One more account should fail. At the time of writing, it fails
-            // because it runs into the compute unit limit.
-            assert!(result.is_err());
+                slack,
+            ),
+            // At `slack` above the max, we should fail.
+            _ if n > max_accounts + slack => assert!(
+                result.is_err(),
+                "WithdrawInactiveStake should fail with {} out of max {} ± {} stake accounts.",
+                n,
+                max_accounts,
+                slack,
+            ),
+            // Around the max, we can either pass or fail, it depends on the
+            // details of this particular run, so we make no statement about it.
+            _ => {}
         }
     }
 }
