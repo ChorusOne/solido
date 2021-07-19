@@ -1741,7 +1741,6 @@ dependencies = [
  "arrayref",
  "bincode",
  "borsh",
- "ed25519-dalek",
  "num-derive",
  "num-traits",
  "num_enum",
