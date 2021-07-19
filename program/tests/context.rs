@@ -54,9 +54,13 @@ impl DeterministicKeypair {
 fn test_deterministic_key() {
     let mut deterministic_keypair = DeterministicKeypair::new();
     let kp1 = deterministic_keypair.new_keypair();
-    let kp2 = deterministic_keypair.new_keypair();
-    let kp3 = deterministic_keypair.new_keypair();
-    println!("{:?} {:?} {:?}", kp1, kp2, kp3);
+    let expected_result: &[u8] = &[
+        178, 247, 245, 129, 214, 222, 60, 6, 168, 34, 253, 110, 126, 130, 101, 251, 192, 15, 132,
+        1, 105, 106, 91, 220, 52, 245, 166, 210, 255, 63, 146, 47, 237, 208, 246, 222, 52, 42, 30,
+        106, 114, 54, 214, 36, 79, 35, 216, 62, 237, 252, 236, 208, 89, 163, 134, 200, 80, 85, 112,
+        20, 152, 231, 112, 51,
+    ];
+    assert_eq!(kp1.to_bytes(), expected_result);
 }
 
 // This id is only used throughout these tests.
