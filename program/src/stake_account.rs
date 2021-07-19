@@ -4,9 +4,8 @@ use std::iter::Sum;
 use std::ops::Add;
 
 use crate::{error::LidoError, token::Lamports};
+use solana_program::stake::{self as stake_program, instruction::StakeInstruction, state::Stake};
 use solana_program::{
-    account_info::AccountInfo,
-    borsh::try_from_slice_unchecked,
     clock::{Clock, Epoch},
     instruction::AccountMeta,
     msg,
@@ -15,7 +14,6 @@ use solana_program::{
     sysvar,
 };
 use solana_program::{instruction::Instruction, stake_history::StakeHistory};
-use spl_stake_pool::stake_program::{self, Stake, StakeInstruction, StakeState};
 
 /// The balance of a stake account, split into the four states that stake can be in.
 ///
@@ -61,16 +59,106 @@ impl StakeBalance {
     }
 }
 
-impl StakeAccount {
-    pub fn get_stake(account: &AccountInfo) -> Result<Stake, ProgramError> {
-        let stake_state: StakeState = try_from_slice_unchecked(&account.data.borrow())?;
-        if let StakeState::Stake(_, stake) = stake_state {
-            Ok(stake)
-        } else {
-            msg!("Stake state should have been StakeState::Stake");
-            Err(LidoError::InvalidStakeAccount.into())
-        }
+/// Consume a 32-byte pubkey from the data start, return it and the remainder.
+fn take_pubkey(data: &[u8]) -> (Pubkey, &[u8]) {
+    let mut prefix = [0u8; 32];
+    prefix.copy_from_slice(&data[..32]);
+    (Pubkey::new(&prefix), &data[32..])
+}
+
+/// Consume a little-endian `u32` from the data start, return it and the remainder.
+fn take_u32_le(data: &[u8]) -> (u32, &[u8]) {
+    // It looks like there is something going on here, but this is just to satisfy
+    // the typechecker, I sure hope LLVM compiles this to just an unaligned load.
+    let mut prefix = [0u8; 4];
+    prefix.copy_from_slice(&data[..4]);
+    (u32::from_le_bytes(prefix), &data[4..])
+}
+
+/// Consume a little-endian `u64` from the data start, return it and the remainder.
+fn take_u64_le(data: &[u8]) -> (u64, &[u8]) {
+    let mut prefix = [0u8; 8];
+    prefix.copy_from_slice(&data[..8]);
+    (u64::from_le_bytes(prefix), &data[8..])
+}
+
+/// Consume a little-endian `f64` from the data start, return it and the remainder.
+fn take_f64_le(data: &[u8]) -> (f64, &[u8]) {
+    let mut prefix = [0u8; 8];
+    prefix.copy_from_slice(&data[..8]);
+    (f64::from_le_bytes(prefix), &data[8..])
+}
+
+/// Deserialize the `meta.rent_exempt_reserve` field in a `StakeState::Stake` account.
+/// Implemented manually here because `solana_program` does not implement a deserializer.
+pub fn deserialize_rent_exempt_reserve(account_data: &[u8]) -> Result<Lamports, ProgramError> {
+    let data = account_data;
+
+    if data.len() < 12 {
+        return Err(LidoError::InvalidStakeAccount.into());
     }
+
+    let (type_, data) = take_u32_le(data);
+    if type_ != 2 {
+        msg!("Stake state should have been StakeState::Stake");
+        return Err(LidoError::InvalidStakeAccount.into());
+    }
+
+    // After the variant tag, the `Meta` struct follows immediately, and the first
+    // field is the one we need.
+    let (rent_exempt_reserve, _suffix) = take_u64_le(data);
+
+    Ok(Lamports(rent_exempt_reserve))
+}
+
+/// We deserialize the stake account manually here, because `solana_program`
+/// does not expose a deserializer for it.
+pub fn deserialize_stake_account(account_data: &[u8]) -> Result<Stake, ProgramError> {
+    let data = account_data;
+
+    // We read 196 bytes from the data, so check that up front, so that bounds
+    // checks can be optimized away below.
+    if data.len() < 196 {
+        return Err(LidoError::InvalidStakeAccount.into());
+    }
+
+    // First: a little-endian 32-bit tag for the variant. We are only
+    // interested in `StakeState::Stake`, which has tag 2.
+    let (type_, data) = take_u32_le(data);
+    if type_ != 2 {
+        msg!("Stake state should have been StakeState::Stake");
+        return Err(LidoError::InvalidStakeAccount.into());
+    }
+
+    // Next up, the 120-byte `Meta`, struct, that we are not interested in.
+    let (_meta_bytes, data) = data.split_at(120);
+
+    // Next up, the `Stake` struct.
+    // It starts with the `Delegation` struct.
+    let (voter_pubkey, data) = take_pubkey(data);
+    let (stake, data) = take_u64_le(data);
+    let (activation_epoch, data) = take_u64_le(data);
+    let (deactivation_epoch, data) = take_u64_le(data);
+    let (warmup_cooldown_rate, data) = take_f64_le(data);
+    let delegation = stake_program::state::Delegation {
+        voter_pubkey,
+        stake,
+        activation_epoch,
+        deactivation_epoch,
+        warmup_cooldown_rate,
+    };
+
+    // After the `Delegation` is only `credits_observed`.
+    let (credits_observed, _suffix) = take_u64_le(data);
+    let stake = Stake {
+        delegation,
+        credits_observed,
+    };
+
+    Ok(stake)
+}
+
+impl StakeAccount {
     /// Makes an instruction that withdraws from the stake to an account
     pub fn stake_account_withdraw(
         amount: Lamports,
@@ -87,7 +175,7 @@ impl StakeAccount {
         ];
 
         Instruction::new_with_bincode(
-            stake_program::id(),
+            stake_program::program::id(),
             &StakeInstruction::Withdraw(amount.0),
             account_metas,
         )
@@ -205,5 +293,68 @@ impl Sum for StakeBalance {
             )
         }
         accumulator
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use solana_program::rent::Rent;
+    use solana_program::stake::state::Delegation;
+    use std::str::FromStr;
+
+    #[test]
+    fn test_deserialize_stake_account() {
+        // Actual stake account, printed from one of the `solana_program_test` tests.
+        let stake_account_data = [
+            2_u8, 0, 0, 0, 128, 213, 34, 0, 0, 0, 0, 0, 109, 205, 23, 189, 77, 39, 158, 172, 203,
+            232, 104, 67, 226, 58, 21, 243, 188, 167, 146, 138, 219, 130, 169, 165, 102, 229, 186,
+            26, 37, 216, 129, 239, 109, 205, 23, 189, 77, 39, 158, 172, 203, 232, 104, 67, 226, 58,
+            21, 243, 188, 167, 146, 138, 219, 130, 169, 165, 102, 229, 186, 26, 37, 216, 129, 239,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 123, 78, 181, 133, 59, 177,
+            25, 168, 47, 189, 98, 97, 72, 40, 220, 29, 58, 189, 47, 120, 44, 190, 215, 164, 200,
+            134, 123, 116, 72, 25, 135, 124, 202, 134, 166, 88, 34, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 208, 63, 1, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0,
+        ];
+
+        let actual = deserialize_stake_account(&stake_account_data).unwrap();
+        let expected = Stake {
+            delegation: Delegation {
+                voter_pubkey: Pubkey::from_str("9JLkwJFXQL548xYfspjaZQws9MCXAF3NYYux9AxUxEfd")
+                    .unwrap(),
+                stake: 1_247_027_824_330,
+                activation_epoch: 0,
+                deactivation_epoch: u64::MAX,
+                warmup_cooldown_rate: 0.25,
+            },
+            credits_observed: 1,
+        };
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_deserialize_rent_exempt_reserve() {
+        // Actual stake account, printed from one of the `solana_program_test` tests. Therefore, its
+        // rent-exempt balance stored in the account, should be equal to the rent-exempt balance for
+        // an account of that size.
+        let stake_account_data = [
+            2_u8, 0, 0, 0, 128, 213, 34, 0, 0, 0, 0, 0, 109, 205, 23, 189, 77, 39, 158, 172, 203,
+            232, 104, 67, 226, 58, 21, 243, 188, 167, 146, 138, 219, 130, 169, 165, 102, 229, 186,
+            26, 37, 216, 129, 239, 109, 205, 23, 189, 77, 39, 158, 172, 203, 232, 104, 67, 226, 58,
+            21, 243, 188, 167, 146, 138, 219, 130, 169, 165, 102, 229, 186, 26, 37, 216, 129, 239,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 123, 78, 181, 133, 59, 177,
+            25, 168, 47, 189, 98, 97, 72, 40, 220, 29, 58, 189, 47, 120, 44, 190, 215, 164, 200,
+            134, 123, 116, 72, 25, 135, 124, 202, 134, 166, 88, 34, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 208, 63, 1, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0,
+        ];
+
+        let actual = deserialize_rent_exempt_reserve(&stake_account_data).unwrap();
+        let rent = Rent::default();
+        let expected = rent.minimum_balance(stake_account_data.len());
+        assert_eq!(actual, Lamports(expected));
     }
 }

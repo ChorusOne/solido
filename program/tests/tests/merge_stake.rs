@@ -21,13 +21,12 @@ async fn test_successful_merge_activating_stake() {
     let account = context.try_get_account(stake_account_pubkeys[0]).await;
     assert!(account.is_none());
 
-    let (meta, stake) = context.get_stake_state(stake_account_pubkeys[1]).await;
-    let sum = 20_000_000_000 - meta.rent_exempt_reserve;
-    assert_eq!(
-        stake.delegation.stake, sum,
-        "Delegated stake should be {}, it is {} instead.",
-        sum, stake.delegation.stake
-    );
+    let stake = context.get_stake_state(stake_account_pubkeys[1]).await;
+    let rent_exempt_reserve = context
+        .get_stake_rent_exempt_reserve(stake_account_pubkeys[1])
+        .await;
+    let sum = 20_000_000_000 - rent_exempt_reserve.0;
+    assert_eq!(stake.delegation.stake, sum, "Unexpected delegated stake.");
 
     let solido_after = context.get_solido().await;
     let mut reserve_after = context.get_account(context.reserve_address).await;
@@ -90,7 +89,7 @@ async fn get_stake_account_from_seed(
     let clock = context.get_clock().await;
     let stake_history = context.get_stake_history().await;
     let stake_balance = context.get_sol_balance(stake_address).await;
-    let (_, stake) = context.get_stake_state(stake_address).await;
+    let stake = context.get_stake_state(stake_address).await;
     StakeAccount::from_delegated_account(stake_balance, &stake, &clock, &stake_history, seed)
 }
 

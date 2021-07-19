@@ -3,7 +3,6 @@ members = [
     "cli",
     "multisig/programs/multisig",
     "program",
-    "solana-program-library/stake-pool/program",
 ]
 
 # Ensure that we don't leave half a program running if something in a thread panics.

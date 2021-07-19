@@ -2,9 +2,8 @@ use solana_program::entrypoint::ProgramResult;
 use solana_program::{
     account_info::AccountInfo, borsh::try_from_slice_unchecked, msg, program::invoke,
     program::invoke_signed, program_error::ProgramError, pubkey::Pubkey, rent::Rent,
-    system_instruction,
+    stake as stake_program, system_instruction,
 };
-use spl_stake_pool::stake_program;
 
 use crate::{
     error::LidoError,
@@ -112,13 +111,13 @@ pub fn initialize_stake_account_undelegated<'a>(
     stake_program: &AccountInfo<'a>,
 ) -> ProgramResult {
     invoke(
-        &stake_program::initialize(
+        &stake_program::instruction::initialize(
             stake_account.key,
-            &stake_program::Authorized {
+            &stake_program::state::Authorized {
                 staker: *stake_authority,
                 withdrawer: *stake_authority,
             },
-            &stake_program::Lockup::default(),
+            &stake_program::state::Lockup::default(),
         ),
         &[
             stake_account.clone(),

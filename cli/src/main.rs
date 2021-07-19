@@ -1,5 +1,3 @@
-extern crate spl_stake_pool;
-
 use std::fmt;
 use std::path::PathBuf;
 

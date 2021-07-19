@@ -3,6 +3,7 @@
 use num_traits::cast::FromPrimitive;
 use solana_program::program_pack::Pack;
 use solana_program::rent::Rent;
+use solana_program::stake::state::Stake;
 use solana_program::system_instruction;
 use solana_program::system_program;
 use solana_program::{borsh::try_from_slice_unchecked, sysvar};
@@ -10,6 +11,7 @@ use solana_program::{clock::Clock, instruction::Instruction};
 use solana_program::{instruction::InstructionError, stake_history::StakeHistory};
 use solana_program_test::{processor, ProgramTest, ProgramTestContext};
 use solana_sdk::account::{from_account, Account};
+use solana_sdk::account_info::AccountInfo;
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::{Keypair, Signer};
 use solana_sdk::transaction::Transaction;
@@ -29,8 +31,6 @@ use lido::{
     state::{FeeRecipients, Lido, RewardDistribution, Validator},
     MINT_AUTHORITY,
 };
-use solana_sdk::account_info::AccountInfo;
-use spl_stake_pool::stake_program::{Meta, Stake, StakeState};
 
 // This id is only used throughout these tests.
 solana_program::declare_id!("3kEkdGe68DuTKg6FhVrLPZ3Wm8EcUPCPjhCeu8WrGDoc");
@@ -904,14 +904,15 @@ impl Context {
             .expect("Stake History account should exist.");
         from_account(&account).expect("Could not get Stake History from account.")
     }
-    pub async fn get_stake_state(&mut self, stake_account: Pubkey) -> (Meta, Stake) {
+
+    pub async fn get_stake_state(&mut self, stake_account: Pubkey) -> Stake {
         let account = self.get_account(stake_account).await;
-        let stake_state = try_from_slice_unchecked::<StakeState>(&account.data).unwrap();
-        if let StakeState::Stake(meta, stake) = stake_state {
-            (meta, stake)
-        } else {
-            panic!("Stake state should have been StakeState::Stake.");
-        }
+        lido::stake_account::deserialize_stake_account(&account.data).unwrap()
+    }
+
+    pub async fn get_stake_rent_exempt_reserve(&mut self, stake_account: Pubkey) -> Lamports {
+        let account = self.get_account(stake_account).await;
+        lido::stake_account::deserialize_rent_exempt_reserve(&account.data).unwrap()
     }
 }
 
