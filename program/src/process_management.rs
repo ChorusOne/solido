@@ -1,6 +1,10 @@
 use solana_program::program::invoke_signed;
+use solana_program::rent::Rent;
+use solana_program::sysvar::Sysvar;
 use solana_program::{account_info::AccountInfo, entrypoint::ProgramResult, msg, pubkey::Pubkey};
 
+use crate::logic::check_rent_exempt;
+use crate::vote_state::PartialVoteState;
 use crate::{
     error::LidoError,
     instruction::{
@@ -39,8 +43,23 @@ pub fn process_add_validator(
 ) -> ProgramResult {
     let accounts = AddValidatorInfo::try_from_slice(accounts_raw)?;
     let mut lido = deserialize_lido(program_id, accounts.lido)?;
+    let rent = &Rent::from_account_info(accounts.sysvar_rent)?;
     lido.check_manager(accounts.manager)?;
     lido.check_is_st_sol_account(&accounts.validator_fee_st_sol_account)?;
+
+    check_rent_exempt(
+        rent,
+        accounts.validator_vote_account,
+        "Validator vote account",
+    )?;
+    // Deserialize also checks if the vote account is a valid Solido vote
+    // account: The withdraw authority should be set to the program_id, and it
+    // should have 100% commission.
+    let _partial_vote_state = PartialVoteState::deserialize(
+        program_id,
+        accounts.lido.key,
+        &accounts.validator_vote_account.data.borrow(),
+    )?;
 
     lido.validators.add(
         *accounts.validator_vote_account.key,

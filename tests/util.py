@@ -171,7 +171,9 @@ def create_stake_account(keypair_fname: str) -> TestAccount:
     return test_account
 
 
-def create_vote_account(vote_key_fname: str, validator_key_fname: str) -> TestAccount:
+def create_vote_account(
+    vote_key_fname: str, validator_key_fname: str, authorized_withdrawer: str
+) -> TestAccount:
     """
     Generate a vote account for the validator
     """
@@ -180,6 +182,10 @@ def create_vote_account(vote_key_fname: str, validator_key_fname: str) -> TestAc
         'create-vote-account',
         vote_key_fname,
         validator_key_fname,
+        '--authorized-withdrawer',
+        authorized_withdrawer,
+        '--commission',
+        '100',
     )
     return test_account
 

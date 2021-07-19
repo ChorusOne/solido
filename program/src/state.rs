@@ -17,6 +17,7 @@ use crate::logic::get_reserve_available_balance;
 use crate::metrics::Metrics;
 use crate::token::{Lamports, Rational, StLamports};
 use crate::util::serialize_b58;
+use crate::REWARDS_WITHDRAW_AUTHORITY;
 use crate::{
     account_map::{AccountMap, AccountSet, EntryConstantSize, PubkeyAndEntry},
     MINIMUM_STAKE_ACCOUNT_BALANCE, RESERVE_ACCOUNT, STAKE_AUTHORITY, VALIDATOR_STAKE_ACCOUNT,
@@ -27,7 +28,7 @@ pub const LIDO_VERSION: u8 = 0;
 /// Size of a serialized `Lido` struct excluding validators and maintainers.
 ///
 /// To update this, run the tests and replace the value here with the test output.
-pub const LIDO_CONSTANT_SIZE: usize = 332;
+pub const LIDO_CONSTANT_SIZE: usize = 333;
 pub const VALIDATOR_CONSTANT_SIZE: usize = 68;
 
 pub type Validators = AccountMap<Validator>;
@@ -83,24 +84,27 @@ impl EntryConstantSize for () {
 /// modifications (validation rewards paid into stake accounts) that were not
 /// yet observed at the time of the update.
 ///
-/// When we observe the actual validator balance in `UpdateValidatorBalance`,
-/// the difference between the tracked balance and the observed balance, is the
-/// reward. We split this reward into a fee part, and a donation part, and
-/// update the tracked balances accordingly. This does not by itself change the
-/// exchange rate, but the new values will be used in the next exchange rate
-/// update.
+/// When we observe the actual validator balance in `WithdrawInactiveStake`, the
+/// difference between the tracked balance and the observed balance, is a
+/// donation that will be returned to the reserve account.
 ///
-/// `UpdateValidatorBalance` is blocked in a given epoch, until we update the
+/// We collect the rewards accumulated by a validator with the
+/// `CollectValidatorFee` instruction. This function distributes the accrued
+/// rewards paid to the Solido program (as we enforce that 100% of the fees goes
+/// to the Solido program).
+///
+/// `CollectValidatorFee` is blocked in a given epoch, until we update the
 /// exchange rate in that epoch. Validation rewards are distributed at the start
 /// of the epoch. This means that in epoch `i`:
 ///
 /// 1. `UpdateExchangeRate` updates the exchange rate to what it was at the end
 ///    of epoch `i - 1`.
-/// 2. `UpdateValidatorBalance` runs for every validator, and observes the
+/// 2. `CollectValidatorFee` runs for every validator, and observes the
 ///    rewards. Deposits (including those for fees) in epoch `i` therefore use
 ///    the exchange rate at the end of epoch `i - 1`, so deposits in epoch `i`
 ///    do not benefit from rewards received in epoch `i`.
-/// 3. Epoch `i + 1` starts, and validation rewards are paid into stake accounts.
+/// 3. Epoch `i + 1` starts, and validation rewards are paid into validator's
+/// vote accounts.
 /// 4. `UpdateExchangeRate` updates the exchange rate to what it was at the end
 ///    of epoch `i`. Everybody who deposited in epoch `i` (users, as well as fee
 ///    recipients) now benefit from the validation rewards received in epoch `i`.
@@ -184,6 +188,7 @@ pub struct Lido {
     pub sol_reserve_account_bump_seed: u8,
     pub stake_authority_bump_seed: u8,
     pub mint_authority_bump_seed: u8,
+    pub rewards_withdraw_authority_bump_seed: u8,
 
     /// How rewards are distributed.
     pub reward_distribution: RewardDistribution,
@@ -390,6 +395,44 @@ impl Lido {
                 stake_authority_account_info.key
             );
             return Err(LidoError::InvalidStakeAuthority.into());
+        }
+        Ok(authority)
+    }
+
+    /// Return the address of the rewards withdraw authority, the
+    /// program-derived address that can sign on behalf of vote accounts.
+    pub fn get_rewards_withdraw_authority(
+        &self,
+        program_id: &Pubkey,
+        solido_address: &Pubkey,
+    ) -> Result<Pubkey, ProgramError> {
+        Pubkey::create_program_address(
+            &[
+                &solido_address.to_bytes()[..],
+                REWARDS_WITHDRAW_AUTHORITY,
+                &[self.rewards_withdraw_authority_bump_seed],
+            ],
+            program_id,
+        )
+        .map_err(|_| ProgramError::InvalidSeeds)
+    }
+
+    /// Confirm that the rewards withdraw authority belongs to this Lido
+    /// instance, return the rewards authority address.
+    pub fn check_rewards_withdraw_authority(
+        &self,
+        program_id: &Pubkey,
+        solido_address: &Pubkey,
+        rewards_withdraw_authority_account_info: &AccountInfo,
+    ) -> Result<Pubkey, ProgramError> {
+        let authority = self.get_rewards_withdraw_authority(program_id, solido_address)?;
+        if &authority != rewards_withdraw_authority_account_info.key {
+            msg!(
+                "Invalid rewards withdraw authority, expected {} but got {}.",
+                authority,
+                rewards_withdraw_authority_account_info.key
+            );
+            return Err(LidoError::InvalidRewardsWithdrawAuthority.into());
         }
         Ok(authority)
     }
@@ -811,6 +854,7 @@ mod test_lido {
             sol_reserve_account_bump_seed: 1,
             stake_authority_bump_seed: 2,
             mint_authority_bump_seed: 3,
+            rewards_withdraw_authority_bump_seed: 4,
             reward_distribution: RewardDistribution {
                 treasury_fee: 2,
                 validation_fee: 3,

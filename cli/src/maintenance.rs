@@ -4,9 +4,12 @@ use std::fmt;
 use std::io;
 use std::time::SystemTime;
 
+use lido::REWARDS_WITHDRAW_AUTHORITY;
 use serde::Serialize;
 use solana_program::program_pack::Pack;
 use solana_program::{clock::Clock, pubkey::Pubkey, rent::Rent, stake_history::StakeHistory};
+use solana_sdk::account::ReadableAccount;
+use solana_sdk::fee_calculator::DEFAULT_TARGET_LAMPORTS_PER_SIGNATURE;
 use solana_sdk::{account::Account, instruction::Instruction};
 use spl_token::state::Mint;
 
@@ -43,7 +46,7 @@ pub enum MaintenanceOutput {
 
     UpdateExchangeRate,
 
-    UpdateValidatorBalance {
+    WithdrawInactiveStake {
         /// The vote account of the validator that we want to update.
         #[serde(serialize_with = "serialize_b58")]
         validator_vote_account: Pubkey,
@@ -52,9 +55,16 @@ pub enum MaintenanceOutput {
         ///
         /// This is only an expected value, because a different transaction might
         /// execute between us observing the state and concluding that there is
-        /// a difference, and our `UpdateValidatorBalance` instruction executing.
+        /// a difference, and our `WithdrawInactiveStake` instruction executing.
         #[serde(rename = "expected_difference_lamports")]
         expected_difference: Lamports,
+    },
+
+    CollectValidatorFee {
+        #[serde(serialize_with = "serialize_b58")]
+        validator_vote_account: Pubkey,
+        #[serde(rename = "fee_rewards_lamports")]
+        fee_rewards: Lamports,
     },
 
     MergeStake {
@@ -85,13 +95,21 @@ impl fmt::Display for MaintenanceOutput {
             MaintenanceOutput::UpdateExchangeRate => {
                 writeln!(f, "Updated exchange rate.")?;
             }
-            MaintenanceOutput::UpdateValidatorBalance {
+            MaintenanceOutput::WithdrawInactiveStake {
                 validator_vote_account,
                 expected_difference,
             } => {
-                writeln!(f, "Updated validator balance.")?;
+                writeln!(f, "Withdrew inactive stake.")?;
                 writeln!(f, "  Validator vote account: {}", validator_vote_account)?;
                 writeln!(f, "  Expected difference:    {}", expected_difference)?;
+            }
+            MaintenanceOutput::CollectValidatorFee {
+                validator_vote_account,
+                fee_rewards,
+            } => {
+                writeln!(f, "Collected validator fees.")?;
+                writeln!(f, "  Validator vote account: {}", validator_vote_account)?;
+                writeln!(f, "  Collected fee rewards:  {}", fee_rewards)?;
             }
             MaintenanceOutput::MergeStake {
                 validator_vote_account,
@@ -142,6 +160,9 @@ pub struct SolidoState {
     /// the stake balance of the derived stake accounts from the begin seed until
     /// end seed.
     pub validator_stake_accounts: Vec<Vec<(Pubkey, StakeAccount)>>,
+    /// For each validator, in the same order as in `solido.validators`, holds
+    /// the number of Lamports of the validator's vote account.
+    pub validator_vote_account_balances: Vec<Lamports>,
 
     /// SPL token mint for stSOL, to know the current supply.
     pub st_sol_mint: Mint,
@@ -197,7 +218,25 @@ fn get_validator_stake_accounts(
     Ok(result)
 }
 
+fn get_vote_account_balance_except_rent(
+    config: &mut SnapshotConfig,
+    rent: &Rent,
+    validator_vote_account: &Pubkey,
+) -> Result<Lamports> {
+    let vote_account = config.client.get_account(validator_vote_account)?;
+    let vote_rent = rent.minimum_balance(vote_account.data().len());
+    Ok(
+        (Lamports(vote_account.lamports()) - Lamports(vote_rent)).expect(
+            "Shouldn't happen. The vote account balance should be at least its rent-exempt balance.",
+        ),
+    )
+}
+
 impl SolidoState {
+    // Set the minimum withdraw from stake accounts and validator's vote
+    // accounts, the cost of validating signatures seems to dominate the
+    // transaction cost.
+    const MINIMUM_WITHDRAW_AMOUNT: Lamports = Lamports(DEFAULT_TARGET_LAMPORTS_PER_SIGNATURE * 100);
     /// Read the state from the on-chain data.
     pub fn new(
         config: &mut SnapshotConfig,
@@ -217,7 +256,14 @@ impl SolidoState {
         let stake_history = config.client.get_stake_history()?;
 
         let mut validator_stake_accounts = Vec::new();
+        let mut validator_vote_account_balances = Vec::new();
         for validator in solido.validators.entries.iter() {
+            validator_vote_account_balances.push(get_vote_account_balance_except_rent(
+                config,
+                &rent,
+                &validator.pubkey,
+            )?);
+
             validator_stake_accounts.push(get_validator_stake_accounts(
                 config,
                 solido_program_id,
@@ -240,6 +286,7 @@ impl SolidoState {
             solido_address: *solido_address,
             solido,
             validator_stake_accounts,
+            validator_vote_account_balances,
             reserve_address,
             reserve_account: reserve_account.clone(),
             st_sol_mint,
@@ -430,11 +477,10 @@ impl SolidoState {
 
     /// Check if any validator's balance is outdated, and if so, update it.
     ///
-    /// A validator's balance should normally only be outdated at the start of
-    /// an epoch, after validation rewards have been paid. But it could happen
-    /// in the middle of an epoch, if some joker donates to one of the stake
-    /// accounts.
-    pub fn try_update_validator_balance(&self) -> Option<(Instruction, MaintenanceOutput)> {
+    /// Merging stakes generates inactive stake that could be withdrawn with this transaction,
+    /// or if some joker donates to one of the stake accounts we can use the same function
+    /// to claim these rewards back to the reserve account so they can be re-staked.
+    pub fn try_withdraw_inactive_stake(&self) -> Option<(Instruction, MaintenanceOutput)> {
         for (validator, stake_accounts) in self
             .solido
             .validators
@@ -449,26 +495,72 @@ impl SolidoState {
                 .expect("If this overflows, there would be more than u64::MAX staked.");
 
             if current_balance > validator.entry.stake_accounts_balance {
+                let expected_difference = (current_balance
+                    - validator.entry.stake_accounts_balance)
+                    .expect("Does not overflow because current > entry.balance.");
+                // If the expected difference is less than some defined amount
+                // of Lamports, we don't bother withdrawing. We try to do this
+                // so we don't pay more for fees than the amount that we'll
+                // withdraw.
+                if expected_difference < SolidoState::MINIMUM_WITHDRAW_AMOUNT {
+                    continue;
+                }
                 // The balance of this validator is not up to date, try to update it.
                 let stake_account_addrs = stake_accounts.iter().map(|(addr, _)| *addr).collect();
-                let instruction = lido::instruction::update_validator_balance(
+                let instruction = lido::instruction::withdraw_inactive_stake(
                     &self.solido_program_id,
-                    &lido::instruction::UpdateValidatorBalanceMeta {
+                    &lido::instruction::WithdrawInactiveStakeMeta {
+                        lido: self.solido_address,
+                        validator_vote_account: validator.pubkey,
+                        stake_accounts: stake_account_addrs,
+                        reserve: self.reserve_address,
+                        stake_authority: self.get_stake_authority(),
+                    },
+                );
+                let task = MaintenanceOutput::WithdrawInactiveStake {
+                    validator_vote_account: validator.pubkey,
+                    expected_difference,
+                };
+                return Some((instruction, task));
+            }
+        }
+
+        None
+    }
+
+    /// Check if any validator's vote account is eligible for fee collection, and if
+    /// so, collect it.
+    ///
+    /// As validator's vote accounts accumulate rewards, at the beginning of
+    /// every epoch, they should be collected and the fees they've generated
+    /// should be spread to the Solido participants.
+    pub fn try_collect_validator_fee(&self) -> Option<(Instruction, MaintenanceOutput)> {
+        for (validator, vote_account_balance) in self
+            .solido
+            .validators
+            .entries
+            .iter()
+            .zip(self.validator_vote_account_balances.iter())
+        {
+            // Need to collect some rewards if the balance is more than
+            // the minimum predefined amount.
+            if vote_account_balance > &SolidoState::MINIMUM_WITHDRAW_AMOUNT {
+                let instruction = lido::instruction::collect_validator_fee(
+                    &self.solido_program_id,
+                    &lido::instruction::CollectValidatorFeeMeta {
                         lido: self.solido_address,
                         validator_vote_account: validator.pubkey,
                         mint_authority: self.get_mint_authority(),
                         st_sol_mint: self.solido.st_sol_mint,
                         treasury_st_sol_account: self.solido.fee_recipients.treasury_account,
                         developer_st_sol_account: self.solido.fee_recipients.developer_account,
-                        stake_accounts: stake_account_addrs,
                         reserve: self.reserve_address,
-                        stake_authority: self.get_stake_authority(),
+                        rewards_withdraw_authority: self.get_rewards_withdraw_authority(),
                     },
                 );
-                let task = MaintenanceOutput::UpdateValidatorBalance {
+                let task = MaintenanceOutput::CollectValidatorFee {
                     validator_vote_account: validator.pubkey,
-                    expected_difference: (current_balance - validator.entry.stake_accounts_balance)
-                        .expect("Does not overflow because current > entry.balance."),
+                    fee_rewards: *vote_account_balance,
                 };
                 return Some((instruction, task));
             }
@@ -634,6 +726,16 @@ impl SolidoState {
         stake_authority
     }
 
+    fn get_rewards_withdraw_authority(&self) -> Pubkey {
+        let (rewards_withdraw_authority, _bump_seed_authority) =
+            lido::find_authority_program_address(
+                &self.solido_program_id,
+                &self.solido_address,
+                REWARDS_WITHDRAW_AUTHORITY,
+            );
+        rewards_withdraw_authority
+    }
+
     fn get_mint_authority(&self) -> Pubkey {
         let (mint_authority, _bump_seed_authority) = lido::find_authority_program_address(
             &self.solido_program_id,
@@ -672,9 +774,11 @@ pub fn try_perform_maintenance(
         // as possible.
         .or_else(|| state.try_merge_on_all_stakes())
         .or_else(|| state.try_update_exchange_rate())
-        // Updating validator balance goes after updating the exchange rate,
+        // Collecting validator fees goes after updating the exchange rate,
         // because it may be rejected if the exchange rate is outdated.
-        .or_else(|| state.try_update_validator_balance())
+        .or_else(|| state.try_collect_validator_fee())
+        // Same for updating the validator balance.
+        .or_else(|| state.try_withdraw_inactive_stake())
         .or_else(|| state.try_stake_deposit());
 
     match instruction_output {
@@ -716,6 +820,7 @@ mod test {
             solido_address: Pubkey::new_unique(),
             solido: Lido::default(),
             validator_stake_accounts: vec![],
+            validator_vote_account_balances: vec![],
             st_sol_mint: Mint::default(),
             reserve_address: Pubkey::new_unique(),
             reserve_account: Account::default(),

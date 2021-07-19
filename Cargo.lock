@@ -3647,6 +3647,7 @@ dependencies = [
  "solana-remote-wallet",
  "solana-sdk",
  "solana-stake-program",
+ "solana-vote-program",
  "spl-token",
  "tiny_http",
 ]

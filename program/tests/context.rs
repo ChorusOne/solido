@@ -10,6 +10,7 @@ use solana_program::{borsh::try_from_slice_unchecked, sysvar};
 use solana_program::{clock::Clock, instruction::Instruction};
 use solana_program::{instruction::InstructionError, stake_history::StakeHistory};
 use solana_program_test::{processor, ProgramTest, ProgramTestContext};
+use solana_sdk::account::ReadableAccount;
 use solana_sdk::account::{from_account, Account};
 use solana_sdk::account_info::AccountInfo;
 use solana_sdk::pubkey::Pubkey;
@@ -21,8 +22,9 @@ use solana_sdk::transport::TransportError;
 use solana_vote_program::vote_instruction;
 use solana_vote_program::vote_state::{VoteInit, VoteState};
 
-use lido::{error::LidoError, RESERVE_ACCOUNT};
-use lido::{instruction, STAKE_AUTHORITY};
+use lido::{
+    error::LidoError, instruction, RESERVE_ACCOUNT, REWARDS_WITHDRAW_AUTHORITY, STAKE_AUTHORITY,
+};
 use lido::{
     state::Weight,
     token::{Lamports, StLamports},
@@ -57,6 +59,7 @@ pub struct Context {
     pub reserve_address: Pubkey,
     pub stake_authority: Pubkey,
     pub mint_authority: Pubkey,
+    pub withdraw_authority: Pubkey,
 }
 
 pub struct ValidatorAccounts {
@@ -185,6 +188,11 @@ impl Context {
         let (mint_authority, _) =
             Pubkey::find_program_address(&[&solido.pubkey().to_bytes()[..], MINT_AUTHORITY], &id());
 
+        let (withdraw_authority, _) = Pubkey::find_program_address(
+            &[&solido.pubkey().to_bytes()[..], REWARDS_WITHDRAW_AUTHORITY],
+            &id(),
+        );
+
         // Note: this name *must* match the name of the crate that contains the
         // program. If it does not, then it will still partially work, but we get
         // weird errors about resizing accounts.
@@ -208,7 +216,8 @@ impl Context {
             reward_distribution,
             reserve_address,
             stake_authority,
-            mint_authority: mint_authority,
+            mint_authority,
+            withdraw_authority,
         };
 
         result.st_sol_mint = result.create_mint(result.mint_authority).await;
@@ -393,13 +402,15 @@ impl Context {
             size_bytes,
             &system_program::id(),
         )];
+
         instructions.extend(vote_instruction::create_account(
             &payer,
             &vote_account.pubkey(),
             &VoteInit {
                 node_pubkey: node_key.pubkey(),
                 authorized_voter: node_key.pubkey(),
-                ..VoteInit::default()
+                authorized_withdrawer: self.withdraw_authority,
+                commission: 100,
             },
             rent_voter,
         ));
@@ -411,7 +422,6 @@ impl Context {
         )
         .await
         .expect("Failed to create vote account.");
-
         vote_account.pubkey()
     }
 
@@ -779,9 +789,9 @@ impl Context {
             .expect("Failed to call MergeStake on Solido instance.")
     }
 
-    /// Observe the new validator balance and write it ot the state,
+    /// Observe the new validator balance and write it to the state,
     /// distribute any rewards received.
-    pub async fn try_update_validator_balance(
+    pub async fn try_withdraw_inactive_stake(
         &mut self,
         validator_vote_account: Pubkey,
     ) -> transport::Result<()> {
@@ -805,15 +815,11 @@ impl Context {
         send_transaction(
             &mut self.context,
             &mut self.nonce,
-            &[instruction::update_validator_balance(
+            &[instruction::withdraw_inactive_stake(
                 &id(),
-                &instruction::UpdateValidatorBalanceMeta {
+                &instruction::WithdrawInactiveStakeMeta {
                     lido: self.solido.pubkey(),
                     validator_vote_account: validator_vote_account,
-                    st_sol_mint: self.st_sol_mint,
-                    mint_authority: self.mint_authority,
-                    treasury_st_sol_account: self.treasury_st_sol_account,
-                    developer_st_sol_account: self.developer_st_sol_account,
                     stake_accounts: stake_account_addrs,
                     reserve: self.reserve_address,
                     stake_authority: self.stake_authority,
@@ -824,10 +830,59 @@ impl Context {
         .await
     }
 
-    pub async fn update_validator_balance(&mut self, validator_vote_account: Pubkey) {
-        self.try_update_validator_balance(validator_vote_account)
+    pub async fn withdraw_inactive_stake(&mut self, validator_vote_account: Pubkey) {
+        self.try_withdraw_inactive_stake(validator_vote_account)
             .await
-            .expect("Failed to update validator balance.");
+            .expect("Failed to withdraw inactive stake.");
+    }
+
+    /// Observe the new validator balance and write it to the state,
+    /// distribute any rewards received.
+    pub async fn try_collect_validator_fee(
+        &mut self,
+        validator_vote_account: Pubkey,
+    ) -> transport::Result<Lamports> {
+        let solido = self.get_solido().await;
+        let reserve_balance_before = self.get_sol_balance(self.reserve_address).await;
+        let rewards_withdraw_authority = solido
+            .get_rewards_withdraw_authority(&id(), &self.solido.pubkey())
+            .unwrap();
+        let vote_account = self.get_account(validator_vote_account).await;
+        let vote_account_rent = self
+            .get_rent()
+            .await
+            .minimum_balance(vote_account.data.len());
+        send_transaction(
+            &mut self.context,
+            &mut self.nonce,
+            &[instruction::collect_validator_fee(
+                &id(),
+                &instruction::CollectValidatorFeeMeta {
+                    lido: self.solido.pubkey(),
+                    validator_vote_account: validator_vote_account,
+                    st_sol_mint: self.st_sol_mint,
+                    mint_authority: self.mint_authority,
+                    treasury_st_sol_account: self.treasury_st_sol_account,
+                    developer_st_sol_account: self.developer_st_sol_account,
+                    reserve: self.reserve_address,
+                    rewards_withdraw_authority,
+                },
+            )],
+            vec![],
+        )
+        .await?;
+        let reserve_balance_after = self.get_sol_balance(self.reserve_address).await;
+        let vote_account = self.get_account(validator_vote_account).await;
+        assert_eq!(vote_account.lamports(), vote_account_rent);
+
+        Ok((reserve_balance_after - reserve_balance_before)
+            .expect("Reserve balance should have increased after validator fee collection."))
+    }
+
+    pub async fn collect_validator_fee(&mut self, validator_vote_account: Pubkey) -> Lamports {
+        self.try_collect_validator_fee(validator_vote_account)
+            .await
+            .expect("Failed to collect validator fee.")
     }
 
     pub async fn try_get_account(&mut self, address: Pubkey) -> Option<Account> {

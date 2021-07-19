@@ -9,6 +9,7 @@ use solana_program::{
     pubkey::Pubkey,
     stake as stake_program, system_program,
     sysvar::{self, stake_history},
+    vote,
 };
 
 use crate::{
@@ -49,7 +50,9 @@ pub enum LidoInstruction {
     /// This can be called by anybody.
     UpdateExchangeRate,
     /// Observe any external changes in the balances of a validator's stake accounts.
-    UpdateValidatorBalance,
+    WithdrawInactiveStake,
+    /// Claim rewards from the validator account and distribute rewards.
+    CollectValidatorFee,
     Withdraw {
         #[allow(dead_code)] // but it's not
         amount: StLamports,
@@ -262,7 +265,7 @@ pub fn update_exchange_rate(
 accounts_struct! {
     // Note: there are no signers among these accounts, updating validator
     // balance is permissionless, anybody can do it.
-    UpdateValidatorBalanceMeta, UpdateValidatorBalanceInfo {
+    WithdrawInactiveStakeMeta, WithdrawInactiveStakeInfo {
         pub lido {
             is_signer: false,
             is_writable: true,
@@ -271,28 +274,6 @@ accounts_struct! {
         pub validator_vote_account {
             is_signer: false,
             is_writable: false,
-        },
-
-        // Updating balances also immediately mints rewards, so we need the stSOL
-        // mint, and the fee accounts to deposit the stSOL into.
-        pub st_sol_mint {
-            is_signer: false,
-            is_writable: true,
-        },
-
-        // Mint authority is required to mint tokens.
-        pub mint_authority {
-            is_signer: false,
-            is_writable: false,
-        },
-
-        pub treasury_st_sol_account {
-            is_signer: false,
-            is_writable: true,
-        },
-        pub developer_st_sol_account {
-            is_signer: false,
-            is_writable: true,
         },
 
         // This instruction withdraws any excess stake from the stake accounts
@@ -318,9 +299,6 @@ accounts_struct! {
         // Needed for the stake program, to withdraw from stake accounts.
         const sysvar_stake_history = sysvar::stake_history::id(),
 
-        // Needed for minting rewards.
-        const spl_token_program = spl_token::id(),
-
         // Needed to withdraw from stake accounts.
         const stake_program = stake_program::program::id(),
 
@@ -333,14 +311,88 @@ accounts_struct! {
     }
 }
 
-pub fn update_validator_balance(
+pub fn withdraw_inactive_stake(
     program_id: &Pubkey,
-    accounts: &UpdateValidatorBalanceMeta,
+    accounts: &WithdrawInactiveStakeMeta,
 ) -> Instruction {
     // There is no reason why `try_to_vec` should fail here.
-    let data = LidoInstruction::UpdateValidatorBalance
-        .try_to_vec()
-        .unwrap();
+    let data = LidoInstruction::WithdrawInactiveStake.try_to_vec().unwrap();
+    Instruction {
+        program_id: *program_id,
+        accounts: accounts.to_vec(),
+        data,
+    }
+}
+
+accounts_struct! {
+    // Note: there are no signers among these accounts, updating a validator
+    // account is permissionless, anybody can do it.
+    CollectValidatorFeeMeta, CollectValidatorFeeInfo {
+        pub lido {
+            is_signer: false,
+            is_writable: true,
+        },
+        // The validator to update the balance for.
+        // Needs to be writable so we withdraw from it.
+        pub validator_vote_account {
+            is_signer: false,
+            is_writable: true,
+        },
+
+        // Updating balances also immediately mints rewards, so we need the stSOL
+        // mint, and the fee accounts to deposit the stSOL into.
+        pub st_sol_mint {
+            is_signer: false,
+            is_writable: true,
+        },
+
+        // Mint authority is required to mint tokens.
+        pub mint_authority {
+            is_signer: false,
+            is_writable: false,
+        },
+
+        pub treasury_st_sol_account {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub developer_st_sol_account {
+            is_signer: false,
+            is_writable: true,
+        },
+
+        pub reserve {
+            is_signer: false,
+            is_writable: true,
+        },
+        // Used to get the rewards out of the validator vote account.
+        pub rewards_withdraw_authority {
+            is_signer: false,
+            is_writable: false,
+        },
+
+        // We only allow updating balances if the exchange rate is up to date,
+        // so we need to know the current epoch.
+        const sysvar_clock = sysvar::clock::id(),
+
+        // Needed for minting rewards.
+        const spl_token_program = spl_token::id(),
+
+        // Needed to calculate the validator's vote account rent exempt, so it
+        // can subtracted from the rewards.
+        const sysvar_rent = sysvar::rent::id(),
+
+        // Needed to withdraw from the vote account.
+        const vote_program = vote::program::id(),
+    }
+}
+
+pub fn collect_validator_fee(
+    program_id: &Pubkey,
+    accounts: &CollectValidatorFeeMeta,
+) -> Instruction {
+    // There is no reason why `try_to_vec` should fail here.
+    let data = LidoInstruction::CollectValidatorFee.try_to_vec().unwrap();
     Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
@@ -409,6 +461,7 @@ accounts_struct! {
         const sysvar_clock = sysvar::clock::id(),
         const sysvar_stake_history = sysvar::stake_history::id(),
         const sysvar_stake_program = stake_program::program::id(),
+        const sysvar_rent = sysvar::rent::id(),
     }
 }
 
