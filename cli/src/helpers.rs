@@ -1,22 +1,27 @@
 use std::fmt;
 
 use serde::Serialize;
-use solana_program::{pubkey::Pubkey, system_instruction};
+use solana_program::{program_error::ProgramError, pubkey::Pubkey, system_instruction};
 use solana_sdk::signature::{Keypair, Signer};
 
 use lido::{
+    error::LidoError,
     metrics::LamportsHistogram,
     state::{Lido, RewardDistribution},
-    MINT_AUTHORITY, RESERVE_ACCOUNT, REWARDS_WITHDRAW_AUTHORITY, STAKE_AUTHORITY,
+    token::StLamports,
+    util::serialize_b58,
+    MINT_AUTHORITY, RESERVE_ACCOUNT, REWARDS_WITHDRAW_AUTHORITY,
 };
 
-use crate::config::{AddRemoveMaintainerOpts, AddValidatorOpts, CreateSolidoOpts, ShowSolidoOpts};
+use crate::config::{
+    AddRemoveMaintainerOpts, AddValidatorOpts, CreateSolidoOpts, DepositOpts, ShowSolidoOpts,
+};
 use crate::{
     multisig::{get_multisig_program_address, propose_instruction, ProposeInstructionOutput},
     snapshot::Result,
     spl_token_utils::{push_create_spl_token_account, push_create_spl_token_mint},
     util::PubkeyBase58,
-    SnapshotConfig,
+    SnapshotClientConfig, SnapshotConfig,
 };
 
 #[derive(Serialize)]
@@ -413,32 +418,12 @@ pub fn command_show_solido(
     opts: &ShowSolidoOpts,
 ) -> Result<ShowSolidoOutput> {
     let lido = config.client.get_solido(opts.solido_address())?;
-    let reserve_account = Pubkey::create_program_address(
-        &[
-            &opts.solido_address().to_bytes(),
-            RESERVE_ACCOUNT,
-            &[lido.sol_reserve_account_bump_seed],
-        ],
-        opts.solido_program_id(),
-    )?;
-
-    let stake_authority = Pubkey::create_program_address(
-        &[
-            &opts.solido_address().to_bytes(),
-            STAKE_AUTHORITY,
-            &[lido.stake_authority_bump_seed],
-        ],
-        opts.solido_program_id(),
-    )?;
-
-    let mint_authority = Pubkey::create_program_address(
-        &[
-            &opts.solido_address().to_bytes(),
-            MINT_AUTHORITY,
-            &[lido.mint_authority_bump_seed],
-        ],
-        opts.solido_program_id(),
-    )?;
+    let reserve_account =
+        lido.get_reserve_account(opts.solido_program_id(), opts.solido_address())?;
+    let stake_authority =
+        lido.get_stake_authority(opts.solido_program_id(), opts.solido_address())?;
+    let mint_authority =
+        lido.get_mint_authority(opts.solido_program_id(), opts.solido_address())?;
 
     let rewards_withdraw_authority = Pubkey::create_program_address(
         &[
@@ -458,4 +443,125 @@ pub fn command_show_solido(
         mint_authority: mint_authority.into(),
         rewards_withdraw_authority: rewards_withdraw_authority.into(),
     })
+}
+
+#[derive(Serialize)]
+pub struct DepositOutput {
+    #[serde(serialize_with = "serialize_b58")]
+    pub recipient: Pubkey,
+
+    /// Amount of stSOL we expected to receive based on the exchange rate at the time of the deposit.
+    ///
+    /// This can differ from the actual amount, when a deposit happens close to
+    /// an epoch boundary, and an `UpdateExchangeRate` instruction executed before
+    /// our deposit, but after we checked the exchange rate.
+    #[serde(rename = "expected_st_lamports")]
+    pub expected_st_sol: StLamports,
+
+    /// The difference in stSOL balance before and after our deposit.
+    ///
+    /// If no other transactions touch the recipient account, then this is the
+    /// amount of stSOL we got. However, the stSOL account balance might change
+    /// for other reasons than just the deposit, if another transaction touched
+    /// the account in the same block.
+    #[serde(rename = "st_lamports_balance_increase")]
+    pub st_sol_balance_increase: StLamports,
+
+    /// Whether we had to create the associated stSOL account. False if one existed already.
+    pub created_associated_st_sol_account: bool,
+}
+
+impl fmt::Display for DepositOutput {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if self.created_associated_st_sol_account {
+            writeln!(f, "Created recipient stSOL account, it did not yet exist.")?;
+        } else {
+            writeln!(f, "Recipient stSOL account existed already before deposit.")?;
+        }
+        writeln!(f, "Recipient stSOL account: {}", self.recipient)?;
+        writeln!(f, "Expected stSOL amount:   {}", self.expected_st_sol)?;
+        writeln!(
+            f,
+            "stSOL balance increase:  {}",
+            self.st_sol_balance_increase
+        )?;
+        Ok(())
+    }
+}
+
+pub fn command_deposit(
+    config: &mut SnapshotClientConfig,
+    opts: &DepositOpts,
+) -> std::result::Result<DepositOutput, crate::error::Error> {
+    let (recipient, created_recipient) = config.with_snapshot(|config| {
+        let solido = config.client.get_solido(opts.solido_address())?;
+
+        let recipient = spl_associated_token_account::get_associated_token_address(
+            &config.signer.pubkey(),
+            &solido.st_sol_mint,
+        );
+
+        if !config.client.account_exists(&recipient)? {
+            let instr = spl_associated_token_account::create_associated_token_account(
+                &config.signer.pubkey(),
+                &config.signer.pubkey(),
+                &solido.st_sol_mint,
+            );
+
+            config.sign_and_send_transaction(&[instr], &[config.signer])?;
+
+            Ok((recipient, true))
+        } else {
+            Ok((recipient, false))
+        }
+    })?;
+
+    let (balance_before, exchange_rate) = config.with_snapshot(|config| {
+        let balance_before = config
+            .client
+            .get_spl_token_balance(&recipient)
+            .map(StLamports)?;
+        let solido = config.client.get_solido(opts.solido_address())?;
+        let reserve =
+            solido.get_reserve_account(opts.solido_program_id(), opts.solido_address())?;
+        let mint_authority =
+            solido.get_mint_authority(opts.solido_program_id(), opts.solido_address())?;
+
+        let instr = lido::instruction::deposit(
+            opts.solido_program_id(),
+            &lido::instruction::DepositAccountsMeta {
+                lido: *opts.solido_address(),
+                user: config.signer.pubkey(),
+                recipient,
+                st_sol_mint: solido.st_sol_mint,
+                mint_authority,
+                reserve_account: reserve,
+            },
+            *opts.amount_sol(),
+        )?;
+
+        config.sign_and_send_transaction(&[instr], &[config.signer])?;
+
+        Ok((balance_before, solido.exchange_rate))
+    })?;
+
+    let balance_after = config.with_snapshot(|config| {
+        config
+            .client
+            .get_spl_token_balance(&recipient)
+            .map(StLamports)
+    })?;
+
+    let st_sol_balance_increase = StLamports(balance_after.0.saturating_sub(balance_before.0));
+    let expected_st_sol = exchange_rate
+        .exchange_sol(*opts.amount_sol())
+        .ok_or_else(|| ProgramError::from(LidoError::CalculationFailure))?;
+
+    let result = DepositOutput {
+        recipient,
+        expected_st_sol,
+        st_sol_balance_increase,
+        created_associated_st_sol_account: created_recipient,
+    };
+    Ok(result)
 }

@@ -1,11 +1,14 @@
 //! Error type for use throughout the CLI program and daemon.
 
+use num_traits::cast::FromPrimitive;
 use solana_client::client_error::{ClientError, ClientErrorKind};
 use solana_client::rpc_request::{RpcError, RpcResponseErrorData};
 use solana_program::program_error::ProgramError;
 use solana_program::pubkey::PubkeyError;
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::transaction::TransactionError;
+
+use lido::error::LidoError;
 
 /// Print the message in bold using ANSI escape sequences.
 fn print_key(message: &'static str) {
@@ -154,8 +157,18 @@ impl AsPrettyError for ClientError {
 
 impl AsPrettyError for ProgramError {
     fn print_pretty(&self) {
-        println!("TODO: Add a nicer print_pretty impl for ProgramError.");
-        println!("Program error:\n{:?}", self);
+        print_red("Program error:");
+        match self {
+            ProgramError::Custom(error_code) => {
+                println!(" Custom error {} (0x{:x})", error_code, error_code);
+                println!("Note: ");
+                match LidoError::from_u32(*error_code) {
+                    Some(err) => println!("Solido error {} is {:?}", error_code, err),
+                    None => println!("This error is not a known Solido error."),
+                }
+            }
+            predefined_error => println!(" {:?}", predefined_error),
+        }
     }
 }
 

@@ -358,12 +358,34 @@ else:
     ), f'\nExpected: {update_exchange_rate_result}\nActual:   {result}'
     print('> Updated the exchange rate, as expected in a change of Epoch.')
 
-print('\nSimulating 1 SOL deposit, then running maintenance ...')
-# TODO(#154): Perform an actual deposit here.
-reserve_account: str = solido_instance['reserve_account']
-solana('transfer', '--allow-unfunded-recipient', reserve_account, '1.0')
-print(f'> Funded reserve {reserve_account} with 1.0 SOL')
 
+def deposit(lamports: int, expect_created_token_account: bool = False) -> None:
+    print(f'\nDepositing {lamports/1_000_000_000} SOL ...')
+    deposit_result = solido(
+        'deposit',
+        '--solido-address',
+        solido_address,
+        '--solido-program-id',
+        solido_program_id,
+        '--amount-sol',
+        f'{lamports / 1_000_000_000}',
+    )
+    # The recipient address depends on the signer, it does not have a fixed expectation.
+    del deposit_result['recipient']
+    expected = {
+        'expected_st_lamports': lamports,
+        'st_lamports_balance_increase': lamports,
+        'created_associated_st_sol_account': expect_created_token_account,
+    }
+    assert deposit_result == expected, f'{deposit_result} == {expected}'
+    print(
+        f'> Got {deposit_result["st_lamports_balance_increase"]/1_000_000_000} stSOL.'
+    )
+
+
+deposit(lamports=1_000_000_000, expect_created_token_account=True)
+
+print('\nRunning maintenance ...')
 result = solido(
     'perform-maintenance',
     '--solido-address',
@@ -389,9 +411,7 @@ print(f'> Staked deposit with {validator_vote_account}.')
 print(
     '\nSimulating 0.0005 SOL deposit (too little to stake), then running maintenance ...'
 )
-# TODO(#154): Perform an actual deposit here.
-solana('transfer', '--allow-unfunded-recipient', reserve_account, '0.0005')
-print(f'> Funded reserve {reserve_account} with 0.0005 SOL')
+deposit(lamports=500_000)
 
 # 0.0005 SOL is not enough to make a stake account, so even though the reserve
 # is not empty, we can't stake what's in the reserve.
@@ -428,3 +448,27 @@ assert result['WithdrawInactiveStake'] == {
 }
 
 print('> Performed WithdrawInactiveStake as expected.')
+
+
+print('\nDonating 1.0 SOL to reserve, then running maintenance ...')
+reserve_account: str = solido_instance['reserve_account']
+solana('transfer', '--allow-unfunded-recipient', reserve_account, '1.0')
+print(f'> Funded reserve {reserve_account} with 1.0 SOL')
+
+print('\nRunning maintenance ...')
+result = solido(
+    'perform-maintenance',
+    '--solido-address',
+    solido_address,
+    '--solido-program-id',
+    solido_program_id,
+    keypair_path=maintainer.keypair_path,
+)
+expected_result = {
+    'StakeDeposit': {
+        'validator_vote_account': validator_vote_account.pubkey,
+        # We have 1.0 SOL from the true deposit, and 1.0 donated.
+        'amount_lamports': int(2.0e9),
+    }
+}
+print('> Staked as expected.')
