@@ -2,7 +2,7 @@
 
 ## v0.3.0
 
-Released 2021-07-19.
+Released 2021-07-20.
 
 **Compatibility**:
 
@@ -37,7 +37,10 @@ Changes:
    when needed.
  * Solido can now withdraw excess balance in stake accounts back to the reserve,
    from where it can be staked. The main cause of excess balance is merging
-   stake accounts, which frees up some of the rent.
+   stake accounts, which frees up some of the rent. Withdrawing excess stake is
+   done by the `WithdrawInactiveStake` instruction, which was previously called
+   `UpdateValidatorBalance`. The maintenance daemon calls this instruction when
+   needed.
  * Dependencies on Solana Program Library programs are now through crates.io.
    Previously we embedded the Solana Program Library as a Git submodule.
 
