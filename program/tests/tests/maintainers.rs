@@ -5,7 +5,7 @@ use crate::context::Context;
 
 use lido::error::LidoError;
 use solana_program_test::tokio;
-use solana_sdk::signature::{Keypair, Signer};
+use solana_sdk::signature::Signer;
 
 #[tokio::test]
 async fn test_successful_add_remove_maintainer() {
@@ -14,7 +14,7 @@ async fn test_successful_add_remove_maintainer() {
     let solido = context.get_solido().await;
     assert_eq!(solido.maintainers.len(), 0);
 
-    let maintainer = Keypair::new();
+    let maintainer = context.deterministic_keypair.new_keypair();
 
     context
         .try_add_maintainer(maintainer.pubkey())

@@ -1,7 +1,7 @@
 #![cfg(feature = "test-bpf")]
 
 use solana_program_test::tokio;
-use solana_sdk::signature::{Keypair, Signer};
+use solana_sdk::signature::Signer;
 
 use lido::error::LidoError;
 use lido::state::{FeeRecipients, RewardDistribution};
@@ -31,12 +31,12 @@ async fn test_successful_change_reward_distribution() {
         st_sol_appreciation: 122,
     };
 
-    let new_treasury_owner = Keypair::new();
+    let new_treasury_owner = context.deterministic_keypair.new_keypair();
     let new_treasury_addr = context
         .create_st_sol_account(new_treasury_owner.pubkey())
         .await;
 
-    let new_developer_owner = Keypair::new();
+    let new_developer_owner = context.deterministic_keypair.new_keypair();
     let new_developer_addr = context
         .create_st_sol_account(new_developer_owner.pubkey())
         .await;
@@ -62,12 +62,12 @@ async fn test_successful_change_reward_distribution() {
 async fn test_change_reward_distribution_wrong_minter() {
     let mut context = Context::new_with_maintainer().await;
 
-    let wrong_mint_authority = Keypair::new();
+    let wrong_mint_authority = context.deterministic_keypair.new_keypair();
     let wrong_mint = context.create_mint(wrong_mint_authority.pubkey()).await;
 
     // Create an SPL token account that is not stSOL.
     context.st_sol_mint = wrong_mint;
-    let not_st_sol_owner = Keypair::new();
+    let not_st_sol_owner = context.deterministic_keypair.new_keypair();
     let not_st_sol_account = context
         .create_st_sol_account(not_st_sol_owner.pubkey())
         .await;
