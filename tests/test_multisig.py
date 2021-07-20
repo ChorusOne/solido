@@ -55,7 +55,7 @@ result = multisig(
     multisig_program_id,
     '--threshold',
     '2',
-    '--owner',
+    '--owners',
     ','.join([addr1.pubkey, addr2.pubkey, addr3.pubkey]),
 )
 multisig_address = result['multisig_address']
@@ -318,7 +318,7 @@ result = multisig(
     multisig_address,
     '--threshold',
     '2',
-    '--owner',
+    '--owners',
     ','.join([addr1.pubkey, addr2.pubkey]),
     keypair_path=addr1.keypair_path,
 )

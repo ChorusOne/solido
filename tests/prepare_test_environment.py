@@ -40,7 +40,7 @@ multisig_data = multisig(
     multisig_program_id,
     '--threshold',
     '1',
-    '--owner',
+    '--owners',
     maintainer.pubkey,
 )
 multisig_instance = multisig_data['multisig_address']
