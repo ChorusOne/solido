@@ -10,7 +10,7 @@ use lido::{
     state::{Lido, RewardDistribution},
     token::StLamports,
     util::serialize_b58,
-    MINT_AUTHORITY, RESERVE_ACCOUNT, REWARDS_WITHDRAW_AUTHORITY,
+    MINT_AUTHORITY, RESERVE_ACCOUNT,
 };
 
 use crate::config::{
@@ -307,17 +307,22 @@ impl fmt::Display for ShowSolidoOutput {
         writeln!(f, "\nAuthorities (public key, bump seed):")?;
         writeln!(
             f,
-            "Deposit authority:     {}, {}",
+            "Deposit authority:          {}, {}",
             self.stake_authority, self.solido.stake_authority_bump_seed
         )?;
         writeln!(
             f,
-            "Mint authority:        {}, {}",
+            "Mint authority:             {}, {}",
             self.mint_authority, self.solido.mint_authority_bump_seed
         )?;
         writeln!(
             f,
-            "Reserve:               {}, {}",
+            "Rewards withdraw authority: {}, {}",
+            self.rewards_withdraw_authority, self.solido.rewards_withdraw_authority_bump_seed,
+        )?;
+        writeln!(
+            f,
+            "Reserve:                    {}, {}",
             self.reserve_account, self.solido.sol_reserve_account_bump_seed
         )?;
         writeln!(f, "\nReward distribution:")?;
@@ -424,15 +429,8 @@ pub fn command_show_solido(
         lido.get_stake_authority(opts.solido_program_id(), opts.solido_address())?;
     let mint_authority =
         lido.get_mint_authority(opts.solido_program_id(), opts.solido_address())?;
-
-    let rewards_withdraw_authority = Pubkey::create_program_address(
-        &[
-            &opts.solido_address().to_bytes(),
-            REWARDS_WITHDRAW_AUTHORITY,
-            &[lido.rewards_withdraw_authority_bump_seed],
-        ],
-        opts.solido_program_id(),
-    )?;
+    let rewards_withdraw_authority =
+        lido.get_rewards_withdraw_authority(opts.solido_program_id(), opts.solido_address())?;
 
     Ok(ShowSolidoOutput {
         solido_program_id: opts.solido_program_id().into(),
