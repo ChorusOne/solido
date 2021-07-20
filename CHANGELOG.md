@@ -1,5 +1,49 @@
 # Changelog
 
+## v0.3.0
+
+Released 2021-07-20.
+
+**Compatibility**:
+
+ * Solido now requires validators to use a vote account that has its *withdraw
+   authority* set to a Solido-controlled address, and that has the commission
+   set to 100%. Solido then ensures that enrolled validators all get the same
+   commission percentage, paid in stSOL. The manager can configure the fee
+   percentage. This approach discourages direct delegations (users delegating
+   directly to the vote account, instead of depositing with Solido).
+ * The on-chain `Lido` struct gained two fields:
+   `rewards_withdraw_authority_bump_seed: u8`, and `metrics: Metrics`. See below
+   for more information.
+
+New features:
+
+ * All options for the `solido` program can now be configured through a config
+   file or environment variable. Previously this was not possible for the
+   `--keypair-path`, `--cluster`, and `--output-mode` options.
+ * The `solido` program gained a `deposit` subcommand that enables deposits from
+   the command line. This command is intended for testing purposes, not for end-
+   users.
+ * Solido now records metrics about deposits, rewards, and fees, in the on-chain
+   data structure. It can be read by any client (for example, by our deposit
+   widget, to show how much SOL users deposited so far). The maintenance daemon
+   also exposes these metrics in its Prometheus `/metrics` endpoint.
+
+Changes:
+
+ * Solido now expects all rewards to appear in vote accounts. A new instruction,
+   `CollectValidatorFee`, withdraws rewards as much SOL as possible from a vote
+   account, and distributes fees. The maintenance daemon calls this instruction
+   when needed.
+ * Solido can now withdraw excess balance in stake accounts back to the reserve,
+   from where it can be staked. The main cause of excess balance is merging
+   stake accounts, which frees up some of the rent. Withdrawing excess stake is
+   done by the `WithdrawInactiveStake` instruction, which was previously called
+   `UpdateValidatorBalance`. The maintenance daemon calls this instruction when
+   needed.
+ * Dependencies on Solana Program Library programs are now through crates.io.
+   Previously we embedded the Solana Program Library as a Git submodule.
+
 ## v0.2.0
 
 Released 2021-07-07.
