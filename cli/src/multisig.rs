@@ -20,7 +20,7 @@ use lido::instruction::RemoveMaintainerMeta;
 use lido::state::FeeRecipients;
 use lido::state::Lido;
 use lido::state::RewardDistribution;
-use lido::util::serialize_b58;
+use lido::util::{serialize_b58, serialize_b58_slice};
 use lido::{instruction::AddMaintainerMeta, state::Weight};
 use multisig::accounts as multisig_accounts;
 use multisig::instruction as multisig_instruction;
@@ -33,7 +33,6 @@ use crate::config::{
 use crate::error::{Abort, AsPrettyError};
 use crate::print_output;
 use crate::snapshot::{Result, SnapshotError};
-use crate::util::PubkeyBase58;
 use crate::{SnapshotClientConfig, SnapshotConfig};
 
 #[derive(Clap, Debug)]
@@ -135,8 +134,11 @@ pub fn get_multisig_program_address(
 
 #[derive(Serialize)]
 struct CreateMultisigOutput {
-    multisig_address: PubkeyBase58,
-    multisig_program_derived_address: PubkeyBase58,
+    #[serde(serialize_with = "serialize_b58")]
+    multisig_address: Pubkey,
+
+    #[serde(serialize_with = "serialize_b58")]
+    multisig_program_derived_address: Pubkey,
 }
 
 impl fmt::Display for CreateMultisigOutput {
@@ -219,9 +221,13 @@ fn create_multisig(
 
 #[derive(Serialize)]
 struct ShowMultisigOutput {
-    multisig_program_derived_address: PubkeyBase58,
+    #[serde(serialize_with = "serialize_b58")]
+    multisig_program_derived_address: Pubkey,
+
     threshold: u64,
-    owners: Vec<PubkeyBase58>,
+
+    #[serde(serialize_with = "serialize_b58_slice")]
+    owners: Vec<Pubkey>,
 }
 
 impl fmt::Display for ShowMultisigOutput {
@@ -259,14 +265,15 @@ fn show_multisig(
     let result = ShowMultisigOutput {
         multisig_program_derived_address: program_derived_address.into(),
         threshold: multisig.threshold,
-        owners: multisig.owners.iter().map(PubkeyBase58::from).collect(),
+        owners: multisig.owners,
     };
     Ok(result)
 }
 
 #[derive(Serialize)]
 struct ShowTransactionSigner {
-    owner: PubkeyBase58,
+    #[serde(serialize_with = "serialize_b58")]
+    owner: Pubkey,
     did_sign: bool,
 }
 
@@ -289,14 +296,23 @@ enum ShowTransactionSigners {
 #[derive(Serialize)]
 enum ParsedInstruction {
     BpfLoaderUpgrade {
-        program_to_upgrade: PubkeyBase58,
-        program_data_address: PubkeyBase58,
-        buffer_address: PubkeyBase58,
-        spill_address: PubkeyBase58,
+        #[serde(serialize_with = "serialize_b58")]
+        program_to_upgrade: Pubkey,
+
+        #[serde(serialize_with = "serialize_b58")]
+        program_data_address: Pubkey,
+
+        #[serde(serialize_with = "serialize_b58")]
+        buffer_address: Pubkey,
+
+        #[serde(serialize_with = "serialize_b58")]
+        spill_address: Pubkey,
     },
     MultisigChange {
         threshold: u64,
-        owners: Vec<PubkeyBase58>,
+
+        #[serde(serialize_with = "serialize_b58_slice")]
+        owners: Vec<Pubkey>,
     },
     SolidoInstruction(SolidoInstruction),
     InvalidSolidoInstruction,
@@ -308,27 +324,35 @@ enum SolidoInstruction {
     AddValidator {
         #[serde(serialize_with = "serialize_b58")]
         solido_instance: Pubkey,
+
         #[serde(serialize_with = "serialize_b58")]
         manager: Pubkey,
+
         #[serde(serialize_with = "serialize_b58")]
         validator_vote_account: Pubkey,
+
         #[serde(serialize_with = "serialize_b58")]
         validator_fee_st_sol_account: Pubkey,
+
         weight: Weight,
     },
     AddMaintainer {
         #[serde(serialize_with = "serialize_b58")]
         solido_instance: Pubkey,
+
         #[serde(serialize_with = "serialize_b58")]
         manager: Pubkey,
+
         #[serde(serialize_with = "serialize_b58")]
         maintainer: Pubkey,
     },
     RemoveMaintainer {
         #[serde(serialize_with = "serialize_b58")]
         solido_instance: Pubkey,
+
         #[serde(serialize_with = "serialize_b58")]
         manager: Pubkey,
+
         #[serde(serialize_with = "serialize_b58")]
         maintainer: Pubkey,
     },
@@ -338,15 +362,18 @@ enum SolidoInstruction {
 
         #[serde(serialize_with = "serialize_b58")]
         solido_instance: Pubkey,
+
         #[serde(serialize_with = "serialize_b58")]
         manager: Pubkey,
+
         fee_recipients: FeeRecipients,
     },
 }
 
 #[derive(Serialize)]
 struct ShowTransactionOutput {
-    multisig_address: PubkeyBase58,
+    #[serde(serialize_with = "serialize_b58")]
+    multisig_address: Pubkey,
     did_execute: bool,
     signers: ShowTransactionSigners,
     // TODO(#180)
@@ -676,7 +703,7 @@ fn show_transaction(
         {
             ParsedInstruction::MultisigChange {
                 threshold: instr.threshold,
-                owners: instr.owners.iter().map(PubkeyBase58::from).collect(),
+                owners: instr.owners,
             }
         } else {
             ParsedInstruction::Unrecognized
@@ -760,7 +787,8 @@ fn try_parse_solido_instruction(
 
 #[derive(Serialize)]
 pub struct ProposeInstructionOutput {
-    transaction_address: PubkeyBase58,
+    #[serde(serialize_with = "serialize_b58")]
+    transaction_address: Pubkey,
 }
 
 impl fmt::Display for ProposeInstructionOutput {

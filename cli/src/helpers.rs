@@ -20,29 +20,34 @@ use crate::{
     multisig::{get_multisig_program_address, propose_instruction, ProposeInstructionOutput},
     snapshot::Result,
     spl_token_utils::{push_create_spl_token_account, push_create_spl_token_mint},
-    util::PubkeyBase58,
     SnapshotClientConfig, SnapshotConfig,
 };
 
 #[derive(Serialize)]
 pub struct CreateSolidoOutput {
     /// Account that stores the data for this Solido instance.
-    pub solido_address: PubkeyBase58,
+    #[serde(serialize_with = "serialize_b58")]
+    pub solido_address: Pubkey,
 
     /// Manages the deposited sol.
-    pub reserve_account: PubkeyBase58,
+    #[serde(serialize_with = "serialize_b58")]
+    pub reserve_account: Pubkey,
 
     /// SPL token mint account for StSol tokens.
-    pub st_sol_mint_address: PubkeyBase58,
+    #[serde(serialize_with = "serialize_b58")]
+    pub st_sol_mint_address: Pubkey,
 
     /// stSOL SPL token account that holds the treasury funds.
-    pub treasury_account: PubkeyBase58,
+    #[serde(serialize_with = "serialize_b58")]
+    pub treasury_account: Pubkey,
 
     /// stSOL SPL token account that receives the developer fees.
-    pub developer_account: PubkeyBase58,
+    #[serde(serialize_with = "serialize_b58")]
+    pub developer_account: Pubkey,
 
     /// Authority for the minting.
-    pub mint_authority: PubkeyBase58,
+    #[serde(serialize_with = "serialize_b58")]
+    pub mint_authority: Pubkey,
 }
 
 impl fmt::Display for CreateSolidoOutput {
@@ -185,12 +190,12 @@ pub fn command_create_solido(
     eprintln!("Did send Lido init.");
 
     let result = CreateSolidoOutput {
-        solido_address: lido_keypair.pubkey().into(),
-        reserve_account: reserve_account.into(),
-        mint_authority: mint_authority.into(),
-        st_sol_mint_address: st_sol_mint_keypair.pubkey().into(),
-        treasury_account: treasury_keypair.pubkey().into(),
-        developer_account: developer_keypair.pubkey().into(),
+        solido_address: lido_keypair.pubkey(),
+        reserve_account: reserve_account,
+        mint_authority: mint_authority,
+        st_sol_mint_address: st_sol_mint_keypair.pubkey(),
+        treasury_account: treasury_keypair.pubkey(),
+        developer_account: developer_keypair.pubkey(),
     };
     Ok(result)
 }
@@ -269,13 +274,25 @@ pub fn command_remove_maintainer(
 
 #[derive(Serialize)]
 pub struct ShowSolidoOutput {
-    pub solido_program_id: PubkeyBase58,
-    pub solido_address: PubkeyBase58,
     pub solido: Lido,
-    pub reserve_account: PubkeyBase58,
-    pub stake_authority: PubkeyBase58,
-    pub mint_authority: PubkeyBase58,
-    pub rewards_withdraw_authority: PubkeyBase58,
+
+    #[serde(serialize_with = "serialize_b58")]
+    pub solido_program_id: Pubkey,
+
+    #[serde(serialize_with = "serialize_b58")]
+    pub solido_address: Pubkey,
+
+    #[serde(serialize_with = "serialize_b58")]
+    pub reserve_account: Pubkey,
+
+    #[serde(serialize_with = "serialize_b58")]
+    pub stake_authority: Pubkey,
+
+    #[serde(serialize_with = "serialize_b58")]
+    pub mint_authority: Pubkey,
+
+    #[serde(serialize_with = "serialize_b58")]
+    pub rewards_withdraw_authority: Pubkey,
 }
 
 impl fmt::Display for ShowSolidoOutput {
@@ -433,13 +450,13 @@ pub fn command_show_solido(
         lido.get_rewards_withdraw_authority(opts.solido_program_id(), opts.solido_address())?;
 
     Ok(ShowSolidoOutput {
-        solido_program_id: opts.solido_program_id().into(),
-        solido_address: opts.solido_address().into(),
+        solido_program_id: *opts.solido_program_id(),
+        solido_address: *opts.solido_address(),
         solido: lido,
-        reserve_account: reserve_account.into(),
-        stake_authority: stake_authority.into(),
-        mint_authority: mint_authority.into(),
-        rewards_withdraw_authority: rewards_withdraw_authority.into(),
+        reserve_account,
+        stake_authority,
+        mint_authority,
+        rewards_withdraw_authority,
     })
 }
 
