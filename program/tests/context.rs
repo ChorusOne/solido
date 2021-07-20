@@ -36,14 +36,14 @@ use lido::{
     MINT_AUTHORITY,
 };
 
-pub struct DeterministicKeypair {
+pub struct DeterministicKeypairGen {
     rng: StdRng,
 }
 
-impl DeterministicKeypair {
+impl DeterministicKeypairGen {
     fn new() -> Self {
         let rng = StdRng::seed_from_u64(0);
-        DeterministicKeypair { rng }
+        DeterministicKeypairGen { rng }
     }
     pub fn new_keypair(&mut self) -> Keypair {
         Keypair::generate(&mut self.rng)
@@ -52,7 +52,7 @@ impl DeterministicKeypair {
 
 #[test]
 fn test_deterministic_key() {
-    let mut deterministic_keypair = DeterministicKeypair::new();
+    let mut deterministic_keypair = DeterministicKeypairGen::new();
     let kp1 = deterministic_keypair.new_keypair();
     let expected_result: &[u8] = &[
         178, 247, 245, 129, 214, 222, 60, 6, 168, 34, 253, 110, 126, 130, 101, 251, 192, 15, 132,
@@ -67,7 +67,7 @@ fn test_deterministic_key() {
 solana_program::declare_id!("3kEkdGe68DuTKg6FhVrLPZ3Wm8EcUPCPjhCeu8WrGDoc");
 
 pub struct Context {
-    pub deterministic_keypair: DeterministicKeypair,
+    pub deterministic_keypair: DeterministicKeypairGen,
     /// Inner test context that contains the banks client and recent block hash.
     pub context: ProgramTestContext,
 
@@ -196,7 +196,7 @@ impl Context {
     ///
     /// The instance contains no maintainers yet.
     pub async fn new_empty() -> Context {
-        let mut deterministic_keypair = DeterministicKeypair::new();
+        let mut deterministic_keypair = DeterministicKeypairGen::new();
         let manager = deterministic_keypair.new_keypair();
         let solido = deterministic_keypair.new_keypair();
 
