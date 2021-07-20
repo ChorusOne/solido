@@ -515,7 +515,7 @@ cli_opt_struct! {
         threshold: u64,
 
         /// The public keys of the multisig owners, who can sign transactions.
-        #[clap(long = "owner")]
+        #[clap(long)]
         owners: PubkeyVec,
 
         /// Address of the Multisig program.
