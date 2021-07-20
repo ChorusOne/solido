@@ -65,7 +65,7 @@ multisig_data = multisig(
     multisig_program_id,
     '--threshold',
     '2',
-    '--owner',
+    '--owners',
     ','.join(t.pubkey for t in test_addrs),
 )
 multisig_instance = multisig_data['multisig_address']
