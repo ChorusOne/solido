@@ -51,7 +51,7 @@ jobs:
         solana-keygen new --no-bip39-passphrase --silent
         solana config set --url https://api.testnet.solana.com
         # Loop airdrop as devnet doesn't seem to support large drops
-        for i in {1..10}; do solana airdrop 1.0; sleep 30;  done
+        for i in {1..20}; do solana airdrop 1.0; sleep 30;  done
 
         NETWORK='https://api.testnet.solana.com' tests/test_solido.py
 
@@ -63,7 +63,7 @@ jobs:
         # should still be there from the previous run.
 
         # Loop airdrop as devnet doesn't seem to support large drops
-        for i in {1..10}; do solana airdrop 1.0; sleep 30;  done
+        for i in {1..20}; do solana airdrop 1.0; sleep 30;  done
 
         NETWORK='https://api.testnet.solana.com' tests/test_multisig.py
 
