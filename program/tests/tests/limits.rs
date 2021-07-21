@@ -35,8 +35,8 @@ async fn test_withdraw_inactive_stake_max_accounts() {
             .await;
 
         // Put some additional SOL in the stake account, so `WithdrawInactiveStake`
-        // has rewards to mint tokens for; this consumes more compute units than
-        // a no-op update, so we actually test the worst case.
+        // has something to withdraw. This consumes more compute units than a
+        // no-op update, so we actually test the worst case.
         context.fund(stake_account, Lamports(100_000)).await;
 
         let result = context
