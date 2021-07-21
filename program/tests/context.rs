@@ -442,6 +442,84 @@ impl Context {
         account.pubkey()
     }
 
+    /// Create an initialized but undelegated stake account (outside of Solido).
+    pub async fn create_stake_account(
+        &mut self,
+        fund_amount: Lamports,
+        authorized_staker_withdrawer: Pubkey,
+    ) -> Pubkey {
+        use solana_program::stake::instruction as stake;
+        use solana_program::stake::state::{Authorized, Lockup};
+
+        let keypair = self.deterministic_keypair.new_keypair();
+
+        let instructions = stake::create_account(
+            &self.context.payer.pubkey(),
+            &keypair.pubkey(),
+            &Authorized {
+                staker: authorized_staker_withdrawer,
+                withdrawer: authorized_staker_withdrawer,
+            },
+            &Lockup::default(),
+            fund_amount.0,
+        );
+        send_transaction(
+            &mut self.context,
+            &mut self.nonce,
+            &instructions[..],
+            vec![&keypair],
+        )
+        .await
+        .expect("Failed to initialize stake account.");
+
+        keypair.pubkey()
+    }
+
+    /// Delegate a stake account, outside of Solido.
+    pub async fn delegate_stake_account(
+        &mut self,
+        stake_account: Pubkey,
+        vote_account: Pubkey,
+        authorized_staker: &Keypair,
+    ) {
+        use solana_program::stake::instruction as stake;
+        let instr =
+            stake::delegate_stake(&stake_account, &authorized_staker.pubkey(), &vote_account);
+        send_transaction(
+            &mut self.context,
+            &mut self.nonce,
+            &[instr],
+            vec![authorized_staker],
+        )
+        .await
+        .expect("Failed to delegate stake.");
+    }
+
+    /// Merge two stake accounts, outside of Solido.
+    ///
+    /// The authorized staker and withdrawer must be the same for both accounts.
+    pub async fn merge_stake_accounts(
+        &mut self,
+        source: Pubkey,
+        destination: Pubkey,
+        authorized_staker_withdrawer: &Keypair,
+    ) {
+        use solana_program::stake::instruction as stake;
+        let instructions = stake::merge(
+            &destination,
+            &source,
+            &authorized_staker_withdrawer.pubkey(),
+        );
+        send_transaction(
+            &mut self.context,
+            &mut self.nonce,
+            &instructions,
+            vec![authorized_staker_withdrawer],
+        )
+        .await
+        .expect("Failed to merge stake.");
+    }
+
     /// Create a vote account for the given validator.
     pub async fn create_vote_account(&mut self, node_key: &Keypair) -> Pubkey {
         let rent = self.context.banks_client.get_rent().await.unwrap();
