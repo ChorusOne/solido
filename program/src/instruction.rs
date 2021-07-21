@@ -72,6 +72,17 @@ pub enum LidoInstruction {
     MergeStake,
 }
 
+impl LidoInstruction {
+    pub fn to_vec(&self) -> Vec<u8> {
+        // `BorshSerialize::try_to_vec` returns a Result, because it uses
+        // `Borsh::serialize`, which takes an arbitrary writer, and which can
+        // therefore return an IoError. But when serializing to a vec, there
+        // is no IO, so for this particular writer, it should never fail.
+        self.try_to_vec()
+            .expect("Serializing an Instruction to Vec<u8> does not fail.")
+    }
+}
+
 accounts_struct! {
     InitializeAccountsMeta, InitializeAccountsInfo {
         pub lido {
@@ -109,18 +120,17 @@ pub fn initialize(
     max_validators: u32,
     max_maintainers: u32,
     accounts: &InitializeAccountsMeta,
-) -> Result<Instruction, ProgramError> {
-    let init_data = LidoInstruction::Initialize {
+) -> Instruction {
+    let data = LidoInstruction::Initialize {
         reward_distribution,
         max_validators,
         max_maintainers,
     };
-    let data = init_data.try_to_vec()?;
-    Ok(Instruction {
+    Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
-        data,
-    })
+        data: data.to_vec(),
+    }
 }
 
 accounts_struct! {
@@ -159,14 +169,13 @@ pub fn deposit(
     program_id: &Pubkey,
     accounts: &DepositAccountsMeta,
     amount: Lamports,
-) -> Result<Instruction, ProgramError> {
-    let init_data = LidoInstruction::Deposit { amount };
-    let data = init_data.try_to_vec()?;
-    Ok(Instruction {
+) -> Instruction {
+    let data = LidoInstruction::Deposit { amount };
+    Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
-        data,
-    })
+        data: data.to_vec(),
+    }
 }
 
 accounts_struct! {
@@ -220,14 +229,13 @@ pub fn stake_deposit(
     program_id: &Pubkey,
     accounts: &StakeDepositAccountsMeta,
     amount: Lamports,
-) -> Result<Instruction, ProgramError> {
-    let init_data = LidoInstruction::StakeDeposit { amount };
-    let data = init_data.try_to_vec()?;
-    Ok(Instruction {
+) -> Instruction {
+    let data = LidoInstruction::StakeDeposit { amount };
+    Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
-        data,
-    })
+        data: data.to_vec(),
+    }
 }
 
 accounts_struct! {
@@ -253,12 +261,10 @@ pub fn update_exchange_rate(
     program_id: &Pubkey,
     accounts: &UpdateExchangeRateAccountsMeta,
 ) -> Instruction {
-    // There is no reason why `try_to_vec` should fail here.
-    let data = LidoInstruction::UpdateExchangeRate.try_to_vec().unwrap();
     Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
-        data,
+        data: LidoInstruction::UpdateExchangeRate.to_vec(),
     }
 }
 
@@ -315,12 +321,10 @@ pub fn withdraw_inactive_stake(
     program_id: &Pubkey,
     accounts: &WithdrawInactiveStakeMeta,
 ) -> Instruction {
-    // There is no reason why `try_to_vec` should fail here.
-    let data = LidoInstruction::WithdrawInactiveStake.try_to_vec().unwrap();
     Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
-        data,
+        data: LidoInstruction::WithdrawInactiveStake.to_vec(),
     }
 }
 
@@ -391,12 +395,10 @@ pub fn collect_validator_fee(
     program_id: &Pubkey,
     accounts: &CollectValidatorFeeMeta,
 ) -> Instruction {
-    // There is no reason why `try_to_vec` should fail here.
-    let data = LidoInstruction::CollectValidatorFee.try_to_vec().unwrap();
     Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
-        data,
+        data: LidoInstruction::CollectValidatorFee.to_vec(),
     }
 }
 
@@ -469,12 +471,13 @@ pub fn add_validator(
     program_id: &Pubkey,
     weight: Weight,
     accounts: &AddValidatorMeta,
-) -> Result<Instruction, ProgramError> {
-    Ok(Instruction {
+) -> Instruction {
+    let data = LidoInstruction::AddValidator { weight };
+    Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
-        data: LidoInstruction::AddValidator { weight }.try_to_vec()?,
-    })
+        data: data.to_vec(),
+    }
 }
 
 accounts_struct! {
@@ -496,15 +499,12 @@ accounts_struct! {
     }
 }
 
-pub fn remove_validator(
-    program_id: &Pubkey,
-    accounts: &RemoveValidatorMeta,
-) -> Result<Instruction, ProgramError> {
-    Ok(Instruction {
+pub fn remove_validator(program_id: &Pubkey, accounts: &RemoveValidatorMeta) -> Instruction {
+    Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
-        data: LidoInstruction::RemoveValidator.try_to_vec()?,
-    })
+        data: LidoInstruction::RemoveValidator.to_vec(),
+    }
 }
 
 accounts_struct! {
@@ -529,15 +529,12 @@ accounts_struct! {
     }
 }
 
-pub fn claim_validator_fees(
-    program_id: &Pubkey,
-    accounts: &ClaimValidatorFeeMeta,
-) -> Result<Instruction, ProgramError> {
-    Ok(Instruction {
+pub fn claim_validator_fees(program_id: &Pubkey, accounts: &ClaimValidatorFeeMeta) -> Instruction {
+    Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
-        data: LidoInstruction::ClaimValidatorFees.try_to_vec()?,
-    })
+        data: LidoInstruction::ClaimValidatorFees.to_vec(),
+    }
 }
 
 accounts_struct! {
@@ -557,15 +554,12 @@ accounts_struct! {
     }
 }
 
-pub fn add_maintainer(
-    program_id: &Pubkey,
-    accounts: &AddMaintainerMeta,
-) -> Result<Instruction, ProgramError> {
-    Ok(Instruction {
+pub fn add_maintainer(program_id: &Pubkey, accounts: &AddMaintainerMeta) -> Instruction {
+    Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
-        data: LidoInstruction::AddMaintainer.try_to_vec()?,
-    })
+        data: LidoInstruction::AddMaintainer.to_vec(),
+    }
 }
 
 accounts_struct! {
@@ -585,15 +579,12 @@ accounts_struct! {
     }
 }
 
-pub fn remove_maintainer(
-    program_id: &Pubkey,
-    accounts: &RemoveMaintainerMeta,
-) -> Result<Instruction, ProgramError> {
-    Ok(Instruction {
+pub fn remove_maintainer(program_id: &Pubkey, accounts: &RemoveMaintainerMeta) -> Instruction {
+    Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
-        data: LidoInstruction::RemoveMaintainer.try_to_vec()?,
-    })
+        data: LidoInstruction::RemoveMaintainer.to_vec(),
+    }
 }
 
 accounts_struct! {

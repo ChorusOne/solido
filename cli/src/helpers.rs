@@ -184,7 +184,7 @@ pub fn command_create_solido(
             developer_account: developer_keypair.pubkey(),
             reserve_account,
         },
-    )?);
+    ));
 
     config.sign_and_send_transaction(&instructions[..], &[config.signer, &lido_keypair])?;
     eprintln!("Did send Lido init.");
@@ -217,7 +217,7 @@ pub fn command_add_validator(
             validator_vote_account: *opts.validator_vote_account(),
             validator_fee_st_sol_account: *opts.validator_fee_account(),
         },
-    )?;
+    );
     propose_instruction(
         config,
         opts.multisig_program_id(),
@@ -240,7 +240,7 @@ pub fn command_add_maintainer(
             manager: multisig_address,
             maintainer: *opts.maintainer_address(),
         },
-    )?;
+    );
     propose_instruction(
         config,
         opts.multisig_program_id(),
@@ -263,7 +263,7 @@ pub fn command_remove_maintainer(
             manager: multisig_address,
             maintainer: *opts.maintainer_address(),
         },
-    )?;
+    );
     propose_instruction(
         config,
         opts.multisig_program_id(),
@@ -553,7 +553,7 @@ pub fn command_deposit(
                 reserve_account: reserve,
             },
             *opts.amount_sol(),
-        )?;
+        );
 
         config.sign_and_send_transaction(&[instr], &[config.signer])?;
 

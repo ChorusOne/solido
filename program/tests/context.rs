@@ -312,8 +312,7 @@ impl Context {
                         developer_account: result.developer_st_sol_account,
                         reserve_account: result.reserve_address,
                     },
-                )
-                .unwrap(),
+                ),
             ],
             vec![&result.solido],
         )
@@ -537,8 +536,7 @@ impl Context {
                     manager: self.manager.pubkey(),
                     maintainer: maintainer,
                 },
-            )
-            .unwrap()],
+            )],
             vec![&self.manager],
         )
         .await
@@ -564,8 +562,7 @@ impl Context {
                     manager: self.manager.pubkey(),
                     maintainer: maintainer,
                 },
-            )
-            .unwrap()],
+            )],
             vec![&self.manager],
         )
         .await
@@ -587,8 +584,7 @@ impl Context {
                     validator_vote_account: accounts.vote_account,
                     validator_fee_st_sol_account: accounts.fee_account,
                 },
-            )
-            .unwrap()],
+            )],
             vec![&self.manager],
         )
         .await
@@ -624,8 +620,7 @@ impl Context {
                     manager: self.manager.pubkey(),
                     validator_vote_account_to_remove: vote_account,
                 },
-            )
-            .unwrap()],
+            )],
             vec![&self.manager],
         )
         .await
@@ -656,8 +651,7 @@ impl Context {
                     mint_authority: self.mint_authority,
                 },
                 amount,
-            )
-            .unwrap()],
+            )],
             vec![&user],
         )
         .await
@@ -723,8 +717,7 @@ impl Context {
                     stake_authority: self.stake_authority,
                 },
                 amount,
-            )
-            .unwrap()],
+            )],
             vec![maintainer],
         )
         .await?;

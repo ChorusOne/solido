@@ -378,8 +378,7 @@ impl SolidoState {
                 stake_authority: self.get_stake_authority(),
             },
             amount_to_deposit,
-        )
-        .expect("Failed to construct StakeDeposit instruction.");
+        );
         let task = MaintenanceOutput::StakeDeposit {
             validator_vote_account: validator.pubkey,
             amount: amount_to_deposit,
