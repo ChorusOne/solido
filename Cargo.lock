@@ -1748,6 +1748,7 @@ dependencies = [
  "rand 0.7.3",
  "serde",
  "serde_derive",
+ "serde_json",
  "solana-program",
  "solana-program-test",
  "solana-sdk",
