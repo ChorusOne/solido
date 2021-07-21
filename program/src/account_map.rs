@@ -91,14 +91,14 @@ impl<T: Default + EntryConstantSize> AccountMap<T> {
         self.entries
             .iter()
             .find(|pe| &pe.pubkey == address)
-            .ok_or_else(|| LidoError::InvalidAccountMember)
+            .ok_or(LidoError::InvalidAccountMember)
     }
 
     pub fn get_mut(&mut self, address: &Pubkey) -> Result<&mut PubkeyAndEntry<T>, LidoError> {
         self.entries
             .iter_mut()
             .find(|pe| &pe.pubkey == address)
-            .ok_or_else(|| LidoError::InvalidAccountMember)
+            .ok_or(LidoError::InvalidAccountMember)
     }
 
     /// Return how many bytes are needed to serialize an instance holding `max_entries`.
