@@ -200,4 +200,19 @@ mod test {
         assert_eq!(map.get_mut(&key), Err(LidoError::InvalidAccountMember));
         assert_eq!(map.remove(&key), Err(LidoError::InvalidAccountMember));
     }
+
+    #[test]
+    fn test_account_map_iter_entries() {
+        let mut map: AccountMap<u32> = AccountMap::new(2);
+        map.add(Pubkey::new_unique(), 0).unwrap();
+        map.add(Pubkey::new_unique(), 1).unwrap();
+
+        for entry in map.iter_entries_mut() {
+            *entry = 2;
+        }
+
+        for entry in map.iter_entries() {
+            assert_eq!(*entry, 2);
+        }
+    }
 }
