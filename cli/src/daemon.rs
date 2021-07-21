@@ -244,7 +244,18 @@ fn start_http_server(
     opts: &RunMaintainerOpts,
     snapshot_mutex: Arc<SnapshotMutex>,
 ) -> Vec<JoinHandle<()>> {
-    let server = Arc::new(Server::http(opts.listen().clone()).unwrap());
+    let server = match Server::http(opts.listen().clone()) {
+        Ok(server) => Arc::new(server),
+        Err(err) => {
+            eprintln!(
+                "Error: {}\nFailed to start http server on {}. Is the daemon already running?",
+                err,
+                opts.listen(),
+            );
+            std::process::exit(1);
+        }
+    };
+
     println!("Http server listening on {}", opts.listen());
 
     // Spawn a number of http handler threads, so we can handle requests in
