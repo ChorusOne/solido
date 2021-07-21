@@ -4,6 +4,8 @@ use num_derive::FromPrimitive;
 use solana_program::{decode_error::DecodeError, program_error::ProgramError};
 use thiserror::Error;
 
+use crate::token::ArithmeticError;
+
 /// Errors that may be returned by the Lido program.
 #[derive(Clone, Debug, Eq, Error, FromPrimitive, PartialEq)]
 pub enum LidoError {
@@ -134,6 +136,18 @@ pub enum LidoError {
     /// The provided Vote Account is invalid or corrupted.
     #[error("InvalidVoteAccount")]
     InvalidVoteAccount,
+}
+
+impl From<ArithmeticError> for LidoError {
+    fn from(_: ArithmeticError) -> Self {
+        LidoError::CalculationFailure
+    }
+}
+
+impl From<ArithmeticError> for ProgramError {
+    fn from(_: ArithmeticError) -> Self {
+        ProgramError::Custom(LidoError::CalculationFailure as u32)
+    }
 }
 
 impl From<LidoError> for ProgramError {

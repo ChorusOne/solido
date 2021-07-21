@@ -35,8 +35,8 @@ pub fn get_reserve_available_balance(
 ) -> Result<Lamports, LidoError> {
     let minimum_balance = Lamports(rent.minimum_balance(0));
     match Lamports(reserve_account.lamports()) - minimum_balance {
-        Some(balance) => Ok(balance),
-        None => {
+        Ok(balance) => Ok(balance),
+        Err(..) => {
             msg!("The reserve account is not rent-exempt.");
             msg!("Please ensure it holds at least {}.", minimum_balance);
             Err(LidoError::ReserveIsNotRentExempt)
@@ -186,20 +186,13 @@ pub fn distribute_fees<'a, 'b>(
     // In the case of fees, the SOL is already part of one of the stake accounts,
     // but we do still need to mint stSOL to represent it.
 
-    let treasury_amount = solido
-        .exchange_rate
-        .exchange_sol(fees.treasury_amount)
-        .ok_or(LidoError::CalculationFailure)?;
+    let treasury_amount = solido.exchange_rate.exchange_sol(fees.treasury_amount)?;
 
-    let developer_amount = solido
-        .exchange_rate
-        .exchange_sol(fees.developer_amount)
-        .ok_or(LidoError::CalculationFailure)?;
+    let developer_amount = solido.exchange_rate.exchange_sol(fees.developer_amount)?;
 
     let per_validator_amount = solido
         .exchange_rate
-        .exchange_sol(fees.reward_per_validator)
-        .ok_or(LidoError::CalculationFailure)?;
+        .exchange_sol(fees.reward_per_validator)?;
 
     // The treasury and developer fee we can mint and pay immediately.
     mint_st_sol_to(
@@ -227,32 +220,24 @@ pub fn distribute_fees<'a, 'b>(
     let mut fee_validation_sol = Lamports(0);
     let mut fee_validation_st_sol = StLamports(0);
     for validator in solido.validators.iter_entries_mut() {
-        validator.fee_credit =
-            (validator.fee_credit + per_validator_amount).ok_or(LidoError::CalculationFailure)?;
-
-        fee_validation_sol = (fee_validation_sol + fees.reward_per_validator)
-            .ok_or(LidoError::CalculationFailure)?;
-        fee_validation_st_sol =
-            (fee_validation_st_sol + per_validator_amount).ok_or(LidoError::CalculationFailure)?;
+        validator.fee_credit = (validator.fee_credit + per_validator_amount)?;
+        fee_validation_sol = (fee_validation_sol + fees.reward_per_validator)?;
+        fee_validation_st_sol = (fee_validation_st_sol + per_validator_amount)?;
     }
 
     // Also record our rewards in the metrics.
     solido
         .metrics
-        .observe_fee_treasury(fees.treasury_amount, treasury_amount)
-        .ok_or(LidoError::CalculationFailure)?;
+        .observe_fee_treasury(fees.treasury_amount, treasury_amount)?;
     solido
         .metrics
-        .observe_fee_validation(fee_validation_sol, fee_validation_st_sol)
-        .ok_or(LidoError::CalculationFailure)?;
+        .observe_fee_validation(fee_validation_sol, fee_validation_st_sol)?;
     solido
         .metrics
-        .observe_fee_developer(fees.developer_amount, developer_amount)
-        .ok_or(LidoError::CalculationFailure)?;
+        .observe_fee_developer(fees.developer_amount, developer_amount)?;
     solido
         .metrics
-        .observe_reward_st_sol_appreciation(fees.st_sol_appreciation_amount)
-        .ok_or(LidoError::CalculationFailure)?;
+        .observe_reward_st_sol_appreciation(fees.st_sol_appreciation_amount)?;
 
     Ok(())
 }

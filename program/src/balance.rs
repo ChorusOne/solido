@@ -1,8 +1,11 @@
 //! Logic for keeping the stake pool balanced.
 
 use crate::state::Validators;
-use crate::token::Lamports;
-use crate::{error::LidoError, token::Rational};
+use crate::{
+    error::LidoError,
+    token,
+    token::{Lamports, Rational},
+};
 
 /// Compute the ideal stake balance for each validator.
 ///
@@ -23,14 +26,12 @@ pub fn get_target_balance(
         "Must have as many target balance outputs as current balance inputs."
     );
 
-    let total_delegated_lamports: Option<Lamports> = validators
+    let total_delegated_lamports: token::Result<Lamports> = validators
         .iter_entries()
         .map(|v| v.stake_accounts_balance)
         .sum();
 
-    let total_lamports = total_delegated_lamports
-        .and_then(|t| t + undelegated_lamports)
-        .ok_or(LidoError::CalculationFailure)?;
+    let total_lamports = total_delegated_lamports.and_then(|t| t + undelegated_lamports)?;
 
     let total_weights: u64 = validators.iter_entries().map(|v| v.weight.0 as u64).sum();
 
@@ -47,7 +48,7 @@ pub fn get_target_balance(
                 numerator: validator.weight.0 as u64,
                 denominator: total_weights,
             })
-        .ok_or(LidoError::NoActiveValidators)?
+        .map_err(|_| LidoError::NoActiveValidators)?
     }
 
     // The total lamports to distribute may be slightly larger than the total
@@ -55,7 +56,7 @@ pub fn get_target_balance(
     let total_lamports_distributed = target_balance
         .iter()
         .cloned()
-        .sum::<Option<Lamports>>()
+        .sum::<token::Result<Lamports>>()
         .expect("Does not overflow, is at most total_lamports.");
 
     let mut remainder = (total_lamports - total_lamports_distributed)
@@ -83,7 +84,7 @@ pub fn get_target_balance(
     let total_lamports_distributed = target_balance
         .iter()
         .cloned()
-        .sum::<Option<Lamports>>()
+        .sum::<token::Result<Lamports>>()
         .expect("Does not overflow, is at most total_lamports.");
     assert_eq!(total_lamports_distributed, total_lamports);
 

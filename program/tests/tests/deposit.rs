@@ -16,7 +16,7 @@ async fn test_successful_deposit() {
     let reserve_balance = context.get_sol_balance(context.reserve_address).await;
     let rent = context.get_rent().await;
     assert_eq!(
-        Some(reserve_balance),
+        Ok(reserve_balance),
         TEST_DEPOSIT_AMOUNT + Lamports(rent.minimum_balance(0))
     );
 

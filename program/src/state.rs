@@ -15,7 +15,7 @@ use spl_token::state::Mint;
 use crate::error::LidoError;
 use crate::logic::get_reserve_available_balance;
 use crate::metrics::Metrics;
-use crate::token::{Lamports, Rational, StLamports};
+use crate::token::{self, Lamports, Rational, StLamports};
 use crate::util::serialize_b58;
 use crate::REWARDS_WITHDRAW_AUTHORITY;
 use crate::{
@@ -129,11 +129,11 @@ pub struct ExchangeRate {
 
 impl ExchangeRate {
     /// Convert SOL to stSOL.
-    pub fn exchange_sol(&self, amount: Lamports) -> Option<StLamports> {
+    pub fn exchange_sol(&self, amount: Lamports) -> token::Result<StLamports> {
         // The exchange rate starts out at 1:1, if there are no deposits yet.
         // If we minted stSOL but there is no SOL, then also assume a 1:1 rate.
         if self.st_sol_supply == StLamports(0) || self.sol_balance == Lamports(0) {
-            return Some(StLamports(amount.0));
+            return Ok(StLamports(amount.0));
         }
 
         let rate = Rational {
@@ -148,10 +148,11 @@ impl ExchangeRate {
     }
 
     /// Convert stSOL to SOL.
-    pub fn exchange_st_sol(&self, amount: StLamports) -> Option<Lamports> {
+    pub fn exchange_st_sol(&self, amount: StLamports) -> Result<Lamports, LidoError> {
         // If there is no stSOL in existence, it cannot be exchanged.
         if self.st_sol_supply == StLamports(0) {
-            return None;
+            msg!("Cannot exchange stSOL for SOL, because no stSTOL has been minted.");
+            return Err(LidoError::InvalidAmount);
         }
 
         let rate = Rational {
@@ -162,7 +163,7 @@ impl ExchangeRate {
         // The result is in StLamports, because the type system considers Rational
         // dimensionless, but in this case `rate` has dimensions SOL/stSOL, so
         // we need to re-wrap the result in the right type.
-        (amount * rate).map(|x| Lamports(x.0))
+        Ok((amount * rate).map(|x| Lamports(x.0))?)
     }
 }
 
@@ -543,15 +544,15 @@ impl Lido {
         let effective_reserve_balance = get_reserve_available_balance(rent, reserve)?;
 
         // The remaining SOL managed is all in stake accounts.
-        let validator_balance: Option<Lamports> = self
+        let validator_balance: token::Result<Lamports> = self
             .validators
             .iter_entries()
             .map(|v| v.stake_accounts_balance)
             .sum();
 
-        validator_balance
-            .and_then(|s| s + effective_reserve_balance)
-            .ok_or(LidoError::CalculationFailure)
+        let result = validator_balance.and_then(|s| s + effective_reserve_balance)?;
+
+        Ok(result)
     }
 
     /// Return the total amount of stSOL in existence.
@@ -564,11 +565,10 @@ impl Lido {
         let st_sol_mint = Mint::unpack_from_slice(&st_sol_mint.data.borrow())?;
         let minted_supply = StLamports(st_sol_mint.supply);
 
-        let credit: Option<StLamports> = self.validators.iter_entries().map(|v| v.fee_credit).sum();
+        let credit: token::Result<StLamports> =
+            self.validators.iter_entries().map(|v| v.fee_credit).sum();
 
-        let result = credit
-            .and_then(|s| s + minted_supply)
-            .ok_or(LidoError::CalculationFailure)?;
+        let result = credit.and_then(|s| s + minted_supply)?;
 
         Ok(result)
     }
@@ -734,7 +734,7 @@ impl RewardDistribution {
     /// deposited it. The remaining SOL, which is not taken as a fee, acts as a
     /// donation to the pool, and makes the SOL value of stSOL go up. It is not
     /// included in the output, as nothing needs to be done to handle it.
-    pub fn split_reward(&self, amount: Lamports, num_validators: u64) -> Option<Fees> {
+    pub fn split_reward(&self, amount: Lamports, num_validators: u64) -> token::Result<Fees> {
         use std::ops::Add;
 
         let treasury_amount = (amount * self.treasury_fraction())?;
@@ -763,7 +763,7 @@ impl RewardDistribution {
             st_sol_appreciation_amount,
         };
 
-        Some(result)
+        Ok(result)
     }
 }
 
@@ -906,7 +906,7 @@ mod test_lido {
             sol_balance: Lamports(0),
             st_sol_supply: StLamports(0),
         };
-        assert_eq!(rate.exchange_sol(Lamports(123)), Some(StLamports(123)));
+        assert_eq!(rate.exchange_sol(Lamports(123)), Ok(StLamports(123)));
     }
 
     #[test]
@@ -917,7 +917,7 @@ mod test_lido {
             st_sol_supply: StLamports(1),
         };
         // If every stSOL is worth 1 SOL, I should get half my SOL amount in stSOL.
-        assert_eq!(rate.exchange_sol(Lamports(44)), Some(StLamports(22)));
+        assert_eq!(rate.exchange_sol(Lamports(44)), Ok(StLamports(22)));
     }
 
     #[test]
@@ -933,7 +933,7 @@ mod test_lido {
             sol_balance: Lamports(100),
             st_sol_supply: StLamports(0),
         };
-        assert_eq!(rate.exchange_sol(Lamports(123)), Some(StLamports(123)));
+        assert_eq!(rate.exchange_sol(Lamports(123)), Ok(StLamports(123)));
 
         // This case should not occur in the wild, but in any case, use a 1:1 rate here too.
         let rate = ExchangeRate {
@@ -941,7 +941,7 @@ mod test_lido {
             sol_balance: Lamports(0),
             st_sol_supply: StLamports(100),
         };
-        assert_eq!(rate.exchange_sol(Lamports(123)), Some(StLamports(123)));
+        assert_eq!(rate.exchange_sol(Lamports(123)), Ok(StLamports(123)));
     }
 
     #[test]

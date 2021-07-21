@@ -1,11 +1,10 @@
 use std::fmt;
 
 use serde::Serialize;
-use solana_program::{program_error::ProgramError, pubkey::Pubkey, system_instruction};
+use solana_program::{pubkey::Pubkey, system_instruction};
 use solana_sdk::signature::{Keypair, Signer};
 
 use lido::{
-    error::LidoError,
     metrics::LamportsHistogram,
     state::{Lido, RewardDistribution},
     token::StLamports,
@@ -591,7 +590,10 @@ pub fn command_deposit(
     let st_sol_balance_increase = StLamports(balance_after.0.saturating_sub(balance_before.0));
     let expected_st_sol = exchange_rate
         .exchange_sol(*opts.amount_sol())
-        .ok_or_else(|| ProgramError::from(LidoError::CalculationFailure))?;
+        // If this is not an `Ok`, the transaction should have failed, but if
+        // the transaction did not fail, then we do want to show the output; we
+        // don't want the user to think that the deposit failed.
+        .unwrap_or(StLamports(0));
 
     let result = DepositOutput {
         recipient,

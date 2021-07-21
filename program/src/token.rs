@@ -25,6 +25,12 @@ pub struct Rational {
     pub denominator: u64,
 }
 
+/// Error returned when a calculation in a token type overflows, underflows, or divides by zero.
+#[derive(Debug, Eq, PartialEq)]
+pub struct ArithmeticError;
+
+pub type Result<T> = std::result::Result<T, ArithmeticError>;
+
 /// Generate a token type that wraps the minimal unit of the token, it’s
 /// “Lamport”. The symbol is for 10<sup>9</sup> of its minimal units and is
 /// only used for `Debug` and `Display` printing.
@@ -64,51 +70,66 @@ macro_rules! impl_token {
         }
 
         impl Mul<Rational> for $TokenLamports {
-            type Output = Option<$TokenLamports>;
-            fn mul(self, other: Rational) -> Option<$TokenLamports> {
+            type Output = Result<$TokenLamports>;
+            fn mul(self, other: Rational) -> Result<$TokenLamports> {
                 // This multiplication cannot overflow, because we expand the
                 // u64s into u128, and u64::MAX * u64::MAX < u128::MAX.
                 let result_u128 = ((self.0 as u128) * (other.numerator as u128))
-                    .checked_div(other.denominator as u128)?;
-                Some($TokenLamports(u64::try_from(result_u128).ok()?))
+                    .checked_div(other.denominator as u128)
+                    .ok_or(ArithmeticError)?;
+                u64::try_from(result_u128)
+                    .map($TokenLamports)
+                    .map_err(|_| ArithmeticError)
             }
         }
 
         impl Mul<u64> for $TokenLamports {
-            type Output = Option<$TokenLamports>;
-            fn mul(self, other: u64) -> Option<$TokenLamports> {
-                Some($TokenLamports(self.0.checked_mul(other)?))
+            type Output = Result<$TokenLamports>;
+            fn mul(self, other: u64) -> Result<$TokenLamports> {
+                self.0
+                    .checked_mul(other)
+                    .map($TokenLamports)
+                    .ok_or(ArithmeticError)
             }
         }
 
         impl Div<u64> for $TokenLamports {
-            type Output = Option<$TokenLamports>;
-            fn div(self, other: u64) -> Option<$TokenLamports> {
-                Some($TokenLamports(self.0.checked_div(other)?))
+            type Output = Result<$TokenLamports>;
+            fn div(self, other: u64) -> Result<$TokenLamports> {
+                self.0
+                    .checked_div(other)
+                    .map($TokenLamports)
+                    .ok_or(ArithmeticError)
             }
         }
 
         impl Sub<$TokenLamports> for $TokenLamports {
-            type Output = Option<$TokenLamports>;
-            fn sub(self, other: $TokenLamports) -> Option<$TokenLamports> {
-                Some($TokenLamports(self.0.checked_sub(other.0)?))
+            type Output = Result<$TokenLamports>;
+            fn sub(self, other: $TokenLamports) -> Result<$TokenLamports> {
+                self.0
+                    .checked_sub(other.0)
+                    .map($TokenLamports)
+                    .ok_or(ArithmeticError)
             }
         }
 
         impl Add<$TokenLamports> for $TokenLamports {
-            type Output = Option<$TokenLamports>;
-            fn add(self, other: $TokenLamports) -> Option<$TokenLamports> {
-                Some($TokenLamports(self.0.checked_add(other.0)?))
+            type Output = Result<$TokenLamports>;
+            fn add(self, other: $TokenLamports) -> Result<$TokenLamports> {
+                self.0
+                    .checked_add(other.0)
+                    .map($TokenLamports)
+                    .ok_or(ArithmeticError)
             }
         }
 
-        impl Sum<$TokenLamports> for Option<$TokenLamports> {
+        impl Sum<$TokenLamports> for Result<$TokenLamports> {
             fn sum<I: Iterator<Item = $TokenLamports>>(iter: I) -> Self {
                 let mut sum = $TokenLamports(0);
                 for item in iter {
                     sum = (sum + item)?;
                 }
-                Some(sum)
+                Ok(sum)
             }
         }
     };
@@ -125,7 +146,7 @@ impl_token!(StLamports, "stSOL");
 /// here).
 impl std::str::FromStr for Lamports {
     type Err = &'static str;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         let mut value = 0_u64;
         let mut is_after_decimal = false;
         let mut exponent = 9_i32;

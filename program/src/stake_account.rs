@@ -3,7 +3,7 @@
 use std::iter::Sum;
 use std::ops::Add;
 
-use crate::{error::LidoError, token::Lamports};
+use crate::{error::LidoError, token, token::Lamports};
 use solana_program::stake::{self as stake_program, instruction::StakeInstruction, state::Stake};
 use solana_program::{
     clock::{Clock, Epoch},
@@ -266,20 +266,20 @@ impl StakeAccount {
 }
 
 impl Add for StakeBalance {
-    type Output = Option<StakeBalance>;
+    type Output = token::Result<StakeBalance>;
 
-    fn add(self, other: StakeBalance) -> Option<StakeBalance> {
+    fn add(self, other: StakeBalance) -> token::Result<StakeBalance> {
         let result = StakeBalance {
             inactive: (self.inactive + other.inactive)?,
             activating: (self.activating + other.activating)?,
             active: (self.active + other.active)?,
             deactivating: (self.deactivating + other.deactivating)?,
         };
-        Some(result)
+        Ok(result)
     }
 }
 
-// Ideally we would implement this for Option<StakeBalance>, but it isn't allowed
+// Ideally we would implement this for Result<StakeBalance>, but it isn't allowed
 // due to orphan impl rules. Curiously, it does work in our `impl_token!` macro.
 // But in any case, overflow should not happen on mainnet, so we can make it
 // panic for now. It will make it harder to fuzz later though.

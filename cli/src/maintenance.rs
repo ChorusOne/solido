@@ -21,6 +21,7 @@ use lido::{
 };
 use lido::{
     state::{Lido, Validator},
+    token,
     token::Lamports,
     MINIMUM_STAKE_ACCOUNT_BALANCE, STAKE_AUTHORITY,
 };
@@ -490,7 +491,7 @@ impl SolidoState {
             let current_balance = stake_accounts
                 .iter()
                 .map(|(_addr, detail)| detail.balance.total())
-                .sum::<Option<Lamports>>()
+                .sum::<token::Result<Lamports>>()
                 .expect("If this overflows, there would be more than u64::MAX staked.");
 
             if current_balance > validator.entry.stake_accounts_balance {

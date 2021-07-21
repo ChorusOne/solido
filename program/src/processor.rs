@@ -135,10 +135,7 @@ pub fn process_deposit(
         ],
     )?;
 
-    let st_sol_amount = lido
-        .exchange_rate
-        .exchange_sol(amount)
-        .ok_or(LidoError::CalculationFailure)?;
+    let st_sol_amount = lido.exchange_rate.exchange_sol(amount)?;
 
     mint_st_sol_to(
         &lido,
@@ -228,8 +225,7 @@ pub fn process_stake_deposit(
     // record that here; we will discover it later in `WithdrawInactiveStake`,
     // and then it will be treated as a donation.
     msg!("Staked {} out of the reserve.", amount);
-    validator.entry.stake_accounts_balance =
-        (validator.entry.stake_accounts_balance + amount).ok_or(LidoError::CalculationFailure)?;
+    validator.entry.stake_accounts_balance = (validator.entry.stake_accounts_balance + amount)?;
 
     // Now we have two options:
     //
@@ -489,9 +485,8 @@ pub fn process_withdraw_inactive_stake(
             lido.stake_authority_bump_seed,
         )?;
 
-        excess_removed =
-            (excess_removed + excess_removed_here).ok_or(LidoError::CalculationFailure)?;
-        observed_total = (observed_total + account_balance).ok_or(LidoError::CalculationFailure)?;
+        excess_removed = (excess_removed + excess_removed_here)?;
+        observed_total = (observed_total + account_balance)?;
     }
 
     if observed_total < validator.entry.stake_accounts_balance {
@@ -571,8 +566,7 @@ pub fn process_collect_validator_fee(
 
     let fees = lido
         .reward_distribution
-        .split_reward(Lamports(rewards), lido.validators.len() as u64)
-        .ok_or(LidoError::CalculationFailure)?;
+        .split_reward(Lamports(rewards), lido.validators.len() as u64)?;
     distribute_fees(&mut lido, &accounts, fees)?;
 
     invoke_signed(

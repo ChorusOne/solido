@@ -10,8 +10,7 @@ use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use serde::Serialize;
 use solana_program::entrypoint::ProgramResult;
 
-use crate::error::LidoError;
-use crate::token::{Lamports, StLamports};
+use crate::token::{self, Lamports, StLamports};
 
 #[repr(C)]
 #[derive(
@@ -86,35 +85,39 @@ impl Metrics {
         &mut self,
         amount_sol: Lamports,
         amount_st_sol: StLamports,
-    ) -> Option<()> {
+    ) -> token::Result<()> {
         self.fee_treasury_sol_total = (self.fee_treasury_sol_total + amount_sol)?;
         self.fee_treasury_st_sol_total = (self.fee_treasury_st_sol_total + amount_st_sol)?;
-        Some(())
+
+        Ok(())
     }
 
     pub fn observe_fee_validation(
         &mut self,
         amount_sol: Lamports,
         amount_st_sol: StLamports,
-    ) -> Option<()> {
+    ) -> token::Result<()> {
         self.fee_validation_sol_total = (self.fee_validation_sol_total + amount_sol)?;
         self.fee_validation_st_sol_total = (self.fee_validation_st_sol_total + amount_st_sol)?;
-        Some(())
+
+        Ok(())
     }
 
     pub fn observe_fee_developer(
         &mut self,
         amount_sol: Lamports,
         amount_st_sol: StLamports,
-    ) -> Option<()> {
+    ) -> token::Result<()> {
         self.fee_developer_sol_total = (self.fee_developer_sol_total + amount_sol)?;
         self.fee_developer_st_sol_total = (self.fee_developer_st_sol_total + amount_st_sol)?;
-        Some(())
+
+        Ok(())
     }
 
-    pub fn observe_reward_st_sol_appreciation(&mut self, amount: Lamports) -> Option<()> {
+    pub fn observe_reward_st_sol_appreciation(&mut self, amount: Lamports) -> token::Result<()> {
         self.st_sol_appreciation_sol_total = (self.st_sol_appreciation_sol_total + amount)?;
-        Some(())
+
+        Ok(())
     }
 
     pub fn observe_deposit(&mut self, amount: Lamports) -> ProgramResult {
@@ -178,7 +181,8 @@ impl LamportsHistogram {
             }
         }
 
-        self.total = (self.total + amount).ok_or(LidoError::CalculationFailure)?;
+        self.total = (self.total + amount)?;
+
         Ok(())
     }
 
