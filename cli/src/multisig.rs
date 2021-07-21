@@ -213,8 +213,8 @@ fn create_multisig(
     )?;
 
     let result = CreateMultisigOutput {
-        multisig_address: multisig_account.pubkey().into(),
-        multisig_program_derived_address: program_derived_address.into(),
+        multisig_address: multisig_account.pubkey(),
+        multisig_program_derived_address: program_derived_address,
     };
     Ok(result)
 }
@@ -263,7 +263,7 @@ fn show_multisig(
         get_multisig_program_address(opts.multisig_program_id(), opts.multisig_address());
 
     let result = ShowMultisigOutput {
-        multisig_program_derived_address: program_derived_address.into(),
+        multisig_program_derived_address: program_derived_address,
         threshold: multisig.threshold,
         owners: multisig.owners,
     };
@@ -654,10 +654,7 @@ fn show_transaction(
                 .iter()
                 .cloned()
                 .zip(transaction.signers.iter())
-                .map(|(owner, did_sign)| ShowTransactionSigner {
-                    owner: owner.into(),
-                    did_sign: *did_sign,
-                })
+                .map(|(owner, &did_sign)| ShowTransactionSigner { owner, did_sign })
                 .collect(),
         }
     } else {
@@ -681,10 +678,10 @@ fn show_transaction(
         // Account meaning, according to
         // https://docs.rs/solana-sdk/1.5.19/solana_sdk/loader_upgradeable_instruction/enum.UpgradeableLoaderInstruction.html#variant.Upgrade
         ParsedInstruction::BpfLoaderUpgrade {
-            program_data_address: instr.accounts[0].pubkey.into(),
-            program_to_upgrade: instr.accounts[1].pubkey.into(),
-            buffer_address: instr.accounts[2].pubkey.into(),
-            spill_address: instr.accounts[3].pubkey.into(),
+            program_data_address: instr.accounts[0].pubkey,
+            program_to_upgrade: instr.accounts[1].pubkey,
+            buffer_address: instr.accounts[2].pubkey,
+            spill_address: instr.accounts[3].pubkey,
         }
     }
     // Try to deserialize the known multisig instructions. The instruction
@@ -724,7 +721,7 @@ fn show_transaction(
     };
 
     let result = ShowTransactionOutput {
-        multisig_address: transaction.multisig.into(),
+        multisig_address: transaction.multisig,
         did_execute: transaction.did_execute,
         signers,
         instruction: instr,
@@ -900,7 +897,7 @@ pub fn propose_instruction(
     )?;
 
     let result = ProposeInstructionOutput {
-        transaction_address: transaction_account.pubkey().into(),
+        transaction_address: transaction_account.pubkey(),
     };
     Ok(result)
 }

@@ -191,8 +191,8 @@ pub fn command_create_solido(
 
     let result = CreateSolidoOutput {
         solido_address: lido_keypair.pubkey(),
-        reserve_account: reserve_account,
-        mint_authority: mint_authority,
+        reserve_account,
+        mint_authority,
         st_sol_mint_address: st_sol_mint_keypair.pubkey(),
         treasury_account: treasury_keypair.pubkey(),
         developer_account: developer_keypair.pubkey(),
