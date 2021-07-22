@@ -2,8 +2,6 @@
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use serde::Serialize;
-use solana_program::entrypoint::ProgramResult;
-use solana_program::program_error::ProgramError;
 use solana_program::pubkey::Pubkey;
 
 use crate::error::LidoError;
@@ -65,9 +63,9 @@ impl<T: Default + EntryConstantSize> AccountMap<T> {
         self.entries.is_empty()
     }
 
-    pub fn add(&mut self, address: Pubkey, value: T) -> ProgramResult {
+    pub fn add(&mut self, address: Pubkey, value: T) -> Result<(), LidoError> {
         if self.len() == self.maximum_entries as usize {
-            return Err(LidoError::MaximumNumberOfAccountsExceeded.into());
+            return Err(LidoError::MaximumNumberOfAccountsExceeded);
         }
         if !self.entries.iter().any(|pe| pe.pubkey == address) {
             self.entries.push(PubkeyAndEntry {
@@ -75,12 +73,12 @@ impl<T: Default + EntryConstantSize> AccountMap<T> {
                 entry: value,
             });
         } else {
-            return Err(LidoError::DuplicatedEntry.into());
+            return Err(LidoError::DuplicatedEntry);
         }
         Ok(())
     }
 
-    pub fn remove(&mut self, address: &Pubkey) -> Result<T, ProgramError> {
+    pub fn remove(&mut self, address: &Pubkey) -> Result<T, LidoError> {
         let idx = self
             .entries
             .iter()
@@ -89,18 +87,18 @@ impl<T: Default + EntryConstantSize> AccountMap<T> {
         Ok(self.entries.swap_remove(idx).entry)
     }
 
-    pub fn get(&self, address: &Pubkey) -> Result<&PubkeyAndEntry<T>, ProgramError> {
+    pub fn get(&self, address: &Pubkey) -> Result<&PubkeyAndEntry<T>, LidoError> {
         self.entries
             .iter()
             .find(|pe| &pe.pubkey == address)
-            .ok_or_else(|| LidoError::InvalidAccountMember.into())
+            .ok_or(LidoError::InvalidAccountMember)
     }
 
-    pub fn get_mut(&mut self, address: &Pubkey) -> Result<&mut PubkeyAndEntry<T>, ProgramError> {
+    pub fn get_mut(&mut self, address: &Pubkey) -> Result<&mut PubkeyAndEntry<T>, LidoError> {
         self.entries
             .iter_mut()
             .find(|pe| &pe.pubkey == address)
-            .ok_or_else(|| LidoError::InvalidAccountMember.into())
+            .ok_or(LidoError::InvalidAccountMember)
     }
 
     /// Return how many bytes are needed to serialize an instance holding `max_entries`.
@@ -158,5 +156,63 @@ impl<'a, T: 'a> std::iter::Iterator for IterEntriesMut<'a, T> {
 
     fn next(&mut self) -> Option<&'a mut T> {
         self.iter.next().map(|pubkey_entry| &mut pubkey_entry.entry)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    impl EntryConstantSize for u32 {
+        const SIZE: usize = 4;
+    }
+
+    #[test]
+    fn test_account_map_limit() {
+        let mut map = AccountMap::new(1);
+        let result_0 = map.add(Pubkey::new_unique(), 0_u32);
+        let result_1 = map.add(Pubkey::new_unique(), 1_u32);
+        assert_eq!(result_0, Ok(()));
+        assert_eq!(result_1, Err(LidoError::MaximumNumberOfAccountsExceeded));
+    }
+
+    #[test]
+    fn test_account_map_duplicate() {
+        let mut map = AccountMap::new(2);
+        let key = Pubkey::new_unique();
+        let result_0 = map.add(key, 0_u32);
+        let result_1 = map.add(key, 1_u32);
+        assert_eq!(result_0, Ok(()));
+        assert_eq!(result_1, Err(LidoError::DuplicatedEntry));
+    }
+
+    #[test]
+    fn test_account_map_add_remove() {
+        let mut map = AccountMap::new(1);
+        let key = Pubkey::new_unique();
+        map.add(key, 0_u32).unwrap();
+
+        assert_eq!(map.get(&key).map(|pe| pe.entry), Ok(0));
+        assert_eq!(map.get_mut(&key).map(|pe| pe.entry), Ok(0));
+        assert_eq!(map.remove(&key), Ok(0));
+
+        assert_eq!(map.get(&key), Err(LidoError::InvalidAccountMember));
+        assert_eq!(map.get_mut(&key), Err(LidoError::InvalidAccountMember));
+        assert_eq!(map.remove(&key), Err(LidoError::InvalidAccountMember));
+    }
+
+    #[test]
+    fn test_account_map_iter_entries() {
+        let mut map: AccountMap<u32> = AccountMap::new(2);
+        map.add(Pubkey::new_unique(), 0).unwrap();
+        map.add(Pubkey::new_unique(), 1).unwrap();
+
+        for entry in map.iter_entries_mut() {
+            *entry = 2;
+        }
+
+        for entry in map.iter_entries() {
+            assert_eq!(*entry, 2);
+        }
     }
 }
