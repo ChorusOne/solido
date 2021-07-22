@@ -418,7 +418,10 @@ impl fmt::Display for ShowSolidoOutput {
         for pe in &self.solido.validators.entries {
             writeln!(
                 f,
-                "  - stake account: {}, rewards address: {}, credit: {}",
+                "  - \
+                Vote account:  {}\n    \
+                Fee address:   {}\n    \
+                Unclaimed fee: {}",
                 pe.pubkey, pe.entry.fee_address, pe.entry.fee_credit
             )?;
         }
