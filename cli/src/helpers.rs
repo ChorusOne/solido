@@ -418,16 +418,34 @@ impl fmt::Display for ShowSolidoOutput {
         for pe in &self.solido.validators.entries {
             writeln!(
                 f,
-                "  - \
+                "\n  - \
                 Vote account:  {}\n    \
                 Fee address:   {}\n    \
-                Unclaimed fee: {}",
-                pe.pubkey, pe.entry.fee_address, pe.entry.fee_credit
+                Unclaimed fee: {}\n    \
+                Stake:         {}\n    \
+                Stake accounts (seed, address):",
+                pe.pubkey,
+                pe.entry.fee_address,
+                pe.entry.fee_credit,
+                pe.entry.stake_accounts_balance,
             )?;
+            for seed in pe.entry.stake_accounts_seed_begin..pe.entry.stake_accounts_seed_end {
+                writeln!(
+                    f,
+                    "      - {}: {}",
+                    seed,
+                    pe.find_stake_account_address(
+                        &self.solido_program_id,
+                        &self.solido_address,
+                        seed
+                    )
+                    .0
+                )?;
+            }
         }
         writeln!(
             f,
-            "\nMaintainers: {} in use out of {} that the instance can support",
+            "\nMaintainers: {} in use out of {} that the instance can support\n",
             self.solido.maintainers.len(),
             self.solido.maintainers.maximum_entries
         )?;
