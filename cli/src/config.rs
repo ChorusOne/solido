@@ -100,7 +100,7 @@ macro_rules! cli_opt_struct {
         // Struct name
         $name:ident {
             $(
-                // Foward the properties
+                // Forward the attributes, such as doc comments or Clap options.
                 $(#[$attr:meta])*
                 // Field name and type, specify default value
                 $field:ident : $type:ty $(=> $default:expr)?
