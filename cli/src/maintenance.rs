@@ -809,22 +809,16 @@ pub fn try_perform_maintenance(
         });
         return Err(error.into());
     }
-    let validator = match validator_vote_account {
-        None => None,
-        Some(pubkey) => {
-            if let Ok(pubkey_entry) = state.solido.validators.get(&pubkey) {
-                Some(pubkey_entry)
-            } else {
-                let error: crate::error::Error = Box::new(MaintenanceError {
-                    message: format!(
-                        "Validator vote account {} is not part of the validator's set.",
-                        pubkey,
-                    ),
-                });
-                return Err(error.into());
-            }
-        }
-    };
+    let validator = validator_vote_account
+        .map(|pubkey| {
+            state.solido.validators.get(&pubkey).map_err(|_| {
+                MaintenanceError::new(format!(
+                    "Validator vote account {} is not part of the validator's set.",
+                    pubkey,
+                ))
+            })
+        })
+        .transpose()?;
 
     // Try all of these operations one by one, and select the first one that
     // produces an instruction.
