@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2021 Chorus One AG
+// SPDX-License-Identifier: GPL-3.0
+
 //! Holds a test context, which makes it easier to test with a Solido instance set up.
 
 use num_traits::cast::FromPrimitive;

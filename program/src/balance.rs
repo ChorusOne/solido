@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2021 Chorus One AG
+// SPDX-License-Identifier: GPL-3.0
+
 //! Logic for keeping the stake pool balanced.
 
 use crate::state::Validators;

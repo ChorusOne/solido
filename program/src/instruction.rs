@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2021 Chorus One AG
+// SPDX-License-Identifier: GPL-3.0
+
 #![allow(clippy::too_many_arguments)]
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};

@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 
+# SPDX-FileCopyrightText: 2021 Chorus One AG
+# SPDX-License-Identifier: GPL-3.0
+
 """
 Start a test validator and wait for it to be available, then print its PID.
 

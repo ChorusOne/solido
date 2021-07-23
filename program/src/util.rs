@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2021 Chorus One AG
+// SPDX-License-Identifier: GPL-3.0
+
 use serde::ser::SerializeSeq;
 use serde::{Serialize, Serializer};
 use solana_program::pubkey::Pubkey;

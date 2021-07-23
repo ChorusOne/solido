@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2021 Chorus One AG
+// SPDX-License-Identifier: GPL-3.0
+
 //! Entry point for maintenance operations, such as updating the pool balance.
 
 use std::fmt;

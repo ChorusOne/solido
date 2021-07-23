@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2021 Chorus One AG
+// SPDX-License-Identifier: GPL-3.0
+
 // The actual tests all live as modules in the `tests` directory.
 // Without this, `cargo test-bpf` tries to build every top-level
 // file as a separate binary, which then causes

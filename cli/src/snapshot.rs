@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2021 Chorus One AG
+// SPDX-License-Identifier: GPL-3.0
+
 //! Utilities for observing a consistent snapshot of on-chain state.
 //!
 //! The Solana RPC does not have any functionality to query an account at a given

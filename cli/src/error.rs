@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2021 Chorus One AG
+// SPDX-License-Identifier: GPL-3.0
+
 //! Error type for use throughout the CLI program and daemon.
 
 use num_traits::cast::FromPrimitive;

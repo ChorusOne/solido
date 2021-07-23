@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 
+# SPDX-FileCopyrightText: 2021 Chorus One AG
+# SPDX-License-Identifier: GPL-3.0
+
 """
 Run the tests with coverage instrumentation, and collect the results.
 Most of this is based on [1].

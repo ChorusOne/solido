@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2021 Chorus One AG
+// SPDX-License-Identifier: GPL-3.0
+
 pub mod add_remove_validator;
 pub mod change_reward_distribution;
 pub mod collect_validator_fee;

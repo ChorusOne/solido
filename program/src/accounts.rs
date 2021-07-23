@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2021 Chorus One AG
+// SPDX-License-Identifier: GPL-3.0
+
 //! Contains a utility macro that makes it safer to work with lists of accounts.
 
 /// Implementation detail of [`accounts_struct`].

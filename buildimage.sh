@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+# SPDX-FileCopyrightText: 2021 Chorus One AG
+# SPDX-License-Identifier: GPL-3.0
+
 # 1. Get last commit hash
 VERSION=$(git rev-parse --short HEAD)
 TAG="chorusone/solido:$VERSION"

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2021 Chorus One AG
+// SPDX-License-Identifier: GPL-3.0
+
 //! A type that stores a map (dictionary) from public key to some value `T`.
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
