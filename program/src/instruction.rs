@@ -44,7 +44,7 @@ pub enum LidoInstruction {
     ///
     /// This function can be called by anybody. It splits the stake account
     /// specified by the caller into one that is currently owned by the caller.
-    /// The amount has to be delegated to the `WITHDRAW_AUTHORITY` so it can be
+    /// The amount has to be delegated to the `STAKE_AUTHORITY` so it can be
     /// burned.
     Withdraw {
         #[allow(dead_code)] // but it's not
@@ -196,12 +196,12 @@ accounts_struct! {
             // Needs to be writable for us to update the metrics.
             is_writable: true,
         },
-        pub user {
+        pub st_sol_account_owner {
             is_signer: true,
-            is_writable: true,
+            is_writable: false,
         },
         // This should be owned by the user.
-        pub st_sol_spl_account {
+        pub st_sol_account {
             is_signer: true,
             is_writable: true,
         },
@@ -225,11 +225,6 @@ accounts_struct! {
         },
         // Used to split stake accounts.
         pub stake_authority {
-            is_signer: false,
-            is_writable: false,
-        },
-        // Used for burning tokens.
-        pub withdraw_authority {
             is_signer: false,
             is_writable: false,
         },

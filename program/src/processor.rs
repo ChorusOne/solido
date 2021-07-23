@@ -27,11 +27,11 @@ use crate::{
     },
     token::{Lamports, StLamports},
     vote_instruction, MINIMUM_STAKE_ACCOUNT_BALANCE, MINT_AUTHORITY, RESERVE_ACCOUNT,
-    REWARDS_WITHDRAW_AUTHORITY, STAKE_AUTHORITY, VALIDATOR_STAKE_ACCOUNT, WITHDRAW_AUTHORITY,
+    REWARDS_WITHDRAW_AUTHORITY, STAKE_AUTHORITY, VALIDATOR_STAKE_ACCOUNT,
 };
 
-use solana_program::{program_option::COption, stake_history::StakeHistory};
-use solana_program::{program_pack::Pack, stake as stake_program};
+use solana_program::stake as stake_program;
+use solana_program::stake_history::StakeHistory;
 use {
     borsh::BorshDeserialize,
     solana_program::{
@@ -99,11 +99,6 @@ pub fn process_initialize(
         program_id,
     );
 
-    let (_, withdraw_bump_seed) = Pubkey::find_program_address(
-        &[&accounts.lido.key.to_bytes(), WITHDRAW_AUTHORITY],
-        program_id,
-    );
-
     lido.lido_version = version;
     lido.maintainers = Maintainers::new(max_maintainers);
     lido.validators = Validators::new(max_validators);
@@ -113,7 +108,6 @@ pub fn process_initialize(
     lido.mint_authority_bump_seed = mint_bump_seed;
     lido.stake_authority_bump_seed = deposit_bump_seed;
     lido.rewards_withdraw_authority_bump_seed = rewards_withdraw_authority_bump_seed;
-    lido.withdraw_authority_bump_seed = withdraw_bump_seed;
     lido.reward_distribution = reward_distribution;
 
     // Confirm that the fee recipients are actually stSOL accounts.
@@ -611,52 +605,43 @@ pub fn process_withdraw(
 ) -> ProgramResult {
     let accounts = WithdrawAccountsInfo::try_from_slice(raw_accounts)?;
     let mut lido = deserialize_lido(program_id, accounts.lido)?;
-    let withdraw_authority = lido.get_withdraw_authority(program_id, accounts.lido.key)?;
-    if &withdraw_authority != accounts.withdraw_authority.key {
-        msg!(
-            "Provided authority: {}, is different from the stored one: {}",
-            accounts.withdraw_authority.key,
-            withdraw_authority
-        );
-        return Err(LidoError::InvalidWithdrawAuthority.into());
-    }
-    let st_sol_account: spl_token::state::Account =
-        spl_token::state::Account::unpack_from_slice(&accounts.st_sol_spl_account.data.borrow())?;
-    // Check if the user is the account owner.
-    if &st_sol_account.owner != accounts.user.key {
-        msg!(
-            "Token is owned by {}, but provided owner is {}.",
-            st_sol_account.owner,
-            accounts.user.key,
-        );
-        return Err(LidoError::InvalidTokenOwner.into());
-    }
-    // Check that the we're allowed to burn the tokens.
-    if let COption::Some(delegated_to) = st_sol_account.delegate {
-        if delegated_to != withdraw_authority {
+
+    // Should remove from the validator that has most stake
+    let provided_validator = lido.validators.get(accounts.validator_vote_account.key)?;
+    for validator in lido.validators.entries.iter() {
+        if validator.entry.stake_accounts_balance > provided_validator.entry.stake_accounts_balance
+        {
             msg!(
-                "Token is delegated to {}, but is expected to be delegated to the withdraw authority: {}.",
-                delegated_to,
-                withdraw_authority,
+                "Validator {} has more stake than the given one.",
+                provided_validator.pubkey
             );
-            return Err(LidoError::InvalidTokenDelegation.into());
+            return Err(LidoError::ValidatorWithMoreStakeExists.into());
         }
-    } else {
-        msg!(
-            "Token is not delegated, but is expected to be delegated to the withdraw authority: {}.",
-            withdraw_authority,
-        );
-        return Err(LidoError::InvalidTokenDelegation.into());
     }
-    // Check that we have enough tokens to burn
-    if StLamports(st_sol_account.delegated_amount) < amount {
-        msg!(
-            "Not enough delegated StSol to withdraw, tried to withdraw {} but maximum to withdraw is {}.",
-            amount,
-            StLamports(st_sol_account.delegated_amount),
-        );
-        return Err(LidoError::InvalidTokenDelegation.into());
-    }
+
+    // Burn stSol tokens
+    burn_st_sol(
+        &lido,
+        accounts.lido.key,
+        accounts.st_sol_account,
+        accounts.st_sol_account_owner,
+        accounts.spl_token,
+        accounts.st_sol_mint,
+        accounts.stake_authority,
+        amount,
+    )?;
+
+    // Reduce validator's balance
+    let sol_to_withdraw = lido.exchange_rate.exchange_st_sol(amount)?;
+    let provided_validator = lido
+        .validators
+        .get_mut(accounts.validator_vote_account.key)?;
+    provided_validator.entry.stake_accounts_balance =
+        (provided_validator.entry.stake_accounts_balance - sol_to_withdraw)?;
+
+    // Update metrics, note that we observe the Lamport amount. Price in
+    // StLamports can be calculated with the `exchange_rate`.
+    lido.metrics.withdraw_amount.observe(sol_to_withdraw)?;
 
     let (stake_account, _) = Validator::find_stake_account_address(
         program_id,
@@ -669,7 +654,6 @@ pub fn process_withdraw(
         return Err(LidoError::InvalidStakeAccount.into());
     }
 
-    let sol_to_withdraw = lido.exchange_rate.exchange_st_sol(amount)?;
     let remaining_balance = (Lamports(accounts.stake_account.lamports()) - sol_to_withdraw)?;
     if remaining_balance < MINIMUM_STAKE_ACCOUNT_BALANCE {
         msg!("Withdrawal will leave the stake account with less than the minimum stake account balance.
@@ -706,17 +690,7 @@ pub fn process_withdraw(
         ]],
     )?;
 
-    burn_st_sol(
-        &lido,
-        accounts.lido.key,
-        accounts.st_sol_spl_account,
-        accounts.spl_token,
-        accounts.st_sol_mint,
-        accounts.withdraw_authority,
-        amount,
-    )?;
-
-    Ok(())
+    lido.save(accounts.lido)
 }
 
 /// Processes [Instruction](enum.Instruction.html).

@@ -139,10 +139,6 @@ pub enum LidoError {
     #[error("InvalidVoteAccount")]
     InvalidVoteAccount = 35,
 
-    /// Invalid Withdraw authority.
-    #[error("InvalidWithdrawAuthority")]
-    InvalidWithdrawAuthority = 36,
-
     /// The provided token owner is different from the given one.
     #[error("InvalidTokenOwner")]
     InvalidTokenOwner = 37,
@@ -150,6 +146,10 @@ pub enum LidoError {
     /// Token was delegated to an unexpected account.
     #[error("InvalidTokenDelegation")]
     InvalidTokenDelegation = 38,
+
+    /// There is a validator that has more stake than the selected one.
+    #[error("ValidatorWithMoreStakeExists")]
+    ValidatorWithMoreStakeExists = 39,
 }
 
 impl From<ArithmeticError> for LidoError {

@@ -66,6 +66,8 @@ pub struct Metrics {
 
     /// Histogram of deposits, including the total amount deposited since we started tracking.
     pub deposit_amount: LamportsHistogram,
+    /// Histogram of withdrawals, including the total amount withdrew since we started tracking.
+    pub withdraw_amount: LamportsHistogram,
 }
 
 impl Metrics {
@@ -81,6 +83,7 @@ impl Metrics {
             fee_developer_st_sol_total: StLamports(0),
 
             deposit_amount: LamportsHistogram::new(),
+            withdraw_amount: LamportsHistogram::new(),
         }
     }
 
@@ -125,6 +128,9 @@ impl Metrics {
 
     pub fn observe_deposit(&mut self, amount: Lamports) -> ProgramResult {
         self.deposit_amount.observe(amount)
+    }
+    pub fn observe_withdraw(&mut self, amount: Lamports) -> ProgramResult {
+        self.withdraw_amount.observe(amount)
     }
 }
 

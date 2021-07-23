@@ -20,12 +20,12 @@ use crate::logic::get_reserve_available_balance;
 use crate::metrics::Metrics;
 use crate::token::{self, Lamports, Rational, StLamports};
 use crate::util::serialize_b58;
+use crate::REWARDS_WITHDRAW_AUTHORITY;
 use crate::{
     account_map::{AccountMap, AccountSet, EntryConstantSize, PubkeyAndEntry},
     MINIMUM_STAKE_ACCOUNT_BALANCE, MINT_AUTHORITY, RESERVE_ACCOUNT, STAKE_AUTHORITY,
     VALIDATOR_STAKE_ACCOUNT,
 };
-use crate::{REWARDS_WITHDRAW_AUTHORITY, WITHDRAW_AUTHORITY};
 
 pub const LIDO_VERSION: u8 = 0;
 
@@ -194,7 +194,6 @@ pub struct Lido {
     pub stake_authority_bump_seed: u8,
     pub mint_authority_bump_seed: u8,
     pub rewards_withdraw_authority_bump_seed: u8,
-    pub withdraw_authority_bump_seed: u8,
 
     /// How rewards are distributed.
     pub reward_distribution: RewardDistribution,
@@ -433,8 +432,8 @@ impl Lido {
         Pubkey::create_program_address(
             &[
                 &solido_address.to_bytes()[..],
-                WITHDRAW_AUTHORITY,
-                &[self.withdraw_authority_bump_seed],
+                STAKE_AUTHORITY,
+                &[self.stake_authority_bump_seed],
             ],
             program_id,
         )
