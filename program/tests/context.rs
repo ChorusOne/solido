@@ -520,6 +520,24 @@ impl Context {
         .expect("Failed to merge stake.");
     }
 
+    /// Deactivate a stake account, outside of Solido.
+    pub async fn deactivate_stake_account(
+        &mut self,
+        stake_account: Pubkey,
+        authorized_staker: &Keypair,
+    ) {
+        use solana_program::stake::instruction as stake;
+        let instruction = stake::deactivate_stake(&stake_account, &authorized_staker.pubkey());
+        send_transaction(
+            &mut self.context,
+            &mut self.nonce,
+            &[instruction],
+            vec![authorized_staker],
+        )
+        .await
+        .expect("Failed to deactivate stake.");
+    }
+
     /// Create a vote account for the given validator.
     pub async fn create_vote_account(&mut self, node_key: &Keypair) -> Pubkey {
         let rent = self.context.banks_client.get_rent().await.unwrap();
