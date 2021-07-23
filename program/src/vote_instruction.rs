@@ -1,6 +1,3 @@
-// SPDX-FileCopyrightText: 2021 Chorus One AG
-// SPDX-License-Identifier: GPL-3.0
-
 //! FIXME copied from the Solana stake program.
 //
 // Since the Solana vote program cannot be included in a Solana program, for now
