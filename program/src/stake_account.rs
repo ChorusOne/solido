@@ -250,7 +250,11 @@ impl StakeAccount {
             return true;
         }
         // An inactive stake into an activating stake during its activation epoch.
-        if merge_from.is_inactive() && self.is_activating() {
+        // Note: although the docs don't say so, merge is symmetric. See also
+        // `tests::solana_assumptions`.
+        if (merge_from.is_inactive() && self.is_activating())
+            || (self.is_inactive() && merge_from.is_activating())
+        {
             return true;
         }
         // The voter pubkey and credits observed must match. Voter must be the same by assumption.
