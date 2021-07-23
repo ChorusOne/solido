@@ -378,6 +378,12 @@ cli_opt_struct! {
         /// Account that stores the data for this Solido instance.
         #[clap(long, value_name = "address")]
         solido_address: Pubkey,
+
+        /// Vote account that the maintainer tries to claim validator's fees
+        /// from. If none is set, the validator will ignore the instruction to
+        /// claim fees.
+        #[clap(long)]
+        validator_vote_account : Pubkey => Pubkey::default(),
     }
 }
 

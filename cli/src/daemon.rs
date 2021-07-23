@@ -18,6 +18,7 @@ use tiny_http::{Request, Response, Server};
 
 use crate::config::RunMaintainerOpts;
 use crate::error::AsPrettyError;
+use crate::maintenance::get_opt_default_pubkey;
 use crate::maintenance::{try_perform_maintenance, MaintenanceOutput, SolidoState};
 use crate::prometheus::{write_metric, Metric, MetricFamily};
 use crate::SnapshotClientConfig;
@@ -133,12 +134,7 @@ fn run_main_loop(
         transactions_claim_validator_fees: 0,
     };
     let mut rng = rand::thread_rng();
-
-    // Pubkey::default, aka [0u8; 32], is the same as None in our config.
-    let validator_vote_account = match opts.validator_vote_account() {
-        pubkey if pubkey == &Pubkey::default() => None,
-        pubkey => Some(*pubkey),
-    };
+    let validator_vote_account = get_opt_default_pubkey(*opts.validator_vote_account());
 
     loop {
         metrics.polls += 1;

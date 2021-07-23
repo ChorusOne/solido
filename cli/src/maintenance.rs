@@ -862,8 +862,18 @@ pub fn run_perform_maintenance(
     config: &mut SnapshotConfig,
     opts: &PerformMaintenanceOpts,
 ) -> Result<Option<MaintenanceOutput>> {
+    let validator_vote_account = get_opt_default_pubkey(*opts.validator_vote_account());
     let state = SolidoState::new(config, opts.solido_program_id(), opts.solido_address())?;
-    try_perform_maintenance(config, None, &state)
+    try_perform_maintenance(config, validator_vote_account, &state)
+}
+
+/// If `pubkey` is `Pubkey::default`, aka `[0u8; 32]`, returns None,
+/// otherwise, returns `Some(pubkey)`.
+pub fn get_opt_default_pubkey(pubkey: Pubkey) -> Option<Pubkey> {
+    match pubkey {
+        pubkey if pubkey == Pubkey::default() => None,
+        pubkey => Some(pubkey),
+    }
 }
 
 #[cfg(test)]
