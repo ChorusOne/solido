@@ -13,6 +13,7 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 
 use rand::Rng;
+use solana_sdk::pubkey::Pubkey;
 use tiny_http::{Request, Response, Server};
 
 use crate::config::RunMaintainerOpts;
@@ -44,6 +45,9 @@ struct MaintenanceMetrics {
 
     /// Number of times we performed a `MergeStake`.
     transactions_merge_stake: u64,
+
+    /// Number of times we performed `ClaimValidatorFees`.
+    transactions_claim_validator_fees: u64,
     // TODO(#96#issuecomment-859388866): Track how much the daemon spends on transaction fees,
     // so we know how much SOL it costs to operate.
     // spent_lamports_total: u64
@@ -126,8 +130,15 @@ fn run_main_loop(
         transactions_withdraw_inactive_stake: 0,
         transactions_collect_validator_fee: 0,
         transactions_merge_stake: 0,
+        transactions_claim_validator_fees: 0,
     };
     let mut rng = rand::thread_rng();
+
+    // Pubkey::default, aka [0u8; 32], is the same as None in our config.
+    let validator_vote_account = match opts.validator_vote_account() {
+        pubkey if pubkey == &Pubkey::default() => None,
+        pubkey => Some(*pubkey),
+    };
 
     loop {
         metrics.polls += 1;
@@ -137,7 +148,7 @@ fn run_main_loop(
             let state =
                 SolidoState::new(&mut config, opts.solido_program_id(), opts.solido_address())?;
 
-            match try_perform_maintenance(&mut config, &state)? {
+            match try_perform_maintenance(&mut config, validator_vote_account, &state)? {
                 None => {
                     // Nothing to be done, try again later.
                     do_wait = true;
@@ -159,6 +170,9 @@ fn run_main_loop(
                         }
                         MaintenanceOutput::MergeStake { .. } => {
                             metrics.transactions_merge_stake += 1
+                        }
+                        MaintenanceOutput::ClaimValidatorFee { .. } => {
+                            metrics.transactions_claim_validator_fees += 1
                         }
                     }
                 }

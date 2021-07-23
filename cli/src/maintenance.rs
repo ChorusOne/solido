@@ -68,6 +68,13 @@ pub enum MaintenanceOutput {
         fee_rewards: Lamports,
     },
 
+    ClaimValidatorFee {
+        #[serde(serialize_with = "serialize_b58")]
+        validator_vote_account: Pubkey,
+        #[serde(rename = "fee_rewards_st_lamports")]
+        fee_rewards: StLamports,
+    },
+
     MergeStake {
         #[serde(serialize_with = "serialize_b58")]
         validator_vote_account: Pubkey,
@@ -111,6 +118,15 @@ impl fmt::Display for MaintenanceOutput {
                 writeln!(f, "Collected validator fees.")?;
                 writeln!(f, "  Validator vote account: {}", validator_vote_account)?;
                 writeln!(f, "  Collected fee rewards:  {}", fee_rewards)?;
+            }
+
+            MaintenanceOutput::ClaimValidatorFee {
+                validator_vote_account,
+                fee_rewards,
+            } => {
+                writeln!(f, "Claimed validator fees.")?;
+                writeln!(f, "  Validator vote account: {}", validator_vote_account)?;
+                writeln!(f, "  Claimed fee:            {}", fee_rewards)?;
             }
             MaintenanceOutput::MergeStake {
                 validator_vote_account,
@@ -529,7 +545,7 @@ impl SolidoState {
     }
 
     /// Check if any validator's vote account is eligible for fee collection, and if
-    /// so, collect it.
+    /// so, collects it.
     ///
     /// As validator's vote accounts accumulate rewards, at the beginning of
     /// every epoch, they should be collected and the fees they've generated
@@ -567,6 +583,48 @@ impl SolidoState {
         }
 
         None
+    }
+
+    /// Checks if the configured validator has unclaimed fees in stSOL. If so,
+    /// claims it on behalf of the validator.
+    pub fn try_claim_validator_fee(
+        &self,
+        validator_vote_account: Option<Pubkey>,
+    ) -> Option<(Instruction, MaintenanceOutput)> {
+        if let Some(validator_vote_account) = validator_vote_account {
+            let validator = match self.solido.validators.get(&validator_vote_account) {
+                Ok(pubkey_and_entry) => Some(pubkey_and_entry),
+                Err(_) => {
+                    // Prints red error.
+                    eprintln!(
+                        "\x1b[31mError: Validator vote account {} is not part of the validator's set.\x1b[0m",
+                        validator_vote_account
+                    );
+                    None
+                }
+            }?;
+
+            // No fees to claim
+            if validator.entry.fee_credit == StLamports(0) {
+                return None;
+            }
+            let instruction = lido::instruction::claim_validator_fees(
+                &self.solido_program_id,
+                &lido::instruction::ClaimValidatorFeeMeta {
+                    lido: self.solido_address,
+                    st_sol_mint: self.solido.st_sol_mint,
+                    mint_authority: self.get_mint_authority(),
+                    validator_fee_st_sol_account: validator.entry.fee_address,
+                },
+            );
+            let task = MaintenanceOutput::ClaimValidatorFee {
+                validator_vote_account: validator.pubkey,
+                fee_rewards: validator.entry.fee_credit,
+            };
+            return Some((instruction, task));
+        } else {
+            None
+        }
     }
 
     /// Write metrics about the current Solido instance in Prometheus format.
@@ -748,6 +806,7 @@ impl SolidoState {
 
 pub fn try_perform_maintenance(
     config: &mut SnapshotConfig,
+    validator_vote_account: Option<Pubkey>,
     state: &SolidoState,
 ) -> Result<Option<MaintenanceOutput>> {
     // To prevent the maintenance transactions failing with mysterious errors
@@ -779,7 +838,8 @@ pub fn try_perform_maintenance(
         .or_else(|| state.try_collect_validator_fee())
         // Same for updating the validator balance.
         .or_else(|| state.try_withdraw_inactive_stake())
-        .or_else(|| state.try_stake_deposit());
+        .or_else(|| state.try_stake_deposit())
+        .or_else(|| state.try_claim_validator_fee(validator_vote_account));
 
     match instruction_output {
         Some((instruction, output)) => {
@@ -803,7 +863,7 @@ pub fn run_perform_maintenance(
     opts: &PerformMaintenanceOpts,
 ) -> Result<Option<MaintenanceOutput>> {
     let state = SolidoState::new(config, opts.solido_program_id(), opts.solido_address())?;
-    try_perform_maintenance(config, &state)
+    try_perform_maintenance(config, None, &state)
 }
 
 #[cfg(test)]
