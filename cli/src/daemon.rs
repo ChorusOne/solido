@@ -46,7 +46,7 @@ struct MaintenanceMetrics {
     /// Number of times we performed a `MergeStake`.
     transactions_merge_stake: u64,
 
-    /// Number of times we performed `ClaimValidatorFees`.
+    /// Number of times we performed `ClaimValidatorFee`.
     transactions_claim_validator_fees: u64,
     // TODO(#96#issuecomment-859388866): Track how much the daemon spends on transaction fees,
     // so we know how much SOL it costs to operate.

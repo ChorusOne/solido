@@ -608,7 +608,7 @@ impl SolidoState {
             if validator.entry.fee_credit == StLamports(0) {
                 return None;
             }
-            let instruction = lido::instruction::claim_validator_fees(
+            let instruction = lido::instruction::claim_validator_fee(
                 &self.solido_program_id,
                 &lido::instruction::ClaimValidatorFeeMeta {
                     lido: self.solido_address,
