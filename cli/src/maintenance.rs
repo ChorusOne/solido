@@ -621,7 +621,7 @@ impl SolidoState {
                 validator_vote_account: validator.pubkey,
                 fee_rewards: validator.entry.fee_credit,
             };
-            return Some((instruction, task));
+            Some((instruction, task))
         } else {
             None
         }
