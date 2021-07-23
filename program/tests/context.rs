@@ -934,8 +934,7 @@ impl Context {
             .expect("Failed to collect validator fee.")
     }
 
-    /// Observe the new validator balance and write it to the state,
-    /// distribute any rewards received.
+    /// Claim validator fee and return the amount claimed.
     pub async fn try_claim_validator_fee(
         &mut self,
         validator_vote_account: Pubkey,

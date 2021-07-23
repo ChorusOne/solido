@@ -47,7 +47,7 @@ struct MaintenanceMetrics {
     transactions_merge_stake: u64,
 
     /// Number of times we performed `ClaimValidatorFee`.
-    transactions_claim_validator_fees: u64,
+    transactions_claim_validator_fee: u64,
     // TODO(#96#issuecomment-859388866): Track how much the daemon spends on transaction fees,
     // so we know how much SOL it costs to operate.
     // spent_lamports_total: u64
@@ -89,6 +89,8 @@ impl MaintenanceMetrics {
                         .with_label("operation", "CollectValidatorFee".to_string()),
                     Metric::new(self.transactions_merge_stake)
                         .with_label("operation", "MergeStake".to_string()),
+                    Metric::new(self.transactions_claim_validator_fee)
+                        .with_label("operation", "ClaimValidatorFee".to_string()),
                 ],
             },
         )?;
@@ -130,7 +132,7 @@ fn run_main_loop(
         transactions_withdraw_inactive_stake: 0,
         transactions_collect_validator_fee: 0,
         transactions_merge_stake: 0,
-        transactions_claim_validator_fees: 0,
+        transactions_claim_validator_fee: 0,
     };
     let mut rng = rand::thread_rng();
     let validator_vote_account = get_opt_default_pubkey(*opts.validator_vote_account());
@@ -167,7 +169,7 @@ fn run_main_loop(
                             metrics.transactions_merge_stake += 1
                         }
                         MaintenanceOutput::ClaimValidatorFee { .. } => {
-                            metrics.transactions_claim_validator_fees += 1
+                            metrics.transactions_claim_validator_fee += 1
                         }
                     }
                 }
