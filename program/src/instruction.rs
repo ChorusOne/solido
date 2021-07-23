@@ -60,7 +60,7 @@ pub enum LidoInstruction {
         #[allow(dead_code)] // but it's not
         amount: StLamports,
     },
-    ClaimValidatorFees,
+    ClaimValidatorFee,
     ChangeRewardDistribution {
         #[allow(dead_code)] // but it's not
         new_reward_distribution: RewardDistribution,
@@ -532,11 +532,11 @@ accounts_struct! {
     }
 }
 
-pub fn claim_validator_fees(program_id: &Pubkey, accounts: &ClaimValidatorFeeMeta) -> Instruction {
+pub fn claim_validator_fee(program_id: &Pubkey, accounts: &ClaimValidatorFeeMeta) -> Instruction {
     Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
-        data: LidoInstruction::ClaimValidatorFees.to_vec(),
+        data: LidoInstruction::ClaimValidatorFee.to_vec(),
     }
 }
 

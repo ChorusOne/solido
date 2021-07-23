@@ -219,7 +219,7 @@ pub fn distribute_fees<'a, 'b>(
 
     // For the validators, as there can be many of them, we can't pay all of
     // them in a single transaction. Instead, we store how much they are
-    // entitled to, and they can later claim it themselves with `ClaimValidatorFees`.
+    // entitled to, and they can later claim it themselves with `ClaimValidatorFee`.
     let mut fee_validation_sol = Lamports(0);
     let mut fee_validation_st_sol = StLamports(0);
     for validator in solido.validators.iter_entries_mut() {

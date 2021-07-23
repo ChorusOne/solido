@@ -20,6 +20,7 @@ use tiny_http::{Request, Response, Server};
 
 use crate::config::RunMaintainerOpts;
 use crate::error::AsPrettyError;
+use crate::maintenance::get_opt_default_pubkey;
 use crate::maintenance::{try_perform_maintenance, MaintenanceOutput, SolidoState};
 use crate::prometheus::{write_metric, Metric, MetricFamily};
 use crate::SnapshotClientConfig;
@@ -47,6 +48,9 @@ struct MaintenanceMetrics {
 
     /// Number of times we performed a `MergeStake`.
     transactions_merge_stake: u64,
+
+    /// Number of times we performed `ClaimValidatorFee`.
+    transactions_claim_validator_fee: u64,
     // TODO(#96#issuecomment-859388866): Track how much the daemon spends on transaction fees,
     // so we know how much SOL it costs to operate.
     // spent_lamports_total: u64
@@ -88,6 +92,8 @@ impl MaintenanceMetrics {
                         .with_label("operation", "CollectValidatorFee".to_string()),
                     Metric::new(self.transactions_merge_stake)
                         .with_label("operation", "MergeStake".to_string()),
+                    Metric::new(self.transactions_claim_validator_fee)
+                        .with_label("operation", "ClaimValidatorFee".to_string()),
                 ],
             },
         )?;
@@ -129,8 +135,10 @@ fn run_main_loop(
         transactions_withdraw_inactive_stake: 0,
         transactions_collect_validator_fee: 0,
         transactions_merge_stake: 0,
+        transactions_claim_validator_fee: 0,
     };
     let mut rng = rand::thread_rng();
+    let validator_vote_account = get_opt_default_pubkey(*opts.validator_vote_account());
 
     loop {
         metrics.polls += 1;
@@ -140,7 +148,7 @@ fn run_main_loop(
             let state =
                 SolidoState::new(&mut config, opts.solido_program_id(), opts.solido_address())?;
 
-            match try_perform_maintenance(&mut config, &state)? {
+            match try_perform_maintenance(&mut config, validator_vote_account, &state)? {
                 None => {
                     // Nothing to be done, try again later.
                     do_wait = true;
@@ -162,6 +170,9 @@ fn run_main_loop(
                         }
                         MaintenanceOutput::MergeStake { .. } => {
                             metrics.transactions_merge_stake += 1
+                        }
+                        MaintenanceOutput::ClaimValidatorFee { .. } => {
+                            metrics.transactions_claim_validator_fee += 1
                         }
                     }
                 }

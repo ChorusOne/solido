@@ -937,6 +937,63 @@ impl Context {
             .expect("Failed to collect validator fee.")
     }
 
+    /// Claim validator fee and return the amount claimed.
+    pub async fn try_claim_validator_fee(
+        &mut self,
+        validator_vote_account: Pubkey,
+    ) -> transport::Result<StLamports> {
+        let solido_before = self.get_solido().await;
+        let validator_before = solido_before
+            .validators
+            .get(&validator_vote_account)
+            .unwrap();
+
+        let validator_balance_before = self
+            .get_st_sol_balance(validator_before.entry.fee_address)
+            .await;
+
+        send_transaction(
+            &mut self.context,
+            &mut self.nonce,
+            &[instruction::claim_validator_fee(
+                &id(),
+                &instruction::ClaimValidatorFeeMeta {
+                    lido: self.solido.pubkey(),
+                    validator_fee_st_sol_account: validator_before.entry.fee_address,
+                    st_sol_mint: self.st_sol_mint,
+                    mint_authority: self.mint_authority,
+                },
+            )],
+            vec![],
+        )
+        .await?;
+        let solido_after = self.get_solido().await;
+        let validator_after = solido_after
+            .validators
+            .get(&validator_vote_account)
+            .unwrap();
+        // Assert all the credits are taken from.
+        assert_eq!(validator_after.entry.fee_credit, StLamports(0));
+
+        let validator_balance_after = self
+            .get_st_sol_balance(validator_before.entry.fee_address)
+            .await;
+
+        // Assert validator's balance increased by the `fee_credit`.
+        assert_eq!(
+            validator_balance_after,
+            (validator_balance_before + validator_before.entry.fee_credit).unwrap()
+        );
+
+        Ok(validator_before.entry.fee_credit)
+    }
+
+    pub async fn claim_validator_fee(&mut self, validator_vote_account: Pubkey) -> StLamports {
+        self.try_claim_validator_fee(validator_vote_account)
+            .await
+            .expect("Failed to claim validator fee.")
+    }
+
     pub async fn try_get_account(&mut self, address: Pubkey) -> Option<Account> {
         self.context
             .banks_client

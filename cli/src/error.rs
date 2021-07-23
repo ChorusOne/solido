@@ -39,6 +39,13 @@ pub struct MaintenanceError {
     pub message: String,
 }
 
+impl MaintenanceError {
+    #[allow(clippy::new_ret_no_self)]
+    pub fn new(message: String) -> Error {
+        Box::new(MaintenanceError { message })
+    }
+}
+
 impl AsPrettyError for MaintenanceError {
     fn print_pretty(&self) {
         print_red("Maintenance error:\n\n");

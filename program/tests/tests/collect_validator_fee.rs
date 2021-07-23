@@ -121,7 +121,18 @@ async fn test_collect_validator_fee() {
         .exchange_rate
         .exchange_st_sol(validator_fee)
         .unwrap();
+
     assert_eq!(validator_fee_sol, Lamports(rewards.0 / 100 * 5));
+
+    // Claim validator fee
+    let claimed_fee = context.claim_validator_fee(validator.vote_account).await;
+    assert_eq!(
+        claimed_fee,
+        solido_after
+            .exchange_rate
+            .exchange_sol(validator_fee_sol)
+            .unwrap()
+    );
 }
 
 #[tokio::test]

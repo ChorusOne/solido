@@ -629,7 +629,7 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
         }
         LidoInstruction::CollectValidatorFee => process_collect_validator_fee(program_id, accounts),
         LidoInstruction::Withdraw { amount } => process_withdraw(program_id, amount, accounts),
-        LidoInstruction::ClaimValidatorFees => process_claim_validator_fee(program_id, accounts),
+        LidoInstruction::ClaimValidatorFee => process_claim_validator_fee(program_id, accounts),
         LidoInstruction::ChangeRewardDistribution {
             new_reward_distribution,
         } => process_change_reward_distribution(program_id, new_reward_distribution, accounts),
