@@ -179,6 +179,55 @@ pub fn mint_st_sol_to<'a>(
     )
 }
 
+/// Burns the given amount of stSOL.
+///
+/// * The stSOL mint must be the one configured in the Solido instance.
+/// * The account account must be an stSOL SPL token account.
+pub fn burn_st_sol<'a>(
+    solido: &Lido,
+    solido_address: &Pubkey,
+    account: &AccountInfo<'a>,
+    spl_token_program: &AccountInfo<'a>,
+    st_sol_mint: &AccountInfo<'a>,
+    withdraw_authority: &AccountInfo<'a>,
+    amount: StLamports,
+) -> ProgramResult {
+    solido.check_mint_is_st_sol_mint(st_sol_mint)?;
+    solido.check_is_st_sol_account(account)?;
+
+    let solido_address_bytes = solido_address.to_bytes();
+    let authority_signature_seeds = [
+        &solido_address_bytes[..],
+        MINT_AUTHORITY,
+        &[solido.mint_authority_bump_seed],
+    ];
+    let signers = [&authority_signature_seeds[..]];
+
+    // The SPL token program supports multisig-managed mints, but we do not
+    // use those.
+    let mint_to_signers = [];
+
+    let instruction = spl_token::instruction::burn(
+        &spl_token_program.key,
+        &account.key,
+        &st_sol_mint.key,
+        &withdraw_authority.key,
+        &mint_to_signers,
+        amount.0,
+    )?;
+
+    invoke_signed(
+        &instruction,
+        &[
+            account.clone(),
+            st_sol_mint.clone(),
+            withdraw_authority.clone(),
+            spl_token_program.clone(),
+        ],
+        &signers,
+    )
+}
+
 /// Mint stSOL for the given fees, and transfer them to the appropriate accounts.
 pub fn distribute_fees<'a, 'b>(
     solido: &mut Lido,

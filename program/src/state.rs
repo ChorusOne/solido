@@ -20,12 +20,12 @@ use crate::logic::get_reserve_available_balance;
 use crate::metrics::Metrics;
 use crate::token::{self, Lamports, Rational, StLamports};
 use crate::util::serialize_b58;
-use crate::REWARDS_WITHDRAW_AUTHORITY;
 use crate::{
     account_map::{AccountMap, AccountSet, EntryConstantSize, PubkeyAndEntry},
     MINIMUM_STAKE_ACCOUNT_BALANCE, MINT_AUTHORITY, RESERVE_ACCOUNT, STAKE_AUTHORITY,
     VALIDATOR_STAKE_ACCOUNT,
 };
+use crate::{REWARDS_WITHDRAW_AUTHORITY, WITHDRAW_AUTHORITY};
 
 pub const LIDO_VERSION: u8 = 0;
 
@@ -194,6 +194,7 @@ pub struct Lido {
     pub stake_authority_bump_seed: u8,
     pub mint_authority_bump_seed: u8,
     pub rewards_withdraw_authority_bump_seed: u8,
+    pub withdraw_authority_bump_seed: u8,
 
     /// How rewards are distributed.
     pub reward_distribution: RewardDistribution,
@@ -416,6 +417,24 @@ impl Lido {
                 &solido_address.to_bytes()[..],
                 REWARDS_WITHDRAW_AUTHORITY,
                 &[self.rewards_withdraw_authority_bump_seed],
+            ],
+            program_id,
+        )
+        .map_err(|_| ProgramError::InvalidSeeds)
+    }
+
+    /// Return the address of the withdraw authority, the program-derived
+    /// address that is responsible for the withdrawing process.
+    pub fn get_withdraw_authority(
+        &self,
+        program_id: &Pubkey,
+        solido_address: &Pubkey,
+    ) -> Result<Pubkey, ProgramError> {
+        Pubkey::create_program_address(
+            &[
+                &solido_address.to_bytes()[..],
+                WITHDRAW_AUTHORITY,
+                &[self.withdraw_authority_bump_seed],
             ],
             program_id,
         )

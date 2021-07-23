@@ -138,6 +138,18 @@ pub enum LidoError {
     /// The provided Vote Account is invalid or corrupted.
     #[error("InvalidVoteAccount")]
     InvalidVoteAccount = 35,
+
+    /// Invalid Withdraw authority.
+    #[error("InvalidWithdrawAuthority")]
+    InvalidWithdrawAuthority = 36,
+
+    /// The provided token owner is different from the given one.
+    #[error("InvalidTokenOwner")]
+    InvalidTokenOwner = 37,
+
+    /// Token was delegated to an unexpected account.
+    #[error("InvalidTokenDelegation")]
+    InvalidTokenDelegation = 38,
 }
 
 impl From<ArithmeticError> for LidoError {
