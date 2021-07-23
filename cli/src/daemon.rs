@@ -13,7 +13,6 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 
 use rand::Rng;
-use solana_sdk::pubkey::Pubkey;
 use tiny_http::{Request, Response, Server};
 
 use crate::config::RunMaintainerOpts;
