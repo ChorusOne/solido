@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2021 Chorus One AG
+// SPDX-License-Identifier: GPL-3.0
+
 use std::fmt;
 
 use anchor_client::solana_sdk::bpf_loader_upgradeable;

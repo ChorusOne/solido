@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 
+# SPDX-FileCopyrightText: 2021 Chorus One AG
+# SPDX-License-Identifier: GPL-3.0
+
 """
 This script calls 'solana' and 'solido' to confirm that functionality works.
 

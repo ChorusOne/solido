@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2021 Chorus One AG
+// SPDX-License-Identifier: GPL-3.0
+
 #![cfg(feature = "test-bpf")]
 
 //! This test confirms the limits of our system.

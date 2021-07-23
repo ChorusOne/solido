@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 
+# SPDX-FileCopyrightText: 2021 Chorus One AG
+# SPDX-License-Identifier: GPL-3.0
+
 """
 Set up a Solido instance on a local testnet, and print its details. This is
 useful when testing the maintenance daemon locally.

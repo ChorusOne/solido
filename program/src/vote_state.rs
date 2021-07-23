@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2021 Chorus One AG
+// SPDX-License-Identifier: GPL-3.0
+
 use crate::{error::LidoError, find_authority_program_address, REWARDS_WITHDRAW_AUTHORITY};
 use solana_program::{msg, pubkey::Pubkey};
 use std::convert::TryInto;

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2021 Chorus One AG
+// SPDX-License-Identifier: GPL-3.0
+
 use solana_program::program::invoke_signed;
 use solana_program::rent::Rent;
 use solana_program::sysvar::Sysvar;

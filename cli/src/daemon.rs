@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2021 Chorus One AG
+// SPDX-License-Identifier: GPL-3.0
+
 //! Maintenance daemon that periodically executes maintenance tasks, and serves metrics.
 //!
 //! The daemon consists of two parts: a main loop, and http server threads. The

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2021 Chorus One AG
+// SPDX-License-Identifier: GPL-3.0
+
 //! Types to make working with token balances safer.
 //!
 //! These wrapper types serve a few purposes:

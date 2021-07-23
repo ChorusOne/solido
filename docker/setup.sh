@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+# SPDX-FileCopyrightText: 2021 Chorus One AG
+# SPDX-License-Identifier: GPL-3.0
+
 KEYPAIR_PATH="~/.config/solana"
 
 # Check for Solana keypair and inject into id.json file if available.

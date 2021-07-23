@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2021 Chorus One AG
+// SPDX-License-Identifier: GPL-3.0
+
 //! Data structures for tracking metrics on-chain.
 //!
 //! In theory, one could look at the transaction history to figure out

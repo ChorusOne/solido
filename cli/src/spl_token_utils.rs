@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2021 Chorus One AG
+// SPDX-License-Identifier: GPL-3.0
+
 use solana_program::{program_pack::Pack, pubkey::Pubkey, system_instruction};
 use solana_sdk::{
     instruction::Instruction,
