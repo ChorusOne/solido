@@ -663,6 +663,40 @@ impl Context {
         recipient
     }
 
+    /// Create a new account, deposit from it, and return the resulting stSOL account.
+    pub async fn withdraw(&mut self, amount: Lamports) -> Pubkey {
+        // Create a new user who is going to do the deposit. The user's account
+        // will hold the SOL to deposit, and it will also be the owner of the
+        // stSOL account that holds the proceeds.
+        let user = self.deterministic_keypair.new_keypair();
+        let recipient = self.create_st_sol_account(user.pubkey()).await;
+
+        // Fund the user account, so the user can deposit that into Solido.
+        self.fund(user.pubkey(), amount).await;
+
+        send_transaction(
+            &mut self.context,
+            &mut self.nonce,
+            &[instruction::deposit(
+                &id(),
+                &instruction::DepositAccountsMeta {
+                    lido: self.solido.pubkey(),
+                    user: user.pubkey(),
+                    recipient: recipient,
+                    st_sol_mint: self.st_sol_mint,
+                    reserve_account: self.reserve_address,
+                    mint_authority: self.mint_authority,
+                },
+                amount,
+            )],
+            vec![&user],
+        )
+        .await
+        .expect("Failed to call Deposit on Solido instance.");
+
+        recipient
+    }
+
     /// Stake the given amount to the given validator, return the resulting stake account.
     pub async fn try_stake_deposit(
         &mut self,

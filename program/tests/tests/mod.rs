@@ -11,3 +11,4 @@ pub mod merge_stake;
 pub mod stake_deposit;
 pub mod update_exchange_rate;
 pub mod withdraw_inactive_stake;
+pub mod withdrawals;
