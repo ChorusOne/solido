@@ -326,7 +326,7 @@ impl fmt::Display for ShowSolidoOutput {
         writeln!(f, "\nAuthorities (public key, bump seed):")?;
         writeln!(
             f,
-            "Deposit authority:          {}, {}",
+            "Stake authority:          {}, {}",
             self.stake_authority, self.solido.stake_authority_bump_seed
         )?;
         writeln!(
