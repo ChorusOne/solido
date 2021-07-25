@@ -229,8 +229,9 @@ accounts_struct! {
             is_writable: false,
         },
         const spl_token = spl_token::id(),
-        const system_program = system_program::id(),
         const sysvar_clock = sysvar::clock::id(),
+        const system_program = system_program::id(),
+        const stake_program = stake_program::program::id(),
     }
 }
 

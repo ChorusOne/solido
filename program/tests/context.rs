@@ -9,6 +9,7 @@ use rand::SeedableRng;
 use solana_program::program_pack::Pack;
 use solana_program::rent::Rent;
 use solana_program::stake::state::Stake;
+use solana_program::stake::state::StakeState;
 use solana_program::system_instruction;
 use solana_program::system_program;
 use solana_program::{borsh::try_from_slice_unchecked, sysvar};
@@ -442,35 +443,29 @@ impl Context {
         account.pubkey()
     }
 
-    /// Create an initialized but undelegated stake account (outside of Solido).
-    pub async fn create_stake_account(
-        &mut self,
-        fund_amount: Lamports,
-        authorized_staker_withdrawer: Pubkey,
-    ) -> Pubkey {
-        use solana_program::stake::instruction as stake;
-        use solana_program::stake::state::{Authorized, Lockup};
-
+    /// Create an uninitialized stake account (outside of Solido).
+    pub async fn create_uninitiazed_stake_account(&mut self) -> Pubkey {
         let keypair = self.deterministic_keypair.new_keypair();
-
-        let instructions = stake::create_account(
-            &self.context.payer.pubkey(),
-            &keypair.pubkey(),
-            &Authorized {
-                staker: authorized_staker_withdrawer,
-                withdrawer: authorized_staker_withdrawer,
-            },
-            &Lockup::default(),
-            fund_amount.0,
-        );
+        let rent = self.get_rent().await;
+        let stake_state_size = std::mem::size_of::<StakeState>();
+        let minimum_rent = rent.minimum_balance(stake_state_size);
+        let instructions = vec![
+            system_instruction::transfer(
+                &self.context.payer.pubkey(),
+                &keypair.pubkey(),
+                minimum_rent,
+            ),
+            system_instruction::allocate(&keypair.pubkey(), stake_state_size as u64),
+            system_instruction::assign(&keypair.pubkey(), &solana_program::stake::program::id()),
+        ];
         send_transaction(
             &mut self.context,
             &mut self.nonce,
-            &instructions[..],
+            &instructions,
             vec![&keypair],
         )
         .await
-        .expect("Failed to initialize stake account.");
+        .expect("Failed to create uninitialized stake account.");
 
         keypair.pubkey()
     }
@@ -705,10 +700,8 @@ impl Context {
         stake_seed: u64,
         stake_account: Pubkey,
     ) -> Pubkey {
-        // Creates new stake account to split from.
-        let new_stake_account = self
-            .create_stake_account(Lamports(1_000_000_000), user.pubkey())
-            .await;
+        // Creates new uninitialized stake account.
+        let uninitialized_stake_account = self.create_uninitiazed_stake_account().await;
 
         // Authorize the token to be burned.
         let authorize_burn_instruction = spl_token::instruction::approve(
@@ -720,7 +713,6 @@ impl Context {
             u64::MAX,
         )
         .unwrap();
-        println!("MINT AUTHORITY {}", self.mint_authority);
 
         send_transaction(
             &mut self.context,
@@ -736,7 +728,7 @@ impl Context {
                         st_sol_account,
                         validator_vote_account: self.validator.as_ref().unwrap().vote_account,
                         stake_account: stake_account,
-                        split_stake: new_stake_account,
+                        split_stake: uninitialized_stake_account,
                         stake_authority: self.stake_authority,
                     },
                     amount,
@@ -747,7 +739,7 @@ impl Context {
         )
         .await
         .expect("Failed to call Withdraw on Solido instance.");
-        new_stake_account
+        uninitialized_stake_account
     }
 
     /// Stake the given amount to the given validator, return the resulting stake account.
