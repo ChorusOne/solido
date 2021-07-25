@@ -442,6 +442,39 @@ impl Context {
         account.pubkey()
     }
 
+    /// Create an initialized but undelegated stake account (outside of Solido).
+    pub async fn create_stake_account(
+        &mut self,
+        fund_amount: Lamports,
+        authorized_staker_withdrawer: Pubkey,
+    ) -> Pubkey {
+        use solana_program::stake::instruction as stake;
+        use solana_program::stake::state::{Authorized, Lockup};
+
+        let keypair = self.deterministic_keypair.new_keypair();
+
+        let instructions = stake::create_account(
+            &self.context.payer.pubkey(),
+            &keypair.pubkey(),
+            &Authorized {
+                staker: authorized_staker_withdrawer,
+                withdrawer: authorized_staker_withdrawer,
+            },
+            &Lockup::default(),
+            fund_amount.0,
+        );
+        send_transaction(
+            &mut self.context,
+            &mut self.nonce,
+            &instructions[..],
+            vec![&keypair],
+        )
+        .await
+        .expect("Failed to initialize stake account.");
+
+        keypair.pubkey()
+    }
+
     /// Create a vote account for the given validator.
     pub async fn create_vote_account(&mut self, node_key: &Keypair) -> Pubkey {
         let rent = self.context.banks_client.get_rent().await.unwrap();
@@ -629,8 +662,8 @@ impl Context {
         .await
     }
 
-    /// Create a new account, deposit from it, and return the resulting stSOL account.
-    pub async fn deposit(&mut self, amount: Lamports) -> Pubkey {
+    /// Create a new account, deposit from it, and return the resulting owner and stSOL account.
+    pub async fn deposit(&mut self, amount: Lamports) -> (Keypair, Pubkey) {
         // Create a new user who is going to do the deposit. The user's account
         // will hold the SOL to deposit, and it will also be the owner of the
         // stSOL account that holds the proceeds.
@@ -660,41 +693,61 @@ impl Context {
         .await
         .expect("Failed to call Deposit on Solido instance.");
 
-        recipient
+        (user, recipient)
     }
 
-    /// Create a new account, deposit from it, and return the resulting stSOL account.
-    pub async fn withdraw(&mut self, amount: Lamports) -> Pubkey {
-        // Create a new user who is going to do the deposit. The user's account
-        // will hold the SOL to deposit, and it will also be the owner of the
-        // stSOL account that holds the proceeds.
-        let user = self.deterministic_keypair.new_keypair();
-        let recipient = self.create_st_sol_account(user.pubkey()).await;
+    /// Withdrawals from  the validator at `self.validator`.
+    pub async fn withdraw(
+        &mut self,
+        user: Keypair,
+        st_sol_account: Pubkey,
+        amount: StLamports,
+        stake_seed: u64,
+        stake_account: Pubkey,
+    ) -> Pubkey {
+        // Creates new stake account to split from.
+        let new_stake_account = self
+            .create_stake_account(Lamports(1_000_000_000), user.pubkey())
+            .await;
 
-        // Fund the user account, so the user can deposit that into Solido.
-        self.fund(user.pubkey(), amount).await;
+        // Authorize the token to be burned.
+        let authorize_burn_instruction = spl_token::instruction::approve(
+            &spl_token::id(),
+            &st_sol_account,
+            &self.stake_authority,
+            &user.pubkey(),
+            &[],
+            u64::MAX,
+        )
+        .unwrap();
+        println!("MINT AUTHORITY {}", self.mint_authority);
 
         send_transaction(
             &mut self.context,
             &mut self.nonce,
-            &[instruction::deposit(
-                &id(),
-                &instruction::DepositAccountsMeta {
-                    lido: self.solido.pubkey(),
-                    user: user.pubkey(),
-                    recipient: recipient,
-                    st_sol_mint: self.st_sol_mint,
-                    reserve_account: self.reserve_address,
-                    mint_authority: self.mint_authority,
-                },
-                amount,
-            )],
+            &[
+                authorize_burn_instruction,
+                instruction::withdraw(
+                    &id(),
+                    &instruction::WithdrawAccountsMeta {
+                        lido: self.solido.pubkey(),
+                        st_sol_mint: self.st_sol_mint,
+                        st_sol_account_owner: user.pubkey(),
+                        st_sol_account,
+                        validator_vote_account: self.validator.as_ref().unwrap().vote_account,
+                        stake_account: stake_account,
+                        split_stake: new_stake_account,
+                        stake_authority: self.stake_authority,
+                    },
+                    amount,
+                    stake_seed,
+                ),
+            ],
             vec![&user],
         )
         .await
-        .expect("Failed to call Deposit on Solido instance.");
-
-        recipient
+        .expect("Failed to call Withdraw on Solido instance.");
+        new_stake_account
     }
 
     /// Stake the given amount to the given validator, return the resulting stake account.

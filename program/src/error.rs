@@ -141,15 +141,15 @@ pub enum LidoError {
 
     /// The provided token owner is different from the given one.
     #[error("InvalidTokenOwner")]
-    InvalidTokenOwner = 37,
+    InvalidTokenOwner = 36,
 
     /// Token was delegated to an unexpected account.
     #[error("InvalidTokenDelegation")]
-    InvalidTokenDelegation = 38,
+    InvalidTokenDelegation = 37,
 
     /// There is a validator that has more stake than the selected one.
     #[error("ValidatorWithMoreStakeExists")]
-    ValidatorWithMoreStakeExists = 39,
+    ValidatorWithMoreStakeExists = 38,
 }
 
 impl From<ArithmeticError> for LidoError {

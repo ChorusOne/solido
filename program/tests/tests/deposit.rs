@@ -14,7 +14,7 @@ pub const TEST_DEPOSIT_AMOUNT: Lamports = Lamports(100_000_000);
 async fn test_successful_deposit() {
     let mut context = Context::new_with_maintainer_and_validator().await;
 
-    let recipient = context.deposit(TEST_DEPOSIT_AMOUNT).await;
+    let (_, recipient) = context.deposit(TEST_DEPOSIT_AMOUNT).await;
 
     let reserve_balance = context.get_sol_balance(context.reserve_address).await;
     let rent = context.get_rent().await;

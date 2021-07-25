@@ -10,6 +10,7 @@ use solana_program::{
     stake as stake_program, system_instruction,
 };
 
+use crate::STAKE_AUTHORITY;
 use crate::{
     error::LidoError,
     instruction::CollectValidatorFeeInfo,
@@ -193,7 +194,7 @@ pub fn burn_st_sol<'a>(
     account_owner: &AccountInfo<'a>,
     spl_token_program: &AccountInfo<'a>,
     st_sol_mint: &AccountInfo<'a>,
-    mint_authority: &AccountInfo<'a>,
+    stake_authority: &AccountInfo<'a>,
     amount: StLamports,
 ) -> ProgramResult {
     solido.check_mint_is_st_sol_mint(st_sol_mint)?;
@@ -213,25 +214,25 @@ pub fn burn_st_sol<'a>(
     }
     // Check that the we're allowed to burn the tokens.
     if let COption::Some(delegated_to) = st_sol_account.delegate {
-        if &delegated_to != mint_authority.key {
+        if &delegated_to != stake_authority.key {
             msg!(
-                "Token is delegated to {}, but is expected to be delegated to the mint authority: {}.",
+                "Token is delegated to {}, but is expected to be delegated to the stake authority: {}.",
                 delegated_to,
-                mint_authority.key,
+                stake_authority.key,
             );
             return Err(LidoError::InvalidTokenDelegation.into());
         }
     } else {
         msg!(
-            "Token is not delegated, but is expected to be delegated to the withdraw authority: {}.",
-            mint_authority.key,
+            "Token is not delegated, but is expected to be delegated to the stake authority: {}.",
+            stake_authority.key,
         );
         return Err(LidoError::InvalidTokenDelegation.into());
     }
     // Check that we have enough tokens to burn
     if StLamports(st_sol_account.delegated_amount) < amount {
         msg!(
-            "Not enough delegated StSol to withdraw, tried to withdraw {} but maximum to withdraw is {}.",
+            "Not enough delegated StSol, tried to withdraw {} but maximum to withdraw is {}.",
             amount,
             StLamports(st_sol_account.delegated_amount),
         );
@@ -241,8 +242,8 @@ pub fn burn_st_sol<'a>(
     let solido_address_bytes = solido_address.to_bytes();
     let authority_signature_seeds = [
         &solido_address_bytes[..],
-        MINT_AUTHORITY,
-        &[solido.mint_authority_bump_seed],
+        STAKE_AUTHORITY,
+        &[solido.stake_authority_bump_seed],
     ];
     let signers = [&authority_signature_seeds[..]];
 
@@ -254,7 +255,7 @@ pub fn burn_st_sol<'a>(
         &spl_token_program.key,
         &account.key,
         &st_sol_mint.key,
-        &mint_authority.key,
+        &stake_authority.key,
         &mint_to_signers,
         amount.0,
     )?;
@@ -264,7 +265,7 @@ pub fn burn_st_sol<'a>(
         &[
             account.clone(),
             st_sol_mint.clone(),
-            mint_authority.clone(),
+            stake_authority.clone(),
             spl_token_program.clone(),
         ],
         &signers,

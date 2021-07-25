@@ -543,16 +543,7 @@ pub fn process_collect_validator_fee(
     lido.check_reserve_account(program_id, accounts.lido.key, accounts.reserve)?;
 
     let clock = Clock::from_account_info(accounts.sysvar_clock)?;
-    if lido.exchange_rate.computed_in_epoch < clock.epoch {
-        msg!(
-            "The exchange rate is outdated, it was last computed in epoch {}, \
-            but now it is epoch {}.",
-            lido.exchange_rate.computed_in_epoch,
-            clock.epoch,
-        );
-        msg!("Please call UpdateExchangeRate before calling CollectValidatorFee.");
-        return Err(LidoError::ExchangeRateNotUpdatedInThisEpoch.into());
-    }
+    lido.check_exchange_rate_last_epoch(&clock, "CollectValidatorFee")?;
 
     let rewards_withdraw_authority = lido.check_rewards_withdraw_authority(
         program_id,
@@ -596,7 +587,8 @@ pub fn process_collect_validator_fee(
     lido.save(accounts.lido)
 }
 
-// TODO(#93) Implement withdraw
+/// Splits a stake account from a validator's stake account. This function
+/// expects the user to pass a stake account that will be split.
 pub fn process_withdraw(
     program_id: &Pubkey,
     amount: StLamports,
@@ -605,6 +597,8 @@ pub fn process_withdraw(
 ) -> ProgramResult {
     let accounts = WithdrawAccountsInfo::try_from_slice(raw_accounts)?;
     let mut lido = deserialize_lido(program_id, accounts.lido)?;
+    let clock = Clock::from_account_info(accounts.sysvar_clock)?;
+    lido.check_exchange_rate_last_epoch(&clock, "Withdraw")?;
 
     // Should remove from the validator that has most stake
     let provided_validator = lido.validators.get(accounts.validator_vote_account.key)?;
@@ -657,7 +651,7 @@ pub fn process_withdraw(
     let remaining_balance = (Lamports(accounts.stake_account.lamports()) - sol_to_withdraw)?;
     if remaining_balance < MINIMUM_STAKE_ACCOUNT_BALANCE {
         msg!("Withdrawal will leave the stake account with less than the minimum stake account balance.
-        Maximum amount to withdraw is {}, tried to withdraw {}", 
+        Maximum amount to withdraw is {}, tried to withdraw {}",
         (Lamports(accounts.stake_account.lamports()) - MINIMUM_STAKE_ACCOUNT_BALANCE)
         .expect("We do not allow the balance to fall below the minimum"), sol_to_withdraw);
         return Err(LidoError::InvalidAmount.into());

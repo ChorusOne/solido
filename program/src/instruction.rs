@@ -202,7 +202,7 @@ accounts_struct! {
         },
         // This should be owned by the user.
         pub st_sol_account {
-            is_signer: true,
+            is_signer: false,
             is_writable: true,
         },
         pub st_sol_mint {
@@ -223,13 +223,14 @@ accounts_struct! {
             is_signer: false,
             is_writable: true,
         },
-        // Used to split stake accounts.
+        // Used to split stake accounts and burn tokens.
         pub stake_authority {
             is_signer: false,
             is_writable: false,
         },
         const spl_token = spl_token::id(),
         const system_program = system_program::id(),
+        const sysvar_clock = sysvar::clock::id(),
     }
 }
 
