@@ -220,7 +220,7 @@ accounts_struct! {
         },
         // Stake where the withdrawn amounts will go.
         pub destination_stake_account {
-            is_signer: false,
+            is_signer: true,
             is_writable: true,
         },
         // Used to split stake accounts and burn tokens.

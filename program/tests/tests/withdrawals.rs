@@ -36,35 +36,48 @@ async fn test_withdrawal() {
 
     let stake_account_balance_before = context.get_sol_balance(stake_account).await;
 
-    // This function gives us a delegated stake account with Sol withdrawn from
-    // the given stake account.
+    let stake_state_size = std::mem::size_of::<StakeState>();
+    let minimum_rent = rent.minimum_balance(stake_state_size);
+
+    // Test withdrawing 1 Lamport less than the minimum rent. Should fail
     let split_stake_account = context
-        .withdraw(user, token_addr, TEST_WITHDRAW_AMOUNT, stake_account)
+        .try_withdraw(
+            &user,
+            token_addr,
+            StLamports(minimum_rent - 1),
+            stake_account,
+        )
+        .await;
+    assert!(split_stake_account.is_err());
+
+    let test_withdraw_amount = StLamports(minimum_rent + 1);
+
+    // `minimum_rent + 1` is needed by the stake program during the split.
+    // This should return an activated stake account with `minimum_rent + 1` Sol.
+    let split_stake_account = context
+        .withdraw(&user, token_addr, test_withdraw_amount, stake_account)
         .await;
 
     let split_stake_sol_balance = context.get_sol_balance(split_stake_account).await;
     let solido = context.get_solido().await;
     let amount_lamports = solido
         .exchange_rate
-        .exchange_st_sol(TEST_WITHDRAW_AMOUNT)
+        .exchange_st_sol(test_withdraw_amount)
         .unwrap();
 
     // Amount should be the same as `TEST_WITHDRAW_AMOUNT` because
     // no rewards were distributed
-    assert_eq!(amount_lamports, Lamports(10_000_000_000));
+    assert_eq!(amount_lamports, Lamports(minimum_rent + 1));
 
     // Assert the new uninitialized stake account's balance is incremented by 10 Sol.
-    assert_eq!(
-        split_stake_sol_balance,
-        (amount_lamports + Lamports(rent.minimum_balance(std::mem::size_of::<StakeState>())))
-            .unwrap()
-    );
+    assert_eq!(split_stake_sol_balance, amount_lamports);
     let stake_account_balance_after = context.get_sol_balance(stake_account).await;
     assert_eq!(
         (stake_account_balance_before - stake_account_balance_after).unwrap(),
-        Lamports(10_000_000_000)
+        Lamports(minimum_rent + 1)
     );
 
     // Check that the stake was indeed withdrawn from the given stake account
-    assert_eq!(stake_account_balance_after, Lamports(90_000_000_000));
+    // Hard-coded the amount - rent, in case rent changes we'll know.
+    assert_eq!(stake_account_balance_after, Lamports(99_997_717_119));
 }

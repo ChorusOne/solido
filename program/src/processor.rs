@@ -647,22 +647,44 @@ pub fn process_withdraw(
         .expect("We do not allow the balance to fall below the minimum"), sol_to_withdraw);
         return Err(LidoError::InvalidAmount.into());
     }
+    // The Stake program already checks for a minimum rent on the destination
+    // stake account inside the `split` function.
 
+    // The Split instruction returns three instructions:
+    //   0 - Allocate instruction.
+    //   1 - Assign owner instruction.
+    //   2 - Split stake instruction.
     let split_instructions = solana_program::stake::instruction::split(
         &stake_account,
         accounts.stake_authority.key,
         sol_to_withdraw.0,
         accounts.destination_stake_account.key,
     );
-
-    // The Split instruction returns three instructions, the first two
-    // deal with allocating data for the new stake account `accounts.split_stake`.
-    // We can leave this on behalf of the user and execute just the last instruction.
     assert_eq!(split_instructions.len(), 3);
-    let split_instructions = &split_instructions[2];
+
+    let (allocate_instruction, assign_instruction, split_instruction) = (
+        &split_instructions[0],
+        &split_instructions[1],
+        &split_instructions[2],
+    );
+
+    invoke(
+        allocate_instruction,
+        &[
+            accounts.destination_stake_account.clone(),
+            accounts.system_program.clone(),
+        ],
+    )?;
+    invoke(
+        assign_instruction,
+        &[
+            accounts.destination_stake_account.clone(),
+            accounts.system_program.clone(),
+        ],
+    )?;
 
     invoke_signed(
-        split_instructions,
+        split_instruction,
         &[
             accounts.source_stake_account.clone(),
             accounts.destination_stake_account.clone(),

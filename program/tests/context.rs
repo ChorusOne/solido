@@ -9,7 +9,6 @@ use rand::SeedableRng;
 use solana_program::program_pack::Pack;
 use solana_program::rent::Rent;
 use solana_program::stake::state::Stake;
-use solana_program::stake::state::StakeState;
 use solana_program::system_instruction;
 use solana_program::system_program;
 use solana_program::{borsh::try_from_slice_unchecked, sysvar};
@@ -443,33 +442,6 @@ impl Context {
         account.pubkey()
     }
 
-    /// Create an uninitialized stake account (outside of Solido).
-    pub async fn create_uninitiazed_stake_account(&mut self) -> Pubkey {
-        let keypair = self.deterministic_keypair.new_keypair();
-        let rent = self.get_rent().await;
-        let stake_state_size = std::mem::size_of::<StakeState>();
-        let minimum_rent = rent.minimum_balance(stake_state_size);
-        let instructions = vec![
-            system_instruction::transfer(
-                &self.context.payer.pubkey(),
-                &keypair.pubkey(),
-                minimum_rent,
-            ),
-            system_instruction::allocate(&keypair.pubkey(), stake_state_size as u64),
-            system_instruction::assign(&keypair.pubkey(), &solana_program::stake::program::id()),
-        ];
-        send_transaction(
-            &mut self.context,
-            &mut self.nonce,
-            &instructions,
-            vec![&keypair],
-        )
-        .await
-        .expect("Failed to create uninitialized stake account.");
-
-        keypair.pubkey()
-    }
-
     /// Create a vote account for the given validator.
     pub async fn create_vote_account(&mut self, node_key: &Keypair) -> Pubkey {
         let rent = self.context.banks_client.get_rent().await.unwrap();
@@ -691,16 +663,16 @@ impl Context {
         (user, recipient)
     }
 
-    /// Withdrawals from  the validator at `self.validator`.
-    pub async fn withdraw(
+    /// Withdraw from the validator at `self.validator`.
+    pub async fn try_withdraw(
         &mut self,
-        user: Keypair,
+        user: &Keypair,
         st_sol_account: Pubkey,
         amount: StLamports,
         source_stake_account: Pubkey,
-    ) -> Pubkey {
-        // Creates new uninitialized stake account.
-        let uninitialized_stake_account = self.create_uninitiazed_stake_account().await;
+    ) -> transport::Result<Pubkey> {
+        // Where the new stake will live.
+        let new_stake = self.deterministic_keypair.new_keypair();
 
         // Authorize the token to be burned.
         let authorize_burn_instruction = spl_token::instruction::approve(
@@ -727,17 +699,29 @@ impl Context {
                         st_sol_account,
                         validator_vote_account: self.validator.as_ref().unwrap().vote_account,
                         source_stake_account,
-                        destination_stake_account: uninitialized_stake_account,
+                        destination_stake_account: new_stake.pubkey(),
                         stake_authority: self.stake_authority,
                     },
                     amount,
                 ),
             ],
-            vec![&user],
+            vec![user, &new_stake],
         )
-        .await
-        .expect("Failed to call Withdraw on Solido instance.");
-        uninitialized_stake_account
+        .await?;
+        Ok(new_stake.pubkey())
+    }
+
+    /// Withdraw from the validator at `self.validator`.
+    pub async fn withdraw(
+        &mut self,
+        user: &Keypair,
+        st_sol_account: Pubkey,
+        amount: StLamports,
+        source_stake_account: Pubkey,
+    ) -> Pubkey {
+        self.try_withdraw(user, st_sol_account, amount, source_stake_account)
+            .await
+            .expect("Failed to call Withdraw on Solido instance.")
     }
 
     /// Stake the given amount to the given validator, return the resulting stake account.
