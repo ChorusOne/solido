@@ -697,7 +697,6 @@ impl Context {
         user: Keypair,
         st_sol_account: Pubkey,
         amount: StLamports,
-        stake_seed: u64,
         source_stake_account: Pubkey,
     ) -> Pubkey {
         // Creates new uninitialized stake account.
@@ -732,7 +731,6 @@ impl Context {
                         stake_authority: self.stake_authority,
                     },
                     amount,
-                    stake_seed,
                 ),
             ],
             vec![&user],

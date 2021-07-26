@@ -30,8 +30,6 @@ async fn test_withdrawal() {
 
     let epoch_schedule = context.context.genesis_config().epoch_schedule;
     let start_slot = epoch_schedule.first_normal_slot;
-    let start_epoch = epoch_schedule.first_normal_epoch;
-    let slots_per_epoch = epoch_schedule.slots_per_epoch;
 
     context.context.warp_to_slot(start_slot).unwrap();
     context.update_exchange_rate().await;
@@ -41,7 +39,7 @@ async fn test_withdrawal() {
     // This function gives us a delegated stake account with Sol withdrawn from
     // the given stake account.
     let split_stake_account = context
-        .withdraw(user, token_addr, TEST_WITHDRAW_AMOUNT, 0, stake_account)
+        .withdraw(user, token_addr, TEST_WITHDRAW_AMOUNT, stake_account)
         .await;
 
     let split_stake_sol_balance = context.get_sol_balance(split_stake_account).await;

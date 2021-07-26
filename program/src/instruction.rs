@@ -51,8 +51,6 @@ pub enum LidoInstruction {
     Withdraw {
         #[allow(dead_code)] // but it's not
         amount: StLamports,
-        #[allow(dead_code)] // but it's not
-        stake_seed: u64,
     },
     /// Move deposits into a new stake account and delegate it to a member validator.
     ///
@@ -241,9 +239,8 @@ pub fn withdraw(
     program_id: &Pubkey,
     accounts: &WithdrawAccountsMeta,
     amount: StLamports,
-    stake_seed: u64,
 ) -> Instruction {
-    let data = LidoInstruction::Withdraw { amount, stake_seed };
+    let data = LidoInstruction::Withdraw { amount };
     Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),

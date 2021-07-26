@@ -592,7 +592,6 @@ pub fn process_collect_validator_fee(
 pub fn process_withdraw(
     program_id: &Pubkey,
     amount: StLamports,
-    stake_seed: u64,
     raw_accounts: &[AccountInfo],
 ) -> ProgramResult {
     let accounts = WithdrawAccountsInfo::try_from_slice(raw_accounts)?;
@@ -633,7 +632,7 @@ pub fn process_withdraw(
         program_id,
         accounts.lido.key,
         accounts.validator_vote_account.key,
-        stake_seed,
+        provided_validator.entry.stake_accounts_seed_begin,
     );
     if &stake_account != accounts.source_stake_account.key {
         msg!("Stake account is different than the calculated by the given seed, should be {}, is {}.", stake_account, accounts.source_stake_account.key);
@@ -705,9 +704,7 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
             process_withdraw_inactive_stake(program_id, accounts)
         }
         LidoInstruction::CollectValidatorFee => process_collect_validator_fee(program_id, accounts),
-        LidoInstruction::Withdraw { amount, stake_seed } => {
-            process_withdraw(program_id, amount, stake_seed, accounts)
-        }
+        LidoInstruction::Withdraw { amount } => process_withdraw(program_id, amount, accounts),
         LidoInstruction::ClaimValidatorFee => process_claim_validator_fee(program_id, accounts),
         LidoInstruction::ChangeRewardDistribution {
             new_reward_distribution,
