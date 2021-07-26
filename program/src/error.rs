@@ -12,7 +12,6 @@ use crate::token::ArithmeticError;
 /// Errors that may be returned by the Lido program.
 #[derive(Clone, Debug, Eq, Error, FromPrimitive, PartialEq)]
 pub enum LidoError {
-    // 0.
     /// Address is already initialized
     #[error("AlreadyInUse")]
     AlreadyInUse = 0,
