@@ -186,6 +186,8 @@ pub fn mint_st_sol_to<'a>(
 ///
 /// * The stSOL mint must be the one configured in the Solido instance.
 /// * The account account must be an stSOL SPL token account.
+/// * The Account owner must have granted permission to the `stake_authority`
+///   to burn at least `amount` tokens.
 #[allow(clippy::too_many_arguments)]
 pub fn burn_st_sol<'a>(
     solido: &Lido,
