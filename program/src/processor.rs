@@ -624,9 +624,10 @@ pub fn process_withdraw(
     provided_validator.entry.stake_accounts_balance =
         (provided_validator.entry.stake_accounts_balance - sol_to_withdraw)?;
 
-    // Update metrics, note that we observe the Lamport amount. Price in
-    // StLamports can be calculated with the `exchange_rate`.
-    lido.metrics.withdraw_amount.observe(sol_to_withdraw)?;
+    // Update withdrawal metrics.
+    lido.metrics
+        .withdraw_amount
+        .observe(amount, sol_to_withdraw)?;
 
     let (stake_account, _) = Validator::find_stake_account_address(
         program_id,

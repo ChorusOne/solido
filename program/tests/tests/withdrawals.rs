@@ -80,4 +80,16 @@ async fn test_withdrawal() {
     // Check that the stake was indeed withdrawn from the given stake account
     // Hard-coded the amount - rent, in case rent changes we'll know.
     assert_eq!(stake_account_balance_after, Lamports(99_997_717_119));
+
+    // Test if we updated the metrics
+    let solido_after = context.get_solido().await;
+    assert_eq!(
+        solido_after.metrics.withdraw_amount.total_st_sol_amount,
+        test_withdraw_amount
+    );
+    assert_eq!(
+        solido_after.metrics.withdraw_amount.total_sol_amount,
+        Lamports(test_withdraw_amount.0)
+    );
+    assert_eq!(solido_after.metrics.withdraw_amount.count, 1);
 }
