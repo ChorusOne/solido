@@ -44,10 +44,8 @@ pub enum LidoInstruction {
     ///
     /// Caller provides some `amount` of StLamports that are to be
     /// burned in order to withdraw SOL.
-    /// This function can be called by anybody. It splits the stake account
-    /// specified by the caller into one that is currently owned by the caller.
-    /// The amount has to be delegated to the `STAKE_AUTHORITY` so it can be
-    /// burned.
+    /// The token's amount has to be delegated to the `STAKE_AUTHORITY` so it
+    /// can be burned.
     Withdraw {
         #[allow(dead_code)] // but it's not
         amount: StLamports,
