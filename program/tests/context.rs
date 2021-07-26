@@ -698,7 +698,7 @@ impl Context {
         st_sol_account: Pubkey,
         amount: StLamports,
         stake_seed: u64,
-        stake_account: Pubkey,
+        source_stake_account: Pubkey,
     ) -> Pubkey {
         // Creates new uninitialized stake account.
         let uninitialized_stake_account = self.create_uninitiazed_stake_account().await;
@@ -727,8 +727,8 @@ impl Context {
                         st_sol_account_owner: user.pubkey(),
                         st_sol_account,
                         validator_vote_account: self.validator.as_ref().unwrap().vote_account,
-                        stake_account: stake_account,
-                        split_stake: uninitialized_stake_account,
+                        source_stake_account,
+                        destination_stake_account: uninitialized_stake_account,
                         stake_authority: self.stake_authority,
                     },
                     amount,

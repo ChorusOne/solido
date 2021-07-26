@@ -13,7 +13,7 @@ use solana_program::{
 use crate::STAKE_AUTHORITY;
 use crate::{
     error::LidoError,
-    instruction::CollectValidatorFeeInfo,
+    instruction::{CollectValidatorFeeInfo, WithdrawAccountsInfo},
     state::Fees,
     state::Lido,
     token::{Lamports, StLamports},
@@ -188,46 +188,41 @@ pub fn mint_st_sol_to<'a>(
 /// * The account account must be an stSOL SPL token account.
 /// * The Account owner must have granted permission to the `stake_authority`
 ///   to burn at least `amount` tokens.
-#[allow(clippy::too_many_arguments)]
-pub fn burn_st_sol<'a>(
+pub fn burn_st_sol<'a, 'b>(
     solido: &Lido,
     solido_address: &Pubkey,
-    account: &AccountInfo<'a>,
-    account_owner: &AccountInfo<'a>,
-    spl_token_program: &AccountInfo<'a>,
-    st_sol_mint: &AccountInfo<'a>,
-    stake_authority: &AccountInfo<'a>,
+    accounts: &WithdrawAccountsInfo<'a, 'b>,
     amount: StLamports,
 ) -> ProgramResult {
-    solido.check_mint_is_st_sol_mint(st_sol_mint)?;
-    solido.check_is_st_sol_account(account)?;
+    solido.check_mint_is_st_sol_mint(accounts.st_sol_mint)?;
+    solido.check_is_st_sol_account(accounts.st_sol_account)?;
 
     let st_sol_account: spl_token::state::Account =
-        spl_token::state::Account::unpack_from_slice(&account.data.borrow())?;
+        spl_token::state::Account::unpack_from_slice(&accounts.st_sol_account.data.borrow())?;
 
     // Check if the user is the account owner.
-    if &st_sol_account.owner != account_owner.key {
+    if &st_sol_account.owner != accounts.st_sol_account_owner.key {
         msg!(
             "Token is owned by {}, but provided owner is {}.",
             st_sol_account.owner,
-            account_owner.key,
+            accounts.st_sol_account_owner.key,
         );
         return Err(LidoError::InvalidTokenOwner.into());
     }
     // Check that the we're allowed to burn the tokens.
     if let COption::Some(delegated_to) = st_sol_account.delegate {
-        if &delegated_to != stake_authority.key {
+        if &delegated_to != accounts.stake_authority.key {
             msg!(
                 "Token is delegated to {}, but is expected to be delegated to the stake authority: {}.",
                 delegated_to,
-                stake_authority.key,
+                accounts.stake_authority.key,
             );
             return Err(LidoError::InvalidTokenDelegation.into());
         }
     } else {
         msg!(
             "Token is not delegated, but is expected to be delegated to the stake authority: {}.",
-            stake_authority.key,
+            accounts.stake_authority.key,
         );
         return Err(LidoError::InvalidTokenDelegation.into());
     }
@@ -254,10 +249,10 @@ pub fn burn_st_sol<'a>(
     let mint_to_signers = [];
 
     let instruction = spl_token::instruction::burn(
-        &spl_token_program.key,
-        &account.key,
-        &st_sol_mint.key,
-        &stake_authority.key,
+        &accounts.spl_token.key,
+        &accounts.st_sol_account.key,
+        &accounts.st_sol_mint.key,
+        &accounts.stake_authority.key,
         &mint_to_signers,
         amount.0,
     )?;
@@ -265,10 +260,10 @@ pub fn burn_st_sol<'a>(
     invoke_signed(
         &instruction,
         &[
-            account.clone(),
-            st_sol_mint.clone(),
-            stake_authority.clone(),
-            spl_token_program.clone(),
+            accounts.st_sol_account_owner.clone(),
+            accounts.st_sol_mint.clone(),
+            accounts.stake_authority.clone(),
+            accounts.spl_token.clone(),
         ],
         &signers,
     )

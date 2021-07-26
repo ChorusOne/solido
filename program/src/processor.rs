@@ -606,24 +606,16 @@ pub fn process_withdraw(
         if validator.entry.stake_accounts_balance > provided_validator.entry.stake_accounts_balance
         {
             msg!(
-                "Validator {} has more stake than the given one.",
-                provided_validator.pubkey
+                "Validator {} has more stake than validator {}",
+                provided_validator.pubkey,
+                validator.pubkey,
             );
             return Err(LidoError::ValidatorWithMoreStakeExists.into());
         }
     }
 
     // Burn stSol tokens
-    burn_st_sol(
-        &lido,
-        accounts.lido.key,
-        accounts.st_sol_account,
-        accounts.st_sol_account_owner,
-        accounts.spl_token,
-        accounts.st_sol_mint,
-        accounts.stake_authority,
-        amount,
-    )?;
+    burn_st_sol(&lido, accounts.lido.key, &accounts, amount)?;
 
     // Reduce validator's balance
     let sol_to_withdraw = lido.exchange_rate.exchange_st_sol(amount)?;
@@ -643,16 +635,16 @@ pub fn process_withdraw(
         accounts.validator_vote_account.key,
         stake_seed,
     );
-    if &stake_account != accounts.stake_account.key {
-        msg!("Stake account is different than the calculated by the given seed, should be {}, is {}.", stake_account, accounts.stake_account.key);
+    if &stake_account != accounts.source_stake_account.key {
+        msg!("Stake account is different than the calculated by the given seed, should be {}, is {}.", stake_account, accounts.source_stake_account.key);
         return Err(LidoError::InvalidStakeAccount.into());
     }
 
-    let remaining_balance = (Lamports(accounts.stake_account.lamports()) - sol_to_withdraw)?;
+    let remaining_balance = (Lamports(accounts.source_stake_account.lamports()) - sol_to_withdraw)?;
     if remaining_balance < MINIMUM_STAKE_ACCOUNT_BALANCE {
         msg!("Withdrawal will leave the stake account with less than the minimum stake account balance.
         Maximum amount to withdraw is {}, tried to withdraw {}",
-        (Lamports(accounts.stake_account.lamports()) - MINIMUM_STAKE_ACCOUNT_BALANCE)
+        (Lamports(accounts.source_stake_account.lamports()) - MINIMUM_STAKE_ACCOUNT_BALANCE)
         .expect("We do not allow the balance to fall below the minimum"), sol_to_withdraw);
         return Err(LidoError::InvalidAmount.into());
     }
@@ -661,7 +653,7 @@ pub fn process_withdraw(
         &stake_account,
         accounts.stake_authority.key,
         sol_to_withdraw.0,
-        accounts.split_stake.key,
+        accounts.destination_stake_account.key,
     );
 
     // The Split instruction returns three instructions, the first two
@@ -673,8 +665,8 @@ pub fn process_withdraw(
     invoke_signed(
         split_instructions,
         &[
-            accounts.stake_account.clone(),
-            accounts.split_stake.clone(),
+            accounts.source_stake_account.clone(),
+            accounts.destination_stake_account.clone(),
             accounts.stake_authority.clone(),
         ],
         &[&[

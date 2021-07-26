@@ -216,12 +216,12 @@ accounts_struct! {
             is_writable: false,
         },
         // Stake account to withdraw from.
-        pub stake_account {
+        pub source_stake_account {
             is_signer: false,
             is_writable: true,
         },
-        // Stake where the withdrew amounts will go.
-        pub split_stake {
+        // Stake where the withdrawn amounts will go.
+        pub destination_stake_account {
             is_signer: false,
             is_writable: true,
         },

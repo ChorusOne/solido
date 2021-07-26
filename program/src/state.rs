@@ -423,24 +423,6 @@ impl Lido {
         .map_err(|_| ProgramError::InvalidSeeds)
     }
 
-    /// Return the address of the withdraw authority, the program-derived
-    /// address that is responsible for the withdrawing process.
-    pub fn get_withdraw_authority(
-        &self,
-        program_id: &Pubkey,
-        solido_address: &Pubkey,
-    ) -> Result<Pubkey, ProgramError> {
-        Pubkey::create_program_address(
-            &[
-                &solido_address.to_bytes()[..],
-                STAKE_AUTHORITY,
-                &[self.stake_authority_bump_seed],
-            ],
-            program_id,
-        )
-        .map_err(|_| ProgramError::InvalidSeeds)
-    }
-
     /// Confirm that the rewards withdraw authority belongs to this Lido
     /// instance, return the rewards authority address.
     pub fn check_rewards_withdraw_authority(

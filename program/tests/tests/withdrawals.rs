@@ -38,8 +38,8 @@ async fn test_withdrawal() {
 
     let stake_account_balance_before = context.get_sol_balance(stake_account).await;
 
-    // This function gives us an uninitialized stake account with Sol withdrawn
-    // from the given stake account.
+    // This function gives us a delegated stake account with Sol withdrawn from
+    // the given stake account.
     let split_stake_account = context
         .withdraw(user, token_addr, TEST_WITHDRAW_AMOUNT, 0, stake_account)
         .await;
