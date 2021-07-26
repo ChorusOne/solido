@@ -668,6 +668,7 @@ pub fn process_withdraw(
             accounts.source_stake_account.clone(),
             accounts.destination_stake_account.clone(),
             accounts.stake_authority.clone(),
+            accounts.stake_program.clone(),
         ],
         &[&[
             &accounts.lido.key.to_bytes(),

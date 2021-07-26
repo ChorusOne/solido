@@ -246,21 +246,21 @@ pub fn burn_st_sol<'a, 'b>(
 
     // The SPL token program supports multisig-managed mints, but we do not
     // use those.
-    let mint_to_signers = [];
+    let burn_signers = [];
 
     let instruction = spl_token::instruction::burn(
         &accounts.spl_token.key,
         &accounts.st_sol_account.key,
         &accounts.st_sol_mint.key,
         &accounts.stake_authority.key,
-        &mint_to_signers,
+        &burn_signers,
         amount.0,
     )?;
 
     invoke_signed(
         &instruction,
         &[
-            accounts.st_sol_account_owner.clone(),
+            accounts.st_sol_account.clone(),
             accounts.st_sol_mint.clone(),
             accounts.stake_authority.clone(),
             accounts.spl_token.clone(),
