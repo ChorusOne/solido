@@ -5,15 +5,17 @@
 
 use crate::{
     assert_solido_error,
-    context::{Context, StakeDeposit},
+    context::{send_transaction, Context, StakeDeposit},
 };
 
+use bincode::deserialize;
 use lido::{
     error::LidoError,
     token::{Lamports, StLamports},
 };
 use solana_program::stake::state::StakeState;
 use solana_program_test::tokio;
+use solana_sdk::signer::Signer;
 
 pub const TEST_DEPOSIT_AMOUNT: Lamports = Lamports(100_000_000_000);
 
@@ -114,6 +116,52 @@ async fn test_withdrawal() {
         Lamports(test_withdraw_amount.0)
     );
     assert_eq!(solido_after.metrics.withdraw_amount.count, 1);
+
+    // Check that the staker/withdrawer authorities are set to the user.
+    let stake_data = context.get_account(split_stake_account).await;
+    if let StakeState::Stake(meta, _stake) = deserialize::<StakeState>(&stake_data.data).unwrap() {
+        assert_eq!(meta.authorized.staker, user.pubkey());
+        assert_eq!(meta.authorized.withdrawer, user.pubkey());
+    }
+
+    // Try to withdraw all stake SOL to user's account. First we need to
+    // deactivate the stake account
+    let deactivate_stake_instruction =
+        solana_program::stake::instruction::deactivate_stake(&split_stake_account, &user.pubkey());
+    send_transaction(
+        &mut context.context,
+        &mut context.nonce,
+        &[deactivate_stake_instruction],
+        vec![&user],
+    )
+    .await
+    .unwrap();
+    // Wait for the deactivation to be complete.
+    context
+        .context
+        .warp_to_slot(start_slot + epoch_schedule.slots_per_epoch)
+        .unwrap();
+
+    // Withdraw from stake account.
+    let withdraw_from_stake_instruction = solana_program::stake::instruction::withdraw(
+        &split_stake_account,
+        &user.pubkey(),
+        &user.pubkey(),
+        minimum_rent + 1,
+        None,
+    );
+    send_transaction(
+        &mut context.context,
+        &mut context.nonce,
+        &[withdraw_from_stake_instruction],
+        vec![&user],
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        context.get_sol_balance(user.pubkey()).await,
+        Lamports(minimum_rent + 1)
+    );
 }
 
 #[tokio::test]

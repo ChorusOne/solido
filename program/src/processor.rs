@@ -13,7 +13,7 @@ use crate::{
     logic::{
         burn_st_sol, check_rent_exempt, create_account_overwrite_if_exists, deserialize_lido,
         distribute_fees, initialize_stake_account_undelegated, mint_st_sol_to,
-        CreateAccountOptions,
+        transfer_stake_authority, CreateAccountOptions,
     },
     process_management::{
         process_add_maintainer, process_add_validator, process_change_reward_distribution,
@@ -30,7 +30,7 @@ use crate::{
     REWARDS_WITHDRAW_AUTHORITY, STAKE_AUTHORITY, VALIDATOR_STAKE_ACCOUNT,
 };
 
-use solana_program::stake as stake_program;
+use solana_program::stake::{self as stake_program};
 use solana_program::stake_history::StakeHistory;
 use {
     borsh::BorshDeserialize,
@@ -696,6 +696,9 @@ pub fn process_withdraw(
             &[lido.stake_authority_bump_seed],
         ]],
     )?;
+
+    // Give control of the stake to the user.
+    transfer_stake_authority(&accounts, lido.stake_authority_bump_seed)?;
 
     lido.save(accounts.lido)
 }

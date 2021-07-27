@@ -3,12 +3,14 @@
 
 use solana_program::entrypoint::ProgramResult;
 use solana_program::program_pack::Pack;
+use solana_program::stake::state::StakeAuthorize;
 use solana_program::{
     account_info::AccountInfo, borsh::try_from_slice_unchecked, msg, program::invoke,
     program::invoke_signed, program_error::ProgramError, pubkey::Pubkey, rent::Rent,
     stake as stake_program, system_instruction,
 };
 
+use crate::STAKE_AUTHORITY;
 use crate::{
     error::LidoError,
     instruction::{CollectValidatorFeeInfo, WithdrawAccountsInfo},
@@ -225,6 +227,52 @@ pub fn burn_st_sol<'a, 'b>(
             accounts.st_sol_account_owner.clone(),
             accounts.spl_token.clone(),
         ],
+    )
+}
+
+pub fn transfer_stake_authority(
+    accounts: &WithdrawAccountsInfo,
+    stake_authority_bump_seed: u8,
+) -> ProgramResult {
+    invoke_signed(
+        &solana_program::stake::instruction::authorize(
+            &accounts.destination_stake_account.key,
+            &accounts.stake_authority.key,
+            &accounts.st_sol_account_owner.key,
+            StakeAuthorize::Withdrawer,
+            None,
+        ),
+        &[
+            accounts.destination_stake_account.clone(),
+            accounts.sysvar_clock.clone(),
+            accounts.stake_authority.clone(),
+            accounts.stake_program.clone(),
+        ],
+        &[&[
+            &accounts.lido.key.to_bytes(),
+            STAKE_AUTHORITY,
+            &[stake_authority_bump_seed],
+        ]],
+    )?;
+    invoke_signed(
+        &solana_program::stake::instruction::authorize(
+            &accounts.destination_stake_account.key,
+            &accounts.stake_authority.key,
+            &accounts.st_sol_account_owner.key,
+            StakeAuthorize::Staker,
+            None,
+        ),
+        &[
+            accounts.destination_stake_account.clone(),
+            accounts.sysvar_clock.clone(),
+            accounts.stake_authority.clone(),
+            accounts.stake_program.clone(),
+        ],
+        &[&[
+            &accounts.lido.key.to_bytes(),
+            STAKE_AUTHORITY,
+            &[stake_authority_bump_seed],
+        ]],
     )
 }
 
