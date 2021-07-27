@@ -60,8 +60,18 @@ async fn test_withdrawal() {
     let split_stake_account = context
         .try_withdraw(&user, token_addr, StLamports(99_000_000_001), stake_account)
         .await;
-    println!("ERROR: {:?}", split_stake_account);
     assert_solido_error!(split_stake_account, LidoError::InvalidAmount);
+
+    // Should overflow when we try to withdraw more than the stake account has.
+    let split_stake_account = context
+        .try_withdraw(
+            &user,
+            token_addr,
+            StLamports(100_000_000_001),
+            stake_account,
+        )
+        .await;
+    assert_solido_error!(split_stake_account, LidoError::CalculationFailure);
 
     let test_withdraw_amount = StLamports(minimum_rent + 1);
     // `minimum_rent + 1` is needed by the stake program during the split.

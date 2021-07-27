@@ -625,9 +625,6 @@ pub fn process_withdraw(
         return Err(LidoError::InvalidStakeAccount.into());
     }
 
-    // Burn stSol tokens
-    burn_st_sol(&lido, &accounts, amount)?;
-
     // Reduce validator's balance
     let sol_to_withdraw = lido.exchange_rate.exchange_st_sol(amount)?;
     let provided_validator = lido
@@ -635,6 +632,8 @@ pub fn process_withdraw(
         .get_mut(accounts.validator_vote_account.key)?;
     provided_validator.entry.stake_accounts_balance =
         (provided_validator.entry.stake_accounts_balance - sol_to_withdraw)?;
+    // Burn stSol tokens
+    burn_st_sol(&lido, &accounts, amount)?;
 
     // Update withdrawal metrics.
     lido.metrics.observe_withdrawal(amount, sol_to_withdraw)?;
