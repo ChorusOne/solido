@@ -225,6 +225,11 @@ macro_rules! accounts_struct {
                     // Collect all remaining pubkeys in a vector.
                     let mut $multi_account = Vec::new();
                     while let Some(meta) = accounts_iter.next() {
+                        // For variadic accounts, we only support writable non-signer
+                        // accounts, so check that they are writable.
+                        if !meta.is_writable {
+                            return Err(LidoError::InvalidAccountInfo.into());
+                        }
                         $multi_account.push(meta.pubkey);
                     }
                 )?
@@ -615,10 +620,13 @@ mod test {
         assert_eq!(output_info.remainder[0].key, &pubkeys[1]);
         assert_eq!(output_info.remainder[1].key, &pubkeys[2]);
 
-        let mut account_metas: Vec<_> = account_infos.iter().map(|ai| match ai.is_writable {
-            true => AccountMeta::new(*ai.key, ai.is_signer),
-            false => AccountMeta::new_readonly(*ai.key, ai.is_signer),
-        }).collect();
+        let mut account_metas: Vec<_> = account_infos
+            .iter()
+            .map(|ai| match ai.is_writable {
+                true => AccountMeta::new(*ai.key, ai.is_signer),
+                false => AccountMeta::new_readonly(*ai.key, ai.is_signer),
+            })
+            .collect();
 
         let output_meta = TestAccountsMeta::try_from_slice(&account_metas).unwrap();
         assert_eq!(output_meta.single, pubkeys[0]);
