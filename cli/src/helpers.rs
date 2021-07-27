@@ -641,31 +641,17 @@ pub fn command_withdraw(
     config: &mut SnapshotClientConfig,
     opts: &WithdrawOpts,
 ) -> std::result::Result<WithdrawOutput, crate::error::Error> {
-    // Gets the token address and delegate it to us.
-    let (st_sol_address, stake_authority) = config.with_snapshot(|config| {
+    let (st_sol_address, sol_amount, new_stake_account) = config.with_snapshot(|config| {
         let solido = config.client.get_solido(opts.solido_address())?;
-        let token_address = spl_associated_token_account::get_associated_token_address(
+
+        let st_sol_address = spl_associated_token_account::get_associated_token_address(
             &config.signer.pubkey(),
             &solido.st_sol_mint,
         );
+
         let stake_authority =
             solido.get_stake_authority(opts.solido_program_id(), opts.solido_address())?;
 
-        // Authorize the token to be burned.
-        let approve_instruction = spl_token::instruction::approve(
-            &spl_token::id(),
-            &token_address,
-            &stake_authority,
-            &config.signer.pubkey(),
-            &[],
-            u64::MAX,
-        )?;
-        config.sign_and_send_transaction(&[approve_instruction], &[config.signer])?;
-        Ok((token_address, stake_authority))
-    })?;
-
-    let (sol_amount, new_stake_account) = config.with_snapshot(|config| {
-        let solido = config.client.get_solido(opts.solido_address())?;
         // Get heaviest validator.
         let heaviest_validator = solido
             .validators
@@ -712,6 +698,7 @@ pub fn command_withdraw(
             .get_account(&destination_stake_account.pubkey())?;
 
         Ok((
+            st_sol_address,
             Lamports(stake_account.lamports()),
             destination_stake_account.pubkey(),
         ))
