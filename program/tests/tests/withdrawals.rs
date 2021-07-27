@@ -3,14 +3,19 @@
 
 #![cfg(feature = "test-bpf")]
 
-use crate::context::{Context, StakeDeposit};
+use crate::{
+    assert_solido_error,
+    context::{Context, StakeDeposit},
+};
 
-use lido::token::{Lamports, StLamports};
+use lido::{
+    error::LidoError,
+    token::{Lamports, StLamports},
+};
 use solana_program::stake::state::StakeState;
 use solana_program_test::tokio;
 
 pub const TEST_DEPOSIT_AMOUNT: Lamports = Lamports(100_000_000_000);
-pub const TEST_WITHDRAW_AMOUNT: StLamports = StLamports(10_000_000_000);
 
 #[tokio::test]
 async fn test_withdrawal() {
@@ -50,8 +55,15 @@ async fn test_withdrawal() {
         .await;
     assert!(split_stake_account.is_err());
 
-    let test_withdraw_amount = StLamports(minimum_rent + 1);
+    // Test withdrawing a value that will leave the stake account with 1 Sol - 1
+    // Lamport. Should fail, because the the stake should have at least 1 Sol.
+    let split_stake_account = context
+        .try_withdraw(&user, token_addr, StLamports(99_000_000_001), stake_account)
+        .await;
+    println!("ERROR: {:?}", split_stake_account);
+    assert_solido_error!(split_stake_account, LidoError::InvalidAmount);
 
+    let test_withdraw_amount = StLamports(minimum_rent + 1);
     // `minimum_rent + 1` is needed by the stake program during the split.
     // This should return an activated stake account with `minimum_rent + 1` Sol.
     let split_stake_account = context
@@ -65,7 +77,7 @@ async fn test_withdrawal() {
         .exchange_st_sol(test_withdraw_amount)
         .unwrap();
 
-    // Amount should be the same as `TEST_WITHDRAW_AMOUNT` because
+    // Amount should be the same as `minimum_rent + 1` because
     // no rewards were distributed
     assert_eq!(amount_lamports, Lamports(minimum_rent + 1));
 
@@ -92,4 +104,32 @@ async fn test_withdrawal() {
         Lamports(test_withdraw_amount.0)
     );
     assert_eq!(solido_after.metrics.withdraw_amount.count, 1);
+}
+
+#[tokio::test]
+async fn test_withdrawal_from_different_validator() {
+    let mut context = Context::new_with_maintainer_and_validator().await;
+    let validator = context.validator.take().unwrap();
+    let other_validator = context.add_validator().await;
+
+    let (user, token_addr) = context.deposit(TEST_DEPOSIT_AMOUNT).await;
+    let stake_account = context
+        .stake_deposit(
+            validator.vote_account,
+            StakeDeposit::Append,
+            TEST_DEPOSIT_AMOUNT,
+        )
+        .await;
+    context.validator = Some(other_validator);
+
+    let epoch_schedule = context.context.genesis_config().epoch_schedule;
+    let start_slot = epoch_schedule.first_normal_slot;
+
+    context.context.warp_to_slot(start_slot).unwrap();
+    context.update_exchange_rate().await;
+
+    let split_stake_account = context
+        .try_withdraw(&user, token_addr, StLamports(1_000_000_000), stake_account)
+        .await;
+    assert_solido_error!(split_stake_account, LidoError::ValidatorWithMoreStakeExists);
 }
