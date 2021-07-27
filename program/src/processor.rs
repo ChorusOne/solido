@@ -587,8 +587,9 @@ pub fn process_collect_validator_fee(
     lido.save(accounts.lido)
 }
 
-/// Splits a stake account from a validator's stake account. This function
-/// expects the user to pass a stake account that will be split.
+/// Splits a stake account from a validator's stake account.
+/// This function can only be called after the exchange rate is updated with
+/// `process_update_exchange_rate`.
 pub fn process_withdraw(
     program_id: &Pubkey,
     amount: StLamports,
@@ -614,7 +615,7 @@ pub fn process_withdraw(
     }
 
     // Burn stSol tokens
-    burn_st_sol(&lido, accounts.lido.key, &accounts, amount)?;
+    burn_st_sol(&lido, &accounts, amount)?;
 
     // Reduce validator's balance
     let sol_to_withdraw = lido.exchange_rate.exchange_st_sol(amount)?;

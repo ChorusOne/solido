@@ -673,23 +673,11 @@ impl Context {
     ) -> transport::Result<Pubkey> {
         // Where the new stake will live.
         let new_stake = self.deterministic_keypair.new_keypair();
-
-        // Authorize the token to be burned.
-        let authorize_burn_instruction = spl_token::instruction::approve(
-            &spl_token::id(),
-            &st_sol_account,
-            &self.stake_authority,
-            &user.pubkey(),
-            &[],
-            u64::MAX,
-        )
-        .unwrap();
-
         send_transaction(
             &mut self.context,
             &mut self.nonce,
             &[
-                authorize_burn_instruction,
+                // authorize_burn_instruction,
                 instruction::withdraw(
                     &id(),
                     &instruction::WithdrawAccountsMeta {

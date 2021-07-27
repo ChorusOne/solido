@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0
 
 use solana_program::entrypoint::ProgramResult;
-use solana_program::program_option::COption;
 use solana_program::program_pack::Pack;
 use solana_program::{
     account_info::AccountInfo, borsh::try_from_slice_unchecked, msg, program::invoke,
@@ -10,7 +9,6 @@ use solana_program::{
     stake as stake_program, system_instruction,
 };
 
-use crate::STAKE_AUTHORITY;
 use crate::{
     error::LidoError,
     instruction::{CollectValidatorFeeInfo, WithdrawAccountsInfo},
@@ -186,11 +184,8 @@ pub fn mint_st_sol_to<'a>(
 ///
 /// * The stSOL mint must be the one configured in the Solido instance.
 /// * The account account must be an stSOL SPL token account.
-/// * The Account owner must have granted permission to the `stake_authority`
-///   to burn at least `amount` tokens.
 pub fn burn_st_sol<'a, 'b>(
     solido: &Lido,
-    solido_address: &Pubkey,
     accounts: &WithdrawAccountsInfo<'a, 'b>,
     amount: StLamports,
 ) -> ProgramResult {
@@ -209,63 +204,27 @@ pub fn burn_st_sol<'a, 'b>(
         );
         return Err(LidoError::InvalidTokenOwner.into());
     }
-    // Check that the we're allowed to burn the tokens.
-    if let COption::Some(delegated_to) = st_sol_account.delegate {
-        if &delegated_to != accounts.stake_authority.key {
-            msg!(
-                "Token is delegated to {}, but is expected to be delegated to the stake authority: {}.",
-                delegated_to,
-                accounts.stake_authority.key,
-            );
-            return Err(LidoError::InvalidTokenDelegation.into());
-        }
-    } else {
-        msg!(
-            "Token is not delegated, but is expected to be delegated to the stake authority: {}.",
-            accounts.stake_authority.key,
-        );
-        return Err(LidoError::InvalidTokenDelegation.into());
-    }
-    // Check that we have enough tokens to burn
-    if StLamports(st_sol_account.delegated_amount) < amount {
-        msg!(
-            "Not enough delegated StSol, tried to withdraw {} but maximum to withdraw is {}.",
-            amount,
-            StLamports(st_sol_account.delegated_amount),
-        );
-        return Err(LidoError::InvalidTokenDelegation.into());
-    }
-
-    let solido_address_bytes = solido_address.to_bytes();
-    let authority_signature_seeds = [
-        &solido_address_bytes[..],
-        STAKE_AUTHORITY,
-        &[solido.stake_authority_bump_seed],
-    ];
-    let signers = [&authority_signature_seeds[..]];
 
     // The SPL token program supports multisig-managed mints, but we do not
     // use those.
     let burn_signers = [];
-
     let instruction = spl_token::instruction::burn(
         &accounts.spl_token.key,
         &accounts.st_sol_account.key,
         &accounts.st_sol_mint.key,
-        &accounts.stake_authority.key,
+        &accounts.st_sol_account_owner.key,
         &burn_signers,
         amount.0,
     )?;
 
-    invoke_signed(
+    invoke(
         &instruction,
         &[
             accounts.st_sol_account.clone(),
             accounts.st_sol_mint.clone(),
-            accounts.stake_authority.clone(),
+            accounts.st_sol_account_owner.clone(),
             accounts.spl_token.clone(),
         ],
-        &signers,
     )
 }
 
