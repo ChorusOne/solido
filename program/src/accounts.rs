@@ -225,6 +225,11 @@ macro_rules! accounts_struct {
                     // Collect all remaining pubkeys in a vector.
                     let mut $multi_account = Vec::new();
                     while let Some(meta) = accounts_iter.next() {
+                        // For variadic accounts, we only support writable non-signer
+                        // accounts, so check that they are writable.
+                        if !meta.is_writable {
+                            return Err(LidoError::InvalidAccountInfo.into());
+                        }
                         $multi_account.push(meta.pubkey);
                     }
                 )?
@@ -591,7 +596,7 @@ mod test {
         let owner = Pubkey::new_unique();
         let executable = false;
         let rent_epoch = 0;
-        let account_infos: Vec<AccountInfo> = pubkeys
+        let mut account_infos: Vec<AccountInfo> = pubkeys
             .iter()
             .zip(lamports.iter_mut())
             .zip(datas.iter_mut())
@@ -609,10 +614,37 @@ mod test {
             })
             .collect();
 
-        let output = TestAccountsInfo::try_from_slice(&account_infos).unwrap();
-        assert_eq!(output.single.key, &pubkeys[0]);
-        assert_eq!(output.remainder.len(), 2);
-        assert_eq!(output.remainder[0].key, &pubkeys[1]);
-        assert_eq!(output.remainder[1].key, &pubkeys[2]);
+        let output_info = TestAccountsInfo::try_from_slice(&account_infos).unwrap();
+        assert_eq!(output_info.single.key, &pubkeys[0]);
+        assert_eq!(output_info.remainder.len(), 2);
+        assert_eq!(output_info.remainder[0].key, &pubkeys[1]);
+        assert_eq!(output_info.remainder[1].key, &pubkeys[2]);
+
+        let mut account_metas: Vec<_> = account_infos
+            .iter()
+            .map(|ai| match ai.is_writable {
+                true => AccountMeta::new(*ai.key, ai.is_signer),
+                false => AccountMeta::new_readonly(*ai.key, ai.is_signer),
+            })
+            .collect();
+
+        let output_meta = TestAccountsMeta::try_from_slice(&account_metas).unwrap();
+        assert_eq!(output_meta.single, pubkeys[0]);
+        assert_eq!(output_meta.remainder.len(), 2);
+        assert_eq!(output_meta.remainder[0], pubkeys[1]);
+        assert_eq!(output_meta.remainder[1], pubkeys[2]);
+
+        // Mark one of the accounts as non-writable; this should make deserialization fail.
+        account_infos[1].is_writable = false;
+        account_metas[1].is_writable = false;
+
+        assert_eq!(
+            TestAccountsInfo::try_from_slice(&account_infos).err(),
+            Some(LidoError::InvalidAccountInfo.into()),
+        );
+        assert_eq!(
+            TestAccountsMeta::try_from_slice(&account_metas).err(),
+            Some(LidoError::InvalidAccountInfo.into()),
+        );
     }
 }
