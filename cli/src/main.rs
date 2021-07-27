@@ -5,6 +5,7 @@ use std::fmt;
 use std::path::PathBuf;
 
 use clap::Clap;
+use helpers::command_withdraw;
 use serde::Serialize;
 use solana_client::rpc_client::RpcClient;
 use solana_remote_wallet::locator::Locator;
@@ -138,6 +139,8 @@ REWARDS
     /// The recipient will be set to the associated token account for the signer.
     /// If the associated token account does not yet exist, it will be created.
     Deposit(DepositOpts),
+
+    Withdraw(WithdrawOpts),
 
     /// Show an instance of solido in detail
     ShowSolido(ShowSolidoOpts),
@@ -313,6 +316,11 @@ fn main() {
             let output = result.ok_or_abort_with("Failed to deposit.");
             print_output(output_mode, &output);
         }
+        SubCommand::Withdraw(cmd_opts) => {
+            let result = command_withdraw(&mut config, &cmd_opts);
+            let output = result.ok_or_abort_with("Failed to withdraw.");
+            print_output(output_mode, &output);
+        }
     }
 }
 
@@ -327,6 +335,7 @@ fn merge_with_config_and_environment(
             opts.merge_with_config_and_environment(config_file)
         }
         SubCommand::Deposit(opts) => opts.merge_with_config_and_environment(config_file),
+        SubCommand::Withdraw(opts) => opts.merge_with_config_and_environment(config_file),
         SubCommand::ShowSolido(opts) => opts.merge_with_config_and_environment(config_file),
         SubCommand::PerformMaintenance(opts) => opts.merge_with_config_and_environment(config_file),
         SubCommand::Multisig(opts) => opts.merge_with_config_and_environment(config_file),
