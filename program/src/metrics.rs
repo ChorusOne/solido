@@ -66,9 +66,10 @@ pub struct Metrics {
 
     /// Histogram of deposits, including the total amount deposited since we started tracking.
     pub deposit_amount: LamportsHistogram,
-    /// Total amount withdrawn since the beginning
-    ///
-    /// Since the
+    /// Total amount withdrawn since the beginning.
+    // Since the user cannot control the amount withdrawn, a histogram for
+    // tracking withdrawals does not make sense. We track the amount in StSOL,
+    // SOL and the total number the function was called.
     pub withdraw_amount: WithdrawMetric,
 }
 
@@ -131,7 +132,7 @@ impl Metrics {
     pub fn observe_deposit(&mut self, amount: Lamports) -> ProgramResult {
         self.deposit_amount.observe(amount)
     }
-    pub fn observe_withdraw(
+    pub fn observe_withdrawal(
         &mut self,
         st_sol_amount: StLamports,
         sol_amount: Lamports,
@@ -224,11 +225,7 @@ pub struct WithdrawMetric {
 }
 
 impl WithdrawMetric {
-    pub fn observe(
-        &mut self,
-        st_sol_amount: StLamports,
-        sol_amount: Lamports,
-    ) -> token::Result<()> {
+    fn observe(&mut self, st_sol_amount: StLamports, sol_amount: Lamports) -> token::Result<()> {
         self.total_st_sol_amount = (self.total_st_sol_amount + st_sol_amount)?;
         self.total_sol_amount = (self.total_sol_amount + sol_amount)?;
         self.count += 1;

@@ -600,8 +600,9 @@ pub fn process_withdraw(
     let clock = Clock::from_account_info(accounts.sysvar_clock)?;
     lido.check_exchange_rate_last_epoch(&clock, "Withdraw")?;
 
-    // Should remove from the validator that has most stake
+    // Should withdraw from the validator that has most stake
     let provided_validator = lido.validators.get(accounts.validator_vote_account.key)?;
+
     for validator in lido.validators.entries.iter() {
         if validator.entry.stake_accounts_balance > provided_validator.entry.stake_accounts_balance
         {
@@ -612,6 +613,16 @@ pub fn process_withdraw(
             );
             return Err(LidoError::ValidatorWithMoreStakeExists.into());
         }
+    }
+    let (stake_account, _) = Validator::find_stake_account_address(
+        program_id,
+        accounts.lido.key,
+        accounts.validator_vote_account.key,
+        provided_validator.entry.stake_accounts_seed_begin,
+    );
+    if &stake_account != accounts.source_stake_account.key {
+        msg!("Stake account is different than the calculated by the given seed, should be {}, is {}.", stake_account, accounts.source_stake_account.key);
+        return Err(LidoError::InvalidStakeAccount.into());
     }
 
     // Burn stSol tokens
@@ -626,20 +637,7 @@ pub fn process_withdraw(
         (provided_validator.entry.stake_accounts_balance - sol_to_withdraw)?;
 
     // Update withdrawal metrics.
-    lido.metrics
-        .withdraw_amount
-        .observe(amount, sol_to_withdraw)?;
-
-    let (stake_account, _) = Validator::find_stake_account_address(
-        program_id,
-        accounts.lido.key,
-        accounts.validator_vote_account.key,
-        provided_validator.entry.stake_accounts_seed_begin,
-    );
-    if &stake_account != accounts.source_stake_account.key {
-        msg!("Stake account is different than the calculated by the given seed, should be {}, is {}.", stake_account, accounts.source_stake_account.key);
-        return Err(LidoError::InvalidStakeAccount.into());
-    }
+    lido.metrics.observe_withdrawal(amount, sol_to_withdraw)?;
 
     let remaining_balance = (Lamports(accounts.source_stake_account.lamports()) - sol_to_withdraw)?;
     if remaining_balance < MINIMUM_STAKE_ACCOUNT_BALANCE {
