@@ -140,6 +140,7 @@ REWARDS
     /// If the associated token account does not yet exist, it will be created.
     Deposit(DepositOpts),
 
+    /// Withdraw StSOL, receive a delegated stake account in return.
     Withdraw(WithdrawOpts),
 
     /// Show an instance of solido in detail
