@@ -315,7 +315,7 @@ cli_opt_struct! {
          #[clap(long, value_name = "address")]
          solido_address: Pubkey,
 
-         /// Amount to withdraw, in stSOL, using . as decimal separator.
+         /// Amount to withdraw in stSOL, using . as decimal separator.
          #[clap(long, value_name = "st_sol")]
          amount_st_sol: StLamports,
     }
