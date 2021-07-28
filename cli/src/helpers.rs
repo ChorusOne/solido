@@ -641,7 +641,7 @@ pub fn command_withdraw(
     config: &mut SnapshotClientConfig,
     opts: &WithdrawOpts,
 ) -> std::result::Result<WithdrawOutput, crate::error::Error> {
-    let (st_sol_address, sol_amount, new_stake_account) = config.with_snapshot(|config| {
+    let (st_sol_address, new_stake_account) = config.with_snapshot(|config| {
         let solido = config.client.get_solido(opts.solido_address())?;
 
         let st_sol_address = spl_associated_token_account::get_associated_token_address(
@@ -693,20 +693,17 @@ pub fn command_withdraw(
         );
         config.sign_and_send_transaction(&[instr], &[config.signer, &destination_stake_account])?;
 
-        let stake_account = config
-            .client
-            .get_account(&destination_stake_account.pubkey())?;
+        Ok((st_sol_address, destination_stake_account))
+    })?;
 
-        Ok((
-            st_sol_address,
-            Lamports(stake_account.lamports()),
-            destination_stake_account.pubkey(),
-        ))
+    let stake_sol = config.with_snapshot(|config| {
+        let stake_account = config.client.get_account(&new_stake_account.pubkey())?;
+        Ok(Lamports(stake_account.lamports()))
     })?;
     let result = WithdrawOutput {
         from_token: st_sol_address,
-        withdrawn_sol: sol_amount,
-        new_stake_account,
+        withdrawn_sol: stake_sol,
+        new_stake_account: new_stake_account.pubkey(),
     };
     Ok(result)
 }

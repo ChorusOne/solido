@@ -141,6 +141,8 @@ REWARDS
     Deposit(DepositOpts),
 
     /// Withdraw StSOL, receive a delegated stake account in return.
+    ///
+    /// The amount of SOL is calculated and stored in the returned stake.
     Withdraw(WithdrawOpts),
 
     /// Show an instance of solido in detail
