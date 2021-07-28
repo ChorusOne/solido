@@ -165,19 +165,58 @@ def add_validator(index: int, vote_account: Optional[str]) -> str:
     return vote_account
 
 
+# Compares a validator structure
+def equal_vote_account_withdrawer(vote_account: str, withdrawer: str) -> bool:
+    val_withdrawer = solana('vote-account', vote_account, '--output', 'json')[
+        'authorizedWithdrawer'
+    ]
+    val_withdrawer == withdrawer
+
+
 # For the first validator, add the test validator itself, so we include a
 # validator that is actually voting, and earning rewards.
 current_validators = json.loads(solana('validators', '--output', 'json'))
 
-# Filter out the validators that are actually voting. On a local testnet, this
-# will only contain the test validator, but on devnet or testnet, there can be
-# more validators. Only include validators with less than 50% commission. On the
-# devnet there are a few 100%-commission validators, but these are not
-# interesting to include for testing, because they don't generate rewards for us.
+# If we're running on localhost, change the comission to 100% and withdrawer
+# address to the Solido's authority.
+if get_network() == 'http://127.0.0.1:8899':
+    solido_instance = solido(
+        'show-solido',
+        '--solido-program-id',
+        solido_program_id,
+        '--solido-address',
+        solido_address,
+    )
+    print(f'> Changing validator\'s comission to 100% ...')
+    validator = current_validators['validators'][0]
+    validator['commission'] = '100'
+    solana(
+        'vote-update-commission',
+        validator['voteAccountPubkey'],
+        '100',
+        './test-ledger/vote-account-keypair.json',
+    )
+    print(f'> Changing validator\'s withdrawer to Solido\'s ...')
+    solana(
+        'vote-authorize-withdrawer',
+        validator['voteAccountPubkey'],
+        './test-ledger/vote-account-keypair.json',
+        solido_instance['rewards_withdraw_authority'],
+    )
+
+
+# Allow only validators that are voting, have 100% commission, and have their
+# withdrawer set to Solido's withdraw authority. On a local testnet, this will
+# only contain the test validator, but on devnet or testnet, there can be more
+# validators.
 active_validators = [
     v
     for v in current_validators['validators']
-    if (not v['delinquent']) and v['commission'] < 50
+    if (not v['delinquent'])
+    and v['commission'] == 100
+    and equal_vote_account_withdrawer(
+        v['voteAccountPubkey'], solido_instance['rewards_withdraw_authority']
+    )
 ]
 
 # Add up to 5 of the active validators. Locally there will only be one, but on
