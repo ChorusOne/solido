@@ -15,6 +15,7 @@ use crate::{
         distribute_fees, initialize_stake_account_undelegated, mint_st_sol_to,
         transfer_stake_authority, CreateAccountOptions,
     },
+    metrics::Metrics,
     process_management::{
         process_add_maintainer, process_add_validator, process_change_reward_distribution,
         process_claim_validator_fee, process_merge_stake, process_remove_maintainer,
@@ -22,7 +23,7 @@ use crate::{
     },
     stake_account::{deserialize_stake_account, StakeAccount},
     state::{
-        FeeRecipients, Lido, Maintainers, RewardDistribution, Validator, Validators,
+        ExchangeRate, FeeRecipients, Lido, Maintainers, RewardDistribution, Validator, Validators,
         LIDO_CONSTANT_SIZE, LIDO_VERSION,
     },
     token::{Lamports, StLamports},
@@ -84,14 +85,6 @@ pub fn process_initialize(
         return Err(LidoError::InvalidLidoSize.into());
     }
 
-    let mut lido = Lido::default();
-
-    // Initialize fee structure
-    lido.fee_recipients = FeeRecipients {
-        treasury_account: *accounts.treasury_account.key,
-        developer_account: *accounts.developer_account.key,
-    };
-
     let (_, reserve_bump_seed) = Pubkey::find_program_address(
         &[&accounts.lido.key.to_bytes(), RESERVE_ACCOUNT],
         program_id,
@@ -110,16 +103,25 @@ pub fn process_initialize(
         program_id,
     );
 
-    lido.lido_version = version;
-    lido.maintainers = Maintainers::new(max_maintainers);
-    lido.validators = Validators::new(max_validators);
-    lido.manager = *accounts.manager.key;
-    lido.st_sol_mint = *accounts.st_sol_mint.key;
-    lido.sol_reserve_account_bump_seed = reserve_bump_seed;
-    lido.mint_authority_bump_seed = mint_bump_seed;
-    lido.stake_authority_bump_seed = deposit_bump_seed;
-    lido.rewards_withdraw_authority_bump_seed = rewards_withdraw_authority_bump_seed;
-    lido.reward_distribution = reward_distribution;
+    // Initialize fee structure
+    let lido = Lido {
+        lido_version: version,
+        manager: *accounts.manager.key,
+        st_sol_mint: *accounts.st_sol_mint.key,
+        exchange_rate: ExchangeRate::default(),
+        sol_reserve_account_bump_seed: reserve_bump_seed,
+        mint_authority_bump_seed: mint_bump_seed,
+        stake_authority_bump_seed: deposit_bump_seed,
+        rewards_withdraw_authority_bump_seed,
+        reward_distribution,
+        fee_recipients: FeeRecipients {
+            treasury_account: *accounts.treasury_account.key,
+            developer_account: *accounts.developer_account.key,
+        },
+        metrics: Metrics::new(),
+        maintainers: Maintainers::new(max_maintainers),
+        validators: Validators::new(max_validators),
+    };
 
     // Confirm that the fee recipients are actually stSOL accounts.
     lido.check_is_st_sol_account(&accounts.treasury_account)?;
