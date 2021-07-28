@@ -62,8 +62,16 @@ pub fn process_initialize(
     check_rent_exempt(rent, accounts.lido, "Solido account")?;
     check_rent_exempt(rent, accounts.reserve_account, "Reserve account")?;
 
-    let mut lido = deserialize_lido(program_id, accounts.lido)?;
-    lido.is_initialized()?;
+    let is_uninitialized = accounts.lido.data.borrow()[..LIDO_CONSTANT_SIZE]
+        .iter()
+        .all(|byte| *byte == 0);
+    if !is_uninitialized {
+        msg!(
+            "Account {} appears to be in use already, refusing to overwrite.",
+            accounts.lido.key
+        );
+        return Err(LidoError::AlreadyInUse.into());
+    }
 
     // Bytes required for maintainers
     let bytes_for_maintainers = Maintainers::required_bytes(max_maintainers as usize);
@@ -75,6 +83,9 @@ pub fn process_initialize(
         msg!("Incorrect allocated bytes for the provided constrains: max_validator bytes: {}, max_maintainers bytes: {}, constant_size: {}, sum is {}, should be {}", bytes_for_validators, bytes_for_maintainers, LIDO_CONSTANT_SIZE, bytes_sum, accounts.lido.data_len());
         return Err(LidoError::InvalidLidoSize.into());
     }
+
+    let mut lido = Lido::default();
+
     // Initialize fee structure
     lido.fee_recipients = FeeRecipients {
         treasury_account: *accounts.treasury_account.key,
