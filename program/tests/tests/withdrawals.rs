@@ -178,6 +178,7 @@ async fn test_withdrawal_from_different_validator() {
             TEST_DEPOSIT_AMOUNT,
         )
         .await;
+    // Set the newly created validator as the default `context` one.
     context.validator = Some(other_validator);
 
     let epoch_schedule = context.context.genesis_config().epoch_schedule;

@@ -67,9 +67,10 @@ pub struct Metrics {
     /// Histogram of deposits, including the total amount deposited since we started tracking.
     pub deposit_amount: LamportsHistogram,
     /// Total amount withdrawn since the beginning.
-    // Since the user cannot control the amount withdrawn, a histogram for
-    // tracking withdrawals does not make sense. We track the amount in StSOL,
-    // SOL and the total number the function was called.
+    // Since the user cannot withdraw more than what is inside a single stake
+    // account, a histogram for tracking withdrawals does not make sense. We
+    // track the amount in StSOL, SOL and the total number the function was
+    // called.
     pub withdraw_amount: WithdrawMetric,
 }
 

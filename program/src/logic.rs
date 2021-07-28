@@ -229,7 +229,8 @@ pub fn burn_st_sol<'a, 'b>(
         ],
     )
 }
-
+// Set the stake and withdraw authority of the destination stake account to the
+// user’s pubkey.
 pub fn transfer_stake_authority(
     accounts: &WithdrawAccountsInfo,
     stake_authority_bump_seed: u8,
