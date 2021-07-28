@@ -178,7 +178,7 @@ def equal_vote_account_withdrawer(vote_account: str, withdrawer: str) -> bool:
 current_validators = json.loads(solana('validators', '--output', 'json'))
 
 # If we're running on localhost, change the comission to 100% and withdrawer
-# address to the Solido's authority.
+# address to the Solido's rewards withdraw authority.
 if get_network() == 'http://127.0.0.1:8899':
     solido_instance = solido(
         'show-solido',
@@ -206,9 +206,9 @@ if get_network() == 'http://127.0.0.1:8899':
 
 
 # Allow only validators that are voting, have 100% commission, and have their
-# withdrawer set to Solido's withdraw authority. On a local testnet, this will
-# only contain the test validator, but on devnet or testnet, there can be more
-# validators.
+# withdrawer set to Solido's rewards withdraw authority. On a local testnet,
+# this will only contain the test validator, but on devnet or testnet, there can
+# be more validators.
 active_validators = [
     v
     for v in current_validators['validators']
