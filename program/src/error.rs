@@ -138,6 +138,14 @@ pub enum LidoError {
     /// The provided Vote Account is invalid or corrupted.
     #[error("InvalidVoteAccount")]
     InvalidVoteAccount = 35,
+
+    /// The provided token owner is different from the given one.
+    #[error("InvalidTokenOwner")]
+    InvalidTokenOwner = 36,
+
+    /// There is a validator that has more stake than the selected one.
+    #[error("ValidatorWithMoreStakeExists")]
+    ValidatorWithMoreStakeExists = 37,
 }
 
 impl From<ArithmeticError> for LidoError {

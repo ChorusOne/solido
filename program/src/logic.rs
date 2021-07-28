@@ -2,15 +2,18 @@
 // SPDX-License-Identifier: GPL-3.0
 
 use solana_program::entrypoint::ProgramResult;
+use solana_program::program_pack::Pack;
+use solana_program::stake::state::StakeAuthorize;
 use solana_program::{
     account_info::AccountInfo, borsh::try_from_slice_unchecked, msg, program::invoke,
     program::invoke_signed, program_error::ProgramError, pubkey::Pubkey, rent::Rent,
     stake as stake_program, system_instruction,
 };
 
+use crate::STAKE_AUTHORITY;
 use crate::{
     error::LidoError,
-    instruction::CollectValidatorFeeInfo,
+    instruction::{CollectValidatorFeeInfo, WithdrawAccountsInfo},
     state::Fees,
     state::Lido,
     token::{Lamports, StLamports},
@@ -176,6 +179,101 @@ pub fn mint_st_sol_to<'a>(
             spl_token_program.clone(),
         ],
         &signers,
+    )
+}
+
+/// Burns the given amount of stSOL.
+///
+/// * The stSOL mint must be the one configured in the Solido instance.
+/// * The account account must be an stSOL SPL token account.
+pub fn burn_st_sol<'a, 'b>(
+    solido: &Lido,
+    accounts: &WithdrawAccountsInfo<'a, 'b>,
+    amount: StLamports,
+) -> ProgramResult {
+    solido.check_mint_is_st_sol_mint(accounts.st_sol_mint)?;
+    solido.check_is_st_sol_account(accounts.st_sol_account)?;
+
+    let st_sol_account: spl_token::state::Account =
+        spl_token::state::Account::unpack_from_slice(&accounts.st_sol_account.data.borrow())?;
+
+    // Check if the user is the account owner.
+    if &st_sol_account.owner != accounts.st_sol_account_owner.key {
+        msg!(
+            "Token is owned by {}, but provided owner is {}.",
+            st_sol_account.owner,
+            accounts.st_sol_account_owner.key,
+        );
+        return Err(LidoError::InvalidTokenOwner.into());
+    }
+
+    // The SPL token program supports multisig-managed mints, but we do not
+    // use those.
+    let burn_signers = [];
+    let instruction = spl_token::instruction::burn(
+        &accounts.spl_token.key,
+        &accounts.st_sol_account.key,
+        &accounts.st_sol_mint.key,
+        &accounts.st_sol_account_owner.key,
+        &burn_signers,
+        amount.0,
+    )?;
+
+    invoke(
+        &instruction,
+        &[
+            accounts.st_sol_account.clone(),
+            accounts.st_sol_mint.clone(),
+            accounts.st_sol_account_owner.clone(),
+            accounts.spl_token.clone(),
+        ],
+    )
+}
+// Set the stake and withdraw authority of the destination stake account to the
+// user’s pubkey.
+pub fn transfer_stake_authority(
+    accounts: &WithdrawAccountsInfo,
+    stake_authority_bump_seed: u8,
+) -> ProgramResult {
+    invoke_signed(
+        &solana_program::stake::instruction::authorize(
+            &accounts.destination_stake_account.key,
+            &accounts.stake_authority.key,
+            &accounts.st_sol_account_owner.key,
+            StakeAuthorize::Withdrawer,
+            None,
+        ),
+        &[
+            accounts.destination_stake_account.clone(),
+            accounts.sysvar_clock.clone(),
+            accounts.stake_authority.clone(),
+            accounts.stake_program.clone(),
+        ],
+        &[&[
+            &accounts.lido.key.to_bytes(),
+            STAKE_AUTHORITY,
+            &[stake_authority_bump_seed],
+        ]],
+    )?;
+    invoke_signed(
+        &solana_program::stake::instruction::authorize(
+            &accounts.destination_stake_account.key,
+            &accounts.stake_authority.key,
+            &accounts.st_sol_account_owner.key,
+            StakeAuthorize::Staker,
+            None,
+        ),
+        &[
+            accounts.destination_stake_account.clone(),
+            accounts.sysvar_clock.clone(),
+            accounts.stake_authority.clone(),
+            accounts.stake_program.clone(),
+        ],
+        &[&[
+            &accounts.lido.key.to_bytes(),
+            STAKE_AUTHORITY,
+            &[stake_authority_bump_seed],
+        ]],
     )
 }
 

@@ -7,11 +7,13 @@ use crate::{
     error::LidoError,
     instruction::{
         CollectValidatorFeeInfo, DepositAccountsInfo, InitializeAccountsInfo, LidoInstruction,
-        StakeDepositAccountsInfo, UpdateExchangeRateAccountsInfo, WithdrawInactiveStakeInfo,
+        StakeDepositAccountsInfo, UpdateExchangeRateAccountsInfo, WithdrawAccountsInfo,
+        WithdrawInactiveStakeInfo,
     },
     logic::{
-        check_rent_exempt, create_account_overwrite_if_exists, deserialize_lido, distribute_fees,
-        initialize_stake_account_undelegated, mint_st_sol_to, CreateAccountOptions,
+        burn_st_sol, check_rent_exempt, create_account_overwrite_if_exists, deserialize_lido,
+        distribute_fees, initialize_stake_account_undelegated, mint_st_sol_to,
+        transfer_stake_authority, CreateAccountOptions,
     },
     process_management::{
         process_add_maintainer, process_add_validator, process_change_reward_distribution,
@@ -24,11 +26,11 @@ use crate::{
         LIDO_CONSTANT_SIZE, LIDO_VERSION,
     },
     token::{Lamports, StLamports},
-    vote_instruction, MINT_AUTHORITY, RESERVE_ACCOUNT, REWARDS_WITHDRAW_AUTHORITY, STAKE_AUTHORITY,
-    VALIDATOR_STAKE_ACCOUNT,
+    vote_instruction, MINIMUM_STAKE_ACCOUNT_BALANCE, MINT_AUTHORITY, RESERVE_ACCOUNT,
+    REWARDS_WITHDRAW_AUTHORITY, STAKE_AUTHORITY, VALIDATOR_STAKE_ACCOUNT,
 };
 
-use solana_program::stake as stake_program;
+use solana_program::stake::{self as stake_program};
 use solana_program::stake_history::StakeHistory;
 use {
     borsh::BorshDeserialize,
@@ -541,16 +543,7 @@ pub fn process_collect_validator_fee(
     lido.check_reserve_account(program_id, accounts.lido.key, accounts.reserve)?;
 
     let clock = Clock::from_account_info(accounts.sysvar_clock)?;
-    if lido.exchange_rate.computed_in_epoch < clock.epoch {
-        msg!(
-            "The exchange rate is outdated, it was last computed in epoch {}, \
-            but now it is epoch {}.",
-            lido.exchange_rate.computed_in_epoch,
-            clock.epoch,
-        );
-        msg!("Please call UpdateExchangeRate before calling CollectValidatorFee.");
-        return Err(LidoError::ExchangeRateNotUpdatedInThisEpoch.into());
-    }
+    lido.check_exchange_rate_last_epoch(&clock, "CollectValidatorFee")?;
 
     let rewards_withdraw_authority = lido.check_rewards_withdraw_authority(
         program_id,
@@ -594,13 +587,120 @@ pub fn process_collect_validator_fee(
     lido.save(accounts.lido)
 }
 
-// TODO(#93) Implement withdraw
+/// Splits a stake account from a validator's stake account.
+/// This function can only be called after the exchange rate is updated with
+/// `process_update_exchange_rate`.
 pub fn process_withdraw(
-    _program_id: &Pubkey,
-    _pool_tokens: StLamports,
-    _accounts: &[AccountInfo],
+    program_id: &Pubkey,
+    amount: StLamports,
+    raw_accounts: &[AccountInfo],
 ) -> ProgramResult {
-    Ok(())
+    let accounts = WithdrawAccountsInfo::try_from_slice(raw_accounts)?;
+    let mut lido = deserialize_lido(program_id, accounts.lido)?;
+    let clock = Clock::from_account_info(accounts.sysvar_clock)?;
+    lido.check_exchange_rate_last_epoch(&clock, "Withdraw")?;
+
+    // Should withdraw from the validator that has most stake
+    let provided_validator = lido.validators.get(accounts.validator_vote_account.key)?;
+
+    for validator in lido.validators.entries.iter() {
+        if validator.entry.stake_accounts_balance > provided_validator.entry.stake_accounts_balance
+        {
+            msg!(
+                "Validator {} has more stake than validator {}",
+                provided_validator.pubkey,
+                validator.pubkey,
+            );
+            return Err(LidoError::ValidatorWithMoreStakeExists.into());
+        }
+    }
+    let (stake_account, _) = Validator::find_stake_account_address(
+        program_id,
+        accounts.lido.key,
+        accounts.validator_vote_account.key,
+        provided_validator.entry.stake_accounts_seed_begin,
+    );
+    if &stake_account != accounts.source_stake_account.key {
+        msg!("Stake account is different than the calculated by the given seed, should be {}, is {}.", stake_account, accounts.source_stake_account.key);
+        return Err(LidoError::InvalidStakeAccount.into());
+    }
+
+    // Reduce validator's balance
+    let sol_to_withdraw = lido.exchange_rate.exchange_st_sol(amount)?;
+    let provided_validator = lido
+        .validators
+        .get_mut(accounts.validator_vote_account.key)?;
+    provided_validator.entry.stake_accounts_balance =
+        (provided_validator.entry.stake_accounts_balance - sol_to_withdraw)?;
+    // Burn stSol tokens
+    burn_st_sol(&lido, &accounts, amount)?;
+
+    // Update withdrawal metrics.
+    lido.metrics.observe_withdrawal(amount, sol_to_withdraw)?;
+
+    let remaining_balance = (Lamports(accounts.source_stake_account.lamports()) - sol_to_withdraw)?;
+    if remaining_balance < MINIMUM_STAKE_ACCOUNT_BALANCE {
+        msg!("Withdrawal will leave the stake account with less than the minimum stake account balance.
+        Maximum amount to withdraw is {}, tried to withdraw {}",
+        (Lamports(accounts.source_stake_account.lamports()) - MINIMUM_STAKE_ACCOUNT_BALANCE)
+        .expect("We do not allow the balance to fall below the minimum"), sol_to_withdraw);
+        return Err(LidoError::InvalidAmount.into());
+    }
+    // The Stake program already checks for a minimum rent on the destination
+    // stake account inside the `split` function.
+
+    // The Split instruction returns three instructions:
+    //   0 - Allocate instruction.
+    //   1 - Assign owner instruction.
+    //   2 - Split stake instruction.
+    let split_instructions = solana_program::stake::instruction::split(
+        &stake_account,
+        accounts.stake_authority.key,
+        sol_to_withdraw.0,
+        accounts.destination_stake_account.key,
+    );
+    assert_eq!(split_instructions.len(), 3);
+
+    let (allocate_instruction, assign_instruction, split_instruction) = (
+        &split_instructions[0],
+        &split_instructions[1],
+        &split_instructions[2],
+    );
+
+    invoke(
+        allocate_instruction,
+        &[
+            accounts.destination_stake_account.clone(),
+            accounts.system_program.clone(),
+        ],
+    )?;
+    invoke(
+        assign_instruction,
+        &[
+            accounts.destination_stake_account.clone(),
+            accounts.system_program.clone(),
+        ],
+    )?;
+
+    invoke_signed(
+        split_instruction,
+        &[
+            accounts.source_stake_account.clone(),
+            accounts.destination_stake_account.clone(),
+            accounts.stake_authority.clone(),
+            accounts.stake_program.clone(),
+        ],
+        &[&[
+            &accounts.lido.key.to_bytes(),
+            STAKE_AUTHORITY,
+            &[lido.stake_authority_bump_seed],
+        ]],
+    )?;
+
+    // Give control of the stake to the user.
+    transfer_stake_authority(&accounts, lido.stake_authority_bump_seed)?;
+
+    lido.save(accounts.lido)
 }
 
 /// Processes [Instruction](enum.Instruction.html).

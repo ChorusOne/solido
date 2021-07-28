@@ -43,7 +43,7 @@ async fn test_update_exchange_rate() {
     const DEPOSIT_AMOUNT: u64 = 100_000_000;
 
     // Make a deposit, so something should change next epoch.
-    let recipient = context.deposit(Lamports(DEPOSIT_AMOUNT)).await;
+    let (_, recipient) = context.deposit(Lamports(DEPOSIT_AMOUNT)).await;
 
     // This is the first deposit, so the exchange rate is 1:1, we should have
     // gotten the same number of stSOL lamports, as we put in in SOL lamports.
@@ -69,7 +69,7 @@ async fn test_update_exchange_rate() {
     );
 
     // If we make a new deposit, the new exchange rate is used, but it is still 1:1.
-    let recipient = context.deposit(Lamports(DEPOSIT_AMOUNT)).await;
+    let (_, recipient) = context.deposit(Lamports(DEPOSIT_AMOUNT)).await;
     let received_st_sol = context.get_st_sol_balance(recipient).await;
     assert_eq!(received_st_sol, StLamports(DEPOSIT_AMOUNT));
 
@@ -87,7 +87,7 @@ async fn test_update_exchange_rate() {
     // There is now not as much SOL as stSOL, but for deposits, the rate is still
     // 1:1. Even though we jumped to the next epoch! After all, we did not update
     // the exchange rate yet.
-    let recipient = context.deposit(Lamports(DEPOSIT_AMOUNT)).await;
+    let (_, recipient) = context.deposit(Lamports(DEPOSIT_AMOUNT)).await;
     let received_st_sol = context.get_st_sol_balance(recipient).await;
     assert_eq!(received_st_sol, StLamports(DEPOSIT_AMOUNT));
 
@@ -107,7 +107,7 @@ async fn test_update_exchange_rate() {
     );
 
     // After the recompute, 1 SOL = 0.5 stSOL.
-    let recipient = context.deposit(Lamports(DEPOSIT_AMOUNT)).await;
+    let (_, recipient) = context.deposit(Lamports(DEPOSIT_AMOUNT)).await;
     let received_st_sol = context.get_st_sol_balance(recipient).await;
     assert_eq!(received_st_sol, StLamports(DEPOSIT_AMOUNT / 2));
 }

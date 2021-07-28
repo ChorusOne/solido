@@ -725,8 +725,8 @@ impl Context {
         .await
     }
 
-    /// Create a new account, deposit from it, and return the resulting stSOL account.
-    pub async fn deposit(&mut self, amount: Lamports) -> Pubkey {
+    /// Create a new account, deposit from it, and return the resulting owner and stSOL account.
+    pub async fn deposit(&mut self, amount: Lamports) -> (Keypair, Pubkey) {
         // Create a new user who is going to do the deposit. The user's account
         // will hold the SOL to deposit, and it will also be the owner of the
         // stSOL account that holds the proceeds.
@@ -756,7 +756,56 @@ impl Context {
         .await
         .expect("Failed to call Deposit on Solido instance.");
 
-        recipient
+        (user, recipient)
+    }
+
+    /// Withdraw from the validator at `self.validator`.
+    pub async fn try_withdraw(
+        &mut self,
+        user: &Keypair,
+        st_sol_account: Pubkey,
+        amount: StLamports,
+        source_stake_account: Pubkey,
+    ) -> transport::Result<Pubkey> {
+        // Where the new stake will live.
+        let new_stake = self.deterministic_keypair.new_keypair();
+        send_transaction(
+            &mut self.context,
+            &mut self.nonce,
+            &[
+                // authorize_burn_instruction,
+                instruction::withdraw(
+                    &id(),
+                    &instruction::WithdrawAccountsMeta {
+                        lido: self.solido.pubkey(),
+                        st_sol_mint: self.st_sol_mint,
+                        st_sol_account_owner: user.pubkey(),
+                        st_sol_account,
+                        validator_vote_account: self.validator.as_ref().unwrap().vote_account,
+                        source_stake_account,
+                        destination_stake_account: new_stake.pubkey(),
+                        stake_authority: self.stake_authority,
+                    },
+                    amount,
+                ),
+            ],
+            vec![user, &new_stake],
+        )
+        .await?;
+        Ok(new_stake.pubkey())
+    }
+
+    /// Withdraw from the validator at `self.validator`.
+    pub async fn withdraw(
+        &mut self,
+        user: &Keypair,
+        st_sol_account: Pubkey,
+        amount: StLamports,
+        source_stake_account: Pubkey,
+    ) -> Pubkey {
+        self.try_withdraw(user, st_sol_account, amount, source_stake_account)
+            .await
+            .expect("Failed to call Withdraw on Solido instance.")
     }
 
     /// Stake the given amount to the given validator, return the resulting stake account.

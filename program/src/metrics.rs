@@ -66,6 +66,12 @@ pub struct Metrics {
 
     /// Histogram of deposits, including the total amount deposited since we started tracking.
     pub deposit_amount: LamportsHistogram,
+    /// Total amount withdrawn since the beginning.
+    // Since the user cannot withdraw more than what is inside a single stake
+    // account, a histogram for tracking withdrawals does not make sense. We
+    // track the amount in StSOL, SOL and the total number the function was
+    // called.
+    pub withdraw_amount: WithdrawMetric,
 }
 
 impl Metrics {
@@ -81,6 +87,7 @@ impl Metrics {
             fee_developer_st_sol_total: StLamports(0),
 
             deposit_amount: LamportsHistogram::new(),
+            withdraw_amount: WithdrawMetric::default(),
         }
     }
 
@@ -125,6 +132,13 @@ impl Metrics {
 
     pub fn observe_deposit(&mut self, amount: Lamports) -> ProgramResult {
         self.deposit_amount.observe(amount)
+    }
+    pub fn observe_withdrawal(
+        &mut self,
+        st_sol_amount: StLamports,
+        sol_amount: Lamports,
+    ) -> token::Result<()> {
+        self.withdraw_amount.observe(st_sol_amount, sol_amount)
     }
 }
 
@@ -193,6 +207,30 @@ impl LamportsHistogram {
         // Every observation falls in the last bucket, so it contains the total
         // number of observations.
         self.counts[self.counts.len() - 1]
+    }
+}
+
+/// Track how many times the withdraw function was called, as well as the number
+/// of StSOL and SOL that was withdrawn.
+#[repr(C)]
+#[derive(
+    Clone, Debug, Default, BorshDeserialize, BorshSerialize, BorshSchema, Eq, PartialEq, Serialize,
+)]
+pub struct WithdrawMetric {
+    /// Total amount of StSOL withdrawn.
+    pub total_st_sol_amount: StLamports,
+    /// Total amount of SOL withdrawn, after the conversion.
+    pub total_sol_amount: Lamports,
+    /// How many times the withdraw function was called.
+    pub count: u64,
+}
+
+impl WithdrawMetric {
+    fn observe(&mut self, st_sol_amount: StLamports, sol_amount: Lamports) -> token::Result<()> {
+        self.total_st_sol_amount = (self.total_st_sol_amount + st_sol_amount)?;
+        self.total_sol_amount = (self.total_sol_amount + sol_amount)?;
+        self.count += 1;
+        Ok(())
     }
 }
 

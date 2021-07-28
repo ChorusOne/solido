@@ -9,6 +9,7 @@ use serde::Serialize;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use solana_program::borsh::get_instance_packed_len;
+use solana_program::clock::Clock;
 use solana_program::{
     account_info::AccountInfo, clock::Epoch, entrypoint::ProgramResult, msg,
     program_error::ProgramError, program_pack::Pack, pubkey::Pubkey, rent::Rent, sysvar::Sysvar,
@@ -32,7 +33,7 @@ pub const LIDO_VERSION: u8 = 0;
 /// Size of a serialized `Lido` struct excluding validators and maintainers.
 ///
 /// To update this, run the tests and replace the value here with the test output.
-pub const LIDO_CONSTANT_SIZE: usize = 333;
+pub const LIDO_CONSTANT_SIZE: usize = 357;
 pub const VALIDATOR_CONSTANT_SIZE: usize = 68;
 
 pub type Validators = AccountMap<Validator>;
@@ -574,6 +575,24 @@ impl Lido {
         let result = credit.and_then(|s| s + minted_supply)?;
 
         Ok(result)
+    }
+
+    pub fn check_exchange_rate_last_epoch(
+        &self,
+        clock: &Clock,
+        method: &str,
+    ) -> Result<(), LidoError> {
+        if self.exchange_rate.computed_in_epoch < clock.epoch {
+            msg!(
+                "The exchange rate is outdated, it was last computed in epoch {}, \
+                but now it is epoch {}.",
+                self.exchange_rate.computed_in_epoch,
+                clock.epoch,
+            );
+            msg!("Please call UpdateExchangeRate before calling {}.", method);
+            return Err(LidoError::ExchangeRateNotUpdatedInThisEpoch);
+        }
+        Ok(())
     }
 }
 

@@ -40,6 +40,16 @@ pub enum LidoInstruction {
         #[allow(dead_code)] // but it's not
         amount: Lamports,
     },
+    /// Withdraw a given amount of stSOL.
+    ///
+    /// Caller provides some `amount` of StLamports that are to be
+    /// burned in order to withdraw SOL.
+    /// The token's amount has to be delegated to the `STAKE_AUTHORITY` so it
+    /// can be burned.
+    Withdraw {
+        #[allow(dead_code)] // but it's not
+        amount: StLamports,
+    },
     /// Move deposits into a new stake account and delegate it to a member validator.
     ///
     /// This does not yet make the new stake account part of the stake pool;
@@ -56,10 +66,6 @@ pub enum LidoInstruction {
     WithdrawInactiveStake,
     /// Claim rewards from the validator account and distribute rewards.
     CollectValidatorFee,
-    Withdraw {
-        #[allow(dead_code)] // but it's not
-        amount: StLamports,
-    },
     ClaimValidatorFee,
     ChangeRewardDistribution {
         #[allow(dead_code)] // but it's not
@@ -174,6 +180,65 @@ pub fn deposit(
     amount: Lamports,
 ) -> Instruction {
     let data = LidoInstruction::Deposit { amount };
+    Instruction {
+        program_id: *program_id,
+        accounts: accounts.to_vec(),
+        data: data.to_vec(),
+    }
+}
+
+accounts_struct! {
+    WithdrawAccountsMeta, WithdrawAccountsInfo {
+        pub lido {
+            is_signer: false,
+            // Needs to be writable for us to update the metrics.
+            is_writable: true,
+        },
+        pub st_sol_account_owner {
+            is_signer: true,
+            is_writable: false,
+        },
+        // This should be owned by the user.
+        pub st_sol_account {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub st_sol_mint {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub validator_vote_account {
+            is_signer: false,
+            is_writable: false,
+        },
+        // Stake account to withdraw from.
+        pub source_stake_account {
+            is_signer: false,
+            is_writable: true,
+        },
+        // Stake where the withdrawn amounts will go.
+        pub destination_stake_account {
+            is_signer: true,
+            is_writable: true,
+        },
+        // Used to split stake accounts and burn tokens.
+        pub stake_authority {
+            is_signer: false,
+            is_writable: false,
+        },
+        const spl_token = spl_token::id(),
+        const sysvar_clock = sysvar::clock::id(),
+        const system_program = system_program::id(),
+        const stake_program = stake_program::program::id(),
+    }
+}
+
+pub fn withdraw(
+    program_id: &Pubkey,
+    accounts: &WithdrawAccountsMeta,
+    amount: StLamports,
+) -> Instruction {
+    let data = LidoInstruction::Withdraw { amount };
     Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
