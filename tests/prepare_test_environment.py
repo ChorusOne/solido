@@ -166,10 +166,9 @@ def add_validator(index: int, vote_account: Optional[str]) -> str:
 
 
 # Compares a validator structure
-def equal_vote_account_withdrawer(vote_account: str, withdrawer: str) -> bool:
+def get_vote_account_withdrawer(vote_account: str) -> str:
     result = solana('vote-account', vote_account, '--output', 'json')
-    val_withdrawer: str = json.loads(result)['authorizedWithdrawer']
-    return val_withdrawer == withdrawer
+    return json.loads(result)['authorizedWithdrawer']
 
 
 # For the first validator, add the test validator itself, so we include a
@@ -213,9 +212,8 @@ active_validators = [
     for v in current_validators['validators']
     if (not v['delinquent'])
     and v['commission'] == '100'
-    and equal_vote_account_withdrawer(
-        v['voteAccountPubkey'], solido_instance['rewards_withdraw_authority']
-    )
+    and get_vote_account_withdrawer(v['voteAccountPubkey'])
+    == solido_instance['rewards_withdraw_authority']
 ]
 
 # Add up to 5 of the active validators. Locally there will only be one, but on

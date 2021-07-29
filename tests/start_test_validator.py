@@ -14,7 +14,6 @@ import sys
 import time
 
 from typing import Optional
-from util import solana
 
 # Start the validator, pipe its stdout to /dev/null.
 test_validator = subprocess.Popen(
