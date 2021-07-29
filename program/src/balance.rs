@@ -131,7 +131,7 @@ pub fn get_validator_to_withdraw(
                 .stake_accounts_balance
                 .cmp(&y.entry.stake_accounts_balance)
         })
-        .ok_or_else(|| LidoError::EmptySetOfValidators)
+        .ok_or(LidoError::EmptySetOfValidators)
 }
 
 #[cfg(test)]
