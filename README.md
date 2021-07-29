@@ -15,3 +15,7 @@ This repository contains both the Solana program (./program) and a client (./cli
 the program.
 
 The full documentation can be found at [https://chorusone.github.io/solido/docs/](https://chorusone.github.io/solido/docs/)
+
+## License
+
+Solido is licensed under the GNU General Public License version 3.
