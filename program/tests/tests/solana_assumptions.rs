@@ -147,9 +147,12 @@ async fn test_deactivating_stake_earns_rewards() {
     let rewards_active = measure_staking_rewards(StakeMode::Active).await;
     let rewards_deactivating = measure_staking_rewards(StakeMode::Deactivating).await;
 
-    // For some reason, when stake is deactivating, the rewards are always two
-    // lamports less. Two Lamports out of 1.2k SOL is a negligible difference,
-    // so we'll assume that deactivation does not prevent rewards.
+    // When stake is deactivating, the rewards are a few lamports less, because
+    // the deactivation transaction itself costs a transaction fee, which is
+    // burned, and this affects the rewards. See also
+    // https://github.com/solana-labs/solana/issues/18894. Two Lamports out of
+    // 1.2k SOL is a negligible difference, so we'll assume that deactivation
+    // does not prevent rewards.
     assert_eq!(rewards_inactive, Lamports(0));
     assert_eq!(rewards_active, Lamports(1_244_921_728_174));
     assert_eq!(rewards_deactivating, Lamports(1_244_921_728_172));
