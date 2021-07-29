@@ -1,0 +1,16 @@
+This file lists the dependencies of the "solido" command-line program, and their
+licenses. An up to date list can be generated with
+
+    cargo license --manifest-path cli/Cargo.toml --avoid-dev-deps --avoid-build-deps
+
+Solido itself is licensed under the GNU Public License version 3. The situation
+for "ring" is more subtle, see its license file at [1] (this is a permalink).
+For the other libraries, you can look up the license text itself by identifier
+at the SPDX website [2]. Most of these licenses are also present in the
+/usr/share/common-licenses directory of the container image.
+
+[1]: https://github.com/briansmith/ring/blob/1bf024dacfeb38eef7400b7880f46af5620cab42/LICENSE
+[2]: https://spdx.org/licenses/
+
+This file is automatically extended with the license list when bundled in the
+container image; in the repository it is only the template.
