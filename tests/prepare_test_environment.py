@@ -10,7 +10,7 @@ useful when testing the maintenance daemon locally.
 
 import json
 import os
-from typing import Optional
+from typing import Optional, Dict, Any
 
 from util import (
     create_test_account,
@@ -167,10 +167,9 @@ def add_validator(index: int, vote_account: Optional[str]) -> str:
 
 # Compares a validator structure
 def equal_vote_account_withdrawer(vote_account: str, withdrawer: str) -> bool:
-    val_withdrawer = solana('vote-account', vote_account, '--output', 'json')[
-        'authorizedWithdrawer'
-    ]
-    val_withdrawer == withdrawer
+    result = solana('vote-account', vote_account, '--output', 'json')
+    val_withdrawer: str = json.loads(result)['authorizedWithdrawer']
+    return val_withdrawer == withdrawer
 
 
 # For the first validator, add the test validator itself, so we include a
@@ -213,7 +212,7 @@ active_validators = [
     v
     for v in current_validators['validators']
     if (not v['delinquent'])
-    and v['commission'] == 100
+    and v['commission'] == '100'
     and equal_vote_account_withdrawer(
         v['voteAccountPubkey'], solido_instance['rewards_withdraw_authority']
     )
