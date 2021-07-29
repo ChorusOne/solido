@@ -67,7 +67,8 @@ def get_deps(manifest_path: str) -> List[Dict[str, Any]]:
         capture_output=True,
         encoding='utf-8',
     )
-    return json.loads(result.stdout)
+    result_parsed: List[Dict[str, Any]] = json.loads(result.stdout)
+    return result_parsed
 
 
 def main() -> None:
