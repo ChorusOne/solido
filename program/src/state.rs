@@ -235,15 +235,6 @@ impl Lido {
         get_instance_packed_len(&lido_instance).unwrap()
     }
 
-    pub fn is_initialized(&self) -> ProgramResult {
-        if self.manager != Pubkey::default() {
-            msg!("Provided Solido instance already in use.");
-            Err(LidoError::AlreadyInUse.into())
-        } else {
-            Ok(())
-        }
-    }
-
     /// Confirm that the given account is Solido's stSOL mint.
     pub fn check_mint_is_st_sol_mint(&self, mint_account_info: &AccountInfo) -> ProgramResult {
         if &self.st_sol_mint != mint_account_info.key {
@@ -912,13 +903,6 @@ mod test_lido {
 
         let lido_restored = try_from_slice_unchecked(&data[..]).unwrap();
         assert_eq!(lido, lido_restored);
-    }
-
-    #[test]
-    fn lido_initialized() {
-        let lido = Lido::default();
-
-        assert!(lido.is_initialized().is_ok());
     }
 
     #[test]
