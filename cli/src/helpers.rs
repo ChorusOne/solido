@@ -617,7 +617,7 @@ pub fn command_deposit(
 #[derive(Serialize)]
 pub struct WithdrawOutput {
     #[serde(serialize_with = "serialize_b58")]
-    pub from_token: Pubkey,
+    pub from_token_address: Pubkey,
 
     /// Amount of SOL that was withdrawn.
     pub withdrawn_sol: Lamports,
@@ -630,7 +630,7 @@ pub struct WithdrawOutput {
 
 impl fmt::Display for WithdrawOutput {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        writeln!(f, "Withdrawn from:          {}", self.from_token)?;
+        writeln!(f, "Withdrawn from:          {}", self.from_token_address)?;
         writeln!(f, "Total SOL withdrawn:     {}", self.withdrawn_sol)?;
         writeln!(f, "New stake account:       {}", self.new_stake_account)?;
         Ok(())
@@ -701,7 +701,7 @@ pub fn command_withdraw(
         Ok(Lamports(stake_account.lamports()))
     })?;
     let result = WithdrawOutput {
-        from_token: st_sol_address,
+        from_token_address: st_sol_address,
         withdrawn_sol: stake_sol,
         new_stake_account: new_stake_account.pubkey(),
     };
