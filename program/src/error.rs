@@ -146,6 +146,10 @@ pub enum LidoError {
     /// There is a validator that has more stake than the selected one.
     #[error("ValidatorWithMoreStakeExists")]
     ValidatorWithMoreStakeExists = 37,
+
+    /// The instance has no validators.
+    #[error("EmptySetOfValidators")]
+    EmptySetOfValidators = 38,
 }
 
 impl From<ArithmeticError> for LidoError {

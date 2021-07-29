@@ -3,7 +3,8 @@
 
 //! Logic for keeping the stake pool balanced.
 
-use crate::state::Validators;
+use crate::account_map::PubkeyAndEntry;
+use crate::state::{Validator, Validators};
 use crate::{
     error::LidoError,
     token,
@@ -117,6 +118,20 @@ pub fn get_validator_furthest_below_target(
     }
 
     (index, amount)
+}
+
+pub fn get_validator_to_withdraw(
+    validators: &Validators,
+) -> Result<&PubkeyAndEntry<Validator>, crate::error::LidoError> {
+    validators
+        .entries
+        .iter()
+        .max_by(|&x, &y| {
+            x.entry
+                .stake_accounts_balance
+                .cmp(&y.entry.stake_accounts_balance)
+        })
+        .ok_or_else(|| LidoError::EmptySetOfValidators)
 }
 
 #[cfg(test)]

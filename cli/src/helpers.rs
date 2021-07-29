@@ -11,6 +11,7 @@ use solana_sdk::{
 };
 
 use lido::{
+    balance::get_validator_to_withdraw,
     metrics::LamportsHistogram,
     state::{Lido, RewardDistribution, Validator},
     token::{Lamports, StLamports},
@@ -653,20 +654,11 @@ pub fn command_withdraw(
             solido.get_stake_authority(opts.solido_program_id(), opts.solido_address())?;
 
         // Get heaviest validator.
-        let heaviest_validator = solido
-            .validators
-            .entries
-            .iter()
-            .max_by(|&x, &y| {
-                x.entry
-                    .stake_accounts_balance
-                    .cmp(&y.entry.stake_accounts_balance)
-            })
-            .ok_or_else(|| {
-                MaintenanceError::new(
-                    "The instance has no active validators to withdraw from.".to_owned(),
-                )
-            })?;
+        let heaviest_validator = get_validator_to_withdraw(&solido.validators).map_err(|_| {
+            MaintenanceError::new(
+                "The instance has no active validators to withdraw from.".to_owned(),
+            )
+        })?;
 
         let (stake_address, _bump_seed) = Validator::find_stake_account_address(
             opts.solido_program_id(),
