@@ -168,7 +168,8 @@ def add_validator(index: int, vote_account: Optional[str]) -> str:
 # Compares a validator structure
 def get_vote_account_withdrawer(vote_account: str) -> str:
     result = solana('vote-account', vote_account, '--output', 'json')
-    return json.loads(result)['authorizedWithdrawer']
+    authorized_withdrawer: str = json.loads(result)['authorizedWithdrawer']
+    return authorized_withdrawer
 
 
 # For the first validator, add the test validator itself, so we include a
