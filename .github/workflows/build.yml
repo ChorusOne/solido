@@ -140,8 +140,8 @@ jobs:
           ~/.cargo/registry/cache/
           ~/.cargo/git/db/
           target/
-        key: lint-1.7.3-v3-${{ hashFiles('Cargo.lock') }}
-        restore-keys: lint-1.7.3-v3
+        key: lint-1.7.3-v4-${{ hashFiles('Cargo.lock') }}
+        restore-keys: lint-1.7.3-v4
 
     - name: Install linters
       run: |
@@ -153,6 +153,7 @@ jobs:
         # the same version locally.
         sudo pip3 install mypy==0.902
         rustup component add clippy
+        cargo install cargo-license --version 0.4.1
 
     - name: Run Clippy
       run: |
@@ -162,6 +163,10 @@ jobs:
     - name: Typecheck Python
       run: |
         git ls-files | grep '\.py$' | xargs mypy --strict
+
+    - name: Check license compatibility
+      run: |
+        tests/check_licenses.py
 
   coverage:
     runs-on: ubuntu-latest
