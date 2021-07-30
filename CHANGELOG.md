@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.4.0
+
+Released 2021-07-30.
+
+**Compatibility**:
+
+ * The on-chain `Lido` struct gained a new field in its `metrics` field for
+   tracking withdrawals.
+
+New features:
+
+ * A first version of withdrawals has been implemented.
+ * `solido show-solido` now shows more information about validators.
+ * The maintenance daemon can now be configured to claim fees for one validator.
+   Claiming the fee transfers validation fee stSOL to the validator’s configured
+   fee account.
+
+Other changes:
+
+ * We now have more accurate coverage measurements for the unit tests and CLI
+   test scripts. The `solana_program_test` tests and on-chain program still do
+   not have coverage reports.
+ * Internal cleanup.
+
 ## v0.3.0
 
 Released 2021-07-20.
