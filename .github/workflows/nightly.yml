@@ -52,7 +52,7 @@ jobs:
         solana config set --url https://api.devnet.solana.com
 
         # Loop airdrop as devnet allows at most 10 SOL at a time.
-        for i in {1..4}; do solana airdrop 10.0; sleep 20;  done
+        for i in {1..4}; do solana airdrop 10.0; sleep 30;  done
 
         NETWORK='https://api.devnet.solana.com' tests/test_solido.py
 
@@ -64,7 +64,7 @@ jobs:
         # should still be there from the previous run.
 
         # Loop airdrop as devnet allows at most 10 SOL at a time.
-        for i in {1..4}; do solana airdrop 10.0; sleep 20;  done
+        for i in {1..4}; do sleep 30; solana airdrop 10.0;  done
 
         NETWORK='https://api.devnet.solana.com' tests/test_multisig.py
 
