@@ -279,6 +279,16 @@ cli_opt_struct! {
         #[clap(long, value_name = "address")]
         developer_account_owner: Pubkey,
 
+        /// Optional argument for the mint address, if not passed a random one
+        /// will be created.
+        #[clap(long)]
+        mint_address: Pubkey => Pubkey::default(),
+
+        /// Optional argument for the solido address, if not passed a random one
+        /// will be created.
+        #[clap(long)]
+        solido_key_path: PathBuf => PathBuf::default(),
+
         /// Used to compute Solido's manager. Multisig instance.
         #[clap(long, value_name = "address")]
         multisig_address: Pubkey,
@@ -379,13 +389,24 @@ cli_opt_struct! {
 
 cli_opt_struct! {
      ShowSolidoOpts {
-        /// The solido instance to show
+        /// The solido instance to show.
         #[clap(long, value_name = "address")]
         solido_address: Pubkey,
         /// Address of the Solido program.
         #[clap(long, value_name = "address")]
         solido_program_id: Pubkey,
     }
+}
+
+cli_opt_struct! {
+    ShowSolidoAuthoritiesOpts {
+        /// The solido instance to show authorities.
+        #[clap(long, value_name = "address")]
+        solido_address: Pubkey,
+        /// Address of the Solido program.
+        #[clap(long, value_name = "address")]
+        solido_program_id: Pubkey,
+   }
 }
 
 cli_opt_struct! {

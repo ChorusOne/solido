@@ -27,6 +27,7 @@ from util import (
     solana,
     solana_program_deploy,
     solido,
+    spl_token,
 )
 
 # We start by generating an account that we will need later. We put the tests
@@ -104,6 +105,52 @@ def approve_and_execute(
         keypair_path=signer.keypair_path,
     )
 
+
+# Test creating a solido instance with a known minter.
+solido_test_account = create_test_account('tests/.keys/solido_address.json', fund=False)
+authorities = solido(
+    'show-authorities',
+    '--solido-address',
+    solido_test_account.pubkey,
+    '--solido-program-id',
+    solido_program_id,
+)
+
+mint_address = create_test_account('tests/.keys/mint_address.json', fund=False)
+spl_token('create-token', 'tests/.keys/mint_address.json')
+# Test changing the mint authority.
+spl_token('authorize', mint_address.pubkey, 'mint', authorities['mint_authority'])
+print('\nCreating Solido instance with a known solido and minter address...')
+result = solido(
+    'create-solido',
+    '--multisig-program-id',
+    multisig_program_id,
+    '--solido-program-id',
+    solido_program_id,
+    '--max-validators',
+    '9',
+    '--max-maintainers',
+    '1',
+    '--treasury-fee-share',
+    '5',
+    '--validation-fee-share',
+    '3',
+    '--developer-fee-share',
+    '2',
+    '--st-sol-appreciation-share',
+    '90',
+    '--treasury-account-owner',
+    treasury_account_owner.pubkey,
+    '--developer-account-owner',
+    developer_account_owner.pubkey,
+    '--multisig-address',
+    multisig_instance,
+    '--solido-key-path',
+    solido_test_account.keypair_path,
+    '--mint-address',
+    mint_address.pubkey,
+    keypair_path=test_addrs[0].keypair_path,
+)
 
 print('\nCreating Solido instance ...')
 result = solido(

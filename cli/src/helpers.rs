@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2021 Chorus One AG
 // SPDX-License-Identifier: GPL-3.0
 
-use std::fmt;
+use std::{fmt, path::PathBuf};
 
 use serde::Serialize;
 use solana_program::{pubkey::Pubkey, system_instruction};
@@ -12,19 +12,21 @@ use solana_sdk::{
 
 use lido::{
     balance::get_validator_to_withdraw,
+    find_authority_program_address,
     metrics::LamportsHistogram,
     state::{Lido, RewardDistribution, Validator},
     token::{Lamports, StLamports},
     util::serialize_b58,
-    MINT_AUTHORITY, RESERVE_ACCOUNT,
+    MINT_AUTHORITY, RESERVE_ACCOUNT, REWARDS_WITHDRAW_AUTHORITY, STAKE_AUTHORITY,
 };
 
 use crate::{
     config::{
-        AddRemoveMaintainerOpts, AddValidatorOpts, CreateSolidoOpts, DepositOpts, ShowSolidoOpts,
-        WithdrawOpts,
+        AddRemoveMaintainerOpts, AddValidatorOpts, CreateSolidoOpts, DepositOpts,
+        ShowSolidoAuthoritiesOpts, ShowSolidoOpts, WithdrawOpts,
     },
     error::MaintenanceError,
+    get_signer,
 };
 use crate::{
     multisig::{get_multisig_program_address, propose_instruction, ProposeInstructionOutput},
@@ -101,17 +103,27 @@ pub fn command_create_solido(
     config: &mut SnapshotConfig,
     opts: &CreateSolidoOpts,
 ) -> Result<CreateSolidoOutput> {
-    let lido_keypair = Keypair::new();
+    let lido_signer = {
+        if opts.solido_key_path() != &PathBuf::default() {
+            // If we've been given a solido private key, use it to create the solido instance.
+            let signer = get_signer(opts.solido_key_path().clone());
+            signer
+        } else {
+            // If not, use a random key
+            let lido_keypair = Keypair::new();
+            Box::new(lido_keypair)
+        }
+    };
 
     let (reserve_account, _) = lido::find_authority_program_address(
         opts.solido_program_id(),
-        &lido_keypair.pubkey(),
+        &lido_signer.pubkey(),
         RESERVE_ACCOUNT,
     );
 
     let (mint_authority, _) = lido::find_authority_program_address(
         opts.solido_program_id(),
-        &lido_keypair.pubkey(),
+        &lido_signer.pubkey(),
         MINT_AUTHORITY,
     );
 
@@ -134,30 +146,37 @@ pub fn command_create_solido(
         min_balance_empty_data_account.0,
     ));
 
-    // Set up the Lido stSOL SPL token mint account.
-    let st_sol_mint_keypair =
-        push_create_spl_token_mint(config, &mut instructions, &mint_authority)?;
-
-    // Ideally we would set up the entire instance in a single transaction, but
-    // Solana transaction size limits are so low that we need to break our
-    // instructions down into multiple transactions. So set up the mint first,
-    // then continue.
-    let signers = &[&st_sol_mint_keypair, config.signer];
-    config.sign_and_send_transaction(&instructions[..], signers)?;
-    instructions.clear();
-    eprintln!("Did send mint init.");
+    let st_sol_mint_pubkey = {
+        if opts.mint_address() != &Pubkey::default() {
+            // If we've been given a minter address, return its public address.
+            *opts.mint_address()
+        } else {
+            // If not, set up the Lido stSOL SPL token mint account.
+            let st_sol_mint_keypair =
+                push_create_spl_token_mint(config, &mut instructions, &mint_authority)?;
+            let signers = &[&st_sol_mint_keypair, config.signer];
+            // Ideally we would set up the entire instance in a single transaction, but
+            // Solana transaction size limits are so low that we need to break our
+            // instructions down into multiple transactions. So set up the mint first,
+            // then continue.
+            config.sign_and_send_transaction(&instructions[..], signers)?;
+            instructions.clear();
+            eprintln!("Did send mint init.");
+            st_sol_mint_keypair.pubkey()
+        }
+    };
 
     // Set up the SPL token account that receive the fees in stSOL.
     let treasury_keypair = push_create_spl_token_account(
         config,
         &mut instructions,
-        &st_sol_mint_keypair.pubkey(),
+        &st_sol_mint_pubkey,
         opts.treasury_account_owner(),
     )?;
     let developer_keypair = push_create_spl_token_account(
         config,
         &mut instructions,
-        &st_sol_mint_keypair.pubkey(),
+        &st_sol_mint_pubkey,
         opts.developer_account_owner(),
     )?;
     config.sign_and_send_transaction(
@@ -170,7 +189,7 @@ pub fn command_create_solido(
     // Create the account that holds the Solido instance itself.
     instructions.push(system_instruction::create_account(
         &config.signer.pubkey(),
-        &lido_keypair.pubkey(),
+        &lido_signer.pubkey(),
         lido_account_balance.0,
         lido_size as u64,
         opts.solido_program_id(),
@@ -187,8 +206,8 @@ pub fn command_create_solido(
         *opts.max_validators(),
         *opts.max_maintainers(),
         &lido::instruction::InitializeAccountsMeta {
-            lido: lido_keypair.pubkey(),
-            st_sol_mint: st_sol_mint_keypair.pubkey(),
+            lido: lido_signer.pubkey(),
+            st_sol_mint: st_sol_mint_pubkey,
             manager,
             treasury_account: treasury_keypair.pubkey(),
             developer_account: developer_keypair.pubkey(),
@@ -196,14 +215,14 @@ pub fn command_create_solido(
         },
     ));
 
-    config.sign_and_send_transaction(&instructions[..], &[config.signer, &lido_keypair])?;
+    config.sign_and_send_transaction(&instructions[..], &[config.signer, &*lido_signer])?;
     eprintln!("Did send Lido init.");
 
     let result = CreateSolidoOutput {
-        solido_address: lido_keypair.pubkey(),
+        solido_address: lido_signer.pubkey(),
         reserve_account,
         mint_authority,
-        st_sol_mint_address: st_sol_mint_keypair.pubkey(),
+        st_sol_mint_address: st_sol_mint_pubkey,
         treasury_account: treasury_keypair.pubkey(),
         developer_account: developer_keypair.pubkey(),
     };
@@ -484,6 +503,74 @@ pub fn command_show_solido(
         solido_program_id: *opts.solido_program_id(),
         solido_address: *opts.solido_address(),
         solido: lido,
+        reserve_account,
+        stake_authority,
+        mint_authority,
+        rewards_withdraw_authority,
+    })
+}
+
+#[derive(Serialize)]
+pub struct ShowSolidoAuthorities {
+    #[serde(serialize_with = "serialize_b58")]
+    pub solido_program_id: Pubkey,
+
+    #[serde(serialize_with = "serialize_b58")]
+    pub solido_address: Pubkey,
+
+    #[serde(serialize_with = "serialize_b58")]
+    pub reserve_account: Pubkey,
+
+    #[serde(serialize_with = "serialize_b58")]
+    pub stake_authority: Pubkey,
+
+    #[serde(serialize_with = "serialize_b58")]
+    pub mint_authority: Pubkey,
+
+    #[serde(serialize_with = "serialize_b58")]
+    pub rewards_withdraw_authority: Pubkey,
+}
+
+impl fmt::Display for ShowSolidoAuthorities {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        writeln!(f, "Stake authority:            {}", self.stake_authority,)?;
+        writeln!(f, "Mint authority:             {}", self.mint_authority)?;
+        writeln!(
+            f,
+            "Rewards withdraw authority: {}",
+            self.rewards_withdraw_authority,
+        )?;
+        writeln!(f, "Reserve account:            {}", self.reserve_account)?;
+        Ok(())
+    }
+}
+
+pub fn command_show_solido_authorities(
+    opts: &ShowSolidoAuthoritiesOpts,
+) -> Result<ShowSolidoAuthorities> {
+    let (reserve_account, _) = find_authority_program_address(
+        opts.solido_program_id(),
+        opts.solido_address(),
+        RESERVE_ACCOUNT,
+    );
+    let (mint_authority, _) = find_authority_program_address(
+        opts.solido_program_id(),
+        opts.solido_address(),
+        MINT_AUTHORITY,
+    );
+    let (stake_authority, _) = find_authority_program_address(
+        opts.solido_program_id(),
+        opts.solido_address(),
+        STAKE_AUTHORITY,
+    );
+    let (rewards_withdraw_authority, _) = find_authority_program_address(
+        opts.solido_program_id(),
+        opts.solido_address(),
+        REWARDS_WITHDRAW_AUTHORITY,
+    );
+    Ok(ShowSolidoAuthorities {
+        solido_program_id: *opts.solido_program_id(),
+        solido_address: *opts.solido_address(),
         reserve_account,
         stake_authority,
         mint_authority,
