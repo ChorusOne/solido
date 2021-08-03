@@ -224,19 +224,37 @@ impl<'a> SnapshotConfig<'a> {
         signers: &T,
     ) -> snapshot::Result<()> {
         let transaction = self.sign_transaction(instructions, signers)?;
-        let _signature = match self.output_mode {
+        let signature_result = match self.output_mode {
             OutputMode::Text => {
                 // In text mode, we can display a spinner.
                 self.client
-                    .send_and_confirm_transaction_with_spinner(&transaction)?
+                    .send_and_confirm_transaction_with_spinner(&transaction)
             }
             OutputMode::Json => {
                 // In json mode, printing a spinner to stdout would break the
                 // json that we also print to stdout, so opt for the silent
                 // version.
-                self.client.send_and_confirm_transaction(&transaction)?
+                self.client.send_and_confirm_transaction(&transaction)
             }
         };
+
+        // Warn the user for one particular footgun.
+        match signature_result {
+            Err(ref err) if error::might_have_executed(err) => {
+                eprintln!(
+                    "Warning: The RPC returned an error, but the transaction \
+                     might still have been executed. Check the signer's address \
+                     on a block explorer before continuing. Beware that timestamps \
+                     shown on explorer.solana.com can be off by weeks, check the slot \
+                     number to confirm whether a transaction is recent."
+                );
+            }
+            _ => {}
+        }
+
+        // Propagate the error if there was any.
+        let _signature = signature_result?;
+
         Ok(())
     }
 }

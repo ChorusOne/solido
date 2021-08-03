@@ -13,6 +13,36 @@ use solana_sdk::transaction::TransactionError;
 
 use lido::error::LidoError;
 
+/// Return whether the transaction may have executed despite the client error.
+///
+/// We observed one case on testnet where the RPC returned:
+///
+///     Solana RPC client returned an error:
+///
+///      Request:    None
+///      Kind:       RPC error for user
+///      unable to confirm transaction. This can happen in situations such as
+///      transaction expiration and insufficient fee-payer funds
+///
+/// But the transaction had been executed nonetheless. I suspect what happened
+/// is that sending the transaction succeeded, but something went wrong when
+/// waiting for confirmations.
+///
+/// We check for this particular case so we can tell users to check if the
+/// transaction executed before continuing. Note that when this function returns
+/// true, there is no guarantee that the transaction did execute, and when it
+/// returns false, there is no guarantee that it did not execute!
+pub fn might_have_executed(error: &ClientError) -> bool {
+    match error.kind() {
+        ClientErrorKind::RpcError(RpcError::ForUser(message)) => {
+            // Unfortunately the error is not more structured than this, we have
+            // to string match on the message.
+            message.contains("unable to confirm transaction.")
+        }
+        _ => false,
+    }
+}
+
 /// Print the message in bold using ANSI escape sequences.
 fn print_key(message: &'static str) {
     // 1m enters bold, 0m is a reset.
