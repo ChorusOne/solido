@@ -149,7 +149,7 @@ REWARDS
     /// Show an instance of solido in detail
     ShowSolido(ShowSolidoOpts),
 
-    /// Show Solido authorities, useful for testing.
+    /// Show Solido authorities, useful for testing and when specifying an existing token mint.
     ShowAuthorities(ShowSolidoAuthoritiesOpts),
 
     /// Execute one iteration of periodic maintenance logic.
