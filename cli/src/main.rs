@@ -365,29 +365,35 @@ fn get_signer(payer_keypair_path: PathBuf) -> Result<Box<dyn Signer>, Error> {
     use uriparse::uri_reference::URIReference;
 
     let boxed_signer: Box<dyn Signer> = if payer_keypair_path.starts_with("usb://") {
-        let hw_wallet = maybe_wallet_manager()
-            .map_err(|err| CliError::with_cause("Remote wallet found, but failed to establish protocol. Maybe the Solana app is not open.", err))?
-            .ok_or_else(|| CliError::new("Failed to find a remote wallet, maybe Ledger is not connected or locked."))?;
-
+        // Parse the uri before we try to connect, so we can diagnose uri format issues early.
         let uri = payer_keypair_path
             .into_os_string()
             .into_string()
             .map_err(|_| {
                 CliError::new("A keypair path that starts with usb:// must be valid UTF-8.")
             })?;
+
+        let uri_invalid_msg =
+            "Failed to parse usb:// keypair path. It must be of the form 'usb://ledger?key=0'.";
+
         let uri_ref = URIReference::try_from(&uri[..])
-            .map_err(|err| CliError::with_cause("Failed to parse usb:// keypair path.", err))?;
+            .map_err(|err| CliError::with_cause(uri_invalid_msg, err))?;
+
+        let derivation_path = DerivationPath::from_uri_key_query(&uri_ref)
+            .map_err(|err| CliError::with_cause(uri_invalid_msg, err))?
+            .ok_or_else(|| CliError::new(uri_invalid_msg))?;
+
+        let locator = Locator::new_from_uri(&uri_ref)
+            .map_err(|err| CliError::with_cause(uri_invalid_msg, err))?;
+
+        let hw_wallet = maybe_wallet_manager()
+            .map_err(|err| CliError::with_cause("Remote wallet found, but failed to establish protocol. Maybe the Solana app is not open.", err))?
+            .ok_or_else(|| CliError::new("Failed to find a remote wallet, maybe Ledger is not connected or locked."))?;
 
         Box::new(
             generate_remote_keypair(
-                Locator::new_from_path(&uri).map_err(|err| {
-                    CliError::with_cause("Invalid usb:// uri for keypair path.", err)
-                })?,
-                DerivationPath::from_uri_key_query(&uri_ref)
-                    .map_err(|err| {
-                        CliError::with_cause("Invalid usb:// uri for keypair path.", err)
-                    })?
-                    .ok_or_else(|| CliError::new("Invalid usb:// uri for keypair path."))?,
+                locator,
+                derivation_path,
                 &hw_wallet,
                 false,    /* Confirm public key */
                 "Solido", /* When multiple wallets are connected, used to display a hint */
