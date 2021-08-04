@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-for i in `seq 1 5`
+for i in `seq 1 6`
 do
     solana airdrop 500.0
     if [ $? -eq 0 ]
