@@ -146,6 +146,10 @@ pub enum LidoError {
     /// There is a validator that has more stake than the selected one.
     #[error("ValidatorWithMoreStakeExists")]
     ValidatorWithMoreStakeExists = 37,
+
+    /// The provided mint is invalid.
+    #[error("InvalidMint")]
+    InvalidMint = 38,
 }
 
 impl From<ArithmeticError> for LidoError {

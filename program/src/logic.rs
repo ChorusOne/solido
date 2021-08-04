@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0
 
 use solana_program::entrypoint::ProgramResult;
+use solana_program::program_option::COption;
 use solana_program::program_pack::Pack;
 use solana_program::stake::state::StakeAuthorize;
 use solana_program::{
@@ -31,6 +32,44 @@ pub(crate) fn check_rent_exempt(
     }
     Ok(())
 }
+
+/// Check if the mint program coin supply is zero and the mint authority is set
+/// to `mint_authority`.
+/// The check has to be done only in Solido's initialization phase, since we
+/// store the mint public key in the solido structure, and it never changes.
+pub(crate) fn check_mint(
+    rent: &Rent,
+    mint: &AccountInfo,
+    mint_authority: &Pubkey,
+) -> Result<(), ProgramError> {
+    if !rent.is_exempt(mint.lamports(), mint.data_len()) {
+        msg!("Mint is not rent-exempt");
+        return Err(ProgramError::AccountNotRentExempt);
+    }
+    let spl_mint = spl_token::state::Mint::unpack_from_slice(&mint.data.borrow())?;
+    if spl_mint.supply != 0 {
+        msg!(
+            "Mint should not have minted tokens, has {}.",
+            spl_mint.supply
+        );
+        return Err(LidoError::InvalidMint.into());
+    }
+    if let COption::Some(authority) = spl_mint.mint_authority {
+        if &authority != mint_authority {
+            msg!(
+                "Mint authority should be {}, it's {} instead.",
+                mint_authority,
+                authority
+            );
+            return Err(LidoError::InvalidMint.into());
+        }
+    } else {
+        msg!("Mint should have an authority.");
+        return Err(LidoError::InvalidMint.into());
+    }
+    Ok(())
+}
+
 /// Subtract the minimum rent-exempt balance from the given reserve balance.
 ///
 /// The rent-exempt amount can never be transferred, or the account would

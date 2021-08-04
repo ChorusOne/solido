@@ -5,6 +5,7 @@ use std::fmt;
 use std::path::PathBuf;
 
 use clap::Clap;
+use helpers::command_show_solido_authorities;
 use helpers::command_withdraw;
 use serde::Serialize;
 use solana_client::rpc_client::RpcClient;
@@ -147,6 +148,9 @@ REWARDS
 
     /// Show an instance of solido in detail
     ShowSolido(ShowSolidoOpts),
+
+    /// Show Solido authorities, useful for testing and when specifying an existing token mint.
+    ShowAuthorities(ShowSolidoAuthoritiesOpts),
 
     /// Execute one iteration of periodic maintenance logic.
     ///
@@ -314,6 +318,13 @@ fn main() {
             let output = result.ok_or_abort_with("Failed to show Solido data.");
             print_output(output_mode, &output);
         }
+        SubCommand::ShowAuthorities(solido_pubkey) => {
+            let result =
+                config.with_snapshot(|_config| command_show_solido_authorities(&solido_pubkey));
+            let output =
+                result.ok_or_abort_with("Failed to show authorities for Solido public key.");
+            print_output(output_mode, &output);
+        }
         SubCommand::Deposit(cmd_opts) => {
             let result = command_deposit(&mut config, &cmd_opts);
             let output = result.ok_or_abort_with("Failed to deposit.");
@@ -340,6 +351,7 @@ fn merge_with_config_and_environment(
         SubCommand::Deposit(opts) => opts.merge_with_config_and_environment(config_file),
         SubCommand::Withdraw(opts) => opts.merge_with_config_and_environment(config_file),
         SubCommand::ShowSolido(opts) => opts.merge_with_config_and_environment(config_file),
+        SubCommand::ShowAuthorities(opts) => opts.merge_with_config_and_environment(config_file),
         SubCommand::PerformMaintenance(opts) => opts.merge_with_config_and_environment(config_file),
         SubCommand::Multisig(opts) => opts.merge_with_config_and_environment(config_file),
         SubCommand::RunMaintainer(opts) => opts.merge_with_config_and_environment(config_file),

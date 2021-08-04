@@ -11,8 +11,8 @@ use crate::{
         WithdrawInactiveStakeInfo,
     },
     logic::{
-        burn_st_sol, check_rent_exempt, create_account_overwrite_if_exists, deserialize_lido,
-        distribute_fees, initialize_stake_account_undelegated, mint_st_sol_to,
+        burn_st_sol, check_mint, check_rent_exempt, create_account_overwrite_if_exists,
+        deserialize_lido, distribute_fees, initialize_stake_account_undelegated, mint_st_sol_to,
         transfer_stake_authority, CreateAccountOptions,
     },
     metrics::Metrics,
@@ -95,8 +95,10 @@ pub fn process_initialize(
         program_id,
     );
 
-    let (_, mint_bump_seed) =
+    let (mint_authority, mint_bump_seed) =
         Pubkey::find_program_address(&[&accounts.lido.key.to_bytes(), MINT_AUTHORITY], program_id);
+    // Check if the token has no minted tokens and right mint authority.
+    check_mint(rent, accounts.st_sol_mint, &mint_authority)?;
 
     let (_, rewards_withdraw_authority_bump_seed) = Pubkey::find_program_address(
         &[&accounts.lido.key.to_bytes(), REWARDS_WITHDRAW_AUTHORITY],
