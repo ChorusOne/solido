@@ -100,7 +100,8 @@ jobs:
         # Perform initial Solana setup.
         solana-keygen new --no-bip39-passphrase --silent
         solana config set --url http://127.0.0.1:8899
-        solana airdrop 500.0
+        # Try to airdrop some times in case it fails
+        tests/airdrop_lamports.sh
 
         tests/test_solido.py
         kill $validator
@@ -212,7 +213,8 @@ jobs:
           # Perform initial Solana setup.
           solana-keygen new --no-bip39-passphrase --silent
           solana config set --url http://127.0.0.1:8899
-          solana airdrop 500.0
+          # Try to airdrop some times in case it fails
+          tests/airdrop_lamports.sh
 
           tests/coverage.py
           kill $validator
