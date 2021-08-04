@@ -53,6 +53,45 @@ impl AsPrettyError for MaintenanceError {
     }
 }
 
+/// Something went wrong either while reading CLI arguments, or while using them.
+///
+/// This can be a user error (e.g. an invalid Ledger path), or it can be something
+/// else that went wrong (e.g. connecting to the Ledger device).
+pub struct CliError {
+    pub message: &'static str,
+    pub cause: Option<String>,
+}
+
+impl CliError {
+    #[allow(clippy::new_ret_no_self)]
+    pub fn new(message: &'static str) -> Error {
+        Box::new(CliError {
+            message,
+            cause: None,
+        })
+    }
+
+    /// Create a new boxed error, including a cause.
+    pub fn with_cause<E: ToString>(message: &'static str, cause: E) -> Error {
+        Box::new(CliError {
+            message,
+            cause: Some(cause.to_string()),
+        })
+    }
+}
+
+impl AsPrettyError for CliError {
+    fn print_pretty(&self) {
+        print_red("Error:\n\n");
+        print_key("Message:");
+        println!("{}", self.message);
+        if let Some(cause) = &self.cause {
+            print_key("Cause:");
+            println!("{}", cause);
+        }
+    }
+}
+
 /// We expected to read from the following account, but it doesn't exist on the network.
 pub struct MissingAccountError {
     pub missing_account: Pubkey,

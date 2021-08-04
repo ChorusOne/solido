@@ -21,7 +21,7 @@ use solana_sdk::signers::Signers;
 use solana_sdk::transaction::Transaction;
 
 use crate::config::*;
-use crate::error::{Abort, Error};
+use crate::error::{Abort, CliError, Error};
 use crate::helpers::{
     command_add_maintainer, command_add_validator, command_create_solido, command_deposit,
     command_remove_maintainer, command_show_solido,
@@ -259,7 +259,8 @@ fn main() {
     solana_logger::setup_with_default("solana=info");
 
     let payer_keypair_path = opts.keypair_path;
-    let signer = &*get_signer(payer_keypair_path.unwrap());
+    let signer = &*get_signer(payer_keypair_path.unwrap())
+        .ok_or_abort_with("Failed to load signer keypair.");
 
     let rpc_client =
         RpcClient::new_with_commitment(opts.cluster.unwrap(), CommitmentConfig::confirmed());
@@ -359,23 +360,47 @@ fn merge_with_config_and_environment(
 }
 
 // Get a boxed signer that lives long enough for us to use it in the Config.
-fn get_signer(payer_keypair_path: PathBuf) -> Box<dyn Signer> {
+fn get_signer(payer_keypair_path: PathBuf) -> Result<Box<dyn Signer>, Error> {
+    use std::convert::TryFrom;
+    use uriparse::uri_reference::URIReference;
+
     let boxed_signer: Box<dyn Signer> = if payer_keypair_path.starts_with("usb://") {
+        // Parse the uri before we try to connect, so we can diagnose uri format issues early.
+        let uri = payer_keypair_path
+            .into_os_string()
+            .into_string()
+            .map_err(|_| {
+                CliError::new("A keypair path that starts with usb:// must be valid UTF-8.")
+            })?;
+
+        let uri_invalid_msg =
+            "Failed to parse usb:// keypair path. It must be of the form 'usb://ledger?key=0'.";
+
+        let uri_ref = URIReference::try_from(&uri[..])
+            .map_err(|err| CliError::with_cause(uri_invalid_msg, err))?;
+
+        let derivation_path = DerivationPath::from_uri_key_query(&uri_ref)
+            .map_err(|err| CliError::with_cause(uri_invalid_msg, err))?
+            .ok_or_else(|| CliError::new(uri_invalid_msg))?;
+
+        let locator = Locator::new_from_uri(&uri_ref)
+            .map_err(|err| CliError::with_cause(uri_invalid_msg, err))?;
+
         let hw_wallet = maybe_wallet_manager()
-            .expect("Remote wallet found, but failed to establish protocol. Maybe the Solana app is not open.")
-            .expect("Failed to find a remote wallet, maybe Ledger is not connected or locked.");
+            .map_err(|err| CliError::with_cause("Remote wallet found, but failed to establish protocol. Maybe the Solana app is not open.", err))?
+            .ok_or_else(|| CliError::new("Failed to find a remote wallet, maybe Ledger is not connected or locked."))?;
+
+        // When using a Ledger hardware wallet, confirm the public key of the
+        // key to sign with on its display, so users can be sure that they
+        // selected the right key.
+        let confirm_public_key = true;
+
         Box::new(
             generate_remote_keypair(
-                Locator::new_from_path(
-                    payer_keypair_path
-                        .into_os_string()
-                        .into_string()
-                        .expect("Should have failed before"),
-                )
-                .expect("Failed reading URL."),
-                DerivationPath::default(),
+                locator,
+                derivation_path,
                 &hw_wallet,
-                false,    /* Confirm public key */
+                confirm_public_key,
                 "Solido", /* When multiple wallets are connected, used to display a hint */
             )
             .expect("Failed to contact remote wallet"),
@@ -385,5 +410,5 @@ fn get_signer(payer_keypair_path: PathBuf) -> Box<dyn Signer> {
             read_keypair_file(&payer_keypair_path).expect("Failed to read key pair from file."),
         )
     };
-    boxed_signer
+    Ok(boxed_signer)
 }

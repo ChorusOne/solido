@@ -3653,6 +3653,7 @@ dependencies = [
  "spl-associated-token-account",
  "spl-token",
  "tiny_http",
+ "uriparse",
 ]
 
 [[package]]
