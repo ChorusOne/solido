@@ -33,7 +33,7 @@ mod daemon;
 mod error;
 mod helpers;
 mod maintenance;
-#[allow(clippy)]
+#[allow(clippy::all)]
 mod multisig;
 mod prometheus;
 mod snapshot;
