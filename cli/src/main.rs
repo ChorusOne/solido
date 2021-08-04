@@ -390,12 +390,17 @@ fn get_signer(payer_keypair_path: PathBuf) -> Result<Box<dyn Signer>, Error> {
             .map_err(|err| CliError::with_cause("Remote wallet found, but failed to establish protocol. Maybe the Solana app is not open.", err))?
             .ok_or_else(|| CliError::new("Failed to find a remote wallet, maybe Ledger is not connected or locked."))?;
 
+        // When using a Ledger hardware wallet, confirm the public key of the
+        // key to sign with on its display, so users can be sure that they
+        // selected the right key.
+        let confirm_public_key = true;
+
         Box::new(
             generate_remote_keypair(
                 locator,
                 derivation_path,
                 &hw_wallet,
-                false,    /* Confirm public key */
+                confirm_public_key,
                 "Solido", /* When multiple wallets are connected, used to display a hint */
             )
             .expect("Failed to contact remote wallet"),
