@@ -11,8 +11,8 @@ use serde::Deserialize;
 use serde_json::Value;
 use solana_sdk::pubkey::{ParsePubkeyError, Pubkey};
 
-use lido::state::Weight;
 use lido::token::Lamports;
+use lido::{state::Weight, token::StLamports};
 
 pub fn get_option_from_config<T: FromStr>(
     name: &'static str,
@@ -302,6 +302,22 @@ cli_opt_struct! {
         /// Amount to deposit, in SOL, using . as decimal separator.
         #[clap(long, value_name = "sol")]
         amount_sol: Lamports,
+    }
+}
+
+cli_opt_struct! {
+    WithdrawOpts {
+         /// Address of the Solido program.
+         #[clap(long, value_name = "address")]
+         solido_program_id: Pubkey,
+
+         /// Account that stores the data for this Solido instance.
+         #[clap(long, value_name = "address")]
+         solido_address: Pubkey,
+
+         /// Amount to withdraw in stSOL, using . as decimal separator.
+         #[clap(long, value_name = "st_sol")]
+         amount_st_sol: StLamports,
     }
 }
 

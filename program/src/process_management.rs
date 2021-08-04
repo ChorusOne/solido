@@ -29,8 +29,8 @@ pub fn process_change_reward_distribution(
     let mut lido = deserialize_lido(program_id, accounts.lido)?;
     lido.check_manager(accounts.manager)?;
 
-    lido.check_is_st_sol_account(&accounts.treasury_account)?;
-    lido.check_is_st_sol_account(&accounts.developer_account)?;
+    lido.check_is_st_sol_account(accounts.treasury_account)?;
+    lido.check_is_st_sol_account(accounts.developer_account)?;
 
     lido.reward_distribution = new_reward_distribution;
     lido.fee_recipients.treasury_account = *accounts.treasury_account.key;
@@ -48,7 +48,7 @@ pub fn process_add_validator(
     let mut lido = deserialize_lido(program_id, accounts.lido)?;
     let rent = &Rent::from_account_info(accounts.sysvar_rent)?;
     lido.check_manager(accounts.manager)?;
-    lido.check_is_st_sol_account(&accounts.validator_fee_st_sol_account)?;
+    lido.check_is_st_sol_account(accounts.validator_fee_st_sol_account)?;
 
     check_rent_exempt(
         rent,
@@ -225,7 +225,7 @@ pub fn process_merge_stake(program_id: &Pubkey, accounts_raw: &[AccountInfo]) ->
     let merge_instructions = solana_program::stake::instruction::merge(
         &to_stake_addr,
         &from_stake_addr,
-        &accounts.stake_authority.key,
+        accounts.stake_authority.key,
     );
 
     // For some reason, `merge` returns a `Vec`, but when we look at the

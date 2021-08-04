@@ -5,18 +5,26 @@ use std::fmt;
 
 use serde::Serialize;
 use solana_program::{pubkey::Pubkey, system_instruction};
-use solana_sdk::signature::{Keypair, Signer};
+use solana_sdk::{
+    account::ReadableAccount,
+    signature::{Keypair, Signer},
+};
 
 use lido::{
+    balance::get_validator_to_withdraw,
     metrics::LamportsHistogram,
-    state::{Lido, RewardDistribution},
-    token::StLamports,
+    state::{Lido, RewardDistribution, Validator},
+    token::{Lamports, StLamports},
     util::serialize_b58,
     MINT_AUTHORITY, RESERVE_ACCOUNT,
 };
 
-use crate::config::{
-    AddRemoveMaintainerOpts, AddValidatorOpts, CreateSolidoOpts, DepositOpts, ShowSolidoOpts,
+use crate::{
+    config::{
+        AddRemoveMaintainerOpts, AddValidatorOpts, CreateSolidoOpts, DepositOpts, ShowSolidoOpts,
+        WithdrawOpts,
+    },
+    error::MaintenanceError,
 };
 use crate::{
     multisig::{get_multisig_program_address, propose_instruction, ProposeInstructionOutput},
@@ -603,6 +611,92 @@ pub fn command_deposit(
         expected_st_sol,
         st_sol_balance_increase,
         created_associated_st_sol_account: created_recipient,
+    };
+    Ok(result)
+}
+
+#[derive(Serialize)]
+pub struct WithdrawOutput {
+    #[serde(serialize_with = "serialize_b58")]
+    pub from_token_address: Pubkey,
+
+    /// Amount of SOL that was withdrawn.
+    pub withdrawn_sol: Lamports,
+
+    /// Newly created stake account, where the source stake account will be
+    /// split to.
+    #[serde(serialize_with = "serialize_b58")]
+    pub new_stake_account: Pubkey,
+}
+
+impl fmt::Display for WithdrawOutput {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        writeln!(f, "Withdrawn from:          {}", self.from_token_address)?;
+        writeln!(f, "Total SOL withdrawn:     {}", self.withdrawn_sol)?;
+        writeln!(f, "New stake account:       {}", self.new_stake_account)?;
+        Ok(())
+    }
+}
+
+pub fn command_withdraw(
+    config: &mut SnapshotClientConfig,
+    opts: &WithdrawOpts,
+) -> std::result::Result<WithdrawOutput, crate::error::Error> {
+    let (st_sol_address, new_stake_account) = config.with_snapshot(|config| {
+        let solido = config.client.get_solido(opts.solido_address())?;
+
+        let st_sol_address = spl_associated_token_account::get_associated_token_address(
+            &config.signer.pubkey(),
+            &solido.st_sol_mint,
+        );
+
+        let stake_authority =
+            solido.get_stake_authority(opts.solido_program_id(), opts.solido_address())?;
+
+        // Get heaviest validator.
+        // TODO(ruuda): Use `CliError` to handle the following error.
+        let heaviest_validator = get_validator_to_withdraw(&solido.validators).map_err(|_| {
+            MaintenanceError::new(
+                "The instance has no active validators to withdraw from.".to_owned(),
+            )
+        })?;
+
+        let (stake_address, _bump_seed) = Validator::find_stake_account_address(
+            opts.solido_program_id(),
+            opts.solido_address(),
+            &heaviest_validator.pubkey,
+            heaviest_validator.entry.stake_accounts_seed_begin,
+        );
+
+        let destination_stake_account = Keypair::new();
+
+        let instr = lido::instruction::withdraw(
+            opts.solido_program_id(),
+            &lido::instruction::WithdrawAccountsMeta {
+                lido: *opts.solido_address(),
+                st_sol_mint: solido.st_sol_mint,
+                st_sol_account_owner: config.signer.pubkey(),
+                st_sol_account: st_sol_address,
+                validator_vote_account: heaviest_validator.pubkey,
+                source_stake_account: stake_address,
+                destination_stake_account: destination_stake_account.pubkey(),
+                stake_authority,
+            },
+            *opts.amount_st_sol(),
+        );
+        config.sign_and_send_transaction(&[instr], &[config.signer, &destination_stake_account])?;
+
+        Ok((st_sol_address, destination_stake_account))
+    })?;
+
+    let stake_sol = config.with_snapshot(|config| {
+        let stake_account = config.client.get_account(&new_stake_account.pubkey())?;
+        Ok(Lamports(stake_account.lamports()))
+    })?;
+    let result = WithdrawOutput {
+        from_token_address: st_sol_address,
+        withdrawn_sol: stake_sol,
+        new_stake_account: new_stake_account.pubkey(),
     };
     Ok(result)
 }

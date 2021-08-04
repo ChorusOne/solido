@@ -98,9 +98,9 @@ pub enum LidoError {
     /// required to hold variable structures
     #[error("InvalidAccountMember")]
     InvalidLidoSize = 26,
-    /// There are no validators with an active stake account to delegate to.
-    #[error("NoActiveValidators")]
-    NoActiveValidators = 27,
+    /// The instance has no validators.
+    #[error("EmptySetOfValidators")]
+    EmptySetOfValidators = 27,
 
     /// When staking part of the reserve to a new stake account, the next
     /// program-derived address for the stake account associated with the given
