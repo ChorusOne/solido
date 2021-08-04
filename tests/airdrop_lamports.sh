@@ -8,5 +8,9 @@ do
     else
         echo "Airdrop failed, awaiting 2s before asking again..."
         sleep 2
+        if [ $i -eq 5 ]
+        then
+            echo "Airdrop failed after trying 5 times, giving up."
+        fi
     fi
 done
