@@ -124,8 +124,8 @@ pub fn process_initialize(
     };
 
     // Confirm that the fee recipients are actually stSOL accounts.
-    lido.check_is_st_sol_account(&accounts.treasury_account)?;
-    lido.check_is_st_sol_account(&accounts.developer_account)?;
+    lido.check_is_st_sol_account(accounts.treasury_account)?;
+    lido.check_is_st_sol_account(accounts.developer_account)?;
 
     lido.save(accounts.lido)
 }
@@ -185,12 +185,12 @@ pub fn process_stake_deposit(
 
     let validator = lido
         .validators
-        .get_mut(&accounts.validator_vote_account.key)?;
+        .get_mut(accounts.validator_vote_account.key)?;
 
     let stake_account_bump_seed = Lido::check_stake_account(
         program_id,
-        &accounts.lido.key,
-        &validator,
+        accounts.lido.key,
+        validator,
         validator.entry.stake_accounts_seed_end,
         accounts.stake_account_end,
     )?;
@@ -216,7 +216,7 @@ pub fn process_stake_deposit(
     // Create the account that is going to hold the new stake account data.
     // Even if it was already funded.
     create_account_overwrite_if_exists(
-        &accounts.lido.key,
+        accounts.lido.key,
         CreateAccountOptions {
             fund_amount: amount,
             data_size: std::mem::size_of::<stake_program::state::StakeState>() as u64,
@@ -297,8 +297,8 @@ pub fn process_stake_deposit(
         }
         Lido::check_stake_account(
             program_id,
-            &accounts.lido.key,
-            &validator,
+            accounts.lido.key,
+            validator,
             // Does not underflow, because end > begin >= 0.
             validator.entry.stake_accounts_seed_end - 1,
             accounts.stake_account_merge_into,
@@ -384,8 +384,8 @@ pub fn withdraw_excess_inactive_sol<'a, 'b>(
     let stake_info = StakeAccount::from_delegated_account(
         Lamports(stake_account.lamports()),
         &stake,
-        &clock,
-        &stake_history,
+        clock,
+        stake_history,
         stake_account_seed,
     );
     let excess_balance = Lamports(

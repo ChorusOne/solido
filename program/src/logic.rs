@@ -104,7 +104,7 @@ pub fn create_account_overwrite_if_exists<'a, 'b>(
             options.account.clone(),
             system_program.clone(),
         ],
-        &[&reserve_account_seeds, options.sign_seeds],
+        &[reserve_account_seeds, options.sign_seeds],
     )?;
     Ok(())
 }
@@ -162,10 +162,10 @@ pub fn mint_st_sol_to<'a>(
     let mint_to_signers = [];
 
     let instruction = spl_token::instruction::mint_to(
-        &spl_token_program.key,
-        &st_sol_mint.key,
-        &recipient.key,
-        &mint_authority.key,
+        spl_token_program.key,
+        st_sol_mint.key,
+        recipient.key,
+        mint_authority.key,
         &mint_to_signers,
         amount.0,
     )?;
@@ -211,10 +211,10 @@ pub fn burn_st_sol<'a, 'b>(
     // use those.
     let burn_signers = [];
     let instruction = spl_token::instruction::burn(
-        &accounts.spl_token.key,
-        &accounts.st_sol_account.key,
-        &accounts.st_sol_mint.key,
-        &accounts.st_sol_account_owner.key,
+        accounts.spl_token.key,
+        accounts.st_sol_account.key,
+        accounts.st_sol_mint.key,
+        accounts.st_sol_account_owner.key,
         &burn_signers,
         amount.0,
     )?;
@@ -237,9 +237,9 @@ pub fn transfer_stake_authority(
 ) -> ProgramResult {
     invoke_signed(
         &solana_program::stake::instruction::authorize(
-            &accounts.destination_stake_account.key,
-            &accounts.stake_authority.key,
-            &accounts.st_sol_account_owner.key,
+            accounts.destination_stake_account.key,
+            accounts.stake_authority.key,
+            accounts.st_sol_account_owner.key,
             StakeAuthorize::Withdrawer,
             None,
         ),
@@ -257,9 +257,9 @@ pub fn transfer_stake_authority(
     )?;
     invoke_signed(
         &solana_program::stake::instruction::authorize(
-            &accounts.destination_stake_account.key,
-            &accounts.stake_authority.key,
-            &accounts.st_sol_account_owner.key,
+            accounts.destination_stake_account.key,
+            accounts.stake_authority.key,
+            accounts.st_sol_account_owner.key,
             StakeAuthorize::Staker,
             None,
         ),
