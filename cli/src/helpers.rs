@@ -106,7 +106,7 @@ pub fn command_create_solido(
     let lido_signer = {
         if opts.solido_key_path() != &PathBuf::default() {
             // If we've been given a solido private key, use it to create the solido instance.
-            get_signer(opts.solido_key_path().clone())
+            get_signer(opts.solido_key_path().clone())?
         } else {
             // If not, use a random key
             Box::new(Keypair::new())
