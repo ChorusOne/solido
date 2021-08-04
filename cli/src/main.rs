@@ -321,7 +321,8 @@ fn main() {
         SubCommand::ShowAuthorities(solido_pubkey) => {
             let result =
                 config.with_snapshot(|_config| command_show_solido_authorities(&solido_pubkey));
-            let output = result.ok_or_abort_with("Failed to show Solido data.");
+            let output =
+                result.ok_or_abort_with("Failed to show authorities for Solido public key.");
             print_output(output_mode, &output);
         }
         SubCommand::Deposit(cmd_opts) => {

@@ -106,12 +106,10 @@ pub fn command_create_solido(
     let lido_signer = {
         if opts.solido_key_path() != &PathBuf::default() {
             // If we've been given a solido private key, use it to create the solido instance.
-            let signer = get_signer(opts.solido_key_path().clone());
-            signer
+            get_signer(opts.solido_key_path().clone())
         } else {
             // If not, use a random key
-            let lido_keypair = Keypair::new();
-            Box::new(lido_keypair)
+            Box::new(Keypair::new())
         }
     };
 
@@ -148,7 +146,7 @@ pub fn command_create_solido(
 
     let st_sol_mint_pubkey = {
         if opts.mint_address() != &Pubkey::default() {
-            // If we've been given a minter address, return its public address.
+            // If we've been given a minter address, return its public key.
             *opts.mint_address()
         } else {
             // If not, set up the Lido stSOL SPL token mint account.

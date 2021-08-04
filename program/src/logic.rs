@@ -33,6 +33,10 @@ pub(crate) fn check_rent_exempt(
     Ok(())
 }
 
+/// Check if the mint program coin supply is zero and the mint authority is set
+/// to `mint_authority`.
+/// The check has to be done only in Solido's initialization phase, since we
+/// store the mint public key in the solido structure, and it never changes.
 pub(crate) fn check_mint(
     rent: &Rent,
     mint: &AccountInfo,

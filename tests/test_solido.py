@@ -151,6 +151,8 @@ result = solido(
     mint_address.pubkey,
     keypair_path=test_addrs[0].keypair_path,
 )
+# The previously created instance is not used throughout the test, and it's
+# done to test creating an instance with a separate mint.
 
 print('\nCreating Solido instance ...')
 result = solido(
