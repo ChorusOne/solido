@@ -654,6 +654,7 @@ pub fn command_withdraw(
             solido.get_stake_authority(opts.solido_program_id(), opts.solido_address())?;
 
         // Get heaviest validator.
+        // TODO(ruuda): Use `CliError` to handle the following error.
         let heaviest_validator = get_validator_to_withdraw(&solido.validators).map_err(|_| {
             MaintenanceError::new(
                 "The instance has no active validators to withdraw from.".to_owned(),

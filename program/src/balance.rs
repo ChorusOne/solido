@@ -52,7 +52,7 @@ pub fn get_target_balance(
                 numerator: validator.weight.0 as u64,
                 denominator: total_weights,
             })
-        .map_err(|_| LidoError::NoActiveValidators)?
+        .map_err(|_| LidoError::EmptySetOfValidators)?
     }
 
     // The total lamports to distribute may be slightly larger than the total
