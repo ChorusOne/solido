@@ -297,7 +297,7 @@ fn start_http_server(
 /// Run the maintenance daemon.
 pub fn main(config: &mut SnapshotClientConfig, opts: &RunMaintainerOpts) {
     let snapshot_mutex = Arc::new(Mutex::new(None));
-    let http_threads = start_http_server(&opts, snapshot_mutex.clone());
+    let http_threads = start_http_server(opts, snapshot_mutex.clone());
 
     run_main_loop(config, opts, &*snapshot_mutex);
 

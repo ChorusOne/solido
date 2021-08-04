@@ -518,12 +518,8 @@ impl fmt::Display for ShowTransactionOutput {
                         writeln!(f, "    Solido instance:       {}", solido_instance)?;
                         writeln!(f, "    Manager:               {}", manager)?;
                         writeln!(f)?;
-                        print_changed_reward_distribution(
-                            f,
-                            &current_solido,
-                            &reward_distribution,
-                        )?;
-                        print_changed_recipients(f, &current_solido, &fee_recipients)?;
+                        print_changed_reward_distribution(f, current_solido, reward_distribution)?;
+                        print_changed_recipients(f, current_solido, fee_recipients)?;
                     }
                 }
             }

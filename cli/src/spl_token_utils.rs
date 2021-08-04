@@ -41,7 +41,7 @@ pub fn push_create_spl_token_mint(
     instructions.push(spl_token::instruction::initialize_mint(
         &spl_token::id(),
         &keypair.pubkey(),
-        &mint_authority,
+        mint_authority,
         freeze_authority,
         num_decimals,
     )?);
