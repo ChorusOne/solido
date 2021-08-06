@@ -26,7 +26,7 @@ use crate::{
         ExchangeRate, FeeRecipients, Lido, Maintainers, RewardDistribution, Validator, Validators,
         LIDO_CONSTANT_SIZE, LIDO_VERSION,
     },
-    token::{Lamports, StLamports},
+    token::{Lamports, Rational, StLamports},
     vote_instruction, MINIMUM_STAKE_ACCOUNT_BALANCE, MINT_AUTHORITY, RESERVE_ACCOUNT,
     REWARDS_WITHDRAW_AUTHORITY, STAKE_AUTHORITY, VALIDATOR_STAKE_ACCOUNT,
 };
@@ -40,6 +40,7 @@ use {
         clock::Clock,
         entrypoint::ProgramResult,
         msg,
+        native_token::LAMPORTS_PER_SOL,
         program::{invoke, invoke_signed},
         program_error::ProgramError,
         pubkey::Pubkey,
@@ -610,6 +611,8 @@ pub fn process_withdraw(
     amount: StLamports,
     raw_accounts: &[AccountInfo],
 ) -> ProgramResult {
+    use std::ops::Add;
+
     let accounts = WithdrawAccountsInfo::try_from_slice(raw_accounts)?;
     let mut lido = deserialize_lido(program_id, accounts.lido)?;
     let clock = Clock::from_account_info(accounts.sysvar_clock)?;
@@ -645,15 +648,34 @@ pub fn process_withdraw(
     let provided_validator = lido
         .validators
         .get_mut(accounts.validator_vote_account.key)?;
-    provided_validator.entry.stake_accounts_balance =
-        (provided_validator.entry.stake_accounts_balance - sol_to_withdraw)?;
-    // Burn stSol tokens
-    burn_st_sol(&lido, &accounts, amount)?;
 
-    // Update withdrawal metrics.
-    lido.metrics.observe_withdrawal(amount, sol_to_withdraw)?;
+    let source_balance = Lamports(accounts.source_stake_account.lamports());
 
-    let remaining_balance = (Lamports(accounts.source_stake_account.lamports()) - sol_to_withdraw)?;
+    // Limit the amount to withdraw to 10% of the stake account's balance + a
+    // small constant. The 10% caps the imbalance that a withdrawal can create
+    // at large balances, and in that case the constant is negligible, but the
+    // constant does ensure that we can reach the minimum in a finite number of
+    // withdrawals.
+    let max_withdraw_amount = (source_balance
+        * Rational {
+            numerator: 1,
+            denominator: 10,
+        })
+    .expect("Multiplying with 0.1 does not overflow or divide by zero.")
+    .add(Lamports(10 * LAMPORTS_PER_SOL))?;
+
+    if sol_to_withdraw > max_withdraw_amount {
+        msg!(
+            "To keep the pool balanced, you can withdraw at most {} from this \
+            validator, but you are trying to withdraw {}.",
+            max_withdraw_amount,
+            sol_to_withdraw,
+        );
+        msg!("Please break up your withdrawal into multiple smaller withdrawals.");
+        return Err(LidoError::InvalidAmount.into());
+    }
+
+    let remaining_balance = (source_balance - sol_to_withdraw)?;
     if remaining_balance < MINIMUM_STAKE_ACCOUNT_BALANCE {
         msg!("Withdrawal will leave the stake account with less than the minimum stake account balance.
         Maximum amount to withdraw is {}, tried to withdraw {}",
@@ -661,6 +683,16 @@ pub fn process_withdraw(
         .expect("We do not allow the balance to fall below the minimum"), sol_to_withdraw);
         return Err(LidoError::InvalidAmount.into());
     }
+
+    provided_validator.entry.stake_accounts_balance =
+        (provided_validator.entry.stake_accounts_balance - sol_to_withdraw)?;
+
+    // Burn stSol tokens
+    burn_st_sol(&lido, &accounts, amount)?;
+
+    // Update withdrawal metrics.
+    lido.metrics.observe_withdrawal(amount, sol_to_withdraw)?;
+
     // The Stake program already checks for a minimum rent on the destination
     // stake account inside the `split` function.
 
