@@ -6,6 +6,7 @@
 use num_traits::cast::FromPrimitive;
 use solana_client::client_error::{ClientError, ClientErrorKind};
 use solana_client::rpc_request::{RpcError, RpcResponseErrorData};
+use solana_program::instruction::InstructionError;
 use solana_program::program_error::ProgramError;
 use solana_program::pubkey::PubkeyError;
 use solana_sdk::pubkey::Pubkey;
@@ -155,6 +156,21 @@ impl AsPrettyError for SerializationError {
     }
 }
 
+fn print_pretty_transaction_error(err: &TransactionError) {
+    // Indent all keys, because they are printed as part of a larger error.
+    print_key("  Raw:    ");
+    println!(" {:?}", err);
+    print_key("  Display:");
+    println!(" {}", err);
+
+    if let TransactionError::InstructionError(_instr, ref instr_error) = err {
+        println!();
+        if let InstructionError::Custom(error_code) = instr_error {
+            print_pretty_error_code(*error_code);
+        }
+    }
+}
+
 impl AsPrettyError for ClientError {
     fn print_pretty(&self) {
         print_red("Solana RPC client returned an error:\n\n");
@@ -188,7 +204,16 @@ impl AsPrettyError for ClientError {
                             print_key("Reason:");
                             println!(" Transaction preflight failure");
                             print_key("Error:");
-                            println!(" {:?}", result.err);
+                            match result.err {
+                                Some(ref err) => {
+                                    println!("\n");
+                                    print_pretty_transaction_error(err);
+                                    println!();
+                                }
+                                None => {
+                                    println!(" unavailable");
+                                }
+                            }
                             print_key("Logs:");
                             match result.logs {
                                 None => {
@@ -221,8 +246,11 @@ impl AsPrettyError for ClientError {
             ClientErrorKind::SigningError(inner) => {
                 println!(" Signing error\n\n{:?}", inner);
             }
-            ClientErrorKind::TransactionError(inner) => {
-                println!(" Transaction error\n\n{:?}", inner);
+            ClientErrorKind::TransactionError(ref inner) => {
+                println!(" Transaction error");
+                print_key("Error:");
+                println!("\n");
+                print_pretty_transaction_error(inner);
             }
             ClientErrorKind::FaucetError(inner) => {
                 println!(" Faucet error\n\n{:?}", inner);
@@ -234,17 +262,33 @@ impl AsPrettyError for ClientError {
     }
 }
 
+pub fn print_pretty_error_code(error_code: u32) {
+    print_key("Error code interpretations:");
+    println!("\n");
+    match LidoError::from_u32(error_code) {
+        Some(err) => println!("    Solido error {} is {:?}", error_code, err),
+        None => println!("    Error {} is not a known Solido error.", error_code),
+    }
+    match multisig::Error::from(ProgramError::Custom(error_code)) {
+        // Anchor calls it an "ErrorCode", but it's really an enum
+        // with user-defined errors (as opposed to the Solana ProgramError).
+        multisig::Error::ErrorCode(custom_error) => {
+            println!("    Multisig error {} is {:?}", error_code, custom_error);
+            println!("    {}", custom_error);
+        }
+        _ => {
+            println!("    Error {} is not a known Multisig error.", error_code);
+        }
+    }
+}
+
 impl AsPrettyError for ProgramError {
     fn print_pretty(&self) {
         print_red("Program error:");
         match self {
             ProgramError::Custom(error_code) => {
-                println!(" Custom error {} (0x{:x})", error_code, error_code);
-                println!("Note: ");
-                match LidoError::from_u32(*error_code) {
-                    Some(err) => println!("Solido error {} is {:?}", error_code, err),
-                    None => println!("This error is not a known Solido error."),
-                }
+                println!(" Custom error {} (0x{:x})\n", error_code, error_code);
+                print_pretty_error_code(*error_code);
             }
             predefined_error => println!(" {:?}", predefined_error),
         }
