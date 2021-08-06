@@ -117,13 +117,14 @@ pub fn main(config: &mut SnapshotClientConfig, multisig_opts: MultisigOpts) {
             print_output(output_mode, &output);
         }
         SubCommand::Approve(cmd_opts) => {
-            let output = approve(config, &cmd_opts)
-                .ok_or_abort_with("Failed to approve multisig transaction.");
+            let result = approve(config, &cmd_opts);
+            let output = result.ok_or_abort_with("Failed to approve multisig transaction.");
             print_output(output_mode, &output);
         }
         SubCommand::ExecuteTransaction(cmd_opts) => {
             let result = config.with_snapshot(|config| execute_transaction(config, &cmd_opts));
-            result.ok_or_abort_with("Failed to execute multisig transaction.");
+            let output = result.ok_or_abort_with("Failed to execute multisig transaction.");
+            print_output(output_mode, &output);
         }
     }
 }
@@ -1069,7 +1070,27 @@ impl anchor_lang::ToAccountMetas for TransactionAccounts {
     }
 }
 
-fn execute_transaction(config: &mut SnapshotConfig, opts: &ExecuteTransactionOpts) -> Result<()> {
+#[derive(Serialize)]
+struct ExecuteOutput {
+    pub transaction_id: Signature,
+}
+
+impl fmt::Display for ExecuteOutput {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        writeln!(f, "Transaction executed.")?;
+        writeln!(
+            f,
+            "Solana transaction id of execution: {}",
+            self.transaction_id
+        )?;
+        Ok(())
+    }
+}
+
+fn execute_transaction(
+    config: &mut SnapshotConfig,
+    opts: &ExecuteTransactionOpts,
+) -> Result<ExecuteOutput> {
     let (program_derived_address, _nonce) =
         get_multisig_program_address(opts.multisig_program_id(), opts.multisig_address());
 
@@ -1095,6 +1116,9 @@ fn execute_transaction(config: &mut SnapshotConfig, opts: &ExecuteTransactionOpt
         data: multisig_instruction::ExecuteTransaction.data(),
         accounts,
     };
-    let _signature = config.sign_and_send_transaction(&[multisig_instruction], &[config.signer])?;
-    Ok(())
+    let signature = config.sign_and_send_transaction(&[multisig_instruction], &[config.signer])?;
+    let result = ExecuteOutput {
+        transaction_id: signature,
+    };
+    Ok(result)
 }
