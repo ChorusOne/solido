@@ -6,7 +6,7 @@ use std::fmt;
 use anchor_client::solana_sdk::bpf_loader_upgradeable;
 use anchor_client::solana_sdk::instruction::Instruction;
 use anchor_client::solana_sdk::pubkey::Pubkey;
-use anchor_client::solana_sdk::signature::{Keypair, Signer};
+use anchor_client::solana_sdk::signature::{Keypair, Signature, Signer};
 use anchor_client::solana_sdk::system_instruction;
 use anchor_client::solana_sdk::sysvar;
 use anchor_lang::prelude::{AccountMeta, ToAccountMetas};
@@ -117,8 +117,9 @@ pub fn main(config: &mut SnapshotClientConfig, multisig_opts: MultisigOpts) {
             print_output(output_mode, &output);
         }
         SubCommand::Approve(cmd_opts) => {
-            let result = config.with_snapshot(|config| approve(config, &cmd_opts));
-            result.ok_or_abort_with("Failed to approve multisig transaction.");
+            let output = approve(config, &cmd_opts)
+                .ok_or_abort_with("Failed to approve multisig transaction.");
+            print_output(output_mode, &output);
         }
         SubCommand::ExecuteTransaction(cmd_opts) => {
             let result = config.with_snapshot(|config| execute_transaction(config, &cmd_opts));
@@ -959,21 +960,73 @@ fn propose_change_multisig(
     )
 }
 
-fn approve(config: &mut SnapshotConfig, opts: &ApproveOpts) -> Result<()> {
-    let approve_accounts = multisig_accounts::Approve {
-        multisig: *opts.multisig_address(),
-        transaction: *opts.transaction_address(),
-        // The owner that signs the multisig proposed transaction, should be
-        // the public key that signs the entire approval transaction (which
-        // is also the payer).
-        owner: config.signer.pubkey(),
-    };
-    let approve_instruction = Instruction {
-        program_id: *opts.multisig_program_id(),
-        data: multisig_instruction::Approve.data(),
-        accounts: approve_accounts.to_account_metas(None),
-    };
-    config.sign_and_send_transaction(&[approve_instruction], &[config.signer])
+#[derive(Serialize)]
+struct ApproveOutput {
+    pub transaction_id: Signature,
+    pub num_approvals: u64,
+    pub threshold: u64,
+}
+
+impl fmt::Display for ApproveOutput {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        writeln!(f, "Transaction approved.")?;
+        writeln!(
+            f,
+            "Solana transaction id of approval: {}",
+            self.transaction_id
+        )?;
+        writeln!(
+            f,
+            "Multisig transaction now has {} out of {} required approvals.",
+            self.num_approvals, self.threshold,
+        )?;
+        Ok(())
+    }
+}
+
+fn approve(
+    config: &mut SnapshotClientConfig,
+    opts: &ApproveOpts,
+) -> std::result::Result<ApproveOutput, crate::Error> {
+    // First, do the actual approval.
+    let signature = config.with_snapshot(|config| {
+        let approve_accounts = multisig_accounts::Approve {
+            multisig: *opts.multisig_address(),
+            transaction: *opts.transaction_address(),
+            // The owner that signs the multisig proposed transaction, should be
+            // the public key that signs the entire approval transaction (which
+            // is also the payer).
+            owner: config.signer.pubkey(),
+        };
+        let approve_instruction = Instruction {
+            program_id: *opts.multisig_program_id(),
+            data: multisig_instruction::Approve.data(),
+            accounts: approve_accounts.to_account_metas(None),
+        };
+        config.sign_and_send_transaction(&[approve_instruction], &[config.signer])
+    })?;
+
+    // After a successful approval, query the new state of the transaction, so
+    // we can show it to the user.
+    let result = config.with_snapshot(|config| {
+        let multisig: multisig::Multisig = config
+            .client
+            .get_account_deserialize(opts.multisig_address())?;
+
+        let transaction: multisig::Transaction = config
+            .client
+            .get_account_deserialize(opts.transaction_address())?;
+
+        let result = ApproveOutput {
+            transaction_id: signature,
+            num_approvals: transaction.signers.iter().filter(|x| **x).count() as u64,
+            threshold: multisig.threshold,
+        };
+
+        Ok(result)
+    })?;
+
+    Ok(result)
 }
 
 /// Wrapper type needed to implement `ToAccountMetas`.
@@ -1042,5 +1095,6 @@ fn execute_transaction(config: &mut SnapshotConfig, opts: &ExecuteTransactionOpt
         data: multisig_instruction::ExecuteTransaction.data(),
         accounts,
     };
-    config.sign_and_send_transaction(&[multisig_instruction], &[config.signer])
+    let _signature = config.sign_and_send_transaction(&[multisig_instruction], &[config.signer])?;
+    Ok(())
 }

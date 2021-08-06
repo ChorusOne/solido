@@ -28,6 +28,7 @@ use crate::helpers::{
 };
 use crate::multisig::MultisigOpts;
 use crate::snapshot::{Snapshot, SnapshotClient};
+use anchor_client::solana_sdk::signature::Signature;
 
 mod config;
 mod daemon;
@@ -222,7 +223,7 @@ impl<'a> SnapshotConfig<'a> {
         &mut self,
         instructions: &[Instruction],
         signers: &T,
-    ) -> snapshot::Result<()> {
+    ) -> snapshot::Result<Signature> {
         let transaction = self.sign_transaction(instructions, signers)?;
         let signature_result = match self.output_mode {
             OutputMode::Text => {
@@ -252,10 +253,7 @@ impl<'a> SnapshotConfig<'a> {
             _ => {}
         }
 
-        // Propagate the error if there was any.
-        let _signature = signature_result?;
-
-        Ok(())
+        Ok(signature_result?)
     }
 }
 
