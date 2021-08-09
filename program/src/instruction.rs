@@ -151,10 +151,14 @@ accounts_struct! {
         },
         pub user {
             is_signer: true,
+            // Is writable due to transfer (system_instruction::transfer) from user to
+            // reserve_account
             is_writable: true,
         },
         pub recipient {
             is_signer: false,
+            // Is writable due to mint to (spl_token::instruction::mint_to) recipient from
+            // st_sol_mint
             is_writable: true,
         },
         pub st_sol_mint {
@@ -163,6 +167,8 @@ accounts_struct! {
         },
         pub reserve_account {
             is_signer: false,
+            // Is writable due to transfer (system_instruction::transfer) from user to
+            // reserve_account
             is_writable: true,
         },
         pub mint_authority {
