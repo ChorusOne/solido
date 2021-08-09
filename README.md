@@ -48,6 +48,68 @@ and documentation, are in a different repository, which is not yet public.
 
 [multisig]: https://github.com/project-serum/multisig
 
+## Building
+
+The on-chain program and `solido` utility are written in Rust. To build them,
+you need:
+
+ * [A Rust toolchain][rust]
+ * [The Solana tool suite][solana-tools] (only needed for the on-chain programs,
+   not for the `solido` utility)
+ * [Docker][docker] (only needed if you want to [reproduce][reproduce] the
+   official build, or if you want to avoid installing build tools locally)
+ * The following system libraries (listed as Debian package names):
+   * `libudev-dev`
+   * `libhidapi-dev`
+   * `pkg-config`
+   * `openssl`
+
+The Solana version that we test against is listed in our [CI config][ci-config].
+
+[rust]:         https://www.rust-lang.org/tools/install
+[solana-tools]: https://docs.solana.com/cli/install-solana-cli-tools
+[docker]:       https://docs.docker.com/engine/install/
+[reproduce]:    https://chorusone.github.io/solido/development/reproducibility/
+[ci-config]:    https://github.com/ChorusOne/solido/blob/main/.github/workflows/build.yml
+
+### Solido utility
+
+To build and test the `solido` utility, use the normal Cargo commands:
+
+```console
+$ cargo test
+$ cargo build --release
+```
+
+The `solido` binary can then be found in `target/release`.
+
+### On-chain programs
+
+Building the on-chain programs requires [the Solana tool suite][solana-tools]:
+
+```console
+$ cargo build-bpf
+$ cargo test-bpf
+```
+
+The programs `lido.so` and `multisig.so` can then be found in `target/deploy`.
+
+### Docker container
+
+To build the container image, use `buildimage.sh`. This will build and package
+Solido along with the Solana toolchain into an image `chorusone/solido:«hash»`,
+where _«hash»_ will be the Git hash of the current version of the codebase.
+
+Once built, one can execute into the container interactively:
+
+```console
+$ docker run --interactive --tty --rm chorusone/solido:hash /bin/sh
+```
+
+This will provide a shell into the working directory where the Solido artefacts
+and the Solana toolchain are located. Inside that directory, the the `solido`
+utility is in `solido/cli`, and the on-chain programs are in `solido/deploy`.
+
 ## License
 
 Lido for Solana is licensed under the GNU General Public License version 3.
