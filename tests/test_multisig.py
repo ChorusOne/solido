@@ -215,7 +215,7 @@ else:
 
 
 print('\nApproving transaction from a second account ...')
-multisig(
+result = multisig(
     'approve',
     '--multisig-program-id',
     multisig_program_id,
@@ -225,6 +225,9 @@ multisig(
     upgrade_transaction_address,
     keypair_path=addr2.keypair_path,
 )
+assert result['num_approvals'] == 2
+assert result['threshold'] == 2
+
 result = multisig(
     'show-transaction',
     '--multisig-program-id',
@@ -243,7 +246,7 @@ print(f'> Transaction is now signed by {addr2} as well.')
 
 
 print('\nTrying to execute with 2 of 2 signatures, which should succeed ...')
-multisig(
+result = multisig(
     'execute-transaction',
     '--multisig-program-id',
     multisig_program_id,
@@ -252,6 +255,7 @@ multisig(
     '--transaction-address',
     upgrade_transaction_address,
 )
+assert 'transaction_id' in result
 result = multisig(
     'show-transaction',
     '--multisig-program-id',
@@ -330,7 +334,7 @@ print(f'> Transaction address is {change_multisig_transaction_address}.')
 
 
 print('\nApproving transaction from a second account ...')
-multisig(
+result = multisig(
     'approve',
     '--multisig-program-id',
     multisig_program_id,
@@ -340,6 +344,9 @@ multisig(
     change_multisig_transaction_address,
     keypair_path=addr3.keypair_path,
 )
+assert result['num_approvals'] == 2
+assert result['threshold'] == 2
+
 result = multisig(
     'show-transaction',
     '--multisig-program-id',
@@ -358,7 +365,7 @@ print('> Transaction has the required number of signatures.')
 
 
 print('\nExecuting multisig change transaction ...')
-multisig(
+result = multisig(
     'execute-transaction',
     '--multisig-program-id',
     multisig_program_id,
@@ -367,6 +374,7 @@ multisig(
     '--transaction-address',
     change_multisig_transaction_address,
 )
+assert 'transaction_id' in result
 result = multisig(
     'show-transaction',
     '--multisig-program-id',

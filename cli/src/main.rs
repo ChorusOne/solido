@@ -15,7 +15,7 @@ use solana_remote_wallet::remote_wallet::maybe_wallet_manager;
 use solana_sdk::commitment_config::CommitmentConfig;
 use solana_sdk::derivation_path::DerivationPath;
 use solana_sdk::instruction::Instruction;
-use solana_sdk::signature::read_keypair_file;
+use solana_sdk::signature::{read_keypair_file, Signature};
 use solana_sdk::signer::Signer;
 use solana_sdk::signers::Signers;
 use solana_sdk::transaction::Transaction;
@@ -222,7 +222,7 @@ impl<'a> SnapshotConfig<'a> {
         &mut self,
         instructions: &[Instruction],
         signers: &T,
-    ) -> snapshot::Result<()> {
+    ) -> snapshot::Result<Signature> {
         let transaction = self.sign_transaction(instructions, signers)?;
         let signature_result = match self.output_mode {
             OutputMode::Text => {
@@ -252,10 +252,7 @@ impl<'a> SnapshotConfig<'a> {
             _ => {}
         }
 
-        // Propagate the error if there was any.
-        let _signature = signature_result?;
-
-        Ok(())
+        Ok(signature_result?)
     }
 }
 
