@@ -16,6 +16,7 @@ use borsh::ser::BorshSerialize;
 use clap::Clap;
 use serde::Serialize;
 
+use lido::instruction::AddMaintainerMeta;
 use lido::instruction::AddValidatorMeta;
 use lido::instruction::ChangeRewardDistributionMeta;
 use lido::instruction::LidoInstruction;
@@ -24,7 +25,6 @@ use lido::state::FeeRecipients;
 use lido::state::Lido;
 use lido::state::RewardDistribution;
 use lido::util::{serialize_b58, serialize_b58_slice};
-use lido::{instruction::AddMaintainerMeta, state::Weight};
 use multisig::accounts as multisig_accounts;
 use multisig::instruction as multisig_instruction;
 
@@ -338,8 +338,6 @@ enum SolidoInstruction {
 
         #[serde(serialize_with = "serialize_b58")]
         validator_fee_st_sol_account: Pubkey,
-
-        weight: Weight,
     },
     AddMaintainer {
         #[serde(serialize_with = "serialize_b58")]
@@ -476,7 +474,6 @@ impl fmt::Display for ShowTransactionOutput {
                         manager,
                         validator_vote_account,
                         validator_fee_st_sol_account,
-                        weight,
                     } => {
                         writeln!(f, "It adds a validator to Solido")?;
                         writeln!(f, "    Solido instance:        {}", solido_instance)?;
@@ -487,7 +484,6 @@ impl fmt::Display for ShowTransactionOutput {
                             "    Validator fee account:  {}",
                             validator_fee_st_sol_account
                         )?;
-                        writeln!(f, "    Validator weight:       {}", weight.0)?;
                     }
                     SolidoInstruction::AddMaintainer {
                         solido_instance,
@@ -753,14 +749,13 @@ fn try_parse_solido_instruction(
                 },
             })
         }
-        LidoInstruction::AddValidator { weight } => {
+        LidoInstruction::AddValidator => {
             let accounts = AddValidatorMeta::try_from_slice(&instr.accounts)?;
             ParsedInstruction::SolidoInstruction(SolidoInstruction::AddValidator {
                 solido_instance: accounts.lido,
                 manager: accounts.manager,
                 validator_vote_account: accounts.validator_vote_account,
                 validator_fee_st_sol_account: accounts.validator_fee_st_sol_account,
-                weight,
             })
         }
         LidoInstruction::AddMaintainer => {

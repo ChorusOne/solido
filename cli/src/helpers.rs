@@ -237,7 +237,6 @@ pub fn command_add_validator(
 
     let instruction = lido::instruction::add_validator(
         opts.solido_program_id(),
-        opts.weight().clone(),
         &lido::instruction::AddValidatorMeta {
             lido: *opts.solido_address(),
             manager: multisig_address,

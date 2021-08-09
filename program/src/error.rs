@@ -150,6 +150,10 @@ pub enum LidoError {
     /// The provided mint is invalid.
     #[error("InvalidMint")]
     InvalidMint = 38,
+
+    /// Tried to deposit stake to inactive validator.
+    #[error("StakeToInactiveValidator")]
+    StakeToInactiveValidator = 39,
 }
 
 impl From<ArithmeticError> for LidoError {

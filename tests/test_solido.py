@@ -247,8 +247,6 @@ transaction_result = solido(
     validator_fee_account,
     '--multisig-address',
     multisig_instance,
-    '--weight',
-    '2000',
     keypair_path=test_addrs[1].keypair_path,
 )
 transaction_address = transaction_result['transaction_address']

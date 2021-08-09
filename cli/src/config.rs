@@ -12,7 +12,7 @@ use serde_json::Value;
 use solana_sdk::pubkey::{ParsePubkeyError, Pubkey};
 
 use lido::token::Lamports;
-use lido::{state::Weight, token::StLamports};
+use lido::token::StLamports;
 
 pub fn get_option_from_config<T: FromStr>(
     name: &'static str,
@@ -355,12 +355,6 @@ cli_opt_struct! {
         /// Address of the Multisig program.
         #[clap(long)]
         multisig_program_id: Pubkey,
-
-        /// Validator weight. Used when calculating the stake amount for keeping
-        /// a weighted balance, also defines the validator's share of fees.
-        /// Defaults to 1000.
-        #[clap(long)]
-        weight: Weight => Weight(1000),
     }
 }
 

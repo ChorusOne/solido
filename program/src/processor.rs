@@ -189,6 +189,13 @@ pub fn process_stake_deposit(
     let validator = lido
         .validators
         .get_mut(accounts.validator_vote_account.key)?;
+    if validator.entry.inactive {
+        msg!(
+            "Validator {} is inactive, new deposits are not allowed",
+            validator.pubkey
+        );
+        return Err(LidoError::StakeToInactiveValidator.into());
+    }
 
     let stake_account_bump_seed = Lido::check_stake_account(
         program_id,
@@ -780,9 +787,7 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
         LidoInstruction::ChangeRewardDistribution {
             new_reward_distribution,
         } => process_change_reward_distribution(program_id, new_reward_distribution, accounts),
-        LidoInstruction::AddValidator { weight } => {
-            process_add_validator(program_id, weight, accounts)
-        }
+        LidoInstruction::AddValidator => process_add_validator(program_id, accounts),
         LidoInstruction::RemoveValidator => process_remove_validator(program_id, accounts),
         LidoInstruction::AddMaintainer => process_add_maintainer(program_id, accounts),
         LidoInstruction::RemoveMaintainer => process_remove_maintainer(program_id, accounts),
