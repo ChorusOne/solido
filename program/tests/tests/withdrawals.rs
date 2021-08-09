@@ -3,87 +3,148 @@
 
 #![cfg(feature = "test-bpf")]
 
+use bincode::deserialize;
+use solana_program::stake::state::StakeState;
+use solana_program_test::tokio;
+use solana_sdk::native_token::LAMPORTS_PER_SOL;
+use solana_sdk::pubkey::Pubkey;
+use solana_sdk::signature::Keypair;
+use solana_sdk::signer::Signer;
+use solana_sdk::transport;
+
 use crate::{
     assert_solido_error,
     context::{send_transaction, Context, StakeDeposit},
 };
-
-use bincode::deserialize;
 use lido::{
     error::LidoError,
     token::{Lamports, StLamports},
+    MINIMUM_STAKE_ACCOUNT_BALANCE,
 };
-use solana_program::stake::state::StakeState;
-use solana_program_test::tokio;
-use solana_sdk::signer::Signer;
 
-pub const TEST_DEPOSIT_AMOUNT: Lamports = Lamports(100_000_000_000);
+/// Shared context for tests where a given amount has been deposited and staked.
+struct WithdrawContext {
+    context: Context,
+    /// User who deposited initially.
+    user: Keypair,
+    /// The user's stSOL account.
+    token_addr: Pubkey,
+    /// Stake account for the staked deposit.
+    stake_account: Pubkey,
+}
+
+impl WithdrawContext {
+    async fn new(stake_amount: Lamports) -> WithdrawContext {
+        let mut context = Context::new_with_maintainer_and_validator().await;
+
+        let (user, token_addr) = context.deposit(stake_amount).await;
+        let validator = context.validator.take().unwrap();
+        let stake_account = context
+            .stake_deposit(validator.vote_account, StakeDeposit::Append, stake_amount)
+            .await;
+        context.validator = Some(validator);
+
+        let epoch_schedule = context.context.genesis_config().epoch_schedule;
+        let start_slot = epoch_schedule.first_normal_slot;
+
+        context.context.warp_to_slot(start_slot).unwrap();
+        context.update_exchange_rate().await;
+
+        WithdrawContext {
+            context,
+            user,
+            token_addr,
+            stake_account,
+        }
+    }
+
+    async fn try_withdraw(&mut self, amount: StLamports) -> transport::Result<Pubkey> {
+        self.context
+            .try_withdraw(&self.user, self.token_addr, amount, self.stake_account)
+            .await
+    }
+}
 
 #[tokio::test]
-async fn test_withdrawal() {
-    let mut context = Context::new_with_maintainer_and_validator().await;
-    let rent = context.get_rent().await;
+async fn test_withdraw_less_than_rent_fails() {
+    let mut context = WithdrawContext::new((MINIMUM_STAKE_ACCOUNT_BALANCE * 2).unwrap()).await;
 
-    let (user, token_addr) = context.deposit(TEST_DEPOSIT_AMOUNT).await;
-    let validator = context.validator.take().unwrap();
-    let stake_account = context
-        .stake_deposit(
-            validator.vote_account,
-            StakeDeposit::Append,
-            TEST_DEPOSIT_AMOUNT,
-        )
-        .await;
-    context.validator = Some(validator);
-
-    let epoch_schedule = context.context.genesis_config().epoch_schedule;
-    let start_slot = epoch_schedule.first_normal_slot;
-
-    context.context.warp_to_slot(start_slot).unwrap();
-    context.update_exchange_rate().await;
-
-    let stake_account_balance_before = context.get_sol_balance(stake_account).await;
-
+    let rent = context.context.get_rent().await;
     let stake_state_size = std::mem::size_of::<StakeState>();
     let minimum_rent = rent.minimum_balance(stake_state_size);
 
-    // Test withdrawing 1 Lamport less than the minimum rent. Should fail
-    let split_stake_account = context
-        .try_withdraw(
-            &user,
-            token_addr,
-            StLamports(minimum_rent - 1),
-            stake_account,
-        )
-        .await;
-    assert!(split_stake_account.is_err());
+    // Test withdrawing 1 Lamport less than the minimum rent. Should fail.
+    let result = context.try_withdraw(StLamports(minimum_rent - 1)).await;
+    assert!(result.is_err());
 
-    // Test withdrawing a value that will leave the stake account with 1 Sol - 1
-    // Lamport. Should fail, because the the stake should have at least 1 Sol.
-    let split_stake_account = context
-        .try_withdraw(&user, token_addr, StLamports(99_000_000_001), stake_account)
-        .await;
-    assert_solido_error!(split_stake_account, LidoError::InvalidAmount);
+    // The stake program requires one more lamport than the rent-exempt amount
+    // for succesful withdrawals.
+    let result = context.try_withdraw(StLamports(minimum_rent + 1)).await;
+    assert!(result.is_ok());
+}
 
-    // Should overflow when we try to withdraw more than the stake account has.
-    let split_stake_account = context
-        .try_withdraw(
-            &user,
-            token_addr,
-            StLamports(100_000_000_001),
-            stake_account,
-        )
+#[tokio::test]
+async fn test_withdraw_beyond_min_balance_fails() {
+    let mut context = WithdrawContext::new((MINIMUM_STAKE_ACCOUNT_BALANCE * 2).unwrap()).await;
+
+    // Test leaving less than the minimum amount in the stake account.
+    let result = context
+        .try_withdraw(StLamports(MINIMUM_STAKE_ACCOUNT_BALANCE.0 + 1))
         .await;
-    assert_solido_error!(split_stake_account, LidoError::CalculationFailure);
+    assert_solido_error!(result, LidoError::InvalidAmount);
+
+    // But leaving exactly the minimum should work.
+    let result = context
+        .try_withdraw(StLamports(MINIMUM_STAKE_ACCOUNT_BALANCE.0))
+        .await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_withdraw_beyond_10_percent_fails() {
+    let mut context = WithdrawContext::new(Lamports(LAMPORTS_PER_SOL * 1000)).await;
+
+    // We can withdraw at most 10% of the balance + 10 SOL.
+    let max_withdraw = Lamports(LAMPORTS_PER_SOL * 110);
+
+    // Withdrawing more should fail.
+    let result = context.try_withdraw(StLamports(max_withdraw.0 + 1)).await;
+    assert_solido_error!(result, LidoError::InvalidAmount);
+
+    // But exactly the max should work.
+    let result = context.try_withdraw(StLamports(max_withdraw.0)).await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_withdraw_underflow() {
+    let amount = Lamports(LAMPORTS_PER_SOL * 5);
+    let mut context = WithdrawContext::new(amount).await;
+
+    // If we try to withdraw more than the stake account balance, that should
+    // report an underflow.
+    let result = context.try_withdraw(StLamports(amount.0 + 1)).await;
+    assert_solido_error!(result, LidoError::CalculationFailure);
+}
+
+#[tokio::test]
+async fn test_withdrawal_result() {
+    let amount = Lamports(100_000_000_000);
+    let mut context = WithdrawContext::new(amount).await;
+
+    let stake_account_balance_before = context.context.get_sol_balance(context.stake_account).await;
+
+    let rent = context.context.get_rent().await;
+    let stake_state_size = std::mem::size_of::<StakeState>();
+    let minimum_rent = rent.minimum_balance(stake_state_size);
 
     let test_withdraw_amount = StLamports(minimum_rent + 1);
     // `minimum_rent + 1` is needed by the stake program during the split.
     // This should return an activated stake account with `minimum_rent + 1` Sol.
-    let split_stake_account = context
-        .withdraw(&user, token_addr, test_withdraw_amount, stake_account)
-        .await;
+    let split_stake_account = context.try_withdraw(test_withdraw_amount).await.unwrap();
 
-    let split_stake_sol_balance = context.get_sol_balance(split_stake_account).await;
-    let solido = context.get_solido().await;
+    let split_stake_sol_balance = context.context.get_sol_balance(split_stake_account).await;
+    let solido = context.context.get_solido().await;
     let amount_lamports = solido
         .exchange_rate
         .exchange_st_sol(test_withdraw_amount)
@@ -95,7 +156,7 @@ async fn test_withdrawal() {
 
     // Assert the new uninitialized stake account's balance is incremented by 10 Sol.
     assert_eq!(split_stake_sol_balance, amount_lamports);
-    let stake_account_balance_after = context.get_sol_balance(stake_account).await;
+    let stake_account_balance_after = context.context.get_sol_balance(context.stake_account).await;
     assert_eq!(
         (stake_account_balance_before - stake_account_balance_after).unwrap(),
         Lamports(minimum_rent + 1)
@@ -106,7 +167,7 @@ async fn test_withdrawal() {
     assert_eq!(stake_account_balance_after, Lamports(99_997_717_119));
 
     // Test if we updated the metrics
-    let solido_after = context.get_solido().await;
+    let solido_after = context.context.get_solido().await;
     assert_eq!(
         solido_after.metrics.withdraw_amount.total_st_sol_amount,
         test_withdraw_amount
@@ -118,48 +179,45 @@ async fn test_withdrawal() {
     assert_eq!(solido_after.metrics.withdraw_amount.count, 1);
 
     // Check that the staker/withdrawer authorities are set to the user.
-    let stake_data = context.get_account(split_stake_account).await;
+    let stake_data = context.context.get_account(split_stake_account).await;
     if let StakeState::Stake(meta, _stake) = deserialize::<StakeState>(&stake_data.data).unwrap() {
-        assert_eq!(meta.authorized.staker, user.pubkey());
-        assert_eq!(meta.authorized.withdrawer, user.pubkey());
+        assert_eq!(meta.authorized.staker, context.user.pubkey());
+        assert_eq!(meta.authorized.withdrawer, context.user.pubkey());
     }
 
     // Try to withdraw all stake SOL to user's account. First we need to
     // deactivate the stake account
-    let deactivate_stake_instruction =
-        solana_program::stake::instruction::deactivate_stake(&split_stake_account, &user.pubkey());
-    send_transaction(
-        &mut context.context,
-        &mut context.nonce,
-        &[deactivate_stake_instruction],
-        vec![&user],
-    )
-    .await
-    .unwrap();
-    // Wait for the deactivation to be complete.
     context
         .context
-        .warp_to_slot(start_slot + epoch_schedule.slots_per_epoch)
+        .deactivate_stake_account(split_stake_account, &context.user)
+        .await;
+
+    // Wait for the deactivation to be complete.
+    let epoch_schedule = context.context.context.genesis_config().epoch_schedule;
+    context
+        .context
+        .context
+        .warp_to_slot(epoch_schedule.first_normal_slot + epoch_schedule.slots_per_epoch)
         .unwrap();
 
     // Withdraw from stake account.
     let withdraw_from_stake_instruction = solana_program::stake::instruction::withdraw(
         &split_stake_account,
-        &user.pubkey(),
-        &user.pubkey(),
+        &context.user.pubkey(),
+        &context.user.pubkey(),
         minimum_rent + 1,
         None,
     );
     send_transaction(
-        &mut context.context,
-        &mut context.nonce,
+        &mut context.context.context,
+        &mut context.context.nonce,
         &[withdraw_from_stake_instruction],
-        vec![&user],
+        vec![&context.user],
     )
     .await
     .unwrap();
     assert_eq!(
-        context.get_sol_balance(user.pubkey()).await,
+        context.context.get_sol_balance(context.user.pubkey()).await,
         Lamports(minimum_rent + 1)
     );
 }
@@ -167,16 +225,13 @@ async fn test_withdrawal() {
 #[tokio::test]
 async fn test_withdrawal_from_different_validator() {
     let mut context = Context::new_with_maintainer_and_validator().await;
+    let amount = Lamports(100_000_000_000);
     let validator = context.validator.take().unwrap();
     let other_validator = context.add_validator().await;
 
-    let (user, token_addr) = context.deposit(TEST_DEPOSIT_AMOUNT).await;
+    let (user, token_addr) = context.deposit(amount).await;
     let stake_account = context
-        .stake_deposit(
-            validator.vote_account,
-            StakeDeposit::Append,
-            TEST_DEPOSIT_AMOUNT,
-        )
+        .stake_deposit(validator.vote_account, StakeDeposit::Append, amount)
         .await;
     // Set the newly created validator as the default `context` one.
     context.validator = Some(other_validator);
