@@ -163,6 +163,8 @@ accounts_struct! {
         },
         pub st_sol_mint {
             is_signer: false,
+            // Is writable due to mint to (spl_token::instruction::mint_to) recipient from
+            // st_sol_mint
             is_writable: true,
         },
         pub reserve_account {
@@ -264,6 +266,8 @@ accounts_struct! {
         },
         pub reserve {
             is_signer: false,
+            // Is writable due to transfer (system_instruction::transfer) from reserve_account to
+            // stake_account_end
             is_writable: true,
         },
         pub validator_vote_account {
@@ -278,17 +282,22 @@ accounts_struct! {
         // should be set to the same value as `stake_account_end`.
         pub stake_account_merge_into {
             is_signer: false,
+            // Is writable due to merge (stake_program::intruction::merge) of stake_account_end
+            // into stake_account_merge_into under the condition that they are not equal
             is_writable: true,
         },
         // Must be set to the program-derived stake account for the given
         // validator, with seed `stake_accounts_seed_end`.
         pub stake_account_end {
             is_signer: false,
+            // Is writable due to transfer (system_instruction::transfer) from reserve_account to
+            // stake_account_end and stake program being initialized
+            // (stake_program::instruction::initialize)
             is_writable: true,
         },
         pub stake_authority {
             is_signer: false,
-            is_writable: true,
+            is_writable: false,
         },
         const sysvar_clock = sysvar::clock::id(),
         const system_program = system_program::id(),
