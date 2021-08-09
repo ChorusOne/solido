@@ -38,12 +38,10 @@ pub fn get_target_balance(
     let total_lamports = total_delegated_lamports.and_then(|t| t + undelegated_lamports)?;
 
     // We only want to target validators that are not in the process of being
-    // removed. For now, those are all the validators. Once we add validator
-    // removal, we need to take the removal flag into account here.
+    // removed.
     let num_active_validators = validators.iter_active().count() as u64;
 
-    // If `num_active_validators` is zero, that means there are no active
-    // validators.
+    // No active validators.
     if num_active_validators == 0 {
         return Err(LidoError::EmptySetOfValidators);
     }
@@ -71,7 +69,7 @@ pub fn get_target_balance(
     let mut remainder = (total_lamports - total_lamports_distributed)
         .expect("Does not underflow because we distribute at most total_lamports.");
 
-    assert!(num_active_validators == 0 || remainder.0 < num_active_validators);
+    assert!(remainder.0 < num_active_validators);
 
     // Distribute the remainder among the first few active validators, give them
     // one Lamport each. This does mean that the validators early in the list
@@ -258,9 +256,9 @@ mod test {
         // 200 Lamports delegated, but only one active validator,
         // so all of the target should be with that one validator.
         let mut validators = Validators::new_fill_default(3);
-        validators.entries[0].entry.stake_accounts_balance = Lamports(100);
-        validators.entries[1].entry.stake_accounts_balance = Lamports(0);
-        validators.entries[2].entry.stake_accounts_balance = Lamports(300);
+        validators.entries[0].entry.stake_accounts_balance = Lamports(1);
+        validators.entries[1].entry.stake_accounts_balance = Lamports(2);
+        validators.entries[2].entry.stake_accounts_balance = Lamports(3);
         validators.entries[0].entry.inactive = true;
         validators.entries[1].entry.inactive = true;
         validators.entries[2].entry.inactive = true;
@@ -269,11 +267,5 @@ mod test {
         let undelegated_stake = Lamports(0);
         let result = get_target_balance(undelegated_stake, &validators, &mut targets[..]);
         assert!(result.is_err());
-        assert_eq!(targets, [Lamports(200), Lamports(0), Lamports(200)]);
-
-        assert_eq!(
-            get_validator_furthest_below_target(&validators, &targets[..]),
-            (0, Lamports(0))
-        );
     }
 }
