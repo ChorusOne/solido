@@ -209,10 +209,12 @@ accounts_struct! {
         // This should be owned by the user.
         pub st_sol_account {
             is_signer: false,
+            // Is writable due to st_sol burn (spl_token::instruction::burn)
             is_writable: true,
         },
         pub st_sol_mint {
             is_signer: false,
+            // Is writable due to st_sol burn (spl_token::instruction::burn)
             is_writable: true,
         },
         pub validator_vote_account {
@@ -222,11 +224,14 @@ accounts_struct! {
         // Stake account to withdraw from.
         pub source_stake_account {
             is_signer: false,
+            // Is writable due to spliti stake (solana_program::stake::instruction::split)
             is_writable: true,
         },
         // Stake where the withdrawn amounts will go.
         pub destination_stake_account {
             is_signer: true,
+            // Is writable due to split stake (solana_program::stake::instruction::split) and
+            // transfer of stake authority (solana_program::stake::instruction::authorize
             is_writable: true,
         },
         // Used to split stake accounts and burn tokens.
@@ -375,6 +380,7 @@ accounts_struct! {
         },
         pub reserve {
             is_signer: false,
+            // Is writable due to withdraw from stake account to reserve (StakeAccount::stake_account_withdraw)
             is_writable: true,
         },
 
