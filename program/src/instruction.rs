@@ -695,10 +695,12 @@ accounts_struct! {
         },
         pub from_stake {
             is_signer: false,
+            // Is writable due to merge (solana_program::stake::instruction::merge)
             is_writable: true,
         },
         pub to_stake {
             is_signer: false,
+            // Is writable due to merge (solana_program::stake::instruction::merge)
             is_writable: true,
         },
         // This instruction doesn’t reference the authority directly, but it
