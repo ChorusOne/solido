@@ -609,6 +609,7 @@ accounts_struct! {
         },
         pub st_sol_mint {
             is_signer: false,
+            // Is writable due to fee mint (spl_token::instruction::mint_to)
             is_writable: true,
         },
         pub mint_authority {
@@ -617,6 +618,7 @@ accounts_struct! {
         },
         pub validator_fee_st_sol_account {
             is_signer: false,
+            // Is writable due to fee mint (spl_token::instruction::mint_to)
             is_writable: true,
         },
         const spl_token = spl_token::id(),
