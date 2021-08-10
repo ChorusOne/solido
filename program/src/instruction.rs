@@ -429,6 +429,7 @@ accounts_struct! {
         // Needs to be writable so we withdraw from it.
         pub validator_vote_account {
             is_signer: false,
+            // Is writable due to withdraw to reserve (vote_instruction::withdraw)
             is_writable: true,
         },
 
@@ -436,6 +437,7 @@ accounts_struct! {
         // mint, and the fee accounts to deposit the stSOL into.
         pub st_sol_mint {
             is_signer: false,
+            // Is writable due to fee mint (spl_token::instruction::mint_to)
             is_writable: true,
         },
 
@@ -447,15 +449,18 @@ accounts_struct! {
 
         pub treasury_st_sol_account {
             is_signer: false,
+            // Is writable due to fee mint (spl_token::instruction::mint_to)
             is_writable: true,
         },
         pub developer_st_sol_account {
             is_signer: false,
+            // Is writable due to fee mint (spl_token::instruction::mint_to)
             is_writable: true,
         },
 
         pub reserve {
             is_signer: false,
+            // Is writable due to withdraw to reserve (vote_instruction::withdraw)
             is_writable: true,
         },
         // Used to get the rewards out of the validator vote account.
