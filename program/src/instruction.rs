@@ -449,12 +449,12 @@ accounts_struct! {
 
         pub treasury_st_sol_account {
             is_signer: false,
-            // Is writable due to fee mint (spl_token::instruction::mint_to)
+            // Is writable due to fee mint (spl_token::instruction::mint_to) to treasury
             is_writable: true,
         },
         pub developer_st_sol_account {
             is_signer: false,
-            // Is writable due to fee mint (spl_token::instruction::mint_to)
+            // Is writable due to fee mint (spl_token::instruction::mint_to) to developer
             is_writable: true,
         },
 
@@ -609,7 +609,8 @@ accounts_struct! {
         },
         pub st_sol_mint {
             is_signer: false,
-            // Is writable due to fee mint (spl_token::instruction::mint_to)
+            // Is writable due to fee mint (spl_token::instruction::mint_to) to validator fee
+            // st_sol account
             is_writable: true,
         },
         pub mint_authority {
@@ -618,7 +619,8 @@ accounts_struct! {
         },
         pub validator_fee_st_sol_account {
             is_signer: false,
-            // Is writable due to fee mint (spl_token::instruction::mint_to)
+            // Is writable due to fee mint (spl_token::instruction::mint_to) to validator fee
+            // st_sol account
             is_writable: true,
         },
         const spl_token = spl_token::id(),
