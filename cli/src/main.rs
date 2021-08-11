@@ -382,12 +382,13 @@ pub fn parse_remote_wallet_details(uri: &str) -> Result<(DerivationPath, Locator
     let uri_invalid_msg =
         "Failed to parse usb:// keypair path. It must be of the form 'usb://ledger?key=0'.";
 
-    let uri_ref = URIReference::try_from(&uri[..])
-        .map_err(|err| CliError::with_cause(uri_invalid_msg, err))?;
+    let uri_ref =
+        URIReference::try_from(uri).map_err(|err| CliError::with_cause(uri_invalid_msg, err))?;
 
     let derivation_path = DerivationPath::from_uri_key_query(&uri_ref)
         .map_err(|err| CliError::with_cause(uri_invalid_msg, err))?
-        .ok_or_else(|| CliError::new(uri_invalid_msg))?;
+        // If there is no ?key= query parameter, then use the default derivation path.
+        .unwrap_or_default();
 
     let locator = Locator::new_from_uri(&uri_ref)
         .map_err(|err| CliError::with_cause(uri_invalid_msg, err))?;
@@ -401,12 +402,78 @@ mod test {
 
     #[test]
     fn test_parse_remote_wallet_details() {
-        assert!(parse_remote_wallet_details("usb://ledger").is_ok());
-        assert!(parse_remote_wallet_details("usb://ledger?key=0").is_ok());
-        assert!(parse_remote_wallet_details("usb://ledger?key=0/1").is_ok());
-        assert!(parse_remote_wallet_details("usb://ledger?key=0/1/2").is_ok());
-        assert!(parse_remote_wallet_details("usb://ledger/BsNsvfXqQTtJnagwFWdBS7FBXgnsK8VZ5CmuznN85swK?key=0/0").is_ok());
-        assert!(parse_remote_wallet_details("usb://ledger/BsNsvfXqQTtJnagwFWdBS7FBXgnsK8VZ5CmuznN85swK").is_ok());
+        use derivation_path::ChildIndex;
+
+        let (derivation_path, _) = parse_remote_wallet_details("usb://ledger").ok().unwrap();
+        // /'44/'501 is added by default for all Solana derivation paths.
+        assert_eq!(
+            derivation_path.path(),
+            [ChildIndex::Hardened(44), ChildIndex::Hardened(501)]
+        );
+
+        let (derivation_path, _) = parse_remote_wallet_details("usb://ledger?key=0")
+            .ok()
+            .unwrap();
+        assert_eq!(
+            derivation_path.path(),
+            [
+                ChildIndex::Hardened(44),
+                ChildIndex::Hardened(501),
+                ChildIndex::Hardened(0)
+            ]
+        );
+
+        let (derivation_path, _) = parse_remote_wallet_details("usb://ledger?key=0/1")
+            .ok()
+            .unwrap();
+        assert_eq!(
+            derivation_path.path(),
+            [
+                ChildIndex::Hardened(44),
+                ChildIndex::Hardened(501),
+                ChildIndex::Hardened(0),
+                ChildIndex::Hardened(1)
+            ]
+        );
+
+        let (derivation_path, _) = parse_remote_wallet_details(
+            "usb://ledger/BsNsvfXqQTtJnagwFWdBS7FBXgnsK8VZ5CmuznN85swK",
+        )
+        .ok()
+        .unwrap();
+        assert_eq!(
+            derivation_path.path(),
+            [ChildIndex::Hardened(44), ChildIndex::Hardened(501)]
+        );
+
+        let (derivation_path, _) = parse_remote_wallet_details(
+            "usb://ledger/BsNsvfXqQTtJnagwFWdBS7FBXgnsK8VZ5CmuznN85swK?key=2",
+        )
+        .ok()
+        .unwrap();
+        assert_eq!(
+            derivation_path.path(),
+            [
+                ChildIndex::Hardened(44),
+                ChildIndex::Hardened(501),
+                ChildIndex::Hardened(2)
+            ]
+        );
+
+        let (derivation_path, _) = parse_remote_wallet_details(
+            "usb://ledger/BsNsvfXqQTtJnagwFWdBS7FBXgnsK8VZ5CmuznN85swK?key=2/3",
+        )
+        .ok()
+        .unwrap();
+        assert_eq!(
+            derivation_path.path(),
+            [
+                ChildIndex::Hardened(44),
+                ChildIndex::Hardened(501),
+                ChildIndex::Hardened(2),
+                ChildIndex::Hardened(3)
+            ]
+        );
 
         assert!(parse_remote_wallet_details("usb://ledger?key=not-an-integer").is_err());
         assert!(parse_remote_wallet_details("usb://ledger?foo=bar").is_err());
