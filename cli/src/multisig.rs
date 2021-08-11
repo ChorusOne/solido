@@ -31,7 +31,7 @@ use multisig::instruction as multisig_instruction;
 use crate::config::ConfigFile;
 use crate::config::{
     ApproveOpts, CreateMultisigOpts, ExecuteTransactionOpts, ProposeChangeMultisigOpts,
-    ProposeUpgradeOpts, ShowMultisigOpts, ShowTransactionOpts,
+    ProposeUpgradeOpts, ShowMultisigOpts, ShowTransactionOpts, TransferTokenOpts,
 };
 use crate::error::{Abort, AsPrettyError};
 use crate::print_output;
@@ -42,6 +42,12 @@ use crate::{SnapshotClientConfig, SnapshotConfig};
 pub struct MultisigOpts {
     #[clap(subcommand)]
     subcommand: SubCommand,
+}
+
+#[derive(Clap, Debug)]
+pub struct TokenOpts {
+    #[clap(subcommand)]
+    subcommand: TokenSubCommand,
 }
 
 impl MultisigOpts {
@@ -60,6 +66,11 @@ impl MultisigOpts {
             SubCommand::ExecuteTransaction(opts) => {
                 opts.merge_with_config_and_environment(config_file)
             }
+            SubCommand::Token(token_sub_command) => match token_sub_command {
+                TokenSubCommand::Transfer(opts) => {
+                    opts.merge_with_config_and_environment(config_file)
+                }
+            },
         }
     }
 }
@@ -86,6 +97,15 @@ enum SubCommand {
 
     /// Execute a transaction that has enough approvals.
     ExecuteTransaction(ExecuteTransactionOpts),
+
+    /// Execute SPL token operations.
+    Token(TokenSubCommand),
+}
+
+#[derive(Clap, Debug)]
+enum TokenSubCommand {
+    /// Transfer token.
+    Transfer(TransferTokenOpts),
 }
 
 pub fn main(config: &mut SnapshotClientConfig, multisig_opts: MultisigOpts) {
@@ -126,6 +146,13 @@ pub fn main(config: &mut SnapshotClientConfig, multisig_opts: MultisigOpts) {
             let output = result.ok_or_abort_with("Failed to execute multisig transaction.");
             print_output(output_mode, &output);
         }
+        SubCommand::Token(token_sub_command) => match token_sub_command {
+            TokenSubCommand::Transfer(cmd_opts) => {
+                let result = config.with_snapshot(|config| transfer_token(config, &cmd_opts));
+                let output = result.ok_or_abort_with("Failed to transfer token.");
+                print_output(output_mode, &output);
+            }
+        },
     }
 }
 
@@ -320,6 +347,7 @@ enum ParsedInstruction {
         owners: Vec<Pubkey>,
     },
     SolidoInstruction(SolidoInstruction),
+    TokenInstruction(TokenInstruction),
     InvalidSolidoInstruction,
     Unrecognized,
 }
@@ -373,6 +401,18 @@ enum SolidoInstruction {
 
         fee_recipients: FeeRecipients,
     },
+}
+
+#[derive(Serialize)]
+enum TokenInstruction {
+    Transfer {
+        #[serde(serialize_with = "serialize_b58")]
+        from_address: Pubkey,
+        #[serde(serialize_with = "serialize_b58")]
+        to_address: Pubkey,
+        amount: u64,
+    },
+    Unsupported,
 }
 
 #[derive(Serialize)]
@@ -533,6 +573,24 @@ impl fmt::Display for ShowTransactionOutput {
                     f,
                     "  Tried to deserialize a Solido instruction, but failed."
                 )?;
+            }
+            ParsedInstruction::TokenInstruction(token_instruction) => {
+                write!(f, "  This is a Token instruction. ")?;
+                match token_instruction {
+                    TokenInstruction::Transfer {
+                        from_address,
+                        to_address,
+                        amount,
+                    } => {
+                        writeln!(f, "It transfers tokens owned by the multisig.")?;
+                        writeln!(f, "    From address: {}", from_address)?;
+                        writeln!(f, "    To address:   {}", to_address)?;
+                        writeln!(f, "    Amount:       {}", amount)?;
+                    }
+                    TokenInstruction::Unsupported => {
+                        writeln!(f, "The instruction is currently unsupported.")?;
+                    }
+                }
             }
         }
 
@@ -717,6 +775,16 @@ fn show_transaction(
                 ParsedInstruction::InvalidSolidoInstruction
             }
         }
+    } else if instr.program_id == spl_token::id() {
+        match try_parse_token_instruction(&instr) {
+            Ok(instr) => instr,
+            Err(SnapshotError::MissingAccount) => return Err(SnapshotError::MissingAccount),
+            Err(SnapshotError::OtherError(err)) => {
+                println!("Warning: Failed to parse Token instruction.");
+                err.print_pretty();
+                ParsedInstruction::InvalidSolidoInstruction
+            }
+        }
     } else {
         ParsedInstruction::Unrecognized
     };
@@ -781,6 +849,22 @@ fn try_parse_solido_instruction(
         }
         _ => ParsedInstruction::InvalidSolidoInstruction,
     })
+}
+
+fn try_parse_token_instruction(instr: &Instruction) -> Result<ParsedInstruction> {
+    let instruction = spl_token::instruction::TokenInstruction::unpack(instr.data.as_slice())?;
+    match instruction {
+        spl_token::instruction::TokenInstruction::Transfer { amount } => Ok(
+            ParsedInstruction::TokenInstruction(TokenInstruction::Transfer {
+                from_address: instr.accounts[0].pubkey,
+                to_address: instr.accounts[1].pubkey,
+                amount: amount,
+            }),
+        ),
+        _ => Ok(ParsedInstruction::TokenInstruction(
+            TokenInstruction::Unsupported,
+        )),
+    }
 }
 
 #[derive(Serialize)]
@@ -1121,4 +1205,27 @@ fn execute_transaction(
         transaction_id: signature,
     };
     Ok(result)
+}
+
+fn transfer_token(
+    config: &mut SnapshotConfig,
+    opts: &TransferTokenOpts,
+) -> Result<ProposeInstructionOutput> {
+    let (multisig_address, _) =
+        get_multisig_program_address(opts.multisig_program_id(), opts.multisig_address());
+
+    let instruction = spl_token::instruction::transfer(
+        &spl_token::id(),
+        opts.from_address(),
+        opts.to_address(),
+        &multisig_address,
+        &[],
+        *opts.amount(),
+    )?;
+    propose_instruction(
+        config,
+        opts.multisig_program_id(),
+        *opts.multisig_address(),
+        instruction,
+    )
 }

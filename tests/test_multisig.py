@@ -31,6 +31,7 @@ from util import (
     solana_program_show,
     multisig,
     get_solido_program_path,
+    spl_token,
 )
 
 
@@ -477,3 +478,84 @@ except subprocess.CalledProcessError as err:
 else:
     print('> Approve succeeded even though it should not have.')
     sys.exit(1)
+
+
+test_token = create_test_account('tests/.keys/test-token.json', fund=False)
+test_token_account_1 = create_test_account(
+    'tests/.keys/test-token-account-1.json', fund=False
+)
+test_token_account_2 = create_test_account(
+    'tests/.keys/test-token-account-2.json', fund=False
+)
+
+spl_token('create-token', test_token.keypair_path)
+spl_token(
+    'create-account',
+    test_token.pubkey,
+    test_token_account_1.keypair_path,
+    '--owner',
+    multisig_program_derived_address,
+)
+print(f'\nTesting transferring token from mint {test_token} ...')
+
+spl_token('create-account', test_token.pubkey, test_token_account_2.keypair_path)
+spl_token('mint', test_token.pubkey, '100', test_token_account_1.pubkey)
+print(
+    f'> Testing transfering 10 tokens from {test_token_account_1} to {test_token_account_2}.'
+)
+result = multisig(
+    'token',
+    'transfer',
+    '--multisig-program-id',
+    multisig_program_id,
+    '--multisig-address',
+    multisig_address,
+    '--from-address',
+    test_token_account_1.pubkey,
+    '--to-address',
+    test_token_account_2.pubkey,
+    '--amount',
+    '10',
+    keypair_path=addr1.keypair_path,
+)
+
+token_transfer_transaction_address = result['transaction_address']
+multisig(
+    'approve',
+    '--multisig-program-id',
+    multisig_program_id,
+    '--multisig-address',
+    multisig_address,
+    '--transaction-address',
+    token_transfer_transaction_address,
+    keypair_path=addr2.keypair_path,
+)
+
+multisig(
+    'execute-transaction',
+    '--multisig-program-id',
+    multisig_program_id,
+    '--multisig-address',
+    multisig_address,
+    '--transaction-address',
+    token_transfer_transaction_address,
+)
+
+result = multisig(
+    'show-transaction',
+    '--multisig-program-id',
+    multisig_program_id,
+    '--solido-program-id',
+    program_id,
+    '--transaction-address',
+    token_transfer_transaction_address,
+)
+assert result['parsed_instruction']['TokenInstruction']['Transfer'] == {
+    'from_address': test_token_account_1.pubkey,
+    'to_address': test_token_account_2.pubkey,
+    'amount': 10,
+}
+
+token_balance = spl_token('balance', '--address', test_token_account_2.pubkey)
+assert float(token_balance) * 1e9 == 10.0
+print(f'> Successfully transferred tokens.')
