@@ -53,6 +53,8 @@ and documentation, are in a different repository, which is not yet public.
 The on-chain program and `solido` utility are written in Rust. To build them,
 you need:
 
+ * An x86_64 Linux machine. Mac should work too, but for reproducibility we
+   target Linux.
  * [A Rust toolchain][rust]
  * [The Solana tool suite][solana-tools] (only needed for the on-chain programs,
    not for the `solido` utility)
