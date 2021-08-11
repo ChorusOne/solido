@@ -210,8 +210,6 @@ mod test {
 
     #[test]
     fn get_target_balance_already_balanced() {
-        // 200 Lamports delegated, but only one active validator,
-        // so all of the target should be with that one validator.
         let mut validators = Validators::new_fill_default(2);
         validators.entries[0].entry.stake_accounts_balance = Lamports(50);
         validators.entries[1].entry.stake_accounts_balance = Lamports(50);
@@ -228,27 +226,29 @@ mod test {
         );
     }
     #[test]
-    fn get_target_balance_validators_non_integer_multiple() {
-        let mut validators = Validators::new_fill_default(2);
+    fn get_target_balance_works_with_inactive_for_non_integer_multiple() {
+        let mut validators = Validators::new_fill_default(3);
         validators.entries[0].entry.stake_accounts_balance = Lamports(101);
-        validators.entries[1].entry.stake_accounts_balance = Lamports(99);
+        validators.entries[1].entry.stake_accounts_balance = Lamports(0);
+        validators.entries[1].entry.active = false;
+        validators.entries[2].entry.stake_accounts_balance = Lamports(99);
 
-        let mut targets = [Lamports(0); 2];
+        let mut targets = [Lamports(0); 3];
         let undelegated_stake = Lamports(51);
         let result = get_target_balance(undelegated_stake, &validators, &mut targets[..]);
         assert!(result.is_ok());
-        assert_eq!(targets, [Lamports(126), Lamports(125)]);
+        assert_eq!(targets, [Lamports(126), Lamports(0), Lamports(125)]);
 
         assert_eq!(
             get_validator_furthest_below_target(&validators, &targets[..]),
-            (1, Lamports(26))
+            (2, Lamports(26))
         );
     }
 
     #[test]
-    fn get_target_balance_inactive_validator() {
-        // 200 Lamports delegated, but only one active validator,
-        // so all of the target should be with that one validator.
+    fn get_target_balance_works_with_inactive_for_integer_multiple() {
+        // 500 Lamports delegated, but only two active validator out of three.
+        // All target should be divided equally within the active validators.
         let mut validators = Validators::new_fill_default(3);
         validators.entries[0].entry.stake_accounts_balance = Lamports(100);
         validators.entries[1].entry.stake_accounts_balance = Lamports(100);
