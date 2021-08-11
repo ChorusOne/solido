@@ -374,33 +374,57 @@ fn merge_with_config_and_environment(
     }
 }
 
-// Get a boxed signer that lives long enough for us to use it in the Config.
-fn get_signer(payer_keypair_path: PathBuf) -> Result<Box<dyn Signer>, Error> {
+/// Parse a keypair path of the form "usb://ledger?key=0".
+pub fn parse_remote_wallet_details(uri: &str) -> Result<(DerivationPath, Locator), Error> {
     use std::convert::TryFrom;
     use uriparse::uri_reference::URIReference;
 
+    let uri_invalid_msg =
+        "Failed to parse usb:// keypair path. It must be of the form 'usb://ledger?key=0'.";
+
+    let uri_ref = URIReference::try_from(&uri[..])
+        .map_err(|err| CliError::with_cause(uri_invalid_msg, err))?;
+
+    let derivation_path = DerivationPath::from_uri_key_query(&uri_ref)
+        .map_err(|err| CliError::with_cause(uri_invalid_msg, err))?
+        .ok_or_else(|| CliError::new(uri_invalid_msg))?;
+
+    let locator = Locator::new_from_uri(&uri_ref)
+        .map_err(|err| CliError::with_cause(uri_invalid_msg, err))?;
+
+    Ok((derivation_path, locator))
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_parse_remote_wallet_details() {
+        assert!(parse_remote_wallet_details("usb://ledger").is_ok());
+        assert!(parse_remote_wallet_details("usb://ledger?key=0").is_ok());
+        assert!(parse_remote_wallet_details("usb://ledger?key=0/1").is_ok());
+        assert!(parse_remote_wallet_details("usb://ledger?key=0/1/2").is_ok());
+        assert!(parse_remote_wallet_details("usb://ledger/BsNsvfXqQTtJnagwFWdBS7FBXgnsK8VZ5CmuznN85swK?key=0/0").is_ok());
+        assert!(parse_remote_wallet_details("usb://ledger/BsNsvfXqQTtJnagwFWdBS7FBXgnsK8VZ5CmuznN85swK").is_ok());
+
+        assert!(parse_remote_wallet_details("usb://ledger?key=not-an-integer").is_err());
+        assert!(parse_remote_wallet_details("usb://ledger?foo=bar").is_err());
+        assert!(parse_remote_wallet_details("usb://ledger/not-a-key").is_err());
+    }
+}
+
+// Get a boxed signer that lives long enough for us to use it in the Config.
+fn get_signer(payer_keypair_path: PathBuf) -> Result<Box<dyn Signer>, Error> {
     let boxed_signer: Box<dyn Signer> = if payer_keypair_path.starts_with("usb://") {
-        // Parse the uri before we try to connect, so we can diagnose uri format issues early.
         let uri = payer_keypair_path
             .into_os_string()
             .into_string()
             .map_err(|_| {
                 CliError::new("A keypair path that starts with usb:// must be valid UTF-8.")
             })?;
-
-        let uri_invalid_msg =
-            "Failed to parse usb:// keypair path. It must be of the form 'usb://ledger?key=0'.";
-
-        let uri_ref = URIReference::try_from(&uri[..])
-            .map_err(|err| CliError::with_cause(uri_invalid_msg, err))?;
-
-        let derivation_path = DerivationPath::from_uri_key_query(&uri_ref)
-            .map_err(|err| CliError::with_cause(uri_invalid_msg, err))?
-            .ok_or_else(|| CliError::new(uri_invalid_msg))?;
-
-        let locator = Locator::new_from_uri(&uri_ref)
-            .map_err(|err| CliError::with_cause(uri_invalid_msg, err))?;
-
+        // Parse the uri before we try to connect, so we can diagnose uri format issues early.
+        let (derivation_path, locator) = parse_remote_wallet_details(&uri)?;
         let hw_wallet = maybe_wallet_manager()
             .map_err(|err| CliError::with_cause("Remote wallet found, but failed to establish protocol. Maybe the Solana app is not open.", err))?
             .ok_or_else(|| CliError::new("Failed to find a remote wallet, maybe Ledger is not connected or locked."))?;
