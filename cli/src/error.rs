@@ -10,6 +10,8 @@ use solana_program::instruction::InstructionError;
 use solana_program::program_error::ProgramError;
 use solana_program::pubkey::PubkeyError;
 use solana_sdk::pubkey::Pubkey;
+use solana_sdk::signer::presigner::PresignerError;
+use solana_sdk::signer::SignerError;
 use solana_sdk::transaction::TransactionError;
 
 use lido::error::LidoError;
@@ -320,6 +322,73 @@ impl AsPrettyError for PubkeyError {
     fn print_pretty(&self) {
         print_red("Solana public key error:");
         println!(" {:?}", self);
+    }
+}
+
+impl AsPrettyError for SignerError {
+    fn print_pretty(&self) {
+        print_red("Failed to sign transaction: ");
+        // `SignerError` does implement display, but the messages are low-quality
+        // and not any more helpful than the enum names, so we write custom descriptions
+        // here to be a bit more user-friendly.
+        match self {
+            SignerError::KeypairPubkeyMismatch => {
+                println!("Mismatch between keypair and pubkey.");
+            }
+            SignerError::NotEnoughSigners => {
+                println!("Not enough signers.");
+                println!(
+                    "This is a programming error, please report a bug at \
+                    https://github.com/chorusone/solido/issues/new."
+                );
+            }
+            SignerError::TransactionError(err) => {
+                println!("Transaction error while signing.");
+                err.print_pretty();
+            }
+            SignerError::Custom(message) => {
+                println!("Custom error.");
+                print_key("Message:");
+                println!(" {}", message)
+            }
+            SignerError::PresignerError(PresignerError::VerificationFailure) => {
+                println!("Pre-signer error.");
+                print_key("Message:");
+                println!(" {}", PresignerError::VerificationFailure);
+            }
+            SignerError::Connection(message) => {
+                println!("Connection error while signing with remote keypair.");
+                print_key("Connection error:");
+                println!(" {}", message);
+            }
+            SignerError::InvalidInput(message) => {
+                println!("Invalid input.");
+                print_key("Message:");
+                println!(" {}", message);
+            }
+            SignerError::NoDeviceFound => {
+                println!("No device found.");
+            }
+            SignerError::Protocol(message) => {
+                println!("Protocol error.");
+                print_key("Message:");
+                println!(" {}", message);
+                // When using the Ledger hardware wallet, if blind signing is
+                // disabled in its Solana app, we get "Ledger operation not supported"
+                // as message. Try to help the user debug this.
+                if message.contains("Ledger") {
+                    print_key("Note:");
+                    println!(
+                        " Is the 'blind signing' setting enabled in the Solana app on the device?"
+                    );
+                }
+            }
+            SignerError::UserCancel(message) => {
+                println!("Signing cancelled by user.");
+                print_key("Message: ");
+                println!(" {}", message);
+            }
+        }
     }
 }
 

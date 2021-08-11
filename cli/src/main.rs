@@ -214,7 +214,10 @@ impl<'a> SnapshotConfig<'a> {
     ) -> snapshot::Result<Transaction> {
         let mut tx = Transaction::new_with_payer(instructions, Some(&self.signer.pubkey()));
         let recent_blockhash = self.client.get_recent_blockhash()?;
-        tx.sign(signers, recent_blockhash);
+        tx.try_sign(signers, recent_blockhash).map_err(|err| {
+            let boxed_error: Error = Box::new(err);
+            boxed_error
+        })?;
         Ok(tx)
     }
 
