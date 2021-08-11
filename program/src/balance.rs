@@ -31,7 +31,7 @@ pub fn get_target_balance(
     );
 
     let total_delegated_lamports: token::Result<Lamports> = validators
-        .iter_active()
+        .iter_entries()
         .map(|v| v.stake_accounts_balance)
         .sum();
 
@@ -43,12 +43,12 @@ pub fn get_target_balance(
 
     // No active validators.
     if num_active_validators == 0 {
-        return Err(LidoError::EmptySetOfValidators);
+        return Err(LidoError::NoActiveValidators);
     }
     // Target an uniform distribution. A division by zero cannot happen because
     // of the test above.
     for (target, validator) in target_balance.iter_mut().zip(validators.iter_entries()) {
-        if !validator.inactive {
+        if validator.active {
             *target = (total_lamports
                 * Rational {
                     numerator: 1,
@@ -78,12 +78,11 @@ pub fn get_target_balance(
     // fee per signature is 10k Lamports at the time of writing. Also, there is
     // a minimum amount we can stake, so in practice, validators will never be
     // as close to their target that the one Lamport matters anyway.
-    // for target in target_balance.iter_mut() {
     for (target, validator) in target_balance.iter_mut().zip(validators.iter_entries()) {
         if remainder == Lamports(0) {
             break;
         }
-        if !validator.inactive {
+        if validator.active {
             *target = (*target + Lamports(1)).expect(
                 "Does not overflow because per-validator balance is at most total_lamports.",
             );
@@ -140,7 +139,7 @@ pub fn get_validator_to_withdraw(
                 .stake_accounts_balance
                 .cmp(&y.entry.stake_accounts_balance)
         })
-        .ok_or(LidoError::EmptySetOfValidators)
+        .ok_or(LidoError::NoActiveValidators)
 }
 
 #[cfg(test)]
@@ -228,6 +227,23 @@ mod test {
             (0, Lamports(0))
         );
     }
+    #[test]
+    fn get_target_balance_validators_non_integer_multiple() {
+        let mut validators = Validators::new_fill_default(2);
+        validators.entries[0].entry.stake_accounts_balance = Lamports(101);
+        validators.entries[1].entry.stake_accounts_balance = Lamports(99);
+
+        let mut targets = [Lamports(0); 2];
+        let undelegated_stake = Lamports(51);
+        let result = get_target_balance(undelegated_stake, &validators, &mut targets[..]);
+        assert!(result.is_ok());
+        assert_eq!(targets, [Lamports(126), Lamports(125)]);
+
+        assert_eq!(
+            get_validator_furthest_below_target(&validators, &targets[..]),
+            (1, Lamports(26))
+        );
+    }
 
     #[test]
     fn get_target_balance_inactive_validator() {
@@ -235,33 +251,32 @@ mod test {
         // so all of the target should be with that one validator.
         let mut validators = Validators::new_fill_default(3);
         validators.entries[0].entry.stake_accounts_balance = Lamports(100);
-        validators.entries[1].entry.stake_accounts_balance = Lamports(0);
-        validators.entries[1].entry.inactive = true;
+        validators.entries[1].entry.stake_accounts_balance = Lamports(100);
+        validators.entries[1].entry.active = false;
         validators.entries[2].entry.stake_accounts_balance = Lamports(300);
 
         let mut targets = [Lamports(0); 3];
         let undelegated_stake = Lamports(0);
         let result = get_target_balance(undelegated_stake, &validators, &mut targets[..]);
         assert!(result.is_ok());
-        assert_eq!(targets, [Lamports(200), Lamports(0), Lamports(200)]);
+        assert_eq!(targets, [Lamports(250), Lamports(0), Lamports(250)]);
 
         assert_eq!(
             get_validator_furthest_below_target(&validators, &targets[..]),
-            (0, Lamports(100))
+            (0, Lamports(150))
         );
     }
 
     #[test]
     fn get_target_balance_all_inactive() {
-        // 200 Lamports delegated, but only one active validator,
-        // so all of the target should be with that one validator.
+        // No active validators exist.
         let mut validators = Validators::new_fill_default(3);
         validators.entries[0].entry.stake_accounts_balance = Lamports(1);
         validators.entries[1].entry.stake_accounts_balance = Lamports(2);
         validators.entries[2].entry.stake_accounts_balance = Lamports(3);
-        validators.entries[0].entry.inactive = true;
-        validators.entries[1].entry.inactive = true;
-        validators.entries[2].entry.inactive = true;
+        validators.entries[0].entry.active = false;
+        validators.entries[1].entry.active = false;
+        validators.entries[2].entry.active = false;
 
         let mut targets = [Lamports(0); 3];
         let undelegated_stake = Lamports(0);

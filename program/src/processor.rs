@@ -189,7 +189,7 @@ pub fn process_stake_deposit(
     let validator = lido
         .validators
         .get_mut(accounts.validator_vote_account.key)?;
-    if validator.entry.inactive {
+    if !validator.entry.active {
         msg!(
             "Validator {} is inactive, new deposits are not allowed",
             validator.pubkey

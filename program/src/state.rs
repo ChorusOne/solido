@@ -38,7 +38,7 @@ pub type Validators = AccountMap<Validator>;
 
 impl Validators {
     pub fn iter_active(&self) -> impl Iterator<Item = &Validator> {
-        self.iter_entries().filter(|&v| !v.inactive)
+        self.iter_entries().filter(|&v| v.active)
     }
 }
 pub type Maintainers = AccountSet;
@@ -592,9 +592,7 @@ impl Lido {
 }
 
 #[repr(C)]
-#[derive(
-    Clone, Debug, Default, Eq, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema, Serialize,
-)]
+#[derive(Clone, Debug, Eq, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema, Serialize)]
 pub struct Validator {
     /// Fees in stSOL that the validator is entitled too, but hasn't claimed yet.
     pub fee_credit: StLamports,
@@ -630,7 +628,7 @@ pub struct Validator {
 
     /// Controls if a validator is allowed to have new stake deposits.
     /// When removing a validator, this flag should be set to `true`.
-    pub inactive: bool,
+    pub active: bool,
 }
 
 impl Validator {
@@ -654,6 +652,19 @@ impl Validator {
             &seed.to_le_bytes()[..],
         ];
         Pubkey::find_program_address(&seeds, program_id)
+    }
+}
+
+impl Default for Validator {
+    fn default() -> Self {
+        Validator {
+            fee_address: Pubkey::new_unique(),
+            fee_credit: StLamports(0),
+            stake_accounts_seed_begin: 0,
+            stake_accounts_seed_end: 0,
+            stake_accounts_balance: Lamports(0),
+            active: true,
+        }
     }
 }
 
