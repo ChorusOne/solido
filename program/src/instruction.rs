@@ -151,18 +151,26 @@ accounts_struct! {
         },
         pub user {
             is_signer: true,
+            // Is writable due to transfer (system_instruction::transfer) from user to
+            // reserve_account
             is_writable: true,
         },
         pub recipient {
             is_signer: false,
+            // Is writable due to mint to (spl_token::instruction::mint_to) recipient from
+            // st_sol_mint
             is_writable: true,
         },
         pub st_sol_mint {
             is_signer: false,
+            // Is writable due to mint to (spl_token::instruction::mint_to) recipient from
+            // st_sol_mint
             is_writable: true,
         },
         pub reserve_account {
             is_signer: false,
+            // Is writable due to transfer (system_instruction::transfer) from user to
+            // reserve_account
             is_writable: true,
         },
         pub mint_authority {
@@ -201,10 +209,12 @@ accounts_struct! {
         // This should be owned by the user.
         pub st_sol_account {
             is_signer: false,
+            // Is writable due to st_sol burn (spl_token::instruction::burn)
             is_writable: true,
         },
         pub st_sol_mint {
             is_signer: false,
+            // Is writable due to st_sol burn (spl_token::instruction::burn)
             is_writable: true,
         },
         pub validator_vote_account {
@@ -214,11 +224,14 @@ accounts_struct! {
         // Stake account to withdraw from.
         pub source_stake_account {
             is_signer: false,
+            // Is writable due to spliti stake (solana_program::stake::instruction::split)
             is_writable: true,
         },
         // Stake where the withdrawn amounts will go.
         pub destination_stake_account {
             is_signer: true,
+            // Is writable due to split stake (solana_program::stake::instruction::split) and
+            // transfer of stake authority (solana_program::stake::instruction::authorize
             is_writable: true,
         },
         // Used to split stake accounts and burn tokens.
@@ -258,6 +271,8 @@ accounts_struct! {
         },
         pub reserve {
             is_signer: false,
+            // Is writable due to transfer (system_instruction::transfer) from reserve_account to
+            // stake_account_end
             is_writable: true,
         },
         pub validator_vote_account {
@@ -272,17 +287,22 @@ accounts_struct! {
         // should be set to the same value as `stake_account_end`.
         pub stake_account_merge_into {
             is_signer: false,
+            // Is writable due to merge (stake_program::intruction::merge) of stake_account_end
+            // into stake_account_merge_into under the condition that they are not equal
             is_writable: true,
         },
         // Must be set to the program-derived stake account for the given
         // validator, with seed `stake_accounts_seed_end`.
         pub stake_account_end {
             is_signer: false,
+            // Is writable due to transfer (system_instruction::transfer) from reserve_account to
+            // stake_account_end and stake program being initialized
+            // (stake_program::instruction::initialize)
             is_writable: true,
         },
         pub stake_authority {
             is_signer: false,
-            is_writable: true,
+            is_writable: false,
         },
         const sysvar_clock = sysvar::clock::id(),
         const system_program = system_program::id(),
@@ -360,6 +380,7 @@ accounts_struct! {
         },
         pub reserve {
             is_signer: false,
+            // Is writable due to withdraw from stake account to reserve (StakeAccount::stake_account_withdraw)
             is_writable: true,
         },
 
@@ -408,6 +429,7 @@ accounts_struct! {
         // Needs to be writable so we withdraw from it.
         pub validator_vote_account {
             is_signer: false,
+            // Is writable due to withdraw to reserve (vote_instruction::withdraw)
             is_writable: true,
         },
 
@@ -415,6 +437,7 @@ accounts_struct! {
         // mint, and the fee accounts to deposit the stSOL into.
         pub st_sol_mint {
             is_signer: false,
+            // Is writable due to fee mint (spl_token::instruction::mint_to)
             is_writable: true,
         },
 
@@ -426,15 +449,18 @@ accounts_struct! {
 
         pub treasury_st_sol_account {
             is_signer: false,
+            // Is writable due to fee mint (spl_token::instruction::mint_to) to treasury
             is_writable: true,
         },
         pub developer_st_sol_account {
             is_signer: false,
+            // Is writable due to fee mint (spl_token::instruction::mint_to) to developer
             is_writable: true,
         },
 
         pub reserve {
             is_signer: false,
+            // Is writable due to withdraw to reserve (vote_instruction::withdraw)
             is_writable: true,
         },
         // Used to get the rewards out of the validator vote account.
@@ -583,6 +609,8 @@ accounts_struct! {
         },
         pub st_sol_mint {
             is_signer: false,
+            // Is writable due to fee mint (spl_token::instruction::mint_to) to validator fee
+            // st_sol account
             is_writable: true,
         },
         pub mint_authority {
@@ -591,6 +619,8 @@ accounts_struct! {
         },
         pub validator_fee_st_sol_account {
             is_signer: false,
+            // Is writable due to fee mint (spl_token::instruction::mint_to) to validator fee
+            // st_sol account
             is_writable: true,
         },
         const spl_token = spl_token::id(),
@@ -667,10 +697,12 @@ accounts_struct! {
         },
         pub from_stake {
             is_signer: false,
+            // Is writable due to merge (solana_program::stake::instruction::merge)
             is_writable: true,
         },
         pub to_stake {
             is_signer: false,
+            // Is writable due to merge (solana_program::stake::instruction::merge)
             is_writable: true,
         },
         // This instruction doesn’t reference the authority directly, but it
