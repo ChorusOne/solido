@@ -858,7 +858,7 @@ fn try_parse_token_instruction(instr: &Instruction) -> Result<ParsedInstruction>
             ParsedInstruction::TokenInstruction(TokenInstruction::Transfer {
                 from_address: instr.accounts[0].pubkey,
                 to_address: instr.accounts[1].pubkey,
-                amount: amount,
+                amount,
             }),
         ),
         _ => Ok(ParsedInstruction::TokenInstruction(
