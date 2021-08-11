@@ -658,7 +658,7 @@ impl Validator {
 impl Default for Validator {
     fn default() -> Self {
         Validator {
-            fee_address: Pubkey::new_unique(),
+            fee_address: Pubkey::default(),
             fee_credit: StLamports(0),
             stake_accounts_seed_begin: 0,
             stake_accounts_seed_end: 0,
