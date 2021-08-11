@@ -74,6 +74,26 @@ The Solana version that we test against is listed in our [CI config][ci-config].
 [reproduce]:    https://chorusone.github.io/solido/development/reproducibility/
 [ci-config]:    https://github.com/ChorusOne/solido/blob/main/.github/workflows/build.yml
 
+### Cloning the repository
+
+This repository contains a Git submodule. To clone it, pass
+`--recurse-submodules`:
+
+```console
+$ git clone --recurse-submodules https://github.com/chorusone/solido
+```
+
+If you already cloned the repository without submodules, you can still
+initialize them later:
+
+```console
+$ git submodule init
+$ git submodule update
+```
+
+If you have an existing checkout and later update it, make sure to also pass
+`--recurse-submodules` when using `git pull` and `git {checkout,switch}`.
+
 ### Solido utility
 
 To build and test the `solido` utility, use the normal Cargo commands:
