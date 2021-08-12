@@ -7,14 +7,14 @@ name = "solido-cli"
 version = "0.1.0"
 
 [dependencies]
-anchor-client = "0.4.4"
-anchor-lang = "0.4.4"
+anchor-client = "0.13.2"
+anchor-lang = "0.13.2"
 bincode = "1.3.1"
-borsh = "0.8"
+borsh = "0.9.1"
 bs58 = "0.4.0"
 clap = "3.0.0-beta.2"
 lido = {path = "../program", features = ["no-entrypoint"]}
-multisig = {path = "../multisig/programs/multisig"}
+serum-multisig = {path = "../multisig/programs/multisig"}
 num-traits = "0.2"
 num_cpus = "1.0"
 rand = "0.8.3"
