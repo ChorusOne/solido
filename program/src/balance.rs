@@ -247,7 +247,7 @@ mod test {
 
     #[test]
     fn get_target_balance_works_with_inactive_for_integer_multiple() {
-        // 500 Lamports delegated, but only two active validator out of three.
+        // 500 Lamports delegated, but only two active validators out of three.
         // All target should be divided equally within the active validators.
         let mut validators = Validators::new_fill_default(3);
         validators.entries[0].entry.stake_accounts_balance = Lamports(100);

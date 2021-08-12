@@ -627,7 +627,7 @@ pub struct Validator {
     pub stake_accounts_balance: Lamports,
 
     /// Controls if a validator is allowed to have new stake deposits.
-    /// When removing a validator, this flag should be set to `true`.
+    /// When removing a validator, this flag should be set to `false`.
     pub active: bool,
 }
 
