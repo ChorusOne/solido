@@ -27,6 +27,7 @@ use lido::util::{serialize_b58, serialize_b58_slice};
 use lido::{instruction::AddMaintainerMeta, state::Weight};
 use multisig::accounts as multisig_accounts;
 use multisig::instruction as multisig_instruction;
+use solana_sdk::program_pack::Pack;
 
 use crate::config::ConfigFile;
 use crate::config::{
@@ -410,6 +411,8 @@ enum TokenInstruction {
         from_address: Pubkey,
         #[serde(serialize_with = "serialize_b58")]
         to_address: Pubkey,
+        #[serde(serialize_with = "serialize_b58")]
+        token_address: Pubkey,
         amount: u64,
     },
     Unsupported,
@@ -580,12 +583,18 @@ impl fmt::Display for ShowTransactionOutput {
                     TokenInstruction::Transfer {
                         from_address,
                         to_address,
+                        token_address,
                         amount,
                     } => {
                         writeln!(f, "It transfers tokens owned by the multisig.")?;
-                        writeln!(f, "    From address: {}", from_address)?;
-                        writeln!(f, "    To address:   {}", to_address)?;
-                        writeln!(f, "    Amount:       {}", amount)?;
+                        writeln!(f, "    Token address: {}", token_address)?;
+                        writeln!(f, "    From address:  {}", from_address)?;
+                        writeln!(f, "    To address:    {}", to_address)?;
+                        writeln!(
+                            f,
+                            "    Amount:        {}, of the token's smallest denomination",
+                            amount
+                        )?;
                     }
                     TokenInstruction::Unsupported => {
                         writeln!(f, "The instruction is currently unsupported.")?;
@@ -776,7 +785,7 @@ fn show_transaction(
             }
         }
     } else if instr.program_id == spl_token::id() {
-        match try_parse_token_instruction(&instr) {
+        match try_parse_token_instruction(config, &instr) {
             Ok(instr) => instr,
             Err(SnapshotError::MissingAccount) => return Err(SnapshotError::MissingAccount),
             Err(SnapshotError::OtherError(err)) => {
@@ -851,13 +860,23 @@ fn try_parse_solido_instruction(
     })
 }
 
-fn try_parse_token_instruction(instr: &Instruction) -> Result<ParsedInstruction> {
+fn try_parse_token_instruction(
+    config: &mut SnapshotConfig,
+    instr: &Instruction,
+) -> Result<ParsedInstruction> {
     let instruction = spl_token::instruction::TokenInstruction::unpack(instr.data.as_slice())?;
+
+    // Get the from account and deserialize it to an `spl_token`. This is done
+    // to get the mint address for the token. If the mint addresses differ, the
+    // instruction simulation will fail when proposing.
+    let from_account = config.client.get_account(&instr.accounts[0].pubkey)?;
+    let spl_token_from = spl_token::state::Account::unpack(&from_account.data)?;
     match instruction {
         spl_token::instruction::TokenInstruction::Transfer { amount } => Ok(
             ParsedInstruction::TokenInstruction(TokenInstruction::Transfer {
                 from_address: instr.accounts[0].pubkey,
                 to_address: instr.accounts[1].pubkey,
+                token_address: spl_token_from.mint,
                 amount,
             }),
         ),

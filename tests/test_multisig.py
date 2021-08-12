@@ -553,6 +553,7 @@ result = multisig(
 assert result['parsed_instruction']['TokenInstruction']['Transfer'] == {
     'from_address': test_token_account_1.pubkey,
     'to_address': test_token_account_2.pubkey,
+    'token_address': test_token.pubkey,
     'amount': 10,
 }
 
