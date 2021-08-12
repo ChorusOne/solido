@@ -816,7 +816,8 @@ pub fn propose_instruction(
     // to compute its size, which we need to allocate an account for it. And to
     // build the dummy transaction, we need to know how many owners the multisig
     // has.
-    let multisig: serum_multisig::Multisig = config.client.get_account_deserialize(&multisig_address)?;
+    let multisig: serum_multisig::Multisig =
+        config.client.get_account_deserialize(&multisig_address)?;
 
     // Build the data that the account will hold, just to measure its size, so
     // we can allocate an account of the right size.
