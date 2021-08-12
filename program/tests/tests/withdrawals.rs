@@ -4,7 +4,6 @@
 #![cfg(feature = "test-bpf")]
 
 use bincode::deserialize;
-use solana_program::program_error::ProgramError;
 use solana_program::stake::state::StakeState;
 use solana_program_test::tokio;
 use solana_sdk::native_token::LAMPORTS_PER_SOL;
