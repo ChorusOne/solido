@@ -3,18 +3,20 @@
 
 use std::fmt;
 
-use anchor_client::solana_sdk::bpf_loader_upgradeable;
-use anchor_client::solana_sdk::instruction::Instruction;
-use anchor_client::solana_sdk::pubkey::Pubkey;
-use anchor_client::solana_sdk::signature::{Keypair, Signature, Signer};
-use anchor_client::solana_sdk::system_instruction;
-use anchor_client::solana_sdk::sysvar;
 use anchor_lang::prelude::{AccountMeta, ToAccountMetas};
 use anchor_lang::{Discriminator, InstructionData};
 use borsh::de::BorshDeserialize;
 use borsh::ser::BorshSerialize;
 use clap::Clap;
 use serde::Serialize;
+use serum_multisig::accounts as multisig_accounts;
+use serum_multisig::instruction as multisig_instruction;
+use solana_sdk::bpf_loader_upgradeable;
+use solana_sdk::instruction::Instruction;
+use solana_sdk::pubkey::Pubkey;
+use solana_sdk::signature::{Keypair, Signature, Signer};
+use solana_sdk::system_instruction;
+use solana_sdk::sysvar;
 
 use lido::instruction::AddMaintainerMeta;
 use lido::instruction::AddValidatorMeta;
@@ -25,8 +27,6 @@ use lido::state::FeeRecipients;
 use lido::state::Lido;
 use lido::state::RewardDistribution;
 use lido::util::{serialize_b58, serialize_b58_slice};
-use serum_multisig::accounts as multisig_accounts;
-use serum_multisig::instruction as multisig_instruction;
 
 use crate::config::ConfigFile;
 use crate::config::{
