@@ -876,7 +876,6 @@ pub fn get_opt_default_pubkey(pubkey: Pubkey) -> Option<Pubkey> {
 
 #[cfg(test)]
 mod test {
-    use lido::state::Weight;
 
     use super::*;
 
@@ -919,10 +918,7 @@ mod test {
         state
             .solido
             .validators
-            .add(
-                Pubkey::new_unique(),
-                Validator::new(Pubkey::new_unique(), Weight::default()),
-            )
+            .add(Pubkey::new_unique(), Validator::new(Pubkey::new_unique()))
             .unwrap();
         state.validator_stake_accounts.push(vec![]);
         // Put some SOL in the reserve, but not enough to stake.
@@ -952,18 +948,12 @@ mod test {
         state
             .solido
             .validators
-            .add(
-                Pubkey::new_unique(),
-                Validator::new(Pubkey::new_unique(), Weight::default()),
-            )
+            .add(Pubkey::new_unique(), Validator::new(Pubkey::new_unique()))
             .unwrap();
         state
             .solido
             .validators
-            .add(
-                Pubkey::new_unique(),
-                Validator::new(Pubkey::new_unique(), Weight::default()),
-            )
+            .add(Pubkey::new_unique(), Validator::new(Pubkey::new_unique()))
             .unwrap();
         state.validator_stake_accounts = vec![vec![], vec![]];
 

@@ -15,7 +15,7 @@ use crate::{
         MergeStakeInfo, RemoveMaintainerInfo, RemoveValidatorInfo,
     },
     logic::{deserialize_lido, mint_st_sol_to},
-    state::{RewardDistribution, Validator, Weight},
+    state::{RewardDistribution, Validator},
     token::StLamports,
     STAKE_AUTHORITY,
 };
@@ -39,11 +39,7 @@ pub fn process_change_reward_distribution(
     lido.save(accounts.lido)
 }
 
-pub fn process_add_validator(
-    program_id: &Pubkey,
-    weight: Weight,
-    accounts_raw: &[AccountInfo],
-) -> ProgramResult {
+pub fn process_add_validator(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> ProgramResult {
     let accounts = AddValidatorInfo::try_from_slice(accounts_raw)?;
     let mut lido = deserialize_lido(program_id, accounts.lido)?;
     let rent = &Rent::from_account_info(accounts.sysvar_rent)?;
@@ -66,7 +62,7 @@ pub fn process_add_validator(
 
     lido.validators.add(
         *accounts.validator_vote_account.key,
-        Validator::new(*accounts.validator_fee_st_sol_account.key, weight),
+        Validator::new(*accounts.validator_fee_st_sol_account.key),
     )?;
 
     lido.save(accounts.lido)

@@ -18,7 +18,7 @@ use solana_program::{
 use crate::{
     accounts_struct, accounts_struct_meta,
     error::LidoError,
-    state::{RewardDistribution, Weight},
+    state::RewardDistribution,
     token::{Lamports, StLamports},
 };
 
@@ -71,10 +71,7 @@ pub enum LidoInstruction {
         #[allow(dead_code)] // but it's not
         new_reward_distribution: RewardDistribution,
     },
-    AddValidator {
-        #[allow(dead_code)] // but it's not
-        weight: Weight,
-    },
+    AddValidator,
     RemoveValidator,
     AddMaintainer,
     RemoveMaintainer,
@@ -561,16 +558,11 @@ accounts_struct! {
     }
 }
 
-pub fn add_validator(
-    program_id: &Pubkey,
-    weight: Weight,
-    accounts: &AddValidatorMeta,
-) -> Instruction {
-    let data = LidoInstruction::AddValidator { weight };
+pub fn add_validator(program_id: &Pubkey, accounts: &AddValidatorMeta) -> Instruction {
     Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
-        data: data.to_vec(),
+        data: LidoInstruction::AddValidator.to_vec(),
     }
 }
 
