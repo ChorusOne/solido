@@ -114,7 +114,7 @@ $ cargo build-bpf
 $ cargo test-bpf
 ```
 
-The programs `lido.so` and `multisig.so` can then be found in `target/deploy`.
+The programs `lido.so` and `serum_multisig.so` can then be found in `target/deploy`.
 
 ### Docker container
 

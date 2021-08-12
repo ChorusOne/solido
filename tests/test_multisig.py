@@ -48,7 +48,9 @@ print(f'> {addr3}')
 
 
 print('\nUploading Multisig program ...')
-multisig_program_id = solana_program_deploy(get_solido_program_path() + '/multisig.so')
+multisig_program_id = solana_program_deploy(
+    get_solido_program_path() + '/serum_multisig.so'
+)
 print(f'> Multisig program id is {multisig_program_id}.')
 
 print('\nCreating new multisig ...')
@@ -71,7 +73,7 @@ with tempfile.TemporaryDirectory() as scratch_dir:
     # We reuse the multisig binary for this purpose, but copy it to a different
     # location so 'solana program deploy' doesn't reuse the program id.
     program_fname = os.path.join(scratch_dir, 'program_v1.so')
-    shutil.copyfile(get_solido_program_path() + '/multisig.so', program_fname)
+    shutil.copyfile(get_solido_program_path() + '/serum_multisig.so', program_fname)
     program_id = solana_program_deploy(program_fname)
     print(f'> Program id is {program_id}.')
 
@@ -93,7 +95,7 @@ with tempfile.TemporaryDirectory() as scratch_dir:
 
     print('\nUploading v2 of program to buffer ...')
     program_fname = os.path.join(scratch_dir, 'program_v2.so')
-    shutil.copyfile(get_solido_program_path() + '/multisig.so', program_fname)
+    shutil.copyfile(get_solido_program_path() + '/serum_multisig.so', program_fname)
     result = solana(
         'program',
         'write-buffer',
