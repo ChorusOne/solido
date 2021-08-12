@@ -15,7 +15,7 @@ from typing import Optional, Dict, Any
 from util import (
     create_test_account,
     solana_program_deploy,
-    create_spl_token,
+    create_spl_token_account,
     create_vote_account,
     get_network,
     solana,
@@ -119,7 +119,7 @@ def add_validator(index: int, vote_account: Optional[str]) -> str:
     validator_fee_st_sol_account_owner = create_test_account(
         f'tests/.keys/validator-{index}-fee-st-sol-account.json'
     )
-    validator_fee_st_sol_account = create_spl_token(
+    validator_fee_st_sol_account = create_spl_token_account(
         validator_fee_st_sol_account_owner.keypair_path,
         st_sol_mint_account,
     )

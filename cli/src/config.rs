@@ -608,3 +608,27 @@ impl From<&ProposeChangeMultisigOpts> for CreateMultisigOpts {
         }
     }
 }
+
+cli_opt_struct! {
+    TransferTokenOpts {
+        /// Address of the Multisig program.
+        #[clap(long)]
+        multisig_program_id: Pubkey,
+
+        /// Multisig instance.
+        #[clap(long, value_name = "address")]
+        multisig_address: Pubkey,
+
+        /// Source of the transfer.
+        #[clap(long, value_name = "address")]
+        from_address: Pubkey,
+
+        /// Destination of the transfer.
+        #[clap(long, value_name = "address")]
+        to_address: Pubkey,
+
+        /// Amount to be transferred in the smallest token denomination.
+        #[clap(long)]
+        amount: u64
+    }
+}
