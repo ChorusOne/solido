@@ -207,7 +207,10 @@ except subprocess.CalledProcessError as err:
     # TODO(#177) Previously the error included a human-readable message, why does it
     # only include the error code now? Something to do with different Anchor
     # versions?
-    assert 'custom program error: 0x65' in err.stdout
+    print(err.stdout)
+    assert (
+        'custom program error: 0x12d' in err.stdout
+    ), f'{err.stdout} should contain error code'
     new_info = solana_program_show(program_id)
     assert new_info == upload_info, 'Program should not have changed.'
     print('> Execution failed as expected.')
@@ -292,7 +295,9 @@ except subprocess.CalledProcessError as err:
     # TODO(#177) Previously the error included a human-readable message, why does it
     # only include the error code now? Something to do with different Anchor
     # versions?
-    assert 'custom program error: 0x69' in err.stdout
+    assert (
+        'custom program error: 0x131' in err.stdout
+    ), f'{err.stdout} should contain error code'
     new_info = solana_program_show(program_id)
     assert new_info == upgrade_info, 'Program should not have changed.'
     print('> Execution failed as expected.')
@@ -461,7 +466,9 @@ except subprocess.CalledProcessError as err:
     # TODO(#177) Previously the error included a human-readable message, why does it
     # only include the error code now? Something to do with different Anchor
     # versions?
-    assert 'custom program error: 0x64' in err.stdout
+    assert (
+        'custom program error: 0x12c' in err.stdout
+    ), f'{err.stdout} should contain error code'
     result = multisig(
         'show-transaction',
         '--multisig-program-id',
