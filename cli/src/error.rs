@@ -264,6 +264,63 @@ impl AsPrettyError for ClientError {
     }
 }
 
+/// Parse an error code back to a multisig error.
+///
+/// We need to write this manually, because `multisig::Error::from`
+/// unfortunately doesn’t convert back from error codes, it appears
+/// to be broken. See also <https://github.com/ChorusOne/solido/issues/177>.
+pub fn multisig_error_from_u32(error_code: u32) -> Option<multisig::ErrorCode> {
+    use multisig::ErrorCode;
+
+    let all_errors = [
+        ErrorCode::InvalidOwner,
+        ErrorCode::NotEnoughSigners,
+        ErrorCode::TransactionAlreadySigned,
+        ErrorCode::Overflow,
+        ErrorCode::UnableToDelete,
+        ErrorCode::AlreadyExecuted,
+        ErrorCode::InvalidThreshold,
+    ];
+
+    // The purpose of the match statement below is to trigger a compile error if
+    // the `ErrorCode` enum changes in a future version of the multisig program.
+    // If you ended up here  to fix that, please also add the new variant to the
+    // list above!
+    match all_errors[0] {
+        ErrorCode::InvalidOwner => { /* See comment above! */ }
+        ErrorCode::NotEnoughSigners => { /* See comment above! */ }
+        ErrorCode::TransactionAlreadySigned => { /* See comment above! */ }
+        ErrorCode::Overflow => { /* See comment above! */ }
+        ErrorCode::UnableToDelete => { /* See comment above! */ }
+        ErrorCode::AlreadyExecuted => { /* See comment above! */ }
+        ErrorCode::InvalidThreshold => { /* See comment above! */ }
+    }
+
+    for &error in &all_errors {
+        match ProgramError::from(error) {
+            ProgramError::Custom(x) if x == error_code => return Some(error),
+            _ => continue,
+        }
+    }
+
+    None
+}
+
+#[cfg(test)]
+mod test {
+    use crate::error::multisig_error_from_u32;
+
+    #[test]
+    fn test_multisig_error_from_u32() {
+        // We use `assert!matches!` because `ErrorCode` does not implement `Eq`.
+        assert!(matches!(
+            multisig_error_from_u32(0x65),
+            Some(multisig::ErrorCode::NotEnoughSigners),
+        ));
+        assert!(matches!(multisig_error_from_u32(u32::MAX), None));
+    }
+}
+
 pub fn print_pretty_error_code(error_code: u32) {
     print_key("Error code interpretations:");
     println!("\n");
@@ -271,14 +328,14 @@ pub fn print_pretty_error_code(error_code: u32) {
         Some(err) => println!("    Solido error {} is {:?}", error_code, err),
         None => println!("    Error {} is not a known Solido error.", error_code),
     }
-    match multisig::Error::from(ProgramError::Custom(error_code)) {
-        // Anchor calls it an "ErrorCode", but it's really an enum
-        // with user-defined errors (as opposed to the Solana ProgramError).
-        multisig::Error::ErrorCode(custom_error) => {
-            println!("    Multisig error {} is {:?}", error_code, custom_error);
-            println!("    {}", custom_error);
+    match multisig_error_from_u32(error_code) {
+        Some(multisig_error) => {
+            println!(
+                "    Multisig error {} is {:?}: {}",
+                error_code, multisig_error, multisig_error
+            );
         }
-        _ => {
+        None => {
             println!("    Error {} is not a known Multisig error.", error_code);
         }
     }

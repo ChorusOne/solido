@@ -202,11 +202,7 @@ try:
     )
 except subprocess.CalledProcessError as err:
     assert err.returncode != 0
-    # assert 'Not enough owners signed this transaction' in err.stderr
-    # TODO(#177) Previously the error included a human-readable message, why does it
-    # only include the error code now? Something to do with different Anchor
-    # versions?
-    assert 'custom program error: 0x65' in err.stdout
+    assert 'Not enough owners signed this transaction' in err.stdout
     new_info = solana_program_show(program_id)
     assert new_info == upload_info, 'Program should not have changed.'
     print('> Execution failed as expected.')
@@ -287,11 +283,7 @@ try:
     )
 except subprocess.CalledProcessError as err:
     assert err.returncode != 0
-    # assert 'The given transaction has already been executed.' in err.stderr
-    # TODO(#177) Previously the error included a human-readable message, why does it
-    # only include the error code now? Something to do with different Anchor
-    # versions?
-    assert 'custom program error: 0x69' in err.stdout
+    assert 'The given transaction has already been executed.' in err.stdout
     new_info = solana_program_show(program_id)
     assert new_info == upgrade_info, 'Program should not have changed.'
     print('> Execution failed as expected.')
@@ -456,11 +448,7 @@ try:
     )
 except subprocess.CalledProcessError as err:
     assert err.returncode != 0
-    # assert 'The given owner is not part of this multisig.' in err.stderr
-    # TODO(#177) Previously the error included a human-readable message, why does it
-    # only include the error code now? Something to do with different Anchor
-    # versions?
-    assert 'custom program error: 0x64' in err.stdout
+    assert 'The given owner is not part of this multisig.' in err.stdout
     result = multisig(
         'show-transaction',
         '--multisig-program-id',
