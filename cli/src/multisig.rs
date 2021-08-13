@@ -3,18 +3,20 @@
 
 use std::fmt;
 
-use anchor_client::solana_sdk::bpf_loader_upgradeable;
-use anchor_client::solana_sdk::instruction::Instruction;
-use anchor_client::solana_sdk::pubkey::Pubkey;
-use anchor_client::solana_sdk::signature::{Keypair, Signature, Signer};
-use anchor_client::solana_sdk::system_instruction;
-use anchor_client::solana_sdk::sysvar;
 use anchor_lang::prelude::{AccountMeta, ToAccountMetas};
 use anchor_lang::{Discriminator, InstructionData};
 use borsh::de::BorshDeserialize;
 use borsh::ser::BorshSerialize;
 use clap::Clap;
 use serde::Serialize;
+use serum_multisig::accounts as multisig_accounts;
+use serum_multisig::instruction as multisig_instruction;
+use solana_sdk::bpf_loader_upgradeable;
+use solana_sdk::instruction::Instruction;
+use solana_sdk::pubkey::Pubkey;
+use solana_sdk::signature::{Keypair, Signature, Signer};
+use solana_sdk::system_instruction;
+use solana_sdk::sysvar;
 
 use lido::instruction::AddMaintainerMeta;
 use lido::instruction::AddValidatorMeta;
@@ -25,8 +27,6 @@ use lido::state::FeeRecipients;
 use lido::state::Lido;
 use lido::state::RewardDistribution;
 use lido::util::{serialize_b58, serialize_b58_slice};
-use multisig::accounts as multisig_accounts;
-use multisig::instruction as multisig_instruction;
 
 use crate::config::ConfigFile;
 use crate::config::{
@@ -260,7 +260,7 @@ fn show_multisig(
     config: &mut SnapshotConfig,
     opts: &ShowMultisigOpts,
 ) -> Result<ShowMultisigOutput> {
-    let multisig: multisig::Multisig = config
+    let multisig: serum_multisig::Multisig = config
         .client
         .get_account_deserialize(opts.multisig_address())?;
 
@@ -453,7 +453,7 @@ impl fmt::Display for ShowTransactionOutput {
             ParsedInstruction::MultisigChange { threshold, owners } => {
                 writeln!(
                     f,
-                    "  This is a multisig::set_owners_and_change_threshold instruction."
+                    "  This is a serum_multisig::set_owners_and_change_threshold instruction."
                 )?;
                 writeln!(
                     f,
@@ -633,13 +633,13 @@ fn show_transaction(
     config: &mut SnapshotConfig,
     opts: &ShowTransactionOpts,
 ) -> Result<ShowTransactionOutput> {
-    let transaction: multisig::Transaction = config
+    let transaction: serum_multisig::Transaction = config
         .client
         .get_account_deserialize(opts.transaction_address())?;
 
     // Also query the multisig, to get the owner public keys, so we can display
     // exactly who voted.
-    let multisig: multisig::Multisig = config
+    let multisig: serum_multisig::Multisig = config
         .client
         .get_account_deserialize(&transaction.multisig)?;
 
@@ -803,24 +803,25 @@ pub fn propose_instruction(
     // funds will be locked forever.
     let transaction_account = Keypair::new();
 
-    // The Multisig program expects `multisig::TransactionAccount` instead of
-    // `solana_sdk::AccountMeta`. The types are structurally identical,
-    // but not nominally, so we need to convert these.
+    // The Multisig program expects `serum_multisig::TransactionAccount` instead
+    // of `solana_sdk::AccountMeta`. The types are structurally identical, but
+    // not nominally, so we need to convert these.
     let accounts: Vec<_> = instruction
         .accounts
         .iter()
-        .map(multisig::TransactionAccount::from)
+        .map(serum_multisig::TransactionAccount::from)
         .collect();
 
-    // We are going to build a dummy version of the `multisig::Transaction`, to
-    // compute its size, which we need to allocate an account for it. And to
+    // We are going to build a dummy version of the `serum_multisig::Transaction`,
+    // to compute its size, which we need to allocate an account for it. And to
     // build the dummy transaction, we need to know how many owners the multisig
     // has.
-    let multisig: multisig::Multisig = config.client.get_account_deserialize(&multisig_address)?;
+    let multisig: serum_multisig::Multisig =
+        config.client.get_account_deserialize(&multisig_address)?;
 
     // Build the data that the account will hold, just to measure its size, so
     // we can allocate an account of the right size.
-    let dummy_tx = multisig::Transaction {
+    let dummy_tx = serum_multisig::Transaction {
         multisig: multisig_address,
         program_id: instruction.program_id,
         accounts,
@@ -836,7 +837,7 @@ pub fn propose_instruction(
 
     // The space used is the serialization of the transaction itself, plus the
     // discriminator that Anchor uses to identify the account type.
-    let mut account_bytes = multisig::Transaction::discriminator().to_vec();
+    let mut account_bytes = serum_multisig::Transaction::discriminator().to_vec();
     dummy_tx
         .serialize(&mut account_bytes)
         .expect("Failed to serialize dummy transaction.");
@@ -856,13 +857,13 @@ pub fn propose_instruction(
         multisig_program_id,
     );
 
-    // The Multisig program expects `multisig::TransactionAccount` instead of
-    // `solana_sdk::AccountMeta`. The types are structurally identical,
+    // The Multisig program expects `serum_multisig::TransactionAccount` instead
+    // of `solana_sdk::AccountMeta`. The types are structurally identical,
     // but not nominally, so we need to convert these.
     let accounts: Vec<_> = instruction
         .accounts
         .iter()
-        .map(multisig::TransactionAccount::from)
+        .map(serum_multisig::TransactionAccount::from)
         .collect();
 
     let multisig_accounts = multisig_accounts::CreateTransaction {
@@ -1005,11 +1006,11 @@ fn approve(
     // After a successful approval, query the new state of the transaction, so
     // we can show it to the user.
     let result = config.with_snapshot(|config| {
-        let multisig: multisig::Multisig = config
+        let multisig: serum_multisig::Multisig = config
             .client
             .get_account_deserialize(opts.multisig_address())?;
 
-        let transaction: multisig::Transaction = config
+        let transaction: serum_multisig::Transaction = config
             .client
             .get_account_deserialize(opts.transaction_address())?;
 
@@ -1027,7 +1028,7 @@ fn approve(
 
 /// Wrapper type needed to implement `ToAccountMetas`.
 struct TransactionAccounts {
-    accounts: Vec<multisig::TransactionAccount>,
+    accounts: Vec<serum_multisig::TransactionAccount>,
     program_id: Pubkey,
 }
 
@@ -1044,9 +1045,9 @@ impl anchor_lang::ToAccountMetas for TransactionAccounts {
                 let mut account_meta = AccountMeta::from(tx_account);
                 // When the program executes the transaction, it uses the account
                 // list with the right signers. But when we build the wrapper
-                // instruction that calls the multisig::execute_transaction, the
-                // signers of the inner instruction should not be signers of the
-                // outer one.
+                // instruction that calls the `serum_multisig::execute_transaction,
+                // the signers of the inner instruction should not be signers of
+                // the outer one.
                 account_meta.is_signer = false;
                 account_meta
             })
@@ -1089,7 +1090,7 @@ fn execute_transaction(
     let (program_derived_address, _nonce) =
         get_multisig_program_address(opts.multisig_program_id(), opts.multisig_address());
 
-    let transaction: multisig::Transaction = config
+    let transaction: serum_multisig::Transaction = config
         .client
         .get_account_deserialize(opts.transaction_address())?;
 

@@ -269,10 +269,10 @@ pub fn print_pretty_error_code(error_code: u32) {
         Some(err) => println!("    Solido error {} is {:?}", error_code, err),
         None => println!("    Error {} is not a known Solido error.", error_code),
     }
-    match multisig::Error::from(ProgramError::Custom(error_code)) {
+    match serum_multisig::Error::from(ProgramError::Custom(error_code)) {
         // Anchor calls it an "ErrorCode", but it's really an enum
         // with user-defined errors (as opposed to the Solana ProgramError).
-        multisig::Error::ErrorCode(custom_error) => {
+        serum_multisig::Error::ErrorCode(custom_error) => {
             println!("    Multisig error {} is {:?}", error_code, custom_error);
             println!("    {}", custom_error);
         }

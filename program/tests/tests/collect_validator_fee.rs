@@ -86,7 +86,7 @@ async fn test_collect_validator_fee() {
     // configuration yields, so we have to deal with it.
     context.update_exchange_rate().await;
     let rewards = context.collect_validator_fee(validator.vote_account).await;
-    assert_eq!(rewards, Lamports(1246_030_107_210));
+    assert_eq!(rewards, Lamports(1_246_030_615_387));
     let treasury_after = context
         .get_st_sol_balance(context.treasury_st_sol_account)
         .await;
@@ -97,22 +97,22 @@ async fn test_collect_validator_fee() {
     let validator_after = solido_after.validators.entries[0].entry.fee_credit;
 
     // The treasury balance increase, when converted back to SOL, should be equal
-    // to 3% of the rewards.
+    // to 3% of the rewards. Two lamports differ due to rounding errors.
     let treasury_fee = (treasury_after - treasury_before).unwrap();
     let treasury_fee_sol = solido_after
         .exchange_rate
         .exchange_st_sol(treasury_fee)
         .unwrap();
-    assert_eq!(treasury_fee_sol, Lamports(rewards.0 / 100 * 3));
+    assert_eq!(treasury_fee_sol, Lamports(rewards.0 / 100 * 3 + 2));
 
     // The developer balance increase, when converted back to SOL, should be equal
-    // to 2% of the rewards.
+    // to 2% of the rewards. One lamport differs due to rounding errors.
     let developer_fee = (developer_after - developer_before).unwrap();
     let developer_fee_sol = solido_after
         .exchange_rate
         .exchange_st_sol(developer_fee)
         .unwrap();
-    assert_eq!(developer_fee_sol, Lamports(rewards.0 / 100 * 2));
+    assert_eq!(developer_fee_sol, Lamports(rewards.0 / 100 * 2 + 1));
 
     // The validator balance increase, when converted back to SOL, should be equal
     // to 5% of the rewards.
@@ -122,7 +122,8 @@ async fn test_collect_validator_fee() {
         .exchange_st_sol(validator_fee)
         .unwrap();
 
-    assert_eq!(validator_fee_sol, Lamports(rewards.0 / 100 * 5));
+    // Four lamports differ due to rounding errors.
+    assert_eq!(validator_fee_sol, Lamports(rewards.0 / 100 * 5 + 4));
 
     // Claim validator fee
     let claimed_fee = context.claim_validator_fee(validator.vote_account).await;
