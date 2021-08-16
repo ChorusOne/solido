@@ -1,5 +1,13 @@
 # Changelog
 
+## (unreleased)
+
+**Compatibility**:
+
+ * `solido run-maintainer` now accepts the listen address with the `--listen`
+   option, instead of accepting it directly; this was an oversight in previous
+   versions.
+
 ## v0.4.0
 
 Released 2021-07-30.

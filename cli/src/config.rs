@@ -581,6 +581,7 @@ cli_opt_struct! {
         solido_address: Pubkey,
 
         /// Listen address and port for the http server that serves a /metrics endpoint. Defaults to 0.0.0.0:8923.
+        #[clap(long)]
         listen: String => "0.0.0.0:8923".to_owned(),
 
         // The expected wait time is half the max poll interval. A max poll interval
