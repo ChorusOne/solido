@@ -135,7 +135,7 @@ REWARDS
     /// Adds a maintainer to the Solido instance
     AddMaintainer(AddRemoveMaintainerOpts),
 
-    /// Adds a maintainer to the Solido instance
+    /// Removes a maintainer from the Solido instance
     RemoveMaintainer(AddRemoveMaintainerOpts),
 
     /// Deposit some SOL, receive stSOL in return.
@@ -144,15 +144,18 @@ REWARDS
     /// If the associated token account does not yet exist, it will be created.
     Deposit(DepositOpts),
 
-    /// Withdraw StSOL, receive a delegated stake account in return.
+    /// Withdraw stSOL, receive a delegated stake account in return.
     ///
     /// The amount of SOL is calculated and stored in the returned stake.
     Withdraw(WithdrawOpts),
 
-    /// Show an instance of solido in detail
+    /// Show an instance of Solido in detail
     ShowSolido(ShowSolidoOpts),
 
-    /// Show Solido authorities, useful for testing and when specifying an existing token mint.
+    /// Show Solido authorities, even if the instance is not initialized.
+    ///
+    /// This is useful for testing, and when setting up a token mint ahead of
+    /// time, to be used later when initializing the Solido instance.
     ShowAuthorities(ShowSolidoAuthoritiesOpts),
 
     /// Execute one iteration of periodic maintenance logic.
