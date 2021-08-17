@@ -23,8 +23,8 @@ use solana_sdk::transaction::Transaction;
 use crate::config::*;
 use crate::error::{Abort, CliError, Error};
 use crate::helpers::{
-    command_add_maintainer, command_add_validator, command_create_solido, command_deposit,
-    command_remove_maintainer, command_show_solido,
+    command_add_maintainer, command_add_validator, command_create_solido,
+    command_deactivate_validator, command_deposit, command_remove_maintainer, command_show_solido,
 };
 use crate::multisig::MultisigOpts;
 use crate::snapshot::{Snapshot, SnapshotClient};
@@ -128,6 +128,9 @@ REWARDS
 
     /// Adds a new validator
     AddValidator(AddValidatorOpts),
+
+    /// Deactivates a validator and initiates the removal process
+    DeactivateValidator(DeactivateValidatorOpts),
 
     /// Adds a maintainer to the Solido instance
     AddMaintainer(AddRemoveMaintainerOpts),
@@ -318,6 +321,12 @@ fn main() {
             let output = result.ok_or_abort_with("Failed to add validator.");
             print_output(output_mode, &output);
         }
+        SubCommand::DeactivateValidator(cmd_opts) => {
+            let result =
+                config.with_snapshot(|config| command_deactivate_validator(config, &cmd_opts));
+            let output = result.ok_or_abort_with("Failed to deactivate validator.");
+            print_output(output_mode, &output);
+        }
         SubCommand::AddMaintainer(cmd_opts) => {
             let result = config.with_snapshot(|config| command_add_maintainer(config, &cmd_opts));
             let output = result.ok_or_abort_with("Failed to add maintainer.");
@@ -361,6 +370,9 @@ fn merge_with_config_and_environment(
     match subcommand {
         SubCommand::CreateSolido(opts) => opts.merge_with_config_and_environment(config_file),
         SubCommand::AddValidator(opts) => opts.merge_with_config_and_environment(config_file),
+        SubCommand::DeactivateValidator(opts) => {
+            opts.merge_with_config_and_environment(config_file)
+        }
         SubCommand::AddMaintainer(opts) | SubCommand::RemoveMaintainer(opts) => {
             opts.merge_with_config_and_environment(config_file)
         }
