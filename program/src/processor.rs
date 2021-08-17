@@ -18,8 +18,8 @@ use crate::{
     metrics::Metrics,
     process_management::{
         process_add_maintainer, process_add_validator, process_change_reward_distribution,
-        process_claim_validator_fee, process_merge_stake, process_remove_maintainer,
-        process_remove_validator, process_deactivate_validator,
+        process_claim_validator_fee, process_deactivate_validator, process_merge_stake,
+        process_remove_maintainer, process_remove_validator,
     },
     stake_account::{deserialize_stake_account, StakeAccount},
     state::{

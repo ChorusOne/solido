@@ -718,8 +718,8 @@ impl Context {
             )],
             vec![&self.manager],
         )
-            .await
-            .expect("Failed to deactivate validator.");
+        .await
+        .expect("Failed to deactivate validator.");
     }
 
     pub async fn try_remove_validator(&mut self, vote_account: Pubkey) -> transport::Result<()> {

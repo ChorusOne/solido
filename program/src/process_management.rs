@@ -12,7 +12,7 @@ use crate::{
     error::LidoError,
     instruction::{
         AddMaintainerInfo, AddValidatorInfo, ChangeRewardDistributionInfo, ClaimValidatorFeeInfo,
-        MergeStakeInfo, RemoveMaintainerInfo, RemoveValidatorInfo, DeactivateValidatorInfo,
+        DeactivateValidatorInfo, MergeStakeInfo, RemoveMaintainerInfo, RemoveValidatorInfo,
     },
     logic::{deserialize_lido, mint_st_sol_to},
     state::{RewardDistribution, Validator},

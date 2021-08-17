@@ -628,7 +628,10 @@ accounts_struct! {
     }
 }
 
-pub fn deactivate_validator(program_id: &Pubkey, accounts: &DeactivateValidatorMeta) -> Instruction {
+pub fn deactivate_validator(
+    program_id: &Pubkey,
+    accounts: &DeactivateValidatorMeta,
+) -> Instruction {
     Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
