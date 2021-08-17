@@ -524,3 +524,47 @@ expected_result = {
     }
 }
 print('> Staked as expected.')
+
+print(f'\n Deactivating validator {validator_vote_account.pubkey} ...')
+transaction_result = solido(
+    'deactivate-validator',
+    '--multisig-program-id',
+    multisig_program_id,
+    '--multisig-address',
+    multisig_instance,
+    '--solido-program-id',
+    solido_program_id,
+    '--solido-address',
+    solido_address,
+    '--validator-vote-account',
+    validator_vote_account.pubkey,
+    keypair_path=test_addrs[0].keypair_path,
+)
+transaction_address = transaction_result['transaction_address']
+print(f'> Deactivation multisig transaction address is {transaction_address}.')
+transaction_status = multisig(
+    'show-transaction',
+    '--multisig-program-id',
+    multisig_program_id,
+    '--solido-program-id',
+    solido_program_id,
+    '--transaction-address',
+    transaction_address,
+)
+assert (
+    'DeactivateValidator'
+    in transaction_status['parsed_instruction']['SolidoInstruction']
+)
+approve_and_execute(transaction_address, test_addrs[1])
+
+solido_instance = solido(
+    'show-solido',
+    '--solido-program-id',
+    solido_program_id,
+    '--solido-address',
+    solido_address,
+)
+assert not solido_instance['solido']['validators']['entries'][0]['entry'][
+    'active'
+], 'Validator should be inactive after deactivation.'
+print('> Validator is inactive as expected.')
