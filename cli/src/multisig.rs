@@ -18,11 +18,10 @@ use solana_sdk::signature::{Keypair, Signature, Signer};
 use solana_sdk::system_instruction;
 use solana_sdk::sysvar;
 
-use lido::instruction::AddMaintainerMeta;
-use lido::instruction::AddValidatorMeta;
-use lido::instruction::ChangeRewardDistributionMeta;
-use lido::instruction::LidoInstruction;
-use lido::instruction::RemoveMaintainerMeta;
+use lido::instruction::{
+    AddMaintainerMeta, AddValidatorMeta, ChangeRewardDistributionMeta, DeactivateValidatorMeta,
+    LidoInstruction, RemoveMaintainerMeta,
+};
 use lido::state::FeeRecipients;
 use lido::state::Lido;
 use lido::state::RewardDistribution;
@@ -339,6 +338,16 @@ enum SolidoInstruction {
         #[serde(serialize_with = "serialize_b58")]
         validator_fee_st_sol_account: Pubkey,
     },
+    DeactivateValidator {
+        #[serde(serialize_with = "serialize_b58")]
+        solido_instance: Pubkey,
+
+        #[serde(serialize_with = "serialize_b58")]
+        manager: Pubkey,
+
+        #[serde(serialize_with = "serialize_b58")]
+        validator_vote_account: Pubkey,
+    },
     AddMaintainer {
         #[serde(serialize_with = "serialize_b58")]
         solido_instance: Pubkey,
@@ -484,6 +493,16 @@ impl fmt::Display for ShowTransactionOutput {
                             "    Validator fee account:  {}",
                             validator_fee_st_sol_account
                         )?;
+                    }
+                    SolidoInstruction::DeactivateValidator {
+                        solido_instance,
+                        manager,
+                        validator_vote_account,
+                    } => {
+                        writeln!(f, "It deactivates a validator.")?;
+                        writeln!(f, "    Solido instance:        {}", solido_instance)?;
+                        writeln!(f, "    Manager:                {}", manager)?;
+                        writeln!(f, "    Validator vote account: {}", validator_vote_account)?;
                     }
                     SolidoInstruction::AddMaintainer {
                         solido_instance,
@@ -756,6 +775,14 @@ fn try_parse_solido_instruction(
                 manager: accounts.manager,
                 validator_vote_account: accounts.validator_vote_account,
                 validator_fee_st_sol_account: accounts.validator_fee_st_sol_account,
+            })
+        }
+        LidoInstruction::DeactivateValidator => {
+            let accounts = DeactivateValidatorMeta::try_from_slice(&instr.accounts)?;
+            ParsedInstruction::SolidoInstruction(SolidoInstruction::DeactivateValidator {
+                solido_instance: accounts.lido,
+                manager: accounts.manager,
+                validator_vote_account: accounts.validator_vote_account_to_deactivate,
             })
         }
         LidoInstruction::AddMaintainer => {
