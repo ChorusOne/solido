@@ -704,6 +704,24 @@ impl Context {
         accounts
     }
 
+    pub async fn deactivate_validator(&mut self, vote_account: Pubkey) {
+        send_transaction(
+            &mut self.context,
+            &mut self.nonce,
+            &[lido::instruction::deactivate_validator(
+                &id(),
+                &lido::instruction::DeactivateValidatorMeta {
+                    lido: self.solido.pubkey(),
+                    manager: self.manager.pubkey(),
+                    validator_vote_account_to_deactivate: vote_account,
+                },
+            )],
+            vec![&self.manager],
+        )
+            .await
+            .expect("Failed to deactivate validator.");
+    }
+
     pub async fn try_remove_validator(&mut self, vote_account: Pubkey) -> transport::Result<()> {
         send_transaction(
             &mut self.context,
