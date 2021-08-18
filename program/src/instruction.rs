@@ -360,33 +360,36 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
-        // Source stake account is the first, possibly active stake account that we'll try to unstake from.
-        // Determined by the
+        // Source stake account is the last active stake account that we'll try
+        // to unstake from.  Determined by the program-derived stake account for
+        // the given validator, with seed `stake_seeds.stake_accounts_seed_end - 1`.
         pub source_stake_account {
             is_signer: false,
-            // Is writable due to merge (stake_program::intruction::merge) of stake_account_end
+            // Is writable due to split (`stake_program::intruction::split`) of stake_account_end
             // into stake_account_merge_into under the condition that they are not equal
             is_writable: true,
         },
-        // Must be set to the program-derived stake account for the given
-        // validator, with seed `stake_accounts_seed_end`.
+        // Destination stake account is the last unstake stake account that will
+        // receive the split of the funds.  Determined by the program-derived
+        // stake account for the given validator, with seed
+        // `unstake_seeds.stake_accounts_seed_end`.
         pub destination_stake_account {
             is_signer: false,
-            // Is writable due to transfer (system_instruction::transfer) from reserve_account to
-            // stake_account_end and stake program being initialized
-            // (stake_program::instruction::initialize)
+            // Is writable due to the first two instructions from split
+            // (`stake_program::intruction::split`).
             is_writable: true,
         },
+        // Stake authority, to be able to split the stake.
         pub stake_authority {
             is_signer: false,
             is_writable: false,
         },
+        // Required to call `solana_program::stake::instruction::deactivate_stake`.
         const sysvar_clock = sysvar::clock::id(),
+        // Required to call cross-program.
         const system_program = system_program::id(),
-        const sysvar_rent = sysvar::rent::id(),
+        // Required to call `stake_program::intruction::split`.
         const stake_program = stake_program::program::id(),
-        const stake_history = stake_history::id(),
-        const stake_program_config = stake_program::config::id(),
     }
 }
 
