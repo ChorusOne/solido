@@ -10,6 +10,7 @@ use rand::SeedableRng;
 use solana_program::program_pack::Pack;
 use solana_program::rent::Rent;
 use solana_program::stake::state::Stake;
+use solana_program::stake::state::StakeState;
 use solana_program::system_instruction;
 use solana_program::system_program;
 use solana_program::{borsh::try_from_slice_unchecked, sysvar};
@@ -924,6 +925,8 @@ impl Context {
             validator.entry.unstake_seeds.stake_accounts_seed_begin,
         );
 
+        let stake_account_before = self.get_stake_account_from_seed(&validator.pubkey, 0).await;
+
         send_transaction(
             &mut self.context,
             &mut self.nonce,
@@ -945,6 +948,33 @@ impl Context {
             vec![self.maintainer.as_ref().unwrap()],
         )
         .await?;
+
+        let stake_account_after = self.get_stake_account_from_seed(&validator.pubkey, 0).await;
+        assert_eq!(
+            (stake_account_before.balance.total() - stake_account_after.balance.total()).unwrap(),
+            amount
+        );
+        let unstake_account = self
+            .get_unstake_account_from_seed(&validator.pubkey, 0)
+            .await;
+
+        let mut deactivating_amount = amount;
+
+        let (unstake_addr, _) = Validator::find_unstake_account_address(
+            &id(),
+            &self.solido.pubkey(),
+            &validator.pubkey,
+            0,
+        );
+        let unstake_account_balance = self.get_sol_balance(unstake_addr).await;
+        // We can't unstake all the balance if we ask for it, the split will not
+        // deactivate the rent.
+        if unstake_account_balance == amount {
+            let rent = self.get_rent().await;
+            let stake_rent = rent.minimum_balance(std::mem::size_of::<StakeState>());
+            deactivating_amount = (amount - Lamports(stake_rent)).unwrap();
+        }
+        assert_eq!(unstake_account.balance.deactivating, deactivating_amount);
         Ok(())
     }
 
