@@ -58,10 +58,7 @@ pub enum LidoInstruction {
         #[allow(dead_code)] // but it's not
         amount: Lamports,
     },
-    /// Unstake from a validator to a new stake account
-    ///
-    /// Splits the stake account determined by the validator's inactive stake
-    /// seeds.
+    /// Unstake from a validator to a new stake account.
     Unstake {
         #[allow(dead_code)] // but it's not
         amount: Lamports,
@@ -363,12 +360,8 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
-        // For a `StakeDeposit` where we temporarily create an undelegated
-        // account at `stake_account_end`, but immediately merge it into
-        // `stake_account_merge_into`, this must be set to the program-derived
-        // stake account for the validator, with seed `stake_accounts_seed_end
-        // - 1`. For a `StakeDeposit` where we create a new stake account, this
-        // should be set to the same value as `stake_account_end`.
+        // Source stake account is the first, possibly active stake account that we'll try to unstake from.
+        // Determined by the
         pub source_stake_account {
             is_signer: false,
             // Is writable due to merge (stake_program::intruction::merge) of stake_account_end
