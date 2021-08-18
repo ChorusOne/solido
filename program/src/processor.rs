@@ -376,17 +376,10 @@ pub fn process_unstake(
     raw_accounts: &[AccountInfo],
 ) -> ProgramResult {
     let accounts = UnstakeAccountsInfo::try_from_slice(raw_accounts)?;
-
     let mut lido = deserialize_lido(program_id, accounts.lido)?;
-
     lido.check_maintainer(accounts.maintainer)?;
     lido.check_stake_authority(program_id, accounts.lido.key, accounts.stake_authority)?;
     let destination_bump_seed = check_unstake_accounts(program_id, &lido, &accounts)?;
-
-    // The Split instruction returns three instructions:
-    //   0 - Allocate instruction.
-    //   1 - Assign owner instruction.
-    //   2 - Split stake instruction.
 
     let provided_validator = lido.validators.get(accounts.validator_vote_account.key)?;
     let seeds = [
@@ -396,7 +389,7 @@ pub fn process_unstake(
         &provided_validator
             .entry
             .unstake_seeds
-            .stake_accounts_seed_begin
+            .stake_accounts_seed_end
             .to_le_bytes()[..],
         &[destination_bump_seed],
     ];

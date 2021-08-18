@@ -390,24 +390,31 @@ pub fn check_unstake_accounts(
     lido: &Lido,
     accounts: &UnstakeAccountsInfo,
 ) -> Result<u8, ProgramError> {
-    let provided_validator = lido.validators.get(accounts.validator_vote_account.key)?;
+    let validator = lido.validators.get(accounts.validator_vote_account.key)?;
+
+    // If a validator doesn't have a stake account, it cannot be unstaked.
+    if validator.entry.stake_seeds.stake_accounts_seed_begin
+        == validator.entry.stake_seeds.stake_accounts_seed_end
+    {
+        msg!("Attempting to unstake from accounts in a validator that has no stake accounts.");
+        return Err(LidoError::InvalidStakeAccount.into());
+    }
+    // Does not underflow. If `stake_accounts_seed_end == 0` the previous
+    // condition would have failed.
+    let source_stake_seed = validator.entry.stake_seeds.stake_accounts_seed_end - 1;
+    let destination_stake_seed = validator.entry.unstake_seeds.stake_accounts_seed_end;
+
     let (source_stake_account, _) = Validator::find_stake_account_address(
         program_id,
         accounts.lido.key,
         accounts.validator_vote_account.key,
-        provided_validator
-            .entry
-            .stake_seeds
-            .stake_accounts_seed_begin,
+        source_stake_seed,
     );
 
     if &source_stake_account != accounts.source_stake_account.key {
         msg!(
             "Source stake account differs from the one calculated by seed {}, should be {}, is {}.",
-            provided_validator
-                .entry
-                .stake_seeds
-                .stake_accounts_seed_begin,
+            source_stake_seed,
             source_stake_account,
             accounts.source_stake_account.key
         );
@@ -419,18 +426,12 @@ pub fn check_unstake_accounts(
             program_id,
             accounts.lido.key,
             accounts.validator_vote_account.key,
-            provided_validator
-                .entry
-                .unstake_seeds
-                .stake_accounts_seed_begin,
+            destination_stake_seed,
         );
     if &destination_stake_account != accounts.destination_stake_account.key {
         msg!(
             "Destination stake account differs from the one calculated by seed {}, should be {}, is {}.",
-            provided_validator
-                .entry
-                .unstake_seeds
-                .stake_accounts_seed_begin,
+            destination_stake_seed,
             source_stake_account,
             accounts.source_stake_account.key
         );
