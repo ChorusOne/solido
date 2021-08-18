@@ -11,10 +11,11 @@ use solana_program::{
     stake as stake_program, system_instruction,
 };
 
+use crate::state::Validator;
 use crate::STAKE_AUTHORITY;
 use crate::{
     error::LidoError,
-    instruction::{CollectValidatorFeeInfo, WithdrawAccountsInfo},
+    instruction::{CollectValidatorFeeInfo, UnstakeAccountsInfo, WithdrawAccountsInfo},
     state::Fees,
     state::Lido,
     token::{Lamports, StLamports},
@@ -379,6 +380,129 @@ pub fn distribute_fees<'a, 'b>(
         .metrics
         .observe_reward_st_sol_appreciation(fees.st_sol_appreciation_amount)?;
 
+    Ok(())
+}
+
+/// Checks if the stake accounts on `accounts` correspond to the ones generated
+/// by the validator's seeds. Returns the destination bump seed.
+pub fn check_unstake_accounts(
+    program_id: &Pubkey,
+    lido: &Lido,
+    accounts: &UnstakeAccountsInfo,
+) -> Result<u8, ProgramError> {
+    let provided_validator = lido.validators.get(accounts.validator_vote_account.key)?;
+    let (source_stake_account, _) = Validator::find_stake_account_address(
+        program_id,
+        accounts.lido.key,
+        accounts.validator_vote_account.key,
+        provided_validator
+            .entry
+            .stake_seeds
+            .stake_accounts_seed_begin,
+    );
+
+    if &source_stake_account != accounts.source_stake_account.key {
+        msg!(
+            "Source stake account differs from the one calculated by seed {}, should be {}, is {}.",
+            provided_validator
+                .entry
+                .stake_seeds
+                .stake_accounts_seed_begin,
+            source_stake_account,
+            accounts.source_stake_account.key
+        );
+        return Err(LidoError::InvalidStakeAccount.into());
+    }
+
+    let (destination_stake_account, destination_bump_seed) =
+        Validator::find_unstake_account_address(
+            program_id,
+            accounts.lido.key,
+            accounts.validator_vote_account.key,
+            provided_validator
+                .entry
+                .unstake_seeds
+                .stake_accounts_seed_begin,
+        );
+    if &destination_stake_account != accounts.destination_stake_account.key {
+        msg!(
+            "Destination stake account differs from the one calculated by seed {}, should be {}, is {}.",
+            provided_validator
+                .entry
+                .unstake_seeds
+                .stake_accounts_seed_begin,
+            source_stake_account,
+            accounts.source_stake_account.key
+        );
+        return Err(LidoError::InvalidStakeAccount.into());
+    }
+    Ok(destination_bump_seed)
+}
+
+pub struct SplitStakeAccounts<'a, 'b> {
+    pub source_stake_account: &'a AccountInfo<'b>,
+    pub destination_stake_account: &'a AccountInfo<'b>,
+    pub authority: &'a AccountInfo<'b>,
+    pub system_program: &'a AccountInfo<'b>,
+    pub stake_program: &'a AccountInfo<'b>,
+}
+
+pub fn split_stake_account(
+    lido_address: &Pubkey,
+    lido: &Lido,
+    accounts: &SplitStakeAccounts,
+    amount: Lamports,
+    seeds: &[&[&[u8]]],
+) -> ProgramResult {
+    // The Split instruction returns three instructions:
+    //   0 - Allocate instruction.
+    //   1 - Assign owner instruction.
+    //   2 - Split stake instruction.
+    let split_instructions = solana_program::stake::instruction::split(
+        accounts.source_stake_account.key,
+        accounts.authority.key,
+        amount.0,
+        accounts.destination_stake_account.key,
+    );
+    assert_eq!(split_instructions.len(), 3);
+
+    let (allocate_instruction, assign_instruction, split_instruction) = (
+        &split_instructions[0],
+        &split_instructions[1],
+        &split_instructions[2],
+    );
+
+    invoke_signed(
+        allocate_instruction,
+        &[
+            accounts.destination_stake_account.clone(),
+            accounts.system_program.clone(),
+        ],
+        seeds,
+    )?;
+    invoke_signed(
+        assign_instruction,
+        &[
+            accounts.destination_stake_account.clone(),
+            accounts.system_program.clone(),
+        ],
+        seeds,
+    )?;
+
+    invoke_signed(
+        split_instruction,
+        &[
+            accounts.source_stake_account.clone(),
+            accounts.destination_stake_account.clone(),
+            accounts.authority.clone(),
+            accounts.stake_program.clone(),
+        ],
+        &[&[
+            &lido_address.to_bytes(),
+            STAKE_AUTHORITY,
+            &[lido.stake_authority_bump_seed],
+        ]],
+    )?;
     Ok(())
 }
 

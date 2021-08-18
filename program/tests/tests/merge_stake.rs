@@ -5,8 +5,7 @@
 
 use crate::assert_solido_error;
 use crate::context::{get_account_info, Context, StakeDeposit};
-use lido::{error::LidoError, stake_account::StakeAccount, state::Validator, token::Lamports};
-use solana_program::pubkey::Pubkey;
+use lido::{error::LidoError, state::Validator, token::Lamports};
 use solana_program_test::tokio;
 use solana_sdk::signer::Signer;
 
@@ -52,8 +51,8 @@ async fn test_successful_merge_activating_stake() {
         .get(&validator_vote_account)
         .unwrap();
     assert_eq!(
-        validator_after.entry.stake_accounts_seed_begin,
-        validator_before.entry.stake_accounts_seed_begin + 1,
+        validator_after.entry.stake_seeds.stake_accounts_seed_begin,
+        validator_before.entry.stake_seeds.stake_accounts_seed_begin + 1,
     );
 
     let sol_before = solido_before.get_sol_balance(
@@ -75,25 +74,6 @@ fn advance_epoch(context: &mut Context, current_slot: &mut u64) {
     let slots_per_epoch = epoch_schedule.slots_per_epoch;
     *current_slot = *current_slot + slots_per_epoch;
     context.context.warp_to_slot(*current_slot).unwrap();
-}
-
-async fn get_stake_account_from_seed(
-    context: &mut Context,
-    validator_vote_account: &Pubkey,
-    seed: u64,
-) -> StakeAccount {
-    let (stake_address, _) = Validator::find_stake_account_address(
-        &crate::context::id(),
-        &context.solido.pubkey(),
-        &validator_vote_account,
-        seed,
-    );
-
-    let clock = context.get_clock().await;
-    let stake_history = context.get_stake_history().await;
-    let stake_balance = context.get_sol_balance(stake_address).await;
-    let stake = context.get_stake_state(stake_address).await;
-    StakeAccount::from_delegated_account(stake_balance, &stake, &clock, &stake_history, seed)
 }
 
 // Test merging active to activating: should fail.
@@ -126,11 +106,13 @@ async fn test_merge_stake_combinations() {
         )
         .await;
 
-    let active_stake_account =
-        get_stake_account_from_seed(&mut context, &validator_vote_account, 0).await;
+    let active_stake_account = context
+        .get_stake_account_from_seed(&validator_vote_account, 0)
+        .await;
 
-    let activating_stake_account =
-        get_stake_account_from_seed(&mut context, &validator_vote_account, 1).await;
+    let activating_stake_account = context
+        .get_stake_account_from_seed(&validator_vote_account, 1)
+        .await;
 
     assert!(active_stake_account.is_active());
     assert!(activating_stake_account.is_activating());
@@ -139,8 +121,9 @@ async fn test_merge_stake_combinations() {
     assert_solido_error!(result, LidoError::WrongStakeState);
     advance_epoch(&mut context, &mut current_slot);
 
-    let now_active_stake_account =
-        get_stake_account_from_seed(&mut context, &validator_vote_account, 1).await;
+    let now_active_stake_account = context
+        .get_stake_account_from_seed(&validator_vote_account, 1)
+        .await;
     assert!(active_stake_account.is_active());
     assert!(now_active_stake_account.is_active());
 

@@ -3,6 +3,7 @@
 
 //! Holds a test context, which makes it easier to test with a Solido instance set up.
 
+use lido::stake_account::StakeAccount;
 use num_traits::cast::FromPrimitive;
 use rand::prelude::StdRng;
 use rand::SeedableRng;
@@ -840,7 +841,7 @@ impl Context {
             &id(),
             &self.solido.pubkey(),
             &validator_vote_account,
-            validator_entry.entry.stake_accounts_seed_end,
+            validator_entry.entry.stake_seeds.stake_accounts_seed_end,
         );
 
         let (stake_account_merge_into, _) = Validator::find_stake_account_address(
@@ -848,12 +849,13 @@ impl Context {
             &self.solido.pubkey(),
             &validator_vote_account,
             match approach {
-                StakeDeposit::Append => validator_entry.entry.stake_accounts_seed_end,
+                StakeDeposit::Append => validator_entry.entry.stake_seeds.stake_accounts_seed_end,
                 // We do a wrapping sub here, so we can call stake-merge initially,
                 // when end is 0, such that the account to merge into is not the
                 // same as the end account.
                 StakeDeposit::Merge => validator_entry
                     .entry
+                    .stake_seeds
                     .stake_accounts_seed_end
                     .wrapping_sub(1),
             },
@@ -897,6 +899,60 @@ impl Context {
         self.try_stake_deposit(validator_vote_account, approach, amount)
             .await
             .expect("Failed to call StakeDeposit on Solido instance.")
+    }
+
+    /// Unstake from the validator at `self.validator`.
+    pub async fn try_unstake(&mut self, amount: Lamports) -> transport::Result<()> {
+        // Where the new stake will live.
+        let solido = self.get_solido().await;
+        // solido.validators.entries[0].entry.get
+        let validator = solido
+            .validators
+            .get(&self.validator.as_ref().unwrap().vote_account)
+            .unwrap();
+
+        let (source_stake_account, _) = Validator::find_stake_account_address(
+            &id(),
+            &self.solido.pubkey(),
+            &validator.pubkey,
+            validator.entry.stake_seeds.stake_accounts_seed_begin,
+        );
+        let (destination_stake_account, _) = Validator::find_unstake_account_address(
+            &id(),
+            &self.solido.pubkey(),
+            &validator.pubkey,
+            validator.entry.unstake_seeds.stake_accounts_seed_begin,
+        );
+
+        send_transaction(
+            &mut self.context,
+            &mut self.nonce,
+            &[
+                // authorize_burn_instruction,
+                instruction::unstake(
+                    &id(),
+                    &instruction::UnstakeAccountsMeta {
+                        lido: self.solido.pubkey(),
+                        validator_vote_account: self.validator.as_ref().unwrap().vote_account,
+                        source_stake_account,
+                        destination_stake_account,
+                        stake_authority: self.stake_authority,
+                        maintainer: self.maintainer.as_ref().unwrap().pubkey(),
+                    },
+                    amount,
+                ),
+            ],
+            vec![self.maintainer.as_ref().unwrap()],
+        )
+        .await?;
+        Ok(())
+    }
+
+    /// Withdraw from the validator at `self.validator`.
+    pub async fn unstake(&mut self, amount: Lamports) {
+        self.try_unstake(amount)
+            .await
+            .expect("Failed to call Unstake on Solido instance.");
     }
 
     pub async fn try_change_reward_distribution(
@@ -1008,8 +1064,8 @@ impl Context {
     ) -> transport::Result<()> {
         let solido = self.get_solido().await;
         let validator = solido.validators.get(&validator_vote_account).unwrap();
-        let begin = validator.entry.stake_accounts_seed_begin;
-        let end = validator.entry.stake_accounts_seed_end;
+        let begin = validator.entry.stake_seeds.stake_accounts_seed_begin;
+        let end = validator.entry.stake_seeds.stake_accounts_seed_end;
 
         let stake_account_addrs: Vec<Pubkey> = (begin..end)
             .map(|seed| {
@@ -1236,6 +1292,43 @@ impl Context {
     pub async fn get_stake_rent_exempt_reserve(&mut self, stake_account: Pubkey) -> Lamports {
         let account = self.get_account(stake_account).await;
         lido::stake_account::deserialize_rent_exempt_reserve(&account.data).unwrap()
+    }
+
+    pub async fn get_stake_account_from_seed(
+        &mut self,
+        validator_vote_account: &Pubkey,
+        seed: u64,
+    ) -> StakeAccount {
+        let (stake_address, _) = Validator::find_stake_account_address(
+            &id(),
+            &self.solido.pubkey(),
+            &validator_vote_account,
+            seed,
+        );
+
+        let clock = self.get_clock().await;
+        let stake_history = self.get_stake_history().await;
+        let stake_balance = self.get_sol_balance(stake_address).await;
+        let stake = self.get_stake_state(stake_address).await;
+        StakeAccount::from_delegated_account(stake_balance, &stake, &clock, &stake_history, seed)
+    }
+    pub async fn get_unstake_account_from_seed(
+        &mut self,
+        validator_vote_account: &Pubkey,
+        seed: u64,
+    ) -> StakeAccount {
+        let (stake_address, _) = Validator::find_unstake_account_address(
+            &id(),
+            &self.solido.pubkey(),
+            &validator_vote_account,
+            seed,
+        );
+
+        let clock = self.get_clock().await;
+        let stake_history = self.get_stake_history().await;
+        let stake_balance = self.get_sol_balance(stake_address).await;
+        let stake = self.get_stake_state(stake_address).await;
+        StakeAccount::from_delegated_account(stake_balance, &stake, &clock, &stake_history, seed)
     }
 }
 
