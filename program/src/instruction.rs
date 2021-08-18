@@ -58,6 +58,14 @@ pub enum LidoInstruction {
         #[allow(dead_code)] // but it's not
         amount: Lamports,
     },
+    /// Unstake from a validator to a new stake account
+    ///
+    /// Splits the stake account determined by the validator's inactive stake
+    /// seeds.
+    Unstake {
+        #[allow(dead_code)] // but it's not
+        amount: Lamports,
+    },
     /// Update the exchange rate, at the beginning of the epoch.
     ///
     /// This can be called by anybody.
@@ -334,6 +342,67 @@ pub fn stake_deposit(
     amount: Lamports,
 ) -> Instruction {
     let data = LidoInstruction::StakeDeposit { amount };
+    Instruction {
+        program_id: *program_id,
+        accounts: accounts.to_vec(),
+        data: data.to_vec(),
+    }
+}
+
+accounts_struct! {
+    UnstakeAccountsMeta, UnstakeAccountsInfo {
+        pub lido {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub maintainer {
+            is_signer: true,
+            is_writable: false,
+        },
+        pub validator_vote_account {
+            is_signer: false,
+            is_writable: false,
+        },
+        // For a `StakeDeposit` where we temporarily create an undelegated
+        // account at `stake_account_end`, but immediately merge it into
+        // `stake_account_merge_into`, this must be set to the program-derived
+        // stake account for the validator, with seed `stake_accounts_seed_end
+        // - 1`. For a `StakeDeposit` where we create a new stake account, this
+        // should be set to the same value as `stake_account_end`.
+        pub source_stake_account {
+            is_signer: false,
+            // Is writable due to merge (stake_program::intruction::merge) of stake_account_end
+            // into stake_account_merge_into under the condition that they are not equal
+            is_writable: true,
+        },
+        // Must be set to the program-derived stake account for the given
+        // validator, with seed `stake_accounts_seed_end`.
+        pub destination_stake_account {
+            is_signer: false,
+            // Is writable due to transfer (system_instruction::transfer) from reserve_account to
+            // stake_account_end and stake program being initialized
+            // (stake_program::instruction::initialize)
+            is_writable: true,
+        },
+        pub stake_authority {
+            is_signer: false,
+            is_writable: false,
+        },
+        const sysvar_clock = sysvar::clock::id(),
+        const system_program = system_program::id(),
+        const sysvar_rent = sysvar::rent::id(),
+        const stake_program = stake_program::program::id(),
+        const stake_history = stake_history::id(),
+        const stake_program_config = stake_program::config::id(),
+    }
+}
+
+pub fn unstake(
+    program_id: &Pubkey,
+    accounts: &UnstakeAccountsMeta,
+    amount: Lamports,
+) -> Instruction {
+    let data = LidoInstruction::Unstake { amount };
     Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),

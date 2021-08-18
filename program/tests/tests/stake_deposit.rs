@@ -7,6 +7,7 @@ use crate::context::{id, Context, StakeDeposit};
 use crate::{assert_error_code, assert_solido_error};
 
 use lido::error::LidoError;
+use lido::state::Validator;
 use lido::token::Lamports;
 use solana_program_test::tokio;
 use solana_sdk::signer::Signer;
@@ -23,8 +24,8 @@ async fn test_stake_deposit_append() {
     let solido_before = context.get_solido().await;
     let validator_before = &solido_before.validators.entries[0].entry;
     assert_eq!(validator_before.stake_accounts_balance, Lamports(0));
-    assert_eq!(validator_before.stake_accounts_seed_begin, 0);
-    assert_eq!(validator_before.stake_accounts_seed_end, 0);
+    assert_eq!(validator_before.stake_seeds.stake_accounts_seed_begin, 0);
+    assert_eq!(validator_before.stake_seeds.stake_accounts_seed_end, 0);
 
     // Now we make a deposit, and then delegate part of it.
     context.deposit(TEST_DEPOSIT_AMOUNT).await;
@@ -54,8 +55,8 @@ async fn test_stake_deposit_append() {
     );
 
     // This was also the first deposit, so that should have created one stake account.
-    assert_eq!(validator_after.stake_accounts_seed_begin, 0);
-    assert_eq!(validator_after.stake_accounts_seed_end, 1);
+    assert_eq!(validator_after.stake_seeds.stake_accounts_seed_begin, 0);
+    assert_eq!(validator_after.stake_seeds.stake_accounts_seed_end, 1);
 }
 
 #[tokio::test]
@@ -104,8 +105,8 @@ async fn test_stake_deposit_merge() {
     );
 
     // We merged, so only seed 0 should be consumed at this point.
-    assert_eq!(validator_after.stake_accounts_seed_begin, 0);
-    assert_eq!(validator_after.stake_accounts_seed_end, 1);
+    assert_eq!(validator_after.stake_seeds.stake_accounts_seed_begin, 0);
+    assert_eq!(validator_after.stake_seeds.stake_accounts_seed_end, 1);
 
     // Next, we will try to merge stake accounts created in different epochs,
     // which should fail.
@@ -151,8 +152,12 @@ async fn test_stake_deposit_succeeds_despite_donation() {
     let validator_before = &solido_before.validators.entries[0];
 
     // Figure out what the next stake account is going to be.
-    let (stake_account_addr, _) =
-        validator_before.find_stake_account_address(&id(), &context.solido.pubkey(), 0);
+    let (stake_account_addr, _) = Validator::find_stake_account_address(
+        &id(),
+        &context.solido.pubkey(),
+        &validator_before.pubkey,
+        0,
+    );
 
     // Put some SOL in that account, so it is no longer non-existent.
     context
