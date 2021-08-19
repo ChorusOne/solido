@@ -18,8 +18,8 @@ use crate::{
     metrics::Metrics,
     process_management::{
         process_add_maintainer, process_add_validator, process_change_reward_distribution,
-        process_claim_validator_fee, process_merge_stake, process_remove_maintainer,
-        process_remove_validator,
+        process_claim_validator_fee, process_deactivate_validator, process_merge_stake,
+        process_remove_maintainer, process_remove_validator,
     },
     stake_account::{deserialize_stake_account, StakeAccount},
     state::{
@@ -789,6 +789,7 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
         } => process_change_reward_distribution(program_id, new_reward_distribution, accounts),
         LidoInstruction::AddValidator => process_add_validator(program_id, accounts),
         LidoInstruction::RemoveValidator => process_remove_validator(program_id, accounts),
+        LidoInstruction::DeactivateValidator => process_deactivate_validator(program_id, accounts),
         LidoInstruction::AddMaintainer => process_add_maintainer(program_id, accounts),
         LidoInstruction::RemoveMaintainer => process_remove_maintainer(program_id, accounts),
         LidoInstruction::MergeStake => process_merge_stake(program_id, accounts),

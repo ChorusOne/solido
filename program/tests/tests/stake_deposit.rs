@@ -189,3 +189,23 @@ async fn test_stake_deposit_succeeds_despite_donation() {
         (TEST_STAKE_DEPOSIT_AMOUNT + Lamports(107_000_000)).unwrap()
     );
 }
+
+#[tokio::test]
+async fn test_stake_deposit_fails_for_inactive_validator() {
+    let mut context = Context::new_with_maintainer().await;
+    let validator = context.add_validator().await;
+
+    context.deactivate_validator(validator.vote_account).await;
+
+    // Try to stake to the inactive validator. This should fail.
+    context.deposit(TEST_DEPOSIT_AMOUNT).await;
+    let result = context
+        .try_stake_deposit(
+            validator.vote_account,
+            StakeDeposit::Append,
+            TEST_STAKE_DEPOSIT_AMOUNT,
+        )
+        .await;
+
+    assert_solido_error!(result, LidoError::StakeToInactiveValidator);
+}
