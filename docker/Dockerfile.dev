@@ -33,8 +33,9 @@ RUN cd $SOLIDOBUILDPATH \
 RUN cd $SOLIDOBUILDPATH \
     && cp -rf $SOLIDOBUILDPATH/target/deploy $SOLIDORELEASEPATH \
     && cp -rf $SOLIDOBUILDPATH/target/release/* $SOLIDORELEASEPATH/cli \
-    && cp -rf $SOLIDOBUILDPATH/tests/* $SOLIDORELEASEPATH/tests \
-    && rm -rf $SOLIDOBUILDPATH
+    && cp -rf $SOLIDOBUILDPATH/tests/* $SOLIDORELEASEPATH/tests
+#\
+#    && rm -rf $SOLIDOBUILDPATH
 
 # Hash on-chain programs
 RUN cd $SOLIDORELEASEPATH/deploy \

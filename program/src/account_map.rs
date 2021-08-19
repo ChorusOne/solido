@@ -81,6 +81,29 @@ impl<T: Default + EntryConstantSize> AccountMap<T> {
         Ok(())
     }
 
+    pub fn remove_on<P>(
+        &mut self,
+        address: &Pubkey,
+        removal_predicate: P,
+        predicate_error: LidoError,
+    ) -> Result<T, LidoError>
+    where
+        P: Fn(&T) -> bool,
+    {
+        let entry_to_be_removed_option = self.entries.iter().find(|pe| &pe.pubkey == address);
+
+        match entry_to_be_removed_option {
+            Some(e) => {
+                if removal_predicate(&e.entry) {
+                    self.remove(address)
+                } else {
+                    return Err(predicate_error);
+                }
+            }
+            None => return Err(LidoError::InvalidAccountMember),
+        }
+    }
+
     pub fn remove(&mut self, address: &Pubkey) -> Result<T, LidoError> {
         let idx = self
             .entries

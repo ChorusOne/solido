@@ -154,6 +154,10 @@ pub enum LidoError {
     /// Tried to deposit stake to inactive validator.
     #[error("StakeToInactiveValidator")]
     StakeToInactiveValidator = 39,
+
+    /// Tried to remove a validator when it when it was active or had stake accounts.
+    #[error("ValidatorIsStillActive")]
+    ValidatorIsStillActive = 40,
 }
 
 impl From<ArithmeticError> for LidoError {
