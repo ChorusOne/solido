@@ -168,6 +168,15 @@ pub fn process_deposit(
         st_sol_amount,
     )?;
 
+    // Explain what we did in the logs, because block explorers can be an
+    // inscrutable mess of accounts, especially without special parsers for
+    // Solido transactions. With the logs, we can still identify what happened.
+    msg!(
+        "Solido: Deposited {}, minted {} in return.",
+        amount,
+        st_sol_amount
+    );
+
     lido.metrics.deposit_amount.observe(amount)?;
     lido.save(accounts.lido)
 }
@@ -746,6 +755,11 @@ pub fn process_withdraw(
 
     // Give control of the stake to the user.
     transfer_stake_authority(&accounts, lido.stake_authority_bump_seed)?;
+
+    // Explain what we did in the logs, because block explorers can be an
+    // inscrutable mess of accounts, especially without special parsers for
+    // Solido transactions. With the logs, we can still identify what happened.
+    msg!("Solido: Withdrew {} for {}.", amount, sol_to_withdraw);
 
     lido.save(accounts.lido)
 }
