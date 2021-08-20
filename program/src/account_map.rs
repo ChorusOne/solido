@@ -81,10 +81,12 @@ impl<T: Default + EntryConstantSize> AccountMap<T> {
         Ok(())
     }
 
+    // Remove entry contingent on a passed predicate and return a specific passed error if
+    // removal predicate fails
     pub fn remove_on<P>(
         &mut self,
         address: &Pubkey,
-        removal_predicate: P,
+        removal_if_true: P,
         predicate_error: LidoError,
     ) -> Result<T, LidoError>
     where
@@ -94,7 +96,7 @@ impl<T: Default + EntryConstantSize> AccountMap<T> {
 
         match entry_to_be_removed_option {
             Some(e) => {
-                if removal_predicate(&e.entry) {
+                if removal_if_true(&e.entry) {
                     self.remove(address)
                 } else {
                     return Err(predicate_error);

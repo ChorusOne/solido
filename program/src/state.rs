@@ -722,12 +722,12 @@ impl PubkeyAndEntry<Validator> {
         )
     }
 
-    pub fn has_stake_accounts(&self) -> bool {
+    pub fn has_no_stake_accounts(&self) -> bool {
         &self.stake_seeds.stake_accounts_seed_begin == &self.stake_seeds.stake_accounts_seed_end
     }
 
     pub fn can_be_removed(&self) -> bool {
-        !&self.active && !&self.has_stake_accounts()
+        !&self.active && self.has_no_stake_accounts()
     }
 
     pub fn find_unstake_account_address(
