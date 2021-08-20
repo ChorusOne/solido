@@ -22,8 +22,8 @@ use lido::{
 
 use crate::{
     config::{
-        AddRemoveMaintainerOpts, AddValidatorOpts, CreateSolidoOpts, DepositOpts,
-        ShowSolidoAuthoritiesOpts, ShowSolidoOpts, WithdrawOpts,
+        AddRemoveMaintainerOpts, AddValidatorOpts, CreateSolidoOpts, DeactivateValidatorOpts,
+        DepositOpts, ShowSolidoAuthoritiesOpts, ShowSolidoOpts, WithdrawOpts,
     },
     error::CliError,
     get_signer,
@@ -227,7 +227,7 @@ pub fn command_create_solido(
     Ok(result)
 }
 
-/// Command to add a validator to Solido.
+/// CLI entry point to add a validator to Solido.
 pub fn command_add_validator(
     config: &mut SnapshotConfig,
     opts: &AddValidatorOpts,
@@ -252,7 +252,31 @@ pub fn command_add_validator(
     )
 }
 
-/// Command to add a validator to Solido.
+/// CLI entry point to deactivate a validator.
+pub fn command_deactivate_validator(
+    config: &mut SnapshotConfig,
+    opts: &DeactivateValidatorOpts,
+) -> Result<ProposeInstructionOutput> {
+    let (multisig_address, _) =
+        get_multisig_program_address(opts.multisig_program_id(), opts.multisig_address());
+
+    let instruction = lido::instruction::deactivate_validator(
+        opts.solido_program_id(),
+        &lido::instruction::DeactivateValidatorMeta {
+            lido: *opts.solido_address(),
+            manager: multisig_address,
+            validator_vote_account_to_deactivate: *opts.validator_vote_account(),
+        },
+    );
+    propose_instruction(
+        config,
+        opts.multisig_program_id(),
+        *opts.multisig_address(),
+        instruction,
+    )
+}
+
+/// CLI entry point to to add a maintainer to Solido.
 pub fn command_add_maintainer(
     config: &mut SnapshotConfig,
     opts: &AddRemoveMaintainerOpts,
