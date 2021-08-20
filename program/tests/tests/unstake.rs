@@ -77,17 +77,24 @@ async fn test_unstake_balance_combinations() {
     let result = context.context.try_unstake(STAKE_AMOUNT).await;
     // Should fail, because the validator will have less than the minimum.
     assert_solido_error!(result, LidoError::InvalidAmount);
-    // If we unstake so that the validator still has the minimum, it should work.
-    context
-        .context
-        .unstake((STAKE_AMOUNT - MINIMUM_STAKE_ACCOUNT_BALANCE).unwrap())
-        .await;
     // Should fail, because we tried to unstake more than the validator has.
     let result = context
         .context
         .try_unstake((STAKE_AMOUNT + Lamports(1)).unwrap())
         .await;
+    assert!(result.is_err()); // Insufficient funds error from Stake Program.
+
+    // Unstaking less than the rent should fail
+    let rent = context.context.get_rent().await;
+    let stake_rent = rent.minimum_balance(std::mem::size_of::<StakeState>());
+    let result = context.context.try_unstake(Lamports(stake_rent - 1)).await;
     assert!(result.is_err());
+
+    // If we unstake so that the validator still has the minimum, it should work.
+    context
+        .context
+        .unstake((STAKE_AMOUNT - MINIMUM_STAKE_ACCOUNT_BALANCE).unwrap())
+        .await;
 }
 
 #[tokio::test]
