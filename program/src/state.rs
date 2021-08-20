@@ -723,7 +723,7 @@ impl PubkeyAndEntry<Validator> {
     }
 
     pub fn has_no_stake_accounts(&self) -> bool {
-        self.stake_seeds.stake_accounts_seed_begin == self.stake_seeds.stake_accounts_seed_end
+        self.stake_seeds.begin == self.stake_seeds.end
     }
 
     pub fn can_be_removed(&self) -> bool {
