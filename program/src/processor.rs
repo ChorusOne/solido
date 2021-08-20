@@ -361,6 +361,8 @@ pub fn process_stake_deposit(
     lido.save(accounts.lido)
 }
 
+/// Unstakes from a validator, the funds are moved to the stake defined by the
+/// validator's unstake seed. Caller must be a maintainer.
 pub fn process_unstake(
     program_id: &Pubkey,
     amount: Lamports,
@@ -372,12 +374,12 @@ pub fn process_unstake(
     lido.check_stake_authority(program_id, accounts.lido.key, accounts.stake_authority)?;
     let destination_bump_seed = check_unstake_accounts(program_id, &lido, &accounts)?;
 
-    let provided_validator = lido.validators.get(accounts.validator_vote_account.key)?;
+    let validator = lido.validators.get(accounts.validator_vote_account.key)?;
     let seeds = [
         &accounts.lido.key.to_bytes(),
         &accounts.validator_vote_account.key.to_bytes(),
         VALIDATOR_UNSTAKE_ACCOUNT,
-        &provided_validator
+        &validator
             .entry
             .unstake_seeds
             .stake_accounts_seed_end
@@ -405,7 +407,7 @@ pub fn process_unstake(
     );
 
     // Deactivates the stake. After this transaction, the Lamports on this stake
-    // account need to go back to the reserve account using another instruction.
+    // account need to go back to the reserve account by using another instruction.
     invoke_signed(
         &deactivate_stake_instruction,
         &[
@@ -421,15 +423,11 @@ pub fn process_unstake(
         ]],
     )?;
 
-    let provided_validator = lido
+    let validator = lido
         .validators
         .get_mut(accounts.validator_vote_account.key)?;
-    provided_validator.entry.stake_accounts_balance =
-        (provided_validator.entry.stake_accounts_balance - amount)?;
-    provided_validator
-        .entry
-        .unstake_seeds
-        .stake_accounts_seed_end += 1;
+    validator.entry.stake_accounts_balance = (validator.entry.stake_accounts_balance - amount)?;
+    validator.entry.unstake_seeds.stake_accounts_seed_end += 1;
 
     lido.save(accounts.lido)
 }
