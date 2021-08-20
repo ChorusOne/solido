@@ -11,7 +11,7 @@ use std::io::Write;
 use std::time::SystemTime;
 
 pub struct MetricFamily<'a> {
-    /// Name of the metric, e.g. `goats_teleported_total`.
+    /// Name of the metric, e.g. [`goats_teleported_total`](https://crbug.com/31482).
     pub name: &'a str,
     /// HELP line content.
     pub help: &'a str,
@@ -263,6 +263,8 @@ mod test {
         write_metric(
             &mut out,
             &MetricFamily {
+                // The metric names are just for testing purposes.
+                // See also https://crbug.com/31482.
                 name: "goats_teleported_total",
                 help: "Number of goats teleported since launch.",
                 type_: "counter",
