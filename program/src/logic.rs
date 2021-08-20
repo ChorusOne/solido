@@ -393,19 +393,18 @@ pub fn check_unstake_accounts(
     let validator = lido.validators.get(accounts.validator_vote_account.key)?;
 
     // If a validator doesn't have a stake account, it cannot be unstaked.
-    if validator.entry.stake_seeds.stake_accounts_seed_begin
-        == validator.entry.stake_seeds.stake_accounts_seed_end
-    {
+    if validator.entry.stake_seeds.begin == validator.entry.stake_seeds.end {
         msg!(
             "Attempting to unstake from a validator {} that has no stake accounts.",
             validator.pubkey
         );
         return Err(LidoError::InvalidStakeAccount.into());
     }
-    // Does not underflow. If `stake_accounts_seed_end == 0` the previous
-    // condition would have failed.
-    let source_stake_seed = validator.entry.stake_seeds.stake_accounts_seed_end - 1;
-    let destination_stake_seed = validator.entry.unstake_seeds.stake_accounts_seed_end;
+    // Does not underflow. If `stake_seeds.end == 0` the previous
+    // condition would have failed. And `stake_seeds.end` is always greater than
+    // `stake_seeds.begin`.
+    let source_stake_seed = validator.entry.stake_seeds.begin;
+    let destination_stake_seed = validator.entry.unstake_seeds.end;
 
     let (source_stake_account, _) = Validator::find_stake_account_address(
         program_id,

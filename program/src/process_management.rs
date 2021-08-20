@@ -192,11 +192,11 @@ pub fn process_merge_stake(program_id: &Pubkey, accounts_raw: &[AccountInfo]) ->
     let mut validator = lido
         .validators
         .get_mut(accounts.validator_vote_account.key)?;
-    let from_seed = validator.entry.stake_seeds.stake_accounts_seed_begin;
-    let to_seed = validator.entry.stake_seeds.stake_accounts_seed_begin + 1;
+    let from_seed = validator.entry.stake_seeds.begin;
+    let to_seed = validator.entry.stake_seeds.begin + 1;
 
     // Check that there are at least two accounts to merge
-    if to_seed >= validator.entry.stake_seeds.stake_accounts_seed_end {
+    if to_seed >= validator.entry.stake_seeds.end {
         msg!("Attempting to merge accounts in a validator that has fewer than two stake accounts.");
         return Err(LidoError::InvalidStakeAccount.into());
     }
@@ -233,7 +233,7 @@ pub fn process_merge_stake(program_id: &Pubkey, accounts_raw: &[AccountInfo]) ->
         );
         return Err(LidoError::InvalidStakeAccount.into());
     }
-    validator.entry.stake_seeds.stake_accounts_seed_begin += 1;
+    validator.entry.stake_seeds.begin += 1;
     // Merge `from_stake_addr` to `to_stake_addr`, at the end of the
     // instruction, `from_stake_addr` ceases to exist.
     let merge_instructions = solana_program::stake::instruction::merge(

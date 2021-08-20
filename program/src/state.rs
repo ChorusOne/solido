@@ -619,6 +619,7 @@ pub struct Validator {
     /// When removing a validator, this flag should be set to `false`.
     pub active: bool,
 }
+
 #[repr(C)]
 #[derive(
     Clone, Debug, Default, Eq, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema, Serialize,
@@ -637,18 +638,18 @@ pub struct SeedRange {
     /// pool and bump `begin`. Accounts are not reused.
     ///
     /// The program enforces that creating new stake accounts is only allowed at
-    /// the `_end` seed, and depositing active stake is only allowed from the
-    /// `_begin` seed. This ensures that maintainers don’t race and accidentally
+    /// the `end` seed, and depositing active stake is only allowed from the
+    /// `begin` seed. This ensures that maintainers don’t race and accidentally
     /// stake more to this validator than intended. If the seed has changed
     /// since the instruction was created, the transaction fails.
     ///
     /// When we unstake SOL, we follow an analogous symmetric mechanism. We
     /// split the validator's stake in two, and retrieve the funds of the second
     /// to the reserve account where it can be re-staked.
-    pub stake_accounts_seed_begin: u64,
+    pub begin: u64,
 
     /// End (exclusive) of the seed range for stake accounts.
-    pub stake_accounts_seed_end: u64,
+    pub end: u64,
 }
 
 impl Validator {
@@ -711,8 +712,8 @@ impl Default for Validator {
         Validator {
             fee_address: Pubkey::default(),
             fee_credit: StLamports(0),
-            stake_seeds: SeedRange::default(),
-            unstake_seeds: SeedRange::default(),
+            stake_seeds: SeedRange { begin: 0, end: 0 },
+            unstake_seeds: SeedRange { begin: 0, end: 0 },
             stake_accounts_balance: Lamports(0),
             active: true,
         }

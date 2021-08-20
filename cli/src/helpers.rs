@@ -479,9 +479,7 @@ impl fmt::Display for ShowSolidoOutput {
                 pe.entry.fee_credit,
                 pe.entry.stake_accounts_balance,
             )?;
-            for seed in pe.entry.stake_seeds.stake_accounts_seed_begin
-                ..pe.entry.stake_seeds.stake_accounts_seed_end
-            {
+            for seed in pe.entry.stake_seeds.begin..pe.entry.stake_seeds.end {
                 writeln!(
                     f,
                     "      - {}: {}",
@@ -776,10 +774,7 @@ pub fn command_withdraw(
             opts.solido_program_id(),
             opts.solido_address(),
             &heaviest_validator.pubkey,
-            heaviest_validator
-                .entry
-                .stake_seeds
-                .stake_accounts_seed_begin,
+            heaviest_validator.entry.stake_seeds.begin,
         );
 
         let destination_stake_account = Keypair::new();
