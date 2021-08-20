@@ -85,8 +85,8 @@ async fn test_removing_validator_with_stake_accounts_should_fail() {
     let solido_before = context.get_solido().await;
     let validator_before: &Validator = &solido_before.validators.entries[0].entry;
     assert_eq!(validator_before.stake_accounts_balance, Lamports(0));
-    assert_eq!(validator_before.stake_seeds.stake_accounts_seed_begin, 0);
-    assert_eq!(validator_before.stake_seeds.stake_accounts_seed_end, 0);
+    assert_eq!(validator_before.stake_seeds.begin, 0);
+    assert_eq!(validator_before.stake_seeds.end, 0);
 
     // Now we make a deposit, and then delegate part of it.
     context.deposit(TEST_DEPOSIT_AMOUNT).await;
