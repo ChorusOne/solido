@@ -6,9 +6,11 @@
 use solana_program_test::tokio;
 
 use crate::assert_solido_error;
-use crate::context::Context;
+use crate::context::{Context, StakeDeposit};
 
 use lido::error::LidoError;
+use lido::state::Validator;
+use lido::token::Lamports;
 use lido::token::StLamports;
 
 pub const TEST_DEPOSIT_AMOUNT: Lamports = Lamports(100_000_000_000);
@@ -46,13 +48,9 @@ async fn test_remove_validator_without_unclaimed_credits() {
     let vote_account = solido.validators.entries[0].pubkey;
     assert_eq!(solido.validators.entries[0].entry.fee_credit, StLamports(0));
 
-    context
-        .try_remove_validator(vote_account)
-        .await
-        .expect("Failed to remove validator.");
+    let result = context.try_remove_validator(vote_account).await;
 
-    let solido = context.get_solido().await;
-    assert_eq!(solido.validators.len(), 0);
+    assert_solido_error!(result, LidoError::ValidatorIsStillActive);
 }
 
 #[tokio::test]
@@ -80,11 +78,12 @@ async fn test_deactivate_validator() {
 }
 #[tokio::test]
 async fn test_removing_validator_with_stake_accounts_should_fail() {
-    let mut context = Context::new_with_maintainer_and_validator().await;
+    let mut context = Context::new_with_maintainer().await;
+    let validator = context.add_validator().await;
 
     // Sanity check before we start: the validator should have zero balance in zero stake accounts.
     let solido_before = context.get_solido().await;
-    let validator_before = &solido_before.validators.entries[0].entry;
+    let validator_before: &Validator = &solido_before.validators.entries[0].entry;
     assert_eq!(validator_before.stake_accounts_balance, Lamports(0));
     assert_eq!(validator_before.stake_seeds.stake_accounts_seed_begin, 0);
     assert_eq!(validator_before.stake_seeds.stake_accounts_seed_end, 0);
@@ -117,14 +116,12 @@ async fn test_removing_validator_with_stake_accounts_should_fail() {
     );
 
     // This was also the first deposit, so that should have created one stake account.
-    assert_eq!(validator_after.stake_seeds.stake_accounts_seed_begin, 0);
-    assert_eq!(validator_after.stake_seeds.stake_accounts_seed_end, 1);
+    assert_eq!(validator_after.stake_seeds.begin, 0);
+    assert_eq!(validator_after.stake_seeds.end, 1);
 
-    context
-        .try_remove_validator(vote_account)
-        .await
-        .expect("Failed to remove validator.");
+    let result = context.try_remove_validator(validator.vote_account).await;
 
-    let solido = context.get_solido().await;
-    assert_eq!(solido.validators.len(), 0);
+    // The validator should not be able to be removed if it is still active
+    //  (i.e. the active flag is set toe true OR it has stake accounts)
+    assert_solido_error!(result, LidoError::ValidatorIsStillActive);
 }
