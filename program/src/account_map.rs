@@ -99,10 +99,10 @@ impl<T: Default + EntryConstantSize> AccountMap<T> {
                 if removal_if_true(&e.entry) {
                     self.remove(address)
                 } else {
-                    return Err(predicate_error);
+                    Err(predicate_error)
                 }
             }
-            None => return Err(LidoError::InvalidAccountMember),
+            None => Err(LidoError::InvalidAccountMember),
         }
     }
 
