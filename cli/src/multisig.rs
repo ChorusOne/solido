@@ -18,18 +18,17 @@ use solana_sdk::signature::{Keypair, Signature, Signer};
 use solana_sdk::system_instruction;
 use solana_sdk::sysvar;
 
-use lido::instruction::{
-    AddMaintainerMeta, AddValidatorMeta, ChangeRewardDistributionMeta, DeactivateValidatorMeta,
-    LidoInstruction, RemoveMaintainerMeta,
+use lido::{
+    instruction::{
+        AddMaintainerMeta, AddValidatorMeta, ChangeRewardDistributionMeta, DeactivateValidatorMeta,
+        LidoInstruction, RemoveMaintainerMeta,
+    },
+    state::{FeeRecipients, Lido, RewardDistribution},
+    util::{serialize_b58, serialize_b58_slice},
 };
-use lido::state::FeeRecipients;
-use lido::state::Lido;
-use lido::state::RewardDistribution;
-use lido::util::{serialize_b58, serialize_b58_slice};
 
-use crate::config::ConfigFile;
 use crate::config::{
-    ApproveOpts, CreateMultisigOpts, ExecuteTransactionOpts, ProposeChangeMultisigOpts,
+    ApproveOpts, ConfigFile, CreateMultisigOpts, ExecuteTransactionOpts, ProposeChangeMultisigOpts,
     ProposeUpgradeOpts, ShowMultisigOpts, ShowTransactionOpts,
 };
 use crate::error::{Abort, AsPrettyError};
