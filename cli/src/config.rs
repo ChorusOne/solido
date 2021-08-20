@@ -377,7 +377,7 @@ cli_opt_struct! {
         multisig_address: Pubkey,
 
         /// Address of the Multisig program.
-        #[clap(long)]
+        #[clap(long, value_name = "address")]
         multisig_program_id: Pubkey,
     }
 }
