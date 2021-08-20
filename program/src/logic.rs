@@ -396,7 +396,10 @@ pub fn check_unstake_accounts(
     if validator.entry.stake_seeds.stake_accounts_seed_begin
         == validator.entry.stake_seeds.stake_accounts_seed_end
     {
-        msg!("Attempting to unstake from accounts in a validator that has no stake accounts.");
+        msg!(
+            "Attempting to unstake from a validator {} that has no stake accounts.",
+            validator.pubkey
+        );
         return Err(LidoError::InvalidStakeAccount.into());
     }
     // Does not underflow. If `stake_accounts_seed_end == 0` the previous
@@ -448,6 +451,13 @@ pub struct SplitStakeAccounts<'a, 'b> {
     pub stake_program: &'a AccountInfo<'b>,
 }
 
+/// Splits `amount` Lamports from the stake in `accounts.source_stake_account`
+/// to the stake in `accounts.destination_stake_account`.
+///
+/// Issue 3 transactions with `invoke_signed` signed with seeds specified by `seeds`:
+///   - Allocates space in the `accounts.destination_stake_account`.
+///   - Assigns the owner of the `accounts.destination_stake_account` to the stake program.
+///   - Splits the stake.
 pub fn split_stake_account(
     lido_address: &Pubkey,
     lido: &Lido,

@@ -367,18 +367,16 @@ accounts_struct! {
         // the given validator, with seed `stake_seeds.stake_accounts_seed_end - 1`.
         pub source_stake_account {
             is_signer: false,
-            // Is writable due to split (`stake_program::intruction::split`) of stake_account_end
-            // into stake_account_merge_into under the condition that they are not equal
+            // Is writable due to split (`stake_program::intruction::split`).
             is_writable: true,
         },
         // Destination stake account is the last unstake stake account that will
-        // receive the split of the funds.  Determined by the program-derived
+        // receive the split of the funds. Determined by the program-derived
         // stake account for the given validator, with seed
         // `unstake_seeds.stake_accounts_seed_end`.
         pub destination_stake_account {
             is_signer: false,
-            // Is writable due to the first two instructions from split
-            // (`stake_program::intruction::split`).
+            // Is writable due to the first two instructions from split.
             is_writable: true,
         },
         // Stake authority, to be able to split the stake.
