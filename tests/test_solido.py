@@ -303,12 +303,12 @@ assert solido_instance['solido']['validators']['entries'][0] == {
         'fee_credit': 0,
         'fee_address': validator_fee_account,
         'stake_seeds': {
-            'stake_accounts_seed_begin': 0,
-            'stake_accounts_seed_end': 0,
+            'begin': 0,
+            'end': 0,
         },
-        'stake_seeds': {
-            'stake_accounts_seed_begin': 0,
-            'stake_accounts_seed_end': 0,
+        'unstake_seeds': {
+            'begin': 0,
+            'end': 0,
         },
         'stake_accounts_balance': 0,
         'active': True,

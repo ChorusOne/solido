@@ -362,7 +362,7 @@ accounts_struct! {
         },
         // Source stake account is the last active stake account that we'll try
         // to unstake from.  Determined by the program-derived stake account for
-        // the given validator, with seed `stake_seeds.stake_accounts_seed_end - 1`.
+        // the given validator, with seed `stake_seeds.begin`.
         pub source_stake_account {
             is_signer: false,
             // Is writable due to split (`stake_program::intruction::split`).
@@ -370,8 +370,7 @@ accounts_struct! {
         },
         // Destination stake account is the last unstake stake account that will
         // receive the split of the funds. Determined by the program-derived
-        // stake account for the given validator, with seed
-        // `unstake_seeds.stake_accounts_seed_end`.
+        // stake account for the given validator, with seed `unstake_seeds.end`.
         pub destination_stake_account {
             is_signer: false,
             // Is writable due to the first two instructions from split.

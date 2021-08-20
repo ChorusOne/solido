@@ -209,9 +209,7 @@ fn get_validator_stake_accounts(
     validator: &PubkeyAndEntry<Validator>,
 ) -> Result<Vec<(Pubkey, StakeAccount)>> {
     let mut result = Vec::new();
-    for seed in validator.entry.stake_seeds.stake_accounts_seed_begin
-        ..validator.entry.stake_seeds.stake_accounts_seed_end
-    {
+    for seed in validator.entry.stake_seeds.begin..validator.entry.stake_seeds.end {
         let (addr, _bump_seed) = Validator::find_stake_account_address(
             solido_program_id,
             solido_address,
@@ -357,7 +355,7 @@ impl SolidoState {
             &self.solido_program_id,
             &self.solido_address,
             &validator.pubkey,
-            validator.entry.stake_seeds.stake_accounts_seed_end,
+            validator.entry.stake_seeds.end,
         );
 
         // Top up the validator to at most its target. If that means we don't use the full

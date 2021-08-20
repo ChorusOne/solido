@@ -10,7 +10,6 @@ use rand::SeedableRng;
 use solana_program::program_pack::Pack;
 use solana_program::rent::Rent;
 use solana_program::stake::state::Stake;
-use solana_program::stake::state::StakeState;
 use solana_program::system_instruction;
 use solana_program::system_program;
 use solana_program::{borsh::try_from_slice_unchecked, sysvar};
@@ -788,23 +787,20 @@ impl Context {
         send_transaction(
             &mut self.context,
             &mut self.nonce,
-            &[
-                // authorize_burn_instruction,
-                instruction::withdraw(
-                    &id(),
-                    &instruction::WithdrawAccountsMeta {
-                        lido: self.solido.pubkey(),
-                        st_sol_mint: self.st_sol_mint,
-                        st_sol_account_owner: user.pubkey(),
-                        st_sol_account,
-                        validator_vote_account: self.validator.as_ref().unwrap().vote_account,
-                        source_stake_account,
-                        destination_stake_account: new_stake.pubkey(),
-                        stake_authority: self.stake_authority,
-                    },
-                    amount,
-                ),
-            ],
+            &[instruction::withdraw(
+                &id(),
+                &instruction::WithdrawAccountsMeta {
+                    lido: self.solido.pubkey(),
+                    st_sol_mint: self.st_sol_mint,
+                    st_sol_account_owner: user.pubkey(),
+                    st_sol_account,
+                    validator_vote_account: self.validator.as_ref().unwrap().vote_account,
+                    source_stake_account,
+                    destination_stake_account: new_stake.pubkey(),
+                    stake_authority: self.stake_authority,
+                },
+                amount,
+            )],
             vec![user, &new_stake],
         )
         .await?;
@@ -842,7 +838,7 @@ impl Context {
             &id(),
             &self.solido.pubkey(),
             &validator_vote_account,
-            validator_entry.entry.stake_seeds.stake_accounts_seed_end,
+            validator_entry.entry.stake_seeds.end,
         );
 
         let (stake_account_merge_into, _) = Validator::find_stake_account_address(
@@ -850,15 +846,11 @@ impl Context {
             &self.solido.pubkey(),
             &validator_vote_account,
             match approach {
-                StakeDeposit::Append => validator_entry.entry.stake_seeds.stake_accounts_seed_end,
+                StakeDeposit::Append => validator_entry.entry.stake_seeds.end,
                 // We do a wrapping sub here, so we can call stake-merge initially,
                 // when end is 0, such that the account to merge into is not the
                 // same as the end account.
-                StakeDeposit::Merge => validator_entry
-                    .entry
-                    .stake_seeds
-                    .stake_accounts_seed_end
-                    .wrapping_sub(1),
+                StakeDeposit::Merge => validator_entry.entry.stake_seeds.end.wrapping_sub(1),
             },
         );
 
@@ -906,7 +898,6 @@ impl Context {
     pub async fn try_unstake(&mut self, amount: Lamports) -> transport::Result<()> {
         // Where the new stake will live.
         let solido = self.get_solido().await;
-        // solido.validators.entries[0].entry.get
         let validator = solido
             .validators
             .get(&self.validator.as_ref().unwrap().vote_account)
@@ -916,65 +907,34 @@ impl Context {
             &id(),
             &self.solido.pubkey(),
             &validator.pubkey,
-            validator.entry.stake_seeds.stake_accounts_seed_begin,
+            validator.entry.stake_seeds.begin,
         );
         let (destination_stake_account, _) = Validator::find_unstake_account_address(
             &id(),
             &self.solido.pubkey(),
             &validator.pubkey,
-            validator.entry.unstake_seeds.stake_accounts_seed_begin,
+            validator.entry.unstake_seeds.end,
         );
-
-        let stake_account_before = self.get_stake_account_from_seed(&validator.pubkey, 0).await;
 
         send_transaction(
             &mut self.context,
             &mut self.nonce,
-            &[
-                // authorize_burn_instruction,
-                instruction::unstake(
-                    &id(),
-                    &instruction::UnstakeAccountsMeta {
-                        lido: self.solido.pubkey(),
-                        validator_vote_account: self.validator.as_ref().unwrap().vote_account,
-                        source_stake_account,
-                        destination_stake_account,
-                        stake_authority: self.stake_authority,
-                        maintainer: self.maintainer.as_ref().unwrap().pubkey(),
-                    },
-                    amount,
-                ),
-            ],
+            &[instruction::unstake(
+                &id(),
+                &instruction::UnstakeAccountsMeta {
+                    lido: self.solido.pubkey(),
+                    validator_vote_account: self.validator.as_ref().unwrap().vote_account,
+                    source_stake_account,
+                    destination_stake_account,
+                    stake_authority: self.stake_authority,
+                    maintainer: self.maintainer.as_ref().unwrap().pubkey(),
+                },
+                amount,
+            )],
             vec![self.maintainer.as_ref().unwrap()],
         )
         .await?;
 
-        let stake_account_after = self.get_stake_account_from_seed(&validator.pubkey, 0).await;
-        assert_eq!(
-            (stake_account_before.balance.total() - stake_account_after.balance.total()).unwrap(),
-            amount
-        );
-        let unstake_account = self
-            .get_unstake_account_from_seed(&validator.pubkey, 0)
-            .await;
-
-        let mut deactivating_amount = amount;
-
-        let (unstake_addr, _) = Validator::find_unstake_account_address(
-            &id(),
-            &self.solido.pubkey(),
-            &validator.pubkey,
-            0,
-        );
-        let unstake_account_balance = self.get_sol_balance(unstake_addr).await;
-        // We can't unstake all the balance if we ask for it, the split will not
-        // deactivate the rent.
-        if unstake_account_balance == amount {
-            let rent = self.get_rent().await;
-            let stake_rent = rent.minimum_balance(std::mem::size_of::<StakeState>());
-            deactivating_amount = (amount - Lamports(stake_rent)).unwrap();
-        }
-        assert_eq!(unstake_account.balance.deactivating, deactivating_amount);
         Ok(())
     }
 
@@ -1094,8 +1054,8 @@ impl Context {
     ) -> transport::Result<()> {
         let solido = self.get_solido().await;
         let validator = solido.validators.get(&validator_vote_account).unwrap();
-        let begin = validator.entry.stake_seeds.stake_accounts_seed_begin;
-        let end = validator.entry.stake_seeds.stake_accounts_seed_end;
+        let begin = validator.entry.stake_seeds.begin;
+        let end = validator.entry.stake_seeds.end;
 
         let stake_account_addrs: Vec<Pubkey> = (begin..end)
             .map(|seed| {
@@ -1342,6 +1302,7 @@ impl Context {
         let stake = self.get_stake_state(stake_address).await;
         StakeAccount::from_delegated_account(stake_balance, &stake, &clock, &stake_history, seed)
     }
+
     pub async fn get_unstake_account_from_seed(
         &mut self,
         validator_vote_account: &Pubkey,

@@ -203,7 +203,7 @@ pub fn process_stake_deposit(
         program_id,
         accounts.lido.key,
         validator,
-        validator.entry.stake_seeds.stake_accounts_seed_end,
+        validator.entry.stake_seeds.end,
         accounts.stake_account_end,
         VALIDATOR_STAKE_ACCOUNT,
     )?;
@@ -216,11 +216,7 @@ pub fn process_stake_deposit(
         return Err(LidoError::WrongStakeState.into());
     }
 
-    let stake_account_seed = validator
-        .entry
-        .stake_seeds
-        .stake_accounts_seed_end
-        .to_le_bytes();
+    let stake_account_seed = validator.entry.stake_seeds.end.to_le_bytes();
     let stake_account_bump_seed = [stake_account_bump_seed];
     let stake_account_seeds = &[
         accounts.lido.key.as_ref(),
@@ -280,7 +276,7 @@ pub fn process_stake_deposit(
         // Case 1: we delegate, and we don't touch `stake_account_merge_into`.
         msg!(
             "Delegating stake account at seed {} ...",
-            validator.entry.stake_seeds.stake_accounts_seed_end
+            validator.entry.stake_seeds.end
         );
         invoke_signed(
             &stake_program::instruction::delegate_stake(
@@ -305,12 +301,10 @@ pub fn process_stake_deposit(
         )?;
 
         // We now consumed this stake account, bump the index.
-        validator.entry.stake_seeds.stake_accounts_seed_end += 1;
+        validator.entry.stake_seeds.end += 1;
     } else {
         // Case 2: Merge the new undelegated stake account into the existing one.
-        if validator.entry.stake_seeds.stake_accounts_seed_end
-            <= validator.entry.stake_seeds.stake_accounts_seed_begin
-        {
+        if validator.entry.stake_seeds.end <= validator.entry.stake_seeds.begin {
             msg!("Can only stake-merge if there is at least one stake account to merge into.");
             return Err(LidoError::InvalidStakeAccount.into());
         }
@@ -319,7 +313,7 @@ pub fn process_stake_deposit(
             accounts.lido.key,
             validator,
             // Does not underflow, because end > begin >= 0.
-            validator.entry.stake_seeds.stake_accounts_seed_end - 1,
+            validator.entry.stake_seeds.end - 1,
             accounts.stake_account_merge_into,
             VALIDATOR_STAKE_ACCOUNT,
         )?;
@@ -327,7 +321,7 @@ pub fn process_stake_deposit(
         // tried to merge, but the epoch is different, then this will fail.
         msg!(
             "Merging into existing stake account at seed {} ...",
-            validator.entry.stake_seeds.stake_accounts_seed_end - 1
+            validator.entry.stake_seeds.end - 1
         );
         let merge_instructions = stake_program::instruction::merge(
             accounts.stake_account_merge_into.key,
@@ -379,11 +373,7 @@ pub fn process_unstake(
         &accounts.lido.key.to_bytes(),
         &accounts.validator_vote_account.key.to_bytes(),
         VALIDATOR_UNSTAKE_ACCOUNT,
-        &validator
-            .entry
-            .unstake_seeds
-            .stake_accounts_seed_end
-            .to_le_bytes()[..],
+        &validator.entry.unstake_seeds.end.to_le_bytes()[..],
         &[destination_bump_seed],
     ];
 
@@ -406,8 +396,9 @@ pub fn process_unstake(
         accounts.stake_authority.key,
     );
 
-    // Deactivates the stake. After this transaction, the Lamports on this stake
-    // account need to go back to the reserve account by using another instruction.
+    // Deactivates the stake. After the stake has become inactive, the Lamports
+    // on this stake account need to go back to the reserve account by using
+    // another instruction.
     invoke_signed(
         &deactivate_stake_instruction,
         &[
@@ -427,7 +418,15 @@ pub fn process_unstake(
         .validators
         .get_mut(accounts.validator_vote_account.key)?;
     validator.entry.stake_accounts_balance = (validator.entry.stake_accounts_balance - amount)?;
-    validator.entry.unstake_seeds.stake_accounts_seed_end += 1;
+    if validator.entry.stake_accounts_balance < MINIMUM_STAKE_ACCOUNT_BALANCE {
+        msg!(
+            "Unstake operation will leave the validator with {}, less than the minimum balance {}.",
+            validator.entry.stake_accounts_balance,
+            MINIMUM_STAKE_ACCOUNT_BALANCE
+        );
+        return Err(LidoError::InvalidAmount.into());
+    }
+    validator.entry.unstake_seeds.end += 1;
 
     lido.save(accounts.lido)
 }
@@ -544,8 +543,8 @@ pub fn process_withdraw_inactive_stake(
     let mut observed_total = Lamports(0);
     let mut excess_removed = Lamports(0);
     let mut stake_accounts = accounts.stake_accounts.iter();
-    let begin = validator.entry.stake_seeds.stake_accounts_seed_begin;
-    let end = validator.entry.stake_seeds.stake_accounts_seed_end;
+    let begin = validator.entry.stake_seeds.begin;
+    let end = validator.entry.stake_seeds.end;
 
     // Visit the stake accounts one by one, and check how much SOL is in there.
     for seed in begin..end {
@@ -724,10 +723,7 @@ pub fn process_withdraw(
         program_id,
         accounts.lido.key,
         accounts.validator_vote_account.key,
-        provided_validator
-            .entry
-            .stake_seeds
-            .stake_accounts_seed_begin,
+        provided_validator.entry.stake_seeds.begin,
     );
     if &stake_account != accounts.source_stake_account.key {
         msg!("Stake account is different than the calculated by the given seed, should be {}, is {}.",

@@ -51,8 +51,8 @@ async fn test_successful_merge_activating_stake() {
         .get(&validator_vote_account)
         .unwrap();
     assert_eq!(
-        validator_after.entry.stake_seeds.stake_accounts_seed_begin,
-        validator_before.entry.stake_seeds.stake_accounts_seed_begin + 1,
+        validator_after.entry.stake_seeds.begin,
+        validator_before.entry.stake_seeds.begin + 1,
     );
 
     let sol_before = solido_before.get_sol_balance(
