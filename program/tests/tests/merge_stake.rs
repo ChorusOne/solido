@@ -5,7 +5,7 @@
 
 use crate::assert_solido_error;
 use crate::context::{get_account_info, Context, StakeDeposit};
-use lido::{error::LidoError, state::Validator, token::Lamports};
+use lido::{error::LidoError, token::Lamports};
 use solana_program_test::tokio;
 use solana_sdk::signer::Signer;
 
@@ -15,10 +15,10 @@ async fn test_successful_merge_activating_stake() {
 
     let rent = context.get_rent().await;
     let solido_before = context.get_solido().await;
-    let validator_vote_account = context.validator.as_ref().unwrap().vote_account;
+    let validator = &context.get_solido().await.validators.entries[0];
     let mut reserve_before = context.get_account(context.reserve_address).await;
 
-    context.merge_stake(validator_vote_account, 0, 1).await;
+    context.merge_stake(&validator, 0, 1).await;
 
     let account = context.try_get_account(stake_account_pubkeys[0]).await;
     assert!(account.is_none());
@@ -33,26 +33,17 @@ async fn test_successful_merge_activating_stake() {
     let solido_after = context.get_solido().await;
     let mut reserve_after = context.get_account(context.reserve_address).await;
     assert_eq!(
-        solido_after
-            .validators
-            .get(&validator_vote_account)
-            .unwrap()
+        solido_after.validators.entries[0]
             .entry
             .stake_accounts_balance,
         Lamports(20_000_000_000)
     );
 
-    let validator_before = solido_before
-        .validators
-        .get(&validator_vote_account)
-        .unwrap();
-    let validator_after = solido_after
-        .validators
-        .get(&validator_vote_account)
-        .unwrap();
+    let validator_before = &solido_before.validators.entries[0].entry;
+    let validator_after = &solido_after.validators.entries[0].entry;
     assert_eq!(
-        validator_after.entry.stake_seeds.begin,
-        validator_before.entry.stake_seeds.begin + 1,
+        validator_after.stake_seeds.begin,
+        validator_before.stake_seeds.begin + 1,
     );
 
     let sol_before = solido_before.get_sol_balance(
@@ -83,14 +74,10 @@ async fn test_merge_stake_combinations() {
     let stake_deposit_amount = Lamports(2_000_000_000); // 2 Sol
     let mut context = Context::new_with_maintainer_and_validator().await;
 
-    let validator_vote_account = context.validator.as_ref().unwrap().vote_account;
+    let validator = &context.get_solido().await.validators.entries[0];
     context.deposit(Lamports(100_000_000_000)).await;
     context
-        .stake_deposit(
-            validator_vote_account,
-            StakeDeposit::Append,
-            stake_deposit_amount,
-        )
+        .stake_deposit(validator.pubkey, StakeDeposit::Append, stake_deposit_amount)
         .await;
 
     let mut current_slot = 0;
@@ -99,41 +86,30 @@ async fn test_merge_stake_combinations() {
 
     // Create an activating stake account.
     context
-        .stake_deposit(
-            validator_vote_account,
-            StakeDeposit::Append,
-            stake_deposit_amount,
-        )
+        .stake_deposit(validator.pubkey, StakeDeposit::Append, stake_deposit_amount)
         .await;
 
-    let active_stake_account = context
-        .get_stake_account_from_seed(&validator_vote_account, 0)
-        .await;
+    let active_stake_account = context.get_stake_account_from_seed(&validator, 0).await;
 
-    let activating_stake_account = context
-        .get_stake_account_from_seed(&validator_vote_account, 1)
-        .await;
+    let activating_stake_account = context.get_stake_account_from_seed(&validator, 1).await;
 
     assert!(active_stake_account.is_active());
     assert!(activating_stake_account.is_activating());
-    let result = context.try_merge_stake(validator_vote_account, 0, 1).await;
+    let result = context.try_merge_stake(&validator, 0, 1).await;
     // Merging active to activating should fail.
     assert_solido_error!(result, LidoError::WrongStakeState);
     advance_epoch(&mut context, &mut current_slot);
 
-    let now_active_stake_account = context
-        .get_stake_account_from_seed(&validator_vote_account, 1)
-        .await;
+    let now_active_stake_account = context.get_stake_account_from_seed(&validator, 1).await;
     assert!(active_stake_account.is_active());
     assert!(now_active_stake_account.is_active());
 
     let rent = context.get_rent().await;
     let solido_before = context.get_solido().await;
-    let validator_vote_account = context.validator.as_ref().unwrap().vote_account;
     let mut reserve_before = context.get_account(context.reserve_address).await;
 
     // Merging two activated stake accounts should succeed.
-    context.merge_stake(validator_vote_account, 0, 1).await;
+    context.merge_stake(&validator, 0, 1).await;
 
     let solido_after = context.get_solido().await;
     let mut reserve_after = context.get_account(context.reserve_address).await;
@@ -155,41 +131,38 @@ async fn test_merge_stake_combinations() {
 #[tokio::test]
 async fn test_merge_validator_with_zero_and_one_stake_account() {
     let mut context = Context::new_with_maintainer().await;
-    let validator = context.add_validator().await;
+    context.add_validator().await;
+    let validator = &context.get_solido().await.validators.entries[0];
     context.deposit(Lamports(10_000_000_000)).await;
 
     // Try to merge stake on a validator that has no stake accounts.
-    let result = context.try_merge_stake(validator.vote_account, 0, 1).await;
+    let result = context.try_merge_stake(&validator, 0, 1).await;
     assert_solido_error!(result, LidoError::InvalidStakeAccount);
 
     context
         .stake_deposit(
-            validator.vote_account,
+            validator.pubkey,
             StakeDeposit::Append,
             Lamports(10_000_000_000),
         )
         .await;
 
     // Try to merge stake on a validator that has 1 stake account.
-    let result = context.try_merge_stake(validator.vote_account, 0, 1).await;
+    let result = context.try_merge_stake(&validator, 0, 1).await;
     assert_solido_error!(result, LidoError::InvalidStakeAccount);
 }
 
 #[tokio::test]
 async fn test_merge_with_donated_stake() {
     let (mut context, _stake_account_pubkeys) = Context::new_with_two_stake_accounts().await;
-    let validator_vote_account = context.validator.as_ref().unwrap().vote_account;
-    let (from_stake_account, _) = Validator::find_stake_account_address(
-        &crate::context::id(),
-        &context.solido.pubkey(),
-        &validator_vote_account,
-        0,
-    );
+    let validator = &context.get_solido().await.validators.entries[0];
+    let (from_stake_account, _) =
+        validator.find_stake_account_address(&crate::context::id(), &context.solido.pubkey(), 0);
     context
         .fund(from_stake_account, Lamports(100_000_000_000))
         .await;
 
-    let to_account = context.merge_stake(validator_vote_account, 0, 1).await;
+    let to_account = context.merge_stake(&validator, 0, 1).await;
     let to_balance = context.get_sol_balance(to_account).await;
 
     assert_eq!(

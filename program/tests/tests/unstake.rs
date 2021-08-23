@@ -6,7 +6,7 @@
 use crate::assert_solido_error;
 use crate::context::{Context, StakeDeposit};
 use lido::MINIMUM_STAKE_ACCOUNT_BALANCE;
-use lido::{error::LidoError, state::Validator, token::Lamports};
+use lido::{error::LidoError, token::Lamports};
 use solana_program::stake::state::StakeState;
 use solana_program_test::tokio;
 use solana_sdk::signer::Signer;
@@ -46,12 +46,12 @@ async fn test_successful_unstake() {
 
     let stake_account_before = context
         .context
-        .get_stake_account_from_seed(&validator.pubkey, 0)
+        .get_stake_account_from_seed(&validator, 0)
         .await;
     context.context.unstake(unstake_lamports).await;
     let stake_account_after = context
         .context
-        .get_stake_account_from_seed(&validator.pubkey, 0)
+        .get_stake_account_from_seed(&validator, 0)
         .await;
     assert_eq!(
         (stake_account_before.balance.total() - stake_account_after.balance.total()).unwrap(),
@@ -59,7 +59,7 @@ async fn test_successful_unstake() {
     );
     let unstake_account = context
         .context
-        .get_unstake_account_from_seed(&validator.pubkey, 0)
+        .get_unstake_account_from_seed(&validator, 0)
         .await;
 
     let rent = context.context.get_rent().await;
@@ -101,10 +101,9 @@ async fn test_unstake_balance_combinations() {
 async fn test_unstake_with_funded_destination_stake() {
     let mut context = UnstakeContext::new(STAKE_AMOUNT).await;
     let validator = &context.context.get_solido().await.validators.entries[0];
-    let (unstake_address, _) = Validator::find_unstake_account_address(
+    let (unstake_address, _) = validator.find_unstake_account_address(
         &crate::context::id(),
         &context.context.solido.pubkey(),
-        &validator.pubkey,
         0,
     );
     context
@@ -116,7 +115,7 @@ async fn test_unstake_with_funded_destination_stake() {
     context.context.unstake(unstake_lamports).await;
     let unstake_account = context
         .context
-        .get_unstake_account_from_seed(&validator.pubkey, 0)
+        .get_unstake_account_from_seed(&validator, 0)
         .await;
     // Since we already had something in the account that paid for the rent, we
     // can unstake all the requested amount.

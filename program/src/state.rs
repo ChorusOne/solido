@@ -498,11 +498,10 @@ impl Lido {
         stake_account: &AccountInfo,
         authority: &[u8],
     ) -> Result<u8, ProgramError> {
-        let (stake_addr, stake_addr_bump_seed) =
-            Validator::find_stake_account_address_with_authority(
+        let (stake_addr, stake_addr_bump_seed) = validator
+            .find_stake_account_address_with_authority(
                 program_id,
                 solido_address,
-                &validator.pubkey,
                 authority,
                 stake_account_seed,
             );
@@ -659,52 +658,6 @@ impl Validator {
             ..Default::default()
         }
     }
-
-    fn find_stake_account_address_with_authority(
-        program_id: &Pubkey,
-        solido_account: &Pubkey,
-        validator_vote_account: &Pubkey,
-        authority: &[u8],
-        seed: u64,
-    ) -> (Pubkey, u8) {
-        let seeds = [
-            &solido_account.to_bytes(),
-            &validator_vote_account.to_bytes(),
-            authority,
-            &seed.to_le_bytes()[..],
-        ];
-        Pubkey::find_program_address(&seeds, program_id)
-    }
-
-    pub fn find_stake_account_address(
-        program_id: &Pubkey,
-        solido_account: &Pubkey,
-        validator_vote_account: &Pubkey,
-        seed: u64,
-    ) -> (Pubkey, u8) {
-        Validator::find_stake_account_address_with_authority(
-            program_id,
-            solido_account,
-            validator_vote_account,
-            VALIDATOR_STAKE_ACCOUNT,
-            seed,
-        )
-    }
-
-    pub fn find_unstake_account_address(
-        program_id: &Pubkey,
-        solido_account: &Pubkey,
-        validator_vote_account: &Pubkey,
-        seed: u64,
-    ) -> (Pubkey, u8) {
-        Validator::find_stake_account_address_with_authority(
-            program_id,
-            solido_account,
-            validator_vote_account,
-            VALIDATOR_UNSTAKE_ACCOUNT,
-            seed,
-        )
-    }
 }
 
 impl Default for Validator {
@@ -717,6 +670,52 @@ impl Default for Validator {
             stake_accounts_balance: Lamports(0),
             active: true,
         }
+    }
+}
+
+impl PubkeyAndEntry<Validator> {
+    pub fn find_stake_account_address_with_authority(
+        &self,
+        program_id: &Pubkey,
+        solido_account: &Pubkey,
+        authority: &[u8],
+        seed: u64,
+    ) -> (Pubkey, u8) {
+        let seeds = [
+            &solido_account.to_bytes(),
+            &self.pubkey.to_bytes(),
+            authority,
+            &seed.to_le_bytes()[..],
+        ];
+        Pubkey::find_program_address(&seeds, program_id)
+    }
+
+    pub fn find_stake_account_address(
+        &self,
+        program_id: &Pubkey,
+        solido_account: &Pubkey,
+        seed: u64,
+    ) -> (Pubkey, u8) {
+        self.find_stake_account_address_with_authority(
+            program_id,
+            solido_account,
+            VALIDATOR_STAKE_ACCOUNT,
+            seed,
+        )
+    }
+
+    pub fn find_unstake_account_address(
+        &self,
+        program_id: &Pubkey,
+        solido_account: &Pubkey,
+        seed: u64,
+    ) -> (Pubkey, u8) {
+        self.find_stake_account_address_with_authority(
+            program_id,
+            solido_account,
+            VALIDATOR_UNSTAKE_ACCOUNT,
+            seed,
+        )
     }
 }
 

@@ -24,7 +24,7 @@ use crate::{
     },
     stake_account::{deserialize_stake_account, StakeAccount},
     state::{
-        ExchangeRate, FeeRecipients, Lido, Maintainers, RewardDistribution, Validator, Validators,
+        ExchangeRate, FeeRecipients, Lido, Maintainers, RewardDistribution, Validators,
         LIDO_CONSTANT_SIZE, LIDO_VERSION,
     },
     token::{Lamports, Rational, StLamports},
@@ -548,12 +548,8 @@ pub fn process_withdraw_inactive_stake(
 
     // Visit the stake accounts one by one, and check how much SOL is in there.
     for seed in begin..end {
-        let (stake_account_address, _bump_seed) = Validator::find_stake_account_address(
-            program_id,
-            accounts.lido.key,
-            &validator.pubkey,
-            seed,
-        );
+        let (stake_account_address, _bump_seed) =
+            validator.find_stake_account_address(program_id, accounts.lido.key, seed);
         let stake_account = match stake_accounts.next() {
             None => {
                 msg!(
@@ -706,24 +702,22 @@ pub fn process_withdraw(
     lido.check_exchange_rate_last_epoch(&clock, "Withdraw")?;
 
     // Should withdraw from the validator that has most stake
-    let provided_validator = lido.validators.get(accounts.validator_vote_account.key)?;
+    let validator = lido.validators.get(accounts.validator_vote_account.key)?;
 
-    for validator in lido.validators.entries.iter() {
-        if validator.entry.stake_accounts_balance > provided_validator.entry.stake_accounts_balance
-        {
+    for val in lido.validators.entries.iter() {
+        if val.entry.stake_accounts_balance > validator.entry.stake_accounts_balance {
             msg!(
                 "Validator {} has more stake than validator {}",
-                provided_validator.pubkey,
+                validator.pubkey,
                 validator.pubkey,
             );
             return Err(LidoError::ValidatorWithMoreStakeExists.into());
         }
     }
-    let (stake_account, _) = Validator::find_stake_account_address(
+    let (stake_account, _) = validator.find_stake_account_address(
         program_id,
         accounts.lido.key,
-        accounts.validator_vote_account.key,
-        provided_validator.entry.stake_seeds.begin,
+        validator.entry.stake_seeds.begin,
     );
     if &stake_account != accounts.source_stake_account.key {
         msg!("Stake account is different than the calculated by the given seed, should be {}, is {}.",
