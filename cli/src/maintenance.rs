@@ -953,10 +953,9 @@ mod test {
         // balance.
         state.reserve_account.lamports += 4 * MINIMUM_STAKE_ACCOUNT_BALANCE.0;
 
-        let stake_account_0 = Validator::find_stake_account_address(
+        let stake_account_0 = state.solido.validators.entries[0].find_stake_account_address(
             &state.solido_program_id,
             &state.solido_address,
-            &state.solido.validators.entries[0].pubkey,
             0,
         );
 
@@ -970,10 +969,9 @@ mod test {
             }
         );
 
-        let stake_account_1 = Validator::find_stake_account_address(
+        let stake_account_1 = state.solido.validators.entries[1].find_stake_account_address(
             &state.solido_program_id,
             &state.solido_address,
-            &state.solido.validators.entries[1].pubkey,
             0,
         );
 
