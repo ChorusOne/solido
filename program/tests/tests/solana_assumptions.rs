@@ -8,10 +8,14 @@
 //! In some places the Solana documentation is absent or incomplete, so we test
 //! the implementation to see how Solana actually works.
 
+use solana_program::stake::state::StakeState;
 use solana_program_test::tokio;
 use solana_sdk::signature::Signer;
 
-use lido::token::Lamports;
+use lido::{
+    stake_account::{StakeAccount, StakeBalance},
+    token::Lamports,
+};
 
 use crate::context::Context;
 
@@ -156,4 +160,116 @@ async fn test_deactivating_stake_earns_rewards() {
     assert_eq!(rewards_inactive, Lamports(0));
     assert_eq!(rewards_active, Lamports(1_244_922_235_900));
     assert_eq!(rewards_deactivating, Lamports(1_244_922_235_898));
+}
+
+#[tokio::test]
+async fn test_stake_accounts() {
+    let amount = Lamports(1_000_000_000);
+
+    let mut context = Context::new_with_maintainer_and_validator().await;
+    let vote_account = context.validator.as_ref().unwrap().vote_account.clone();
+    let authority = context.deterministic_keypair.new_keypair();
+    let rent = context.get_rent().await;
+    let stake_rent = Lamports(rent.minimum_balance(std::mem::size_of::<StakeState>()));
+
+    let activating = context
+        .create_stake_account(amount, authority.pubkey())
+        .await;
+    context
+        .delegate_stake_account(activating, vote_account, &authority)
+        .await;
+
+    let activating_stake = context.get_stake_state(activating).await;
+    let activating_stake_account = StakeAccount::from_delegated_account(
+        amount,
+        &activating_stake,
+        &context.get_clock().await,
+        &context.get_stake_history().await,
+        0,
+    );
+
+    assert_eq!(
+        activating_stake_account.balance,
+        StakeBalance {
+            inactive: stake_rent,
+            activating: (amount - stake_rent).unwrap(),
+            active: Lamports(0),
+            deactivating: Lamports(0),
+        }
+    );
+
+    let epoch_schedule = context.context.genesis_config().epoch_schedule;
+    let slots_per_epoch = epoch_schedule.slots_per_epoch;
+    let start_slot = epoch_schedule.first_normal_slot;
+
+    context.context.warp_to_slot(start_slot).unwrap();
+
+    // Stake is now active.
+    let active = activating;
+    let active_stake = context.get_stake_state(active).await;
+    let active_stake_account = StakeAccount::from_delegated_account(
+        amount,
+        &active_stake,
+        &context.get_clock().await,
+        &context.get_stake_history().await,
+        0,
+    );
+
+    assert_eq!(
+        active_stake_account.balance,
+        StakeBalance {
+            inactive: stake_rent,
+            activating: Lamports(0),
+            active: (amount - stake_rent).unwrap(),
+            deactivating: Lamports(0),
+        }
+    );
+
+    context.deactivate_stake_account(active, &authority).await;
+    // Stake is now deactivating.
+    let deactivating = active;
+
+    let deactivating_stake = context.get_stake_state(deactivating).await;
+    let deactivating_stake_account = StakeAccount::from_delegated_account(
+        amount,
+        &deactivating_stake,
+        &context.get_clock().await,
+        &context.get_stake_history().await,
+        0,
+    );
+
+    assert_eq!(
+        deactivating_stake_account.balance,
+        StakeBalance {
+            inactive: stake_rent,
+            activating: Lamports(0),
+            active: Lamports(0),
+            deactivating: (amount - stake_rent).unwrap(),
+        }
+    );
+
+    let warp_to_slot = context.get_clock().await.slot + slots_per_epoch;
+    context.context.warp_to_slot(warp_to_slot).unwrap();
+
+    // Stake is now deactivating.
+    let deactivated = deactivating;
+
+    let deactivated_stake = context.get_stake_state(deactivated).await;
+    let deactivated_stake_account = StakeAccount::from_delegated_account(
+        amount,
+        &deactivated_stake,
+        &context.get_clock().await,
+        &context.get_stake_history().await,
+        0,
+    );
+
+    assert_eq!(
+        deactivated_stake_account.balance,
+        StakeBalance {
+            inactive: amount,
+            activating: Lamports(0),
+            active: Lamports(0),
+            deactivating: Lamports(0),
+        }
+    );
 }
