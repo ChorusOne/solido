@@ -7,7 +7,6 @@ use crate::context::{id, Context, StakeDeposit};
 use crate::{assert_error_code, assert_solido_error};
 
 use lido::error::LidoError;
-use lido::state::Validator;
 use lido::token::Lamports;
 use solana_program_test::tokio;
 use solana_sdk::signer::Signer;
@@ -146,18 +145,15 @@ async fn test_stake_deposit_merge() {
 #[tokio::test]
 async fn test_stake_deposit_succeeds_despite_donation() {
     let mut context = Context::new_with_maintainer().await;
-    let validator = context.add_validator().await;
+    context.add_validator().await;
+    let validator = &context.get_solido().await.validators.entries[0];
 
     let solido_before = context.get_solido().await;
     let validator_before = &solido_before.validators.entries[0];
 
     // Figure out what the next stake account is going to be.
-    let (stake_account_addr, _) = Validator::find_stake_account_address(
-        &id(),
-        &context.solido.pubkey(),
-        &validator_before.pubkey,
-        0,
-    );
+    let (stake_account_addr, _) =
+        validator_before.find_stake_account_address(&id(), &context.solido.pubkey(), 0);
 
     // Put some SOL in that account, so it is no longer non-existent.
     context
@@ -169,7 +165,7 @@ async fn test_stake_deposit_succeeds_despite_donation() {
     context.deposit(TEST_DEPOSIT_AMOUNT).await;
     context
         .stake_deposit(
-            validator.vote_account,
+            validator.pubkey,
             StakeDeposit::Append,
             TEST_STAKE_DEPOSIT_AMOUNT,
         )
@@ -184,9 +180,7 @@ async fn test_stake_deposit_succeeds_despite_donation() {
     );
 
     // After we update the balance, it should.
-    context
-        .withdraw_inactive_stake(validator.vote_account)
-        .await;
+    context.withdraw_inactive_stake(validator.pubkey).await;
     let solido = context.get_solido().await;
     let validator_entry = &solido.validators.entries[0].entry;
     assert_eq!(

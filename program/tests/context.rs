@@ -3,6 +3,7 @@
 
 //! Holds a test context, which makes it easier to test with a Solido instance set up.
 
+use lido::account_map::PubkeyAndEntry;
 use lido::stake_account::StakeAccount;
 use num_traits::cast::FromPrimitive;
 use rand::prelude::StdRng;
@@ -834,17 +835,15 @@ impl Context {
             .get(&validator_vote_account)
             .expect("Trying to stake with a non-member validator.");
 
-        let (stake_account_end, _) = Validator::find_stake_account_address(
+        let (stake_account_end, _) = validator_entry.find_stake_account_address(
             &id(),
             &self.solido.pubkey(),
-            &validator_vote_account,
             validator_entry.entry.stake_seeds.end,
         );
 
-        let (stake_account_merge_into, _) = Validator::find_stake_account_address(
+        let (stake_account_merge_into, _) = validator_entry.find_stake_account_address(
             &id(),
             &self.solido.pubkey(),
-            &validator_vote_account,
             match approach {
                 StakeDeposit::Append => validator_entry.entry.stake_seeds.end,
                 // We do a wrapping sub here, so we can call stake-merge initially,
@@ -903,16 +902,14 @@ impl Context {
             .get(&self.validator.as_ref().unwrap().vote_account)
             .unwrap();
 
-        let (source_stake_account, _) = Validator::find_stake_account_address(
+        let (source_stake_account, _) = validator.find_stake_account_address(
             &id(),
             &self.solido.pubkey(),
-            &validator.pubkey,
             validator.entry.stake_seeds.begin,
         );
-        let (destination_stake_account, _) = Validator::find_unstake_account_address(
+        let (destination_stake_account, _) = validator.find_unstake_account_address(
             &id(),
             &self.solido.pubkey(),
-            &validator.pubkey,
             validator.entry.unstake_seeds.end,
         );
 
@@ -996,23 +993,15 @@ impl Context {
     /// Returns the address that stake was merged into.
     pub async fn try_merge_stake(
         &mut self,
-        validator_vote_account: Pubkey,
+        validator: &PubkeyAndEntry<Validator>,
         from_seed: u64,
         to_seed: u64,
     ) -> transport::Result<Pubkey> {
-        let (from_stake_account, _) = Validator::find_stake_account_address(
-            &id(),
-            &self.solido.pubkey(),
-            &validator_vote_account,
-            from_seed,
-        );
+        let (from_stake_account, _) =
+            validator.find_stake_account_address(&id(), &self.solido.pubkey(), from_seed);
 
-        let (to_stake_account, _) = Validator::find_stake_account_address(
-            &id(),
-            &self.solido.pubkey(),
-            &validator_vote_account,
-            to_seed,
-        );
+        let (to_stake_account, _) =
+            validator.find_stake_account_address(&id(), &self.solido.pubkey(), to_seed);
 
         send_transaction(
             &mut self.context,
@@ -1021,7 +1010,7 @@ impl Context {
                 &id(),
                 &instruction::MergeStakeMeta {
                     lido: self.solido.pubkey(),
-                    validator_vote_account: validator_vote_account,
+                    validator_vote_account: validator.pubkey,
                     stake_authority: self.stake_authority,
                     from_stake: from_stake_account,
                     to_stake: to_stake_account,
@@ -1037,11 +1026,11 @@ impl Context {
     /// Merge two accounts of a given validator.
     pub async fn merge_stake(
         &mut self,
-        validator_vote_account: Pubkey,
+        validator: &PubkeyAndEntry<Validator>,
         from_seed: u64,
         to_seed: u64,
     ) -> Pubkey {
-        self.try_merge_stake(validator_vote_account, from_seed, to_seed)
+        self.try_merge_stake(validator, from_seed, to_seed)
             .await
             .expect("Failed to call MergeStake on Solido instance.")
     }
@@ -1059,13 +1048,9 @@ impl Context {
 
         let stake_account_addrs: Vec<Pubkey> = (begin..end)
             .map(|seed| {
-                Validator::find_stake_account_address(
-                    &id(),
-                    &self.solido.pubkey(),
-                    &validator_vote_account,
-                    seed,
-                )
-                .0
+                validator
+                    .find_stake_account_address(&id(), &self.solido.pubkey(), seed)
+                    .0
             })
             .collect();
 
@@ -1286,15 +1271,11 @@ impl Context {
 
     pub async fn get_stake_account_from_seed(
         &mut self,
-        validator_vote_account: &Pubkey,
+        validator: &PubkeyAndEntry<Validator>,
         seed: u64,
     ) -> StakeAccount {
-        let (stake_address, _) = Validator::find_stake_account_address(
-            &id(),
-            &self.solido.pubkey(),
-            &validator_vote_account,
-            seed,
-        );
+        let (stake_address, _) =
+            validator.find_stake_account_address(&id(), &self.solido.pubkey(), seed);
 
         let clock = self.get_clock().await;
         let stake_history = self.get_stake_history().await;
@@ -1305,15 +1286,11 @@ impl Context {
 
     pub async fn get_unstake_account_from_seed(
         &mut self,
-        validator_vote_account: &Pubkey,
+        validator: &PubkeyAndEntry<Validator>,
         seed: u64,
     ) -> StakeAccount {
-        let (stake_address, _) = Validator::find_unstake_account_address(
-            &id(),
-            &self.solido.pubkey(),
-            &validator_vote_account,
-            seed,
-        );
+        let (stake_address, _) =
+            validator.find_unstake_account_address(&id(), &self.solido.pubkey(), seed);
 
         let clock = self.get_clock().await;
         let stake_history = self.get_stake_history().await;
