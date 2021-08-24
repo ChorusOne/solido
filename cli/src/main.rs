@@ -15,7 +15,7 @@ use solana_remote_wallet::remote_wallet::maybe_wallet_manager;
 use solana_sdk::commitment_config::CommitmentConfig;
 use solana_sdk::derivation_path::DerivationPath;
 use solana_sdk::instruction::Instruction;
-use solana_sdk::signature::{read_keypair_file, Signature};
+use solana_sdk::signature::{read_keypair, read_keypair_file, Signature};
 use solana_sdk::signer::Signer;
 use solana_sdk::signers::Signers;
 use solana_sdk::transaction::Transaction;
@@ -49,7 +49,35 @@ mod spl_token_utils;
 // we write the default values on the rustdoc so Clap can print them in help
 // messages.
 #[derive(Clap, Debug)]
+#[clap(after_long_help = r#"CONFIGURATION:
+    All of the options of this program can also be provided as an environment
+    variable with "SOLIDO_" prefix. E.g. to provide --keypair-path, set the
+    SOLIDO_KEYPAIR_PATH environment variable.
+
+    Alternatively, all of the options of this program can also be provided in a
+    json config file (the location of which must be provided with --config or
+    SOLIDO_CONFIG). This json file must contain an object with one key per
+    option. E.g. to provide --cluster and --keypair-path, write the following
+    config file:
+
+    {
+      "cluster": "https://api.mainnet-beta.solana.com",
+      "keypair_path": "/path/to/id.json"
+    }"#)]
 struct Opts {
+    /// The contents of a keypair file to sign and pay with, as json array.
+    ///
+    /// This is mainly useful when loading a keypair from e.g. Hashicorp
+    /// Vault into the SOLIDO_KEYPAIR environment variable. This takes
+    /// precedence over --keypair-path.
+    ///
+    /// Note, when used in the config file, this must be a string that
+    /// contains the contents of the keypair file (which itself is a json
+    /// array of numbers), it shouldn't be an array directly.
+    // Overwritten by `GeneralOpts` if None.
+    #[clap(long)]
+    keypair: Option<String>,
+
     /// The keypair to sign and pay with. [default: ~/.config/solana/id.json]
     // Overwritten by `GeneralOpts` if None.
     #[clap(long)]
@@ -79,6 +107,10 @@ impl Opts {
         let config_file = self.config.as_ref().map(|p| read_config(p.as_path()));
         general_opts.merge_with_config_and_environment(config_file.as_ref());
 
+        self.keypair = self
+            .keypair
+            .take()
+            .or_else(|| Some(general_opts.keypair().to_owned()));
         self.keypair_path = self
             .keypair_path
             .take()
@@ -282,9 +314,16 @@ fn main() {
 
     solana_logger::setup_with_default("solana=info");
 
-    let payer_keypair_path = opts.keypair_path;
-    let signer = &*get_signer(payer_keypair_path.unwrap())
-        .ok_or_abort_with("Failed to load signer keypair.");
+    // Note, the unwraps below are safe, because `merge_with_config_and_environment`
+    // ensures that all values are provided; it’s just that for the derived Clap
+    // parser, the options are all optional.
+    let signer = if opts.keypair.as_ref().unwrap() == "" {
+        let payer_keypair_path = opts.keypair_path;
+        get_signer_from_path(payer_keypair_path.unwrap())
+            .ok_or_abort_with("Failed to load signer keypair.")
+    } else {
+        get_signer_from_key(opts.keypair.unwrap())
+    };
 
     let rpc_client =
         RpcClient::new_with_commitment(opts.cluster.unwrap(), CommitmentConfig::confirmed());
@@ -293,7 +332,7 @@ fn main() {
     let output_mode = opts.output_mode.unwrap();
     let mut config = Config {
         client: snapshot_client,
-        signer,
+        signer: &*signer,
         output_mode,
     };
 
@@ -499,8 +538,17 @@ mod test {
     }
 }
 
+fn get_signer_from_key(key_json: String) -> Box<dyn Signer> {
+    use std::io::Cursor;
+    let mut cursor = Cursor::new(key_json.as_bytes());
+    Box::new(
+        read_keypair(&mut cursor)
+            .expect("Failed to deserialize keypair. Is it a json array of numbers?"),
+    )
+}
+
 // Get a boxed signer that lives long enough for us to use it in the Config.
-fn get_signer(payer_keypair_path: PathBuf) -> Result<Box<dyn Signer>, Error> {
+fn get_signer_from_path(payer_keypair_path: PathBuf) -> Result<Box<dyn Signer>, Error> {
     let boxed_signer: Box<dyn Signer> = if payer_keypair_path.starts_with("usb://") {
         let uri = payer_keypair_path
             .into_os_string()

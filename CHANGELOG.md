@@ -1,5 +1,14 @@
 # Changelog
 
+## (unreleased)
+
+New features:
+
+ * `solido` now supports `--keypair` (and `SOLIDO_KEYPAIR` when passed as
+   environment variable) as an alternative to `--keypair-path`. This is useful
+   for example to load the signer key from Hashicorp Vault with
+   [Vaultenv](https://github.com/channable/vaultenv).
+
 ## v0.5.0
 
 Released 2021-08-25.

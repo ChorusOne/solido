@@ -221,6 +221,18 @@ fn get_default_keypair_path() -> PathBuf {
 
 cli_opt_struct! {
     GeneralOpts {
+        /// The contents of a keypair file to sign and pay with, as json array.
+        ///
+        /// This is mainly useful when loading a keypair from e.g. Hashicorp
+        /// Vault into the SOLIDO_KEYPAIR environment variable. This takes
+        /// precedence over --keypair-path.
+        ///
+        /// Note, when used in the config file, this must be a string that
+        /// contains the contents of the keypair file (which itself is a json
+        /// array of numbers), it shouldn't be an array directly.
+        #[clap(long)]
+        keypair: String => "".to_string(),
+
         /// The keypair to sign and pay with. [default: ~/.config/solana/id.json]
         #[clap(long)]
         keypair_path: PathBuf => get_default_keypair_path(),
