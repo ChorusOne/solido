@@ -727,7 +727,7 @@ impl PubkeyAndEntry<Validator> {
     }
 
     pub fn can_be_removed(&self) -> bool {
-        !&self.active && self.has_no_stake_accounts()
+        !&self.active && self.has_no_stake_accounts() && self.stake_accounts_balance == Lamports(0)
     }
 
     pub fn find_unstake_account_address(

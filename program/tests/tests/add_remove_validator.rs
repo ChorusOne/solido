@@ -10,8 +10,7 @@ use crate::context::{Context, StakeDeposit};
 
 use lido::error::LidoError;
 use lido::state::Validator;
-use lido::token::Lamports;
-use lido::token::StLamports;
+use lido::token::{Lamports, StLamports};
 
 pub const TEST_DEPOSIT_AMOUNT: Lamports = Lamports(100_000_000_000);
 pub const TEST_STAKE_DEPOSIT_AMOUNT: Lamports = Lamports(10_000_000_000);
@@ -39,7 +38,20 @@ async fn test_successful_add_validator() {
 }
 
 #[tokio::test]
-async fn test_remove_validator_without_unclaimed_credits() {
+async fn test_successful_remove_validator() {
+    let mut context = Context::new_with_maintainer_and_validator().await;
+    let validator = &context.get_solido().await.validators.entries[0];
+    context
+        .try_remove_validator(validator.pubkey)
+        .await
+        .unwrap();
+
+    let solido = context.get_solido().await;
+    assert_eq!(solido.validators.len(), 0);
+}
+
+#[tokio::test]
+async fn test_remove_validator_with_unclaimed_credits() {
     let mut context = Context::new_with_maintainer_and_validator().await;
 
     let solido = context.get_solido().await;

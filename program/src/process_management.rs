@@ -82,13 +82,15 @@ pub fn process_remove_validator(
 ) -> ProgramResult {
     let accounts = RemoveValidatorInfo::try_from_slice(accounts_raw)?;
     let mut lido = deserialize_lido(program_id, accounts.lido)?;
-    lido.check_manager(accounts.manager)?;
 
-    let removed_validator = lido.validators.remove_on(
-        accounts.validator_vote_account_to_remove.key,
-        |x| x.can_be_removed(),
-        LidoError::ValidatorIsStillActive,
-    )?;
+    let removed_validator = lido
+        .validators
+        .remove(accounts.validator_vote_account_to_remove.key)?;
+
+    if !removed_validator.can_be_removed() {
+        msg!("Refusing to remove validator because it is still active, deactivate it first.");
+        return Err(LidoError::ValidatorIsStillActive.into());
+    }
 
     if removed_validator.fee_credit != StLamports(0) {
         msg!("Validator still has tokens to claim. Reclaim tokens before removing the validator");
