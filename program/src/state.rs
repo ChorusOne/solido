@@ -692,8 +692,8 @@ impl Default for Validator {
 }
 
 impl Validator {
-    pub fn has_no_stake_accounts(&self) -> bool {
-        self.stake_seeds.begin == self.stake_seeds.end
+    pub fn has_stake_accounts(&self) -> bool {
+        self.stake_seeds.begin != self.stake_seeds.end
     }
 
     pub fn check_can_be_removed(&self) -> Result<(), LidoError> {
@@ -701,18 +701,18 @@ impl Validator {
             msg!("Refusing to remove validator because it is still active, deactivate it first.");
             return Err(LidoError::ValidatorIsStillActive);
         }
-        if !self.has_no_stake_accounts() {
-            msg!("Refusing to remove validator because it still has stake accounts, unstake them first.");
-            return Err(LidoError::ValidatorShouldHaveNoStakeAccounts);
-        }
-        // If not, this is a bug.
-        assert_eq!(self.stake_accounts_balance, Lamports(0));
         if self.fee_credit != StLamports(0) {
             msg!(
                 "Validator still has tokens to claim. Reclaim tokens before removing the validator"
             );
             return Err(LidoError::ValidatorHasUnclaimedCredit);
         }
+        if self.has_stake_accounts() {
+            msg!("Refusing to remove validator because it still has stake accounts, unstake them first.");
+            return Err(LidoError::ValidatorShouldHaveNoStakeAccounts);
+        }
+        // If not, this is a bug.
+        assert_eq!(self.stake_accounts_balance, Lamports(0));
         Ok(())
     }
 }
