@@ -613,7 +613,7 @@ pub struct Validator {
     /// Seeds for inactive stake accounts.
     pub unstake_seeds: SeedRange,
 
-    /// Sum of the balances of the stake accounts.
+    /// Sum of the balances of the stake accounts and unstake accounts.
     pub stake_accounts_balance: Lamports,
 
     /// Sum of the balances of the unstake accounts.

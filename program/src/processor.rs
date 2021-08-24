@@ -427,12 +427,7 @@ pub fn process_unstake(
         .validators
         .get_mut(accounts.validator_vote_account.key)?;
     // Increase the `unstake_accounts_balance` by `amount`.
-    validator.entry.unstake_accounts_balance = (validator.entry.unstake_accounts_balance + amount)?;
-    msg!(
-        "VALIDATOR ACTIVE: {}, STAKE ACCOUNT:{}",
-        validator.entry.active,
-        validator.entry.stake_accounts_balance
-    );
+
     if validator.entry.active {
         if (validator.entry.stake_accounts_balance - amount)? < MINIMUM_STAKE_ACCOUNT_BALANCE {
             msg!(
@@ -450,13 +445,18 @@ pub fn process_unstake(
         if full_amount != amount {
             msg!(
                 "An inactive validator must have all its stake withdrawn. Tried\\
-                to withdraw {}, Should withdraw {} instead.",
+                to withdraw {}, Should withdraw {} instead. The full amount might be split\\
+                in several transaction, as there are limitations on how much can be unstaked\\
+                in a single transaction.",
                 amount,
                 full_amount,
             );
             return Err(LidoError::InvalidAmount.into());
+        } else {
+            validator.entry.stake_seeds.begin += 1;
         }
     }
+    validator.entry.unstake_accounts_balance = (validator.entry.unstake_accounts_balance + amount)?;
     validator.entry.unstake_seeds.end += 1;
 
     lido.save(accounts.lido)
@@ -578,7 +578,7 @@ pub fn process_withdraw_inactive_stake(
     let end = validator.entry.stake_seeds.end;
 
     // Visit the stake accounts one by one, and check how much SOL is in there.
-    for seed in begin..end {
+    for seed in &validator.entry.stake_seeds {
         let (stake_account_address, _bump_seed) =
             validator.find_stake_account_address(program_id, accounts.lido.key, seed);
         let stake_account = match stake_accounts.next() {
