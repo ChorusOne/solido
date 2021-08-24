@@ -697,7 +697,7 @@ impl Validator {
     }
 
     pub fn check_can_be_removed(&self) -> Result<(), LidoError> {
-        if !self.active {
+        if self.active {
             msg!("Refusing to remove validator because it is still active, deactivate it first.");
             return Err(LidoError::ValidatorIsStillActive.into());
         }
