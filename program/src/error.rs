@@ -99,8 +99,8 @@ pub enum LidoError {
     #[error("InvalidAccountMember")]
     InvalidLidoSize = 26,
     /// The instance has no validators.
-    #[error("EmptySetOfValidators")]
-    EmptySetOfValidators = 27,
+    #[error("NoActiveValidators")]
+    NoActiveValidators = 27,
 
     /// When staking part of the reserve to a new stake account, the next
     /// program-derived address for the stake account associated with the given
@@ -150,6 +150,10 @@ pub enum LidoError {
     /// The provided mint is invalid.
     #[error("InvalidMint")]
     InvalidMint = 38,
+
+    /// Tried to deposit stake to inactive validator.
+    #[error("StakeToInactiveValidator")]
+    StakeToInactiveValidator = 39,
 }
 
 impl From<ArithmeticError> for LidoError {

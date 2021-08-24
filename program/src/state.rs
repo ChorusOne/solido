@@ -3,8 +3,6 @@
 
 //! State transition types
 
-use std::{num::ParseIntError, str::FromStr};
-
 use serde::Serialize;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
@@ -34,9 +32,15 @@ pub const LIDO_VERSION: u8 = 0;
 ///
 /// To update this, run the tests and replace the value here with the test output.
 pub const LIDO_CONSTANT_SIZE: usize = 357;
-pub const VALIDATOR_CONSTANT_SIZE: usize = 68;
+pub const VALIDATOR_CONSTANT_SIZE: usize = 65;
 
 pub type Validators = AccountMap<Validator>;
+
+impl Validators {
+    pub fn iter_active(&self) -> impl Iterator<Item = &Validator> {
+        self.iter_entries().filter(|&v| v.active)
+    }
+}
 pub type Maintainers = AccountSet;
 
 impl EntryConstantSize for Validator {
@@ -587,26 +591,8 @@ impl Lido {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema, Serialize)]
-pub struct Weight(pub u32);
-impl Default for Weight {
-    fn default() -> Self {
-        Weight(1000)
-    }
-}
-impl FromStr for Weight {
-    type Err = ParseIntError;
-
-    fn from_str(s: &str) -> Result<Self, ParseIntError> {
-        let weight: u32 = s.parse()?;
-        Ok(Weight(weight))
-    }
-}
-
 #[repr(C)]
-#[derive(
-    Clone, Debug, Default, Eq, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema, Serialize,
-)]
+#[derive(Clone, Debug, Eq, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema, Serialize)]
 pub struct Validator {
     /// Fees in stSOL that the validator is entitled too, but hasn't claimed yet.
     pub fee_credit: StLamports,
@@ -640,16 +626,15 @@ pub struct Validator {
     /// Sum of the balances of the stake accounts.
     pub stake_accounts_balance: Lamports,
 
-    /// Weight of the validator. Used when calculating the stake amount for
-    /// keeping a weighted balance, also defines the validator's share of fees.
-    pub weight: Weight,
+    /// Controls if a validator is allowed to have new stake deposits.
+    /// When removing a validator, this flag should be set to `false`.
+    pub active: bool,
 }
 
 impl Validator {
-    pub fn new(fee_address: Pubkey, weight: Weight) -> Validator {
+    pub fn new(fee_address: Pubkey) -> Validator {
         Validator {
             fee_address,
-            weight,
             ..Default::default()
         }
     }
@@ -667,6 +652,19 @@ impl Validator {
             &seed.to_le_bytes()[..],
         ];
         Pubkey::find_program_address(&seeds, program_id)
+    }
+}
+
+impl Default for Validator {
+    fn default() -> Self {
+        Validator {
+            fee_address: Pubkey::default(),
+            fee_credit: StLamports(0),
+            stake_accounts_seed_begin: 0,
+            stake_accounts_seed_end: 0,
+            stake_accounts_balance: Lamports(0),
+            active: true,
+        }
     }
 }
 
@@ -865,10 +863,7 @@ mod test_lido {
 
         let mut validators = Validators::new(10_000);
         validators
-            .add(
-                Pubkey::new_unique(),
-                Validator::new(Pubkey::new_unique(), Weight::default()),
-            )
+            .add(Pubkey::new_unique(), Validator::new(Pubkey::new_unique()))
             .unwrap();
         let maintainers = Maintainers::new(1);
         let lido = Lido {
@@ -1040,10 +1035,7 @@ mod test_lido {
 
         lido.validators.maximum_entries = 1;
         lido.validators
-            .add(
-                Pubkey::new_unique(),
-                Validator::new(Pubkey::new_unique(), Weight::default()),
-            )
+            .add(Pubkey::new_unique(), Validator::new(Pubkey::new_unique()))
             .unwrap();
         lido.validators.entries[0].entry.stake_accounts_balance = Lamports(37);
         assert_eq!(
@@ -1111,10 +1103,7 @@ mod test_lido {
 
         lido.validators.maximum_entries = 1;
         lido.validators
-            .add(
-                Pubkey::new_unique(),
-                Validator::new(Pubkey::new_unique(), Weight::default()),
-            )
+            .add(Pubkey::new_unique(), Validator::new(Pubkey::new_unique()))
             .unwrap();
         lido.validators.entries[0].entry.fee_credit = StLamports(37);
         assert_eq!(

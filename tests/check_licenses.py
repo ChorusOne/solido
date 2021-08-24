@@ -31,7 +31,7 @@ ALLOWED_LICENSES = [
 # for reasons listed below.
 ALLOWED_DEPENDENCIES = [
     # Actually Apache 2.0, but it's not part of the crate metadata.
-    'multisig',
+    'serum-multisig',
     # Has a complex licensing situation, that has been verified by Wenger & Vieli
     # to be compatible with Solido.
     'ring',

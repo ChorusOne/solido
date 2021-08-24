@@ -59,7 +59,9 @@ solido_program_id = solana_program_deploy(get_solido_program_path() + '/lido.so'
 print(f'> Solido program id is {solido_program_id}.')
 
 print('\nUploading Multisig program ...')
-multisig_program_id = solana_program_deploy(get_solido_program_path() + '/multisig.so')
+multisig_program_id = solana_program_deploy(
+    get_solido_program_path() + '/serum_multisig.so'
+)
 print(f'> Multisig program id is {multisig_program_id}.')
 
 print('\nCreating new multisig ...')
@@ -247,8 +249,6 @@ transaction_result = solido(
     validator_fee_account,
     '--multisig-address',
     multisig_instance,
-    '--weight',
-    '2000',
     keypair_path=test_addrs[1].keypair_path,
 )
 transaction_address = transaction_result['transaction_address']
@@ -305,7 +305,7 @@ assert solido_instance['solido']['validators']['entries'][0] == {
         'stake_accounts_seed_begin': 0,
         'stake_accounts_seed_end': 0,
         'stake_accounts_balance': 0,
-        'weight': 2000,
+        'active': True,
     },
 }, f'Unexpected validator entry, in {json.dumps(solido_instance, indent=True)}'
 
@@ -524,3 +524,47 @@ expected_result = {
     }
 }
 print('> Staked as expected.')
+
+print(f'\n Deactivating validator {validator_vote_account.pubkey} ...')
+transaction_result = solido(
+    'deactivate-validator',
+    '--multisig-program-id',
+    multisig_program_id,
+    '--multisig-address',
+    multisig_instance,
+    '--solido-program-id',
+    solido_program_id,
+    '--solido-address',
+    solido_address,
+    '--validator-vote-account',
+    validator_vote_account.pubkey,
+    keypair_path=test_addrs[0].keypair_path,
+)
+transaction_address = transaction_result['transaction_address']
+print(f'> Deactivation multisig transaction address is {transaction_address}.')
+transaction_status = multisig(
+    'show-transaction',
+    '--multisig-program-id',
+    multisig_program_id,
+    '--solido-program-id',
+    solido_program_id,
+    '--transaction-address',
+    transaction_address,
+)
+assert (
+    'DeactivateValidator'
+    in transaction_status['parsed_instruction']['SolidoInstruction']
+)
+approve_and_execute(transaction_address, test_addrs[1])
+
+solido_instance = solido(
+    'show-solido',
+    '--solido-program-id',
+    solido_program_id,
+    '--solido-address',
+    solido_address,
+)
+assert not solido_instance['solido']['validators']['entries'][0]['entry'][
+    'active'
+], 'Validator should be inactive after deactivation.'
+print('> Validator is inactive as expected.')

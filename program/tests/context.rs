@@ -27,12 +27,9 @@ use solana_sdk::transport::TransportError;
 use solana_vote_program::vote_instruction;
 use solana_vote_program::vote_state::{VoteInit, VoteState};
 
+use lido::token::{Lamports, StLamports};
 use lido::{
     error::LidoError, instruction, RESERVE_ACCOUNT, REWARDS_WITHDRAW_AUTHORITY, STAKE_AUTHORITY,
-};
-use lido::{
-    state::Weight,
-    token::{Lamports, StLamports},
 };
 use lido::{
     state::{FeeRecipients, Lido, RewardDistribution, Validator},
@@ -676,7 +673,6 @@ impl Context {
             &mut self.nonce,
             &[lido::instruction::add_validator(
                 &id(),
-                Weight::default(),
                 &lido::instruction::AddValidatorMeta {
                     lido: self.solido.pubkey(),
                     manager: self.manager.pubkey(),
@@ -706,6 +702,24 @@ impl Context {
             .expect("Failed to add validator.");
 
         accounts
+    }
+
+    pub async fn deactivate_validator(&mut self, vote_account: Pubkey) {
+        send_transaction(
+            &mut self.context,
+            &mut self.nonce,
+            &[lido::instruction::deactivate_validator(
+                &id(),
+                &lido::instruction::DeactivateValidatorMeta {
+                    lido: self.solido.pubkey(),
+                    manager: self.manager.pubkey(),
+                    validator_vote_account_to_deactivate: vote_account,
+                },
+            )],
+            vec![&self.manager],
+        )
+        .await
+        .expect("Failed to deactivate validator.");
     }
 
     pub async fn try_remove_validator(&mut self, vote_account: Pubkey) -> transport::Result<()> {

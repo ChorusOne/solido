@@ -12,10 +12,10 @@ use crate::{
     error::LidoError,
     instruction::{
         AddMaintainerInfo, AddValidatorInfo, ChangeRewardDistributionInfo, ClaimValidatorFeeInfo,
-        MergeStakeInfo, RemoveMaintainerInfo, RemoveValidatorInfo,
+        DeactivateValidatorInfo, MergeStakeInfo, RemoveMaintainerInfo, RemoveValidatorInfo,
     },
     logic::{deserialize_lido, mint_st_sol_to},
-    state::{RewardDistribution, Validator, Weight},
+    state::{RewardDistribution, Validator},
     token::StLamports,
     STAKE_AUTHORITY,
 };
@@ -39,11 +39,7 @@ pub fn process_change_reward_distribution(
     lido.save(accounts.lido)
 }
 
-pub fn process_add_validator(
-    program_id: &Pubkey,
-    weight: Weight,
-    accounts_raw: &[AccountInfo],
-) -> ProgramResult {
+pub fn process_add_validator(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> ProgramResult {
     let accounts = AddValidatorInfo::try_from_slice(accounts_raw)?;
     let mut lido = deserialize_lido(program_id, accounts.lido)?;
     let rent = &Rent::from_account_info(accounts.sysvar_rent)?;
@@ -66,7 +62,7 @@ pub fn process_add_validator(
 
     lido.validators.add(
         *accounts.validator_vote_account.key,
-        Validator::new(*accounts.validator_fee_st_sol_account.key, weight),
+        Validator::new(*accounts.validator_fee_st_sol_account.key),
     )?;
 
     lido.save(accounts.lido)
@@ -91,6 +87,29 @@ pub fn process_remove_validator(
         msg!("Validator still has tokens to claim. Reclaim tokens before removing the validator");
         return Err(LidoError::ValidatorHasUnclaimedCredit.into());
     }
+
+    lido.save(accounts.lido)
+}
+
+/// Set the `active` flag to false for a given validator.
+///
+/// This prevents new funds from being staked with this validator, and enables
+/// removing the validator once no stake is delegated to it any more, and once
+/// it has no unclaimed fee credit.
+pub fn process_deactivate_validator(
+    program_id: &Pubkey,
+    accounts_raw: &[AccountInfo],
+) -> ProgramResult {
+    let accounts = DeactivateValidatorInfo::try_from_slice(accounts_raw)?;
+    let mut lido = deserialize_lido(program_id, accounts.lido)?;
+    lido.check_manager(accounts.manager)?;
+
+    let validator = lido
+        .validators
+        .get_mut(accounts.validator_vote_account_to_deactivate.key)?;
+
+    validator.entry.active = false;
+    msg!("Validator {} deactivated.", validator.pubkey);
 
     lido.save(accounts.lido)
 }

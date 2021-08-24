@@ -18,7 +18,7 @@ use solana_program::{
 use crate::{
     accounts_struct, accounts_struct_meta,
     error::LidoError,
-    state::{RewardDistribution, Weight},
+    state::RewardDistribution,
     token::{Lamports, StLamports},
 };
 
@@ -74,10 +74,25 @@ pub enum LidoInstruction {
         #[allow(dead_code)] // but it's not
         new_reward_distribution: RewardDistribution,
     },
-    AddValidator {
-        #[allow(dead_code)] // but it's not
-        weight: Weight,
-    },
+
+    /// Add a new validator to the validator set.
+    ///
+    /// Requires the manager to sign.
+    AddValidator,
+
+    /// Set the `active` flag to false for a given validator.
+    ///
+    /// Requires the manager to sign.
+    ///
+    /// Deactivation initiates the validator removal process:
+    ///
+    /// * It prevents new funds from being staked with the validator.
+    /// * It signals to the maintainer bot to start unstaking from this validator.
+    ///
+    /// Once there are no more delegations to this validator, and it has no
+    /// unclaimed fee credits, then the validator can be removed.
+    DeactivateValidator,
+
     RemoveValidator,
     AddMaintainer,
     RemoveMaintainer,
@@ -564,16 +579,11 @@ accounts_struct! {
     }
 }
 
-pub fn add_validator(
-    program_id: &Pubkey,
-    weight: Weight,
-    accounts: &AddValidatorMeta,
-) -> Instruction {
-    let data = LidoInstruction::AddValidator { weight };
+pub fn add_validator(program_id: &Pubkey, accounts: &AddValidatorMeta) -> Instruction {
     Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
-        data: data.to_vec(),
+        data: LidoInstruction::AddValidator.to_vec(),
     }
 }
 
@@ -601,6 +611,34 @@ pub fn remove_validator(program_id: &Pubkey, accounts: &RemoveValidatorMeta) -> 
         program_id: *program_id,
         accounts: accounts.to_vec(),
         data: LidoInstruction::RemoveValidator.to_vec(),
+    }
+}
+
+accounts_struct! {
+    DeactivateValidatorMeta, DeactivateValidatorInfo {
+        pub lido {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub manager {
+            is_signer: true,
+            is_writable: false,
+        },
+        pub validator_vote_account_to_deactivate {
+            is_signer: false,
+            is_writable: false,
+        },
+    }
+}
+
+pub fn deactivate_validator(
+    program_id: &Pubkey,
+    accounts: &DeactivateValidatorMeta,
+) -> Instruction {
+    Instruction {
+        program_id: *program_id,
+        accounts: accounts.to_vec(),
+        data: LidoInstruction::DeactivateValidator.to_vec(),
     }
 }
 

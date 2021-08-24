@@ -269,8 +269,8 @@ impl AsPrettyError for ClientError {
 /// We need to write this manually, because `multisig::Error::from`
 /// unfortunately doesn’t convert back from error codes, it appears
 /// to be broken. See also <https://github.com/ChorusOne/solido/issues/177>.
-pub fn multisig_error_from_u32(error_code: u32) -> Option<multisig::ErrorCode> {
-    use multisig::ErrorCode;
+pub fn multisig_error_from_u32(error_code: u32) -> Option<serum_multisig::ErrorCode> {
+    use serum_multisig::ErrorCode;
 
     let all_errors = [
         ErrorCode::InvalidOwner,
@@ -309,14 +309,19 @@ pub fn multisig_error_from_u32(error_code: u32) -> Option<multisig::ErrorCode> {
 #[cfg(test)]
 mod test {
     use crate::error::multisig_error_from_u32;
+    use solana_program::program_error::ProgramError;
 
     #[test]
     fn test_multisig_error_from_u32() {
         // We use `assert!matches!` because `ErrorCode` does not implement `Eq`.
-        assert!(matches!(
-            multisig_error_from_u32(0x65),
-            Some(multisig::ErrorCode::NotEnoughSigners),
-        ));
+        assert!(
+            matches!(
+                multisig_error_from_u32(301),
+                Some(serum_multisig::ErrorCode::NotEnoughSigners),
+            ),
+            "Note: NotEnoughSigners code is {:?}",
+            ProgramError::from(serum_multisig::ErrorCode::NotEnoughSigners),
+        );
         assert!(matches!(multisig_error_from_u32(u32::MAX), None));
     }
 }

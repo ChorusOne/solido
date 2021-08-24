@@ -51,3 +51,27 @@ async fn test_remove_validator_without_unclaimed_credits() {
     let solido = context.get_solido().await;
     assert_eq!(solido.validators.len(), 0);
 }
+
+#[tokio::test]
+async fn test_deactivate_validator() {
+    let mut context = Context::new_with_maintainer().await;
+
+    let validator = context.add_validator().await;
+
+    // Initially, the validator should be active.
+    let solido = context.get_solido().await;
+    assert_eq!(solido.validators.len(), 1);
+    assert!(solido.validators.entries[0].entry.active);
+
+    context.deactivate_validator(validator.vote_account).await;
+
+    // After deactivation, it should be inactive.
+    let solido = context.get_solido().await;
+    assert_eq!(solido.validators.len(), 1);
+    assert!(!solido.validators.entries[0].entry.active);
+
+    // Deactivation is idempotent.
+    context.deactivate_validator(validator.vote_account).await;
+    let solido_after_second_deactivation = context.get_solido().await;
+    assert_eq!(solido, solido_after_second_deactivation);
+}

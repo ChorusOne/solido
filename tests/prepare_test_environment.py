@@ -29,7 +29,9 @@ solido_program_id = solana_program_deploy(get_solido_program_path() + '/lido.so'
 print(f'> Solido program id is {solido_program_id}')
 
 print('\nUploading Multisig program ...')
-multisig_program_id = solana_program_deploy(get_solido_program_path() + '/multisig.so')
+multisig_program_id = solana_program_deploy(
+    get_solido_program_path() + '/serum_multisig.so'
+)
 print(f'> Multisig program id is {multisig_program_id}')
 
 os.makedirs('tests/.keys', exist_ok=True)
