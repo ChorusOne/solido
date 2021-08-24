@@ -3,6 +3,8 @@
 
 //! State transition types
 
+use std::ops::Range;
+
 use serde::Serialize;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
@@ -614,6 +616,9 @@ pub struct Validator {
     /// Sum of the balances of the stake accounts.
     pub stake_accounts_balance: Lamports,
 
+    /// Sum of the balances of the unstake accounts.
+    pub unstake_accounts_balance: Lamports,
+
     /// Controls if a validator is allowed to have new stake deposits.
     /// When removing a validator, this flag should be set to `false`.
     pub active: bool,
@@ -649,6 +654,18 @@ pub struct SeedRange {
 
     /// End (exclusive) of the seed range for stake accounts.
     pub end: u64,
+}
+
+impl IntoIterator for &SeedRange {
+    type Item = u64;
+    type IntoIter = Range<u64>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        Range {
+            start: self.begin,
+            end: self.end,
+        }
+    }
 }
 
 impl Validator {

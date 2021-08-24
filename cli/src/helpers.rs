@@ -479,7 +479,7 @@ impl fmt::Display for ShowSolidoOutput {
                 pe.entry.fee_credit,
                 pe.entry.stake_accounts_balance,
             )?;
-            for seed in pe.entry.stake_seeds.begin..pe.entry.stake_seeds.end {
+            for seed in &pe.entry.stake_seeds {
                 writeln!(
                     f,
                     "      - {}: {}",

@@ -12,12 +12,8 @@ use solana_program_test::tokio;
 use solana_sdk::signer::Signer;
 const STAKE_AMOUNT: Lamports = Lamports(10_000_000_000);
 
-struct UnstakeContext {
-    context: Context,
-}
-
 impl UnstakeContext {
-    async fn new(stake_amount: Lamports) -> UnstakeContext {
+    async fn new(stake_amount: Lamports) -> Context {
         let mut context = Context::new_with_maintainer_and_validator().await;
         context.deposit(stake_amount).await;
         let validator = context.validator.take().unwrap();
@@ -32,7 +28,7 @@ impl UnstakeContext {
         context.context.warp_to_slot(start_slot).unwrap();
         context.update_exchange_rate().await;
 
-        UnstakeContext { context }
+        context
     }
 }
 
