@@ -33,7 +33,7 @@ pub const LIDO_VERSION: u8 = 0;
 ///
 /// To update this, run the tests and replace the value here with the test output.
 pub const LIDO_CONSTANT_SIZE: usize = 357;
-pub const VALIDATOR_CONSTANT_SIZE: usize = 81;
+pub const VALIDATOR_CONSTANT_SIZE: usize = 89;
 
 pub type Validators = AccountMap<Validator>;
 
