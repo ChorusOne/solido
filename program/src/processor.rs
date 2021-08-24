@@ -433,16 +433,29 @@ pub fn process_unstake(
         validator.entry.active,
         validator.entry.stake_accounts_balance
     );
-    if validator.entry.active
-        && (validator.entry.stake_accounts_balance - amount)? < MINIMUM_STAKE_ACCOUNT_BALANCE
-    {
-        msg!(
+    if validator.entry.active {
+        if (validator.entry.stake_accounts_balance - amount)? < MINIMUM_STAKE_ACCOUNT_BALANCE {
+            msg!(
             "Unstake operation will leave the active validator with {}, less than the minimum balance {}.\\
             Only inactive validators can fall below the limit.",
             validator.entry.stake_accounts_balance,
             MINIMUM_STAKE_ACCOUNT_BALANCE
         );
-        return Err(LidoError::InvalidAmount.into());
+            return Err(LidoError::InvalidAmount.into());
+        }
+    } else {
+        let full_amount = (validator.entry.stake_accounts_balance
+            - validator.entry.unstake_accounts_balance)
+            .expect("Unstake accounts balance is not greater than Stake accounts balance.");
+        if full_amount != amount {
+            msg!(
+                "An inactive validator must have all its stake withdrawn. Tried\\
+                to withdraw {}, Should withdraw {} instead.",
+                amount,
+                full_amount,
+            );
+            return Err(LidoError::InvalidAmount.into());
+        }
     }
     validator.entry.unstake_seeds.end += 1;
 
