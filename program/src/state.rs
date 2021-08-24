@@ -691,6 +691,16 @@ impl Default for Validator {
     }
 }
 
+impl Validator {
+    pub fn has_no_stake_accounts(&self) -> bool {
+        self.stake_seeds.begin == self.stake_seeds.end
+    }
+
+    pub fn can_be_removed(&self) -> bool {
+        !&self.active && self.has_no_stake_accounts() && self.stake_accounts_balance == Lamports(0)
+    }
+}
+
 impl PubkeyAndEntry<Validator> {
     pub fn find_stake_account_address_with_authority(
         &self,
@@ -720,14 +730,6 @@ impl PubkeyAndEntry<Validator> {
             VALIDATOR_STAKE_ACCOUNT,
             seed,
         )
-    }
-
-    pub fn has_no_stake_accounts(&self) -> bool {
-        self.stake_seeds.begin == self.stake_seeds.end
-    }
-
-    pub fn can_be_removed(&self) -> bool {
-        !&self.active && self.has_no_stake_accounts() && self.stake_accounts_balance == Lamports(0)
     }
 
     pub fn find_unstake_account_address(
