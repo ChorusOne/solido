@@ -699,11 +699,11 @@ impl Validator {
     pub fn check_can_be_removed(&self) -> Result<(), LidoError> {
         if self.active {
             msg!("Refusing to remove validator because it is still active, deactivate it first.");
-            return Err(LidoError::ValidatorIsStillActive.into());
+            return Err(LidoError::ValidatorIsStillActive);
         }
         if !self.has_no_stake_accounts() {
             msg!("Refusing to remove validator because it still has stake accounts, unstake them first.");
-            return Err(LidoError::ValidatorShouldHaveNoStakeAccounts.into());
+            return Err(LidoError::ValidatorShouldHaveNoStakeAccounts);
         }
         // If not, this is a bug.
         assert_eq!(self.stake_accounts_balance, Lamports(0));
@@ -711,7 +711,7 @@ impl Validator {
             msg!(
                 "Validator still has tokens to claim. Reclaim tokens before removing the validator"
             );
-            return Err(LidoError::ValidatorHasUnclaimedCredit.into());
+            return Err(LidoError::ValidatorHasUnclaimedCredit);
         }
         Ok(())
     }
