@@ -197,30 +197,7 @@ pub fn process_stake_deposit(
     lido.check_stake_authority(program_id, accounts.lido.key, accounts.stake_authority)?;
     lido.check_can_stake_amount(accounts.reserve, accounts.sysvar_rent, amount)?;
 
-    // Confirm that there is no other active validator with a lower balance that
-    // we could stake to. This alone is not sufficient to guarantee a uniform
-    // stake balance, but it limits the power that maintainers have to disturb
-    // the balance. More importantly, it ensures that when two maintainers create
-    // the same StakeDeposit transaction, only one of them succeeds.
-    let validator_with_least_stake = lido
-        .validators
-        .iter_active_entries()
-        .min_by_key(|pair| pair.entry.effective_stake_balance())
-        .ok_or(LidoError::NoActiveValidators)?
-        .pubkey;
-
-    if validator_with_least_stake != *accounts.validator_vote_account.key {
-        msg!(
-            "Refusing to stake with {}, because {} has less stake, stake there instead.",
-            accounts.validator_vote_account.key,
-            validator_with_least_stake,
-        );
-        return Err(LidoError::ValidatorWithLessStakeExists.into());
-    }
-
-    let validator = lido
-        .validators
-        .get_mut(accounts.validator_vote_account.key)?;
+    let validator = lido.validators.get(accounts.validator_vote_account.key)?;
 
     if !validator.entry.active {
         msg!(
@@ -229,6 +206,39 @@ pub fn process_stake_deposit(
         );
         return Err(LidoError::StakeToInactiveValidator.into());
     }
+
+    // Confirm that there is no other active validator with a lower balance that
+    // we could stake to. This alone is not sufficient to guarantee a uniform
+    // stake balance, but it limits the power that maintainers have to disturb
+    // the balance. More importantly, it ensures that when two maintainers create
+    // the same StakeDeposit transaction, only one of them succeeds.
+    let minimum_stake_validator = lido
+        .validators
+        .iter_active_entries()
+        .min_by_key(|pair| pair.entry.effective_stake_balance())
+        .ok_or(LidoError::NoActiveValidators)?;
+
+    // Note that we compare balances, not keys, because the minimum might not be unique.
+    if validator.entry.effective_stake_balance()
+        > minimum_stake_validator.entry.effective_stake_balance()
+    {
+        msg!(
+            "Refusing to stake with {}, who has {} stake, \
+            because {} has less stake: {}. Stake there instead.",
+            validator.pubkey,
+            validator.entry.effective_stake_balance(),
+            minimum_stake_validator.pubkey,
+            minimum_stake_validator.entry.effective_stake_balance(),
+        );
+        return Err(LidoError::ValidatorWithLessStakeExists.into());
+    }
+
+    // From now on we will not reference other Lido fields, so we can get the
+    // validator as mutable. This is a bit wasteful, but we can optimize when we
+    // need dozens of validators, for now we are under the compute limit.
+    let validator = lido
+        .validators
+        .get_mut(accounts.validator_vote_account.key)?;
 
     let stake_account_bump_seed = Lido::check_stake_account(
         program_id,
