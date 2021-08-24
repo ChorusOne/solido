@@ -685,6 +685,7 @@ impl Default for Validator {
             stake_seeds: SeedRange { begin: 0, end: 0 },
             unstake_seeds: SeedRange { begin: 0, end: 0 },
             stake_accounts_balance: Lamports(0),
+            unstake_accounts_balance: Lamports(0),
             active: true,
         }
     }
