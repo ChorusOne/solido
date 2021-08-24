@@ -41,6 +41,10 @@ impl Validators {
     pub fn iter_active(&self) -> impl Iterator<Item = &Validator> {
         self.iter_entries().filter(|&v| v.active)
     }
+
+    pub fn iter_active_entries(&self) -> impl Iterator<Item = &PubkeyAndEntry<Validator>> {
+        self.entries.iter().filter(|&v| v.entry.active)
+    }
 }
 pub type Maintainers = AccountSet;
 
@@ -674,6 +678,12 @@ impl Validator {
             fee_address,
             ..Default::default()
         }
+    }
+
+    /// Return the balance in only the stake accounts, excluding the unstake accounts.
+    pub fn effective_stake_balance(&self) -> Lamports {
+        (self.stake_accounts_balance - self.unstake_accounts_balance)
+            .expect("Unstake balance cannot exceed the validator's total stake balance.")
     }
 }
 

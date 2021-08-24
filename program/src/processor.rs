@@ -197,9 +197,31 @@ pub fn process_stake_deposit(
     lido.check_stake_authority(program_id, accounts.lido.key, accounts.stake_authority)?;
     lido.check_can_stake_amount(accounts.reserve, accounts.sysvar_rent, amount)?;
 
+    // Confirm that there is no other active validator with a lower balance that
+    // we could stake to. This alone is not sufficient to guarantee a uniform
+    // stake balance, but it limits the power that maintainers have to disturb
+    // the balance. More importantly, it ensures that when two maintainers create
+    // the same StakeDeposit transaction, only one of them succeeds.
+    let validator_with_least_stake = lido
+        .validators
+        .iter_active_entries()
+        .min_by_key(|pair| pair.entry.effective_stake_balance())
+        .ok_or(LidoError::NoActiveValidators)?
+        .pubkey;
+
+    if validator_with_least_stake != *accounts.validator_vote_account.key {
+        msg!(
+            "Refusing to stake with {}, because {} has less stake, stake there instead.",
+            accounts.validator_vote_account.key,
+            validator_with_least_stake,
+        );
+        return Err(LidoError::ValidatorWithLessStakeExists.into());
+    }
+
     let validator = lido
         .validators
         .get_mut(accounts.validator_vote_account.key)?;
+
     if !validator.entry.active {
         msg!(
             "Validator {} is inactive, new deposits are not allowed",
@@ -438,9 +460,7 @@ pub fn process_unstake(
             return Err(LidoError::InvalidAmount.into());
         }
     } else {
-        let full_amount = (validator.entry.stake_accounts_balance
-            - validator.entry.unstake_accounts_balance)
-            .expect("Unstake accounts balance is not greater than Stake accounts balance.");
+        let full_amount = validator.entry.effective_stake_balance();
         if full_amount != amount {
             msg!(
                 "An inactive validator must have all its stake withdrawn. Tried\\

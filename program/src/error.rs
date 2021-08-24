@@ -162,6 +162,10 @@ pub enum LidoError {
     /// Tried to remove a validator when it when it was active or had stake accounts.
     #[error("ValidatorShouldHaveNoStakeAccounts")]
     ValidatorShouldHaveNoStakeAccounts = 41,
+
+    /// There is a validator that has less stake than the selected one, stake to that one instead.
+    #[error("ValidatorWithLessStakeExists")]
+    ValidatorWithLessStakeExists = 42,
 }
 
 impl From<ArithmeticError> for LidoError {
