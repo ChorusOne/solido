@@ -251,7 +251,7 @@ async fn test_stake_accounts() {
     let warp_to_slot = context.get_clock().await.slot + slots_per_epoch;
     context.context.warp_to_slot(warp_to_slot).unwrap();
 
-    // Stake is now deactivating.
+    // Stake is now inactive.
     let deactivated = deactivating;
 
     let deactivated_stake = context.get_stake_state(deactivated).await;

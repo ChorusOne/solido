@@ -23,7 +23,7 @@ use solana_program::{instruction::Instruction, stake_history::StakeHistory};
 /// The sum of the four fields is equal to the SOL balance of the stake account.
 /// Note that a stake account can have a portion in `inactive` and a portion in
 /// `active`, with zero being activating or deactivating.
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct StakeBalance {
     pub inactive: Lamports,
     pub activating: Lamports,
