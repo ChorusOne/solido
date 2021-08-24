@@ -311,6 +311,7 @@ assert solido_instance['solido']['validators']['entries'][0] == {
             'end': 0,
         },
         'stake_accounts_balance': 0,
+        'unstake_accounts_balance': 0,
         'active': True,
     },
 }, f'Unexpected validator entry, in {json.dumps(solido_instance, indent=True)}'
