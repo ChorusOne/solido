@@ -426,10 +426,14 @@ pub fn process_unstake(
     let validator = lido
         .validators
         .get_mut(accounts.validator_vote_account.key)?;
-    validator.entry.stake_accounts_balance = (validator.entry.stake_accounts_balance - amount)?;
-    if validator.entry.stake_accounts_balance < MINIMUM_STAKE_ACCOUNT_BALANCE {
+    // Increase the `unstake_accounts_balance` by `amount`.
+    validator.entry.unstake_accounts_balance = (validator.entry.unstake_accounts_balance + amount)?;
+    if validator.entry.active
+        && validator.entry.stake_accounts_balance < MINIMUM_STAKE_ACCOUNT_BALANCE
+    {
         msg!(
-            "Unstake operation will leave the validator with {}, less than the minimum balance {}.",
+            "Unstake operation will leave the active validator with {}, less than the minimum balance {}.\\
+            Only inactive validators can fall below the limit.",
             validator.entry.stake_accounts_balance,
             MINIMUM_STAKE_ACCOUNT_BALANCE
         );
@@ -713,8 +717,11 @@ pub fn process_withdraw(
     // Should withdraw from the validator that has most stake
     let validator = lido.validators.get(accounts.validator_vote_account.key)?;
 
+    let validator_staked_balance = (validator.entry.stake_accounts_balance
+        - validator.entry.unstake_accounts_balance)
+        .expect("Can't unstake more than the staked total.");
     for val in lido.validators.entries.iter() {
-        if val.entry.stake_accounts_balance > validator.entry.stake_accounts_balance {
+        if val.entry.stake_accounts_balance > validator_staked_balance {
             msg!(
                 "Validator {} has more stake than validator {}",
                 validator.pubkey,

@@ -399,9 +399,6 @@ pub fn check_unstake_accounts(
         );
         return Err(LidoError::InvalidStakeAccount.into());
     }
-    // Does not underflow. If `stake_seeds.end == 0` the previous
-    // condition would have failed. And `stake_seeds.end` is always greater than
-    // `stake_seeds.begin`.
     let source_stake_seed = validator.entry.stake_seeds.begin;
     let destination_stake_seed = validator.entry.unstake_seeds.end;
 
@@ -424,8 +421,8 @@ pub fn check_unstake_accounts(
         msg!(
             "Destination stake account differs from the one calculated by seed {}, should be {}, is {}.",
             destination_stake_seed,
-            source_stake_account,
-            accounts.source_stake_account.key
+            destination_stake_account,
+            accounts.destination_stake_account.key
         );
         return Err(LidoError::InvalidStakeAccount.into());
     }
