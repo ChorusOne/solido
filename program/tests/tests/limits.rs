@@ -67,7 +67,7 @@ async fn test_max_validators_maintainers() {
 
     // The maximum number of validators that we can support, before Deposit or
     // StakeDeposit fails.
-    let max_validators: u32 = 68;
+    let max_validators: u32 = 64;
 
     for i in 0..max_validators {
         context
