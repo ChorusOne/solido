@@ -33,6 +33,7 @@ pub enum LidoInstruction {
         #[allow(dead_code)] // but it's not
         max_maintainers: u32,
     },
+
     /// Deposit a given amount of SOL.
     ///
     /// This can be called by anybody.
@@ -40,20 +41,17 @@ pub enum LidoInstruction {
         #[allow(dead_code)] // but it's not
         amount: Lamports,
     },
+
     /// Withdraw a given amount of stSOL.
     ///
-    /// Caller provides some `amount` of StLamports that are to be
-    /// burned in order to withdraw SOL.
-    /// The token's amount has to be delegated to the `STAKE_AUTHORITY` so it
-    /// can be burned.
+    /// Caller provides some `amount` of StLamports that are to be burned in
+    /// order to withdraw SOL.
     Withdraw {
         #[allow(dead_code)] // but it's not
         amount: StLamports,
     },
-    /// Move deposits into a new stake account and delegate it to a member validator.
-    ///
-    /// This does not yet make the new stake account part of the stake pool;
-    /// must be followed up by [`DepositActiveStakeToPool`].
+
+    /// Move deposits from the reserve into a stake account and delegate it to a member validator.
     StakeDeposit {
         #[allow(dead_code)] // but it's not
         amount: Lamports,
@@ -67,8 +65,12 @@ pub enum LidoInstruction {
     ///
     /// This can be called by anybody.
     UpdateExchangeRate,
+
     /// Observe any external changes in the balances of a validator's stake accounts.
+    ///
+    /// If there is inactive balance in stake accounts, withdraw this back to the reserve.
     WithdrawInactiveStake,
+
     /// Claim rewards from the validator account and distribute rewards.
     CollectValidatorFee,
     ClaimValidatorFee,

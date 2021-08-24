@@ -3595,6 +3595,7 @@ dependencies = [
  "borsh",
  "bs58 0.4.0",
  "clap 3.0.0-beta.2",
+ "derivation-path",
  "lido",
  "num-traits",
  "num_cpus",

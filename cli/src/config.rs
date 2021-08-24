@@ -599,6 +599,7 @@ cli_opt_struct! {
         solido_address: Pubkey,
 
         /// Listen address and port for the http server that serves a /metrics endpoint. Defaults to 0.0.0.0:8923.
+        #[clap(long)]
         listen: String => "0.0.0.0:8923".to_owned(),
 
         // The expected wait time is half the max poll interval. A max poll interval
@@ -624,5 +625,29 @@ impl From<&ProposeChangeMultisigOpts> for CreateMultisigOpts {
             owners: opts.owners.clone(),
             multisig_program_id: opts.multisig_program_id,
         }
+    }
+}
+
+cli_opt_struct! {
+    TransferTokenOpts {
+        /// Address of the Multisig program.
+        #[clap(long)]
+        multisig_program_id: Pubkey,
+
+        /// Multisig instance.
+        #[clap(long, value_name = "address")]
+        multisig_address: Pubkey,
+
+        /// Source of the transfer.
+        #[clap(long, value_name = "address")]
+        from_address: Pubkey,
+
+        /// Destination of the transfer.
+        #[clap(long, value_name = "address")]
+        to_address: Pubkey,
+
+        /// Amount to be transferred in the smallest token denomination.
+        #[clap(long)]
+        amount: u64
     }
 }

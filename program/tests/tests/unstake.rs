@@ -78,6 +78,30 @@ async fn test_unstake_balance_combinations() {
     context
         .unstake((STAKE_AMOUNT - MINIMUM_STAKE_ACCOUNT_BALANCE).unwrap())
         .await;
+
+    let validator = &context.get_solido().await.validators.entries[0];
+    // Unstake all from an inactive validator
+    context.deactivate_validator(validator.pubkey).await;
+    context.unstake(MINIMUM_STAKE_ACCOUNT_BALANCE).await;
+
+    let validator = &context.get_solido().await.validators.entries[0];
+    // No stake accounts should exist.
+    assert_eq!(
+        validator.entry.stake_seeds.begin,
+        validator.entry.stake_seeds.end
+    );
+    assert_eq!(
+        validator.entry.stake_accounts_balance,
+        validator.entry.unstake_accounts_balance
+    );
+    let (stake_account, _) = validator.find_stake_account_address(
+        &crate::context::id(),
+        &context.solido.pubkey(),
+        validator.entry.stake_seeds.begin,
+    );
+    let account = context.try_get_account(stake_account).await;
+    // Previous stake shouldn't exist.
+    assert!(account.is_none());
 }
 
 #[tokio::test]

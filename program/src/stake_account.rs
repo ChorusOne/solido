@@ -202,7 +202,12 @@ impl StakeAccount {
             .delegation
             .stake_activating_and_deactivating(target_epoch, history, fix_stake_deactivate);
 
-        // Deactivating lamports is counted on the active lamports.
+        // `stake_activating_and_deactivating` counts deactivating stake both as
+        // part of the active lamports, and as part of the deactivating
+        // lamports, but we want to split the lamports into mutually exclusive
+        // categories, so for us, active should not include deactivating
+        // lamports. There cannot be more lamports deactivating than there are
+        // active lamports, so this does not underflow.
         active_lamports -= deactivating_lamports;
         let inactive_lamports = account_lamports.0
             .checked_sub(active_lamports)

@@ -193,7 +193,7 @@ def create_vote_account(
     return test_account
 
 
-def create_spl_token(owner_keypair_fname: str, minter: str) -> str:
+def create_spl_token_account(owner_keypair_fname: str, minter: str) -> str:
     """
     Creates an spl token for the given minter
     spl_token command returns 'Creating account <address>

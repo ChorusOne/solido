@@ -31,6 +31,7 @@ from util import (
     solana_program_show,
     multisig,
     get_solido_program_path,
+    spl_token,
 )
 
 
@@ -203,14 +204,7 @@ try:
     )
 except subprocess.CalledProcessError as err:
     assert err.returncode != 0
-    # assert 'Not enough owners signed this transaction' in err.stderr
-    # TODO(#177) Previously the error included a human-readable message, why does it
-    # only include the error code now? Something to do with different Anchor
-    # versions?
-    print(err.stdout)
-    assert (
-        'custom program error: 0x12d' in err.stdout
-    ), f'{err.stdout} should contain error code'
+    assert 'Not enough owners signed this transaction' in err.stdout
     new_info = solana_program_show(program_id)
     assert new_info == upload_info, 'Program should not have changed.'
     print('> Execution failed as expected.')
@@ -291,13 +285,7 @@ try:
     )
 except subprocess.CalledProcessError as err:
     assert err.returncode != 0
-    # assert 'The given transaction has already been executed.' in err.stderr
-    # TODO(#177) Previously the error included a human-readable message, why does it
-    # only include the error code now? Something to do with different Anchor
-    # versions?
-    assert (
-        'custom program error: 0x131' in err.stdout
-    ), f'{err.stdout} should contain error code'
+    assert 'The given transaction has already been executed.' in err.stdout
     new_info = solana_program_show(program_id)
     assert new_info == upgrade_info, 'Program should not have changed.'
     print('> Execution failed as expected.')
@@ -462,13 +450,7 @@ try:
     )
 except subprocess.CalledProcessError as err:
     assert err.returncode != 0
-    # assert 'The given owner is not part of this multisig.' in err.stderr
-    # TODO(#177) Previously the error included a human-readable message, why does it
-    # only include the error code now? Something to do with different Anchor
-    # versions?
-    assert (
-        'custom program error: 0x12c' in err.stdout
-    ), f'{err.stdout} should contain error code'
+    assert 'The given owner is not part of this multisig.' in err.stdout
     result = multisig(
         'show-transaction',
         '--multisig-program-id',
@@ -486,3 +468,85 @@ except subprocess.CalledProcessError as err:
 else:
     print('> Approve succeeded even though it should not have.')
     sys.exit(1)
+
+
+test_token = create_test_account('tests/.keys/test-token.json', fund=False)
+test_token_account_1 = create_test_account(
+    'tests/.keys/test-token-account-1.json', fund=False
+)
+test_token_account_2 = create_test_account(
+    'tests/.keys/test-token-account-2.json', fund=False
+)
+
+spl_token('create-token', test_token.keypair_path)
+spl_token(
+    'create-account',
+    test_token.pubkey,
+    test_token_account_1.keypair_path,
+    '--owner',
+    multisig_program_derived_address,
+)
+print(f'\nTesting transferring token from mint {test_token} ...')
+
+spl_token('create-account', test_token.pubkey, test_token_account_2.keypair_path)
+spl_token('mint', test_token.pubkey, '100', test_token_account_1.pubkey)
+print(
+    f'> Testing transfering 10 tokens from {test_token_account_1} to {test_token_account_2}.'
+)
+result = multisig(
+    'token',
+    'transfer',
+    '--multisig-program-id',
+    multisig_program_id,
+    '--multisig-address',
+    multisig_address,
+    '--from-address',
+    test_token_account_1.pubkey,
+    '--to-address',
+    test_token_account_2.pubkey,
+    '--amount',
+    '10',
+    keypair_path=addr1.keypair_path,
+)
+
+token_transfer_transaction_address = result['transaction_address']
+multisig(
+    'approve',
+    '--multisig-program-id',
+    multisig_program_id,
+    '--multisig-address',
+    multisig_address,
+    '--transaction-address',
+    token_transfer_transaction_address,
+    keypair_path=addr2.keypair_path,
+)
+
+multisig(
+    'execute-transaction',
+    '--multisig-program-id',
+    multisig_program_id,
+    '--multisig-address',
+    multisig_address,
+    '--transaction-address',
+    token_transfer_transaction_address,
+)
+
+result = multisig(
+    'show-transaction',
+    '--multisig-program-id',
+    multisig_program_id,
+    '--solido-program-id',
+    program_id,
+    '--transaction-address',
+    token_transfer_transaction_address,
+)
+assert result['parsed_instruction']['TokenInstruction']['Transfer'] == {
+    'from_address': test_token_account_1.pubkey,
+    'to_address': test_token_account_2.pubkey,
+    'token_address': test_token.pubkey,
+    'amount': 10,
+}
+
+token_balance = spl_token('balance', '--address', test_token_account_2.pubkey)
+assert float(token_balance) * 1e9 == 10.0
+print(f'> Successfully transferred tokens.')

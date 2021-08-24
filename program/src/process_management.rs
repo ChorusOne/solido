@@ -68,14 +68,9 @@ pub fn process_add_validator(program_id: &Pubkey, accounts_raw: &[AccountInfo]) 
     lido.save(accounts.lido)
 }
 
-/// Removes a validator from the stake pool, notice that the validator might not
-/// be immediately removed from the validators list in the stake pool after this
-/// instruction is executed, this function requires the validator has no
-/// unclaimed fees.
-/// The validator stake account to be removed:
-/// `accounts::stake_account_to_remove` should have exactly 1 Sol + rent for
-/// holding a Stake account, this is checked in `remove_validator_from_pool` from
-/// the Stake Pool.
+/// Remove a validator.
+///
+/// TODO(#365): It should only be possible to remove validators that have no stake.
 pub fn process_remove_validator(
     program_id: &Pubkey,
     accounts_raw: &[AccountInfo],

@@ -19,7 +19,7 @@ import json
 
 from util import (
     TestAccount,
-    create_spl_token,
+    create_spl_token_account,
     create_test_account,
     create_vote_account,
     get_solido_program_path,
@@ -229,7 +229,7 @@ print(f'> Creating validator vote account {validator_vote_account}')
 print(f'> Creating validator token account with owner {validator_fee_account_owner}')
 
 # Create SPL token
-validator_fee_account = create_spl_token(
+validator_fee_account = create_spl_token_account(
     'tests/.keys/validator-token-account-key.json', st_sol_mint_account
 )
 print(f'> Validator stSol token account: {validator_fee_account}')
