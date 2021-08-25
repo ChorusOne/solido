@@ -7,13 +7,14 @@ use crate::{
     error::LidoError,
     instruction::{
         CollectValidatorFeeInfo, DepositAccountsInfo, InitializeAccountsInfo, LidoInstruction,
-        StakeDepositAccountsInfo, UpdateExchangeRateAccountsInfo, WithdrawAccountsInfo,
-        WithdrawInactiveStakeInfo,
+        StakeDepositAccountsInfo, UnstakeAccountsInfo, UpdateExchangeRateAccountsInfo,
+        WithdrawAccountsInfo, WithdrawInactiveStakeInfo,
     },
     logic::{
-        burn_st_sol, check_mint, check_rent_exempt, create_account_overwrite_if_exists,
-        deserialize_lido, distribute_fees, initialize_stake_account_undelegated, mint_st_sol_to,
-        transfer_stake_authority, CreateAccountOptions,
+        burn_st_sol, check_mint, check_rent_exempt, check_unstake_accounts,
+        create_account_overwrite_if_exists, deserialize_lido, distribute_fees,
+        initialize_stake_account_undelegated, mint_st_sol_to, split_stake_account,
+        transfer_stake_authority, CreateAccountOptions, SplitStakeAccounts,
     },
     metrics::Metrics,
     process_management::{
@@ -23,12 +24,13 @@ use crate::{
     },
     stake_account::{deserialize_stake_account, StakeAccount},
     state::{
-        ExchangeRate, FeeRecipients, Lido, Maintainers, RewardDistribution, Validator, Validators,
+        ExchangeRate, FeeRecipients, Lido, Maintainers, RewardDistribution, Validators,
         LIDO_CONSTANT_SIZE, LIDO_VERSION,
     },
     token::{Lamports, Rational, StLamports},
     vote_instruction, MINIMUM_STAKE_ACCOUNT_BALANCE, MINT_AUTHORITY, RESERVE_ACCOUNT,
     REWARDS_WITHDRAW_AUTHORITY, STAKE_AUTHORITY, VALIDATOR_STAKE_ACCOUNT,
+    VALIDATOR_UNSTAKE_ACCOUNT,
 };
 
 use solana_program::stake::{self as stake_program};
@@ -210,8 +212,9 @@ pub fn process_stake_deposit(
         program_id,
         accounts.lido.key,
         validator,
-        validator.entry.stake_accounts_seed_end,
+        validator.entry.stake_seeds.end,
         accounts.stake_account_end,
+        VALIDATOR_STAKE_ACCOUNT,
     )?;
 
     if accounts.stake_account_end.data.borrow().len() > 0 {
@@ -222,7 +225,7 @@ pub fn process_stake_deposit(
         return Err(LidoError::WrongStakeState.into());
     }
 
-    let stake_account_seed = validator.entry.stake_accounts_seed_end.to_le_bytes();
+    let stake_account_seed = validator.entry.stake_seeds.end.to_le_bytes();
     let stake_account_bump_seed = [stake_account_bump_seed];
     let stake_account_seeds = &[
         accounts.lido.key.as_ref(),
@@ -282,7 +285,7 @@ pub fn process_stake_deposit(
         // Case 1: we delegate, and we don't touch `stake_account_merge_into`.
         msg!(
             "Delegating stake account at seed {} ...",
-            validator.entry.stake_accounts_seed_end
+            validator.entry.stake_seeds.end
         );
         invoke_signed(
             &stake_program::instruction::delegate_stake(
@@ -307,10 +310,10 @@ pub fn process_stake_deposit(
         )?;
 
         // We now consumed this stake account, bump the index.
-        validator.entry.stake_accounts_seed_end += 1;
+        validator.entry.stake_seeds.end += 1;
     } else {
         // Case 2: Merge the new undelegated stake account into the existing one.
-        if validator.entry.stake_accounts_seed_end <= validator.entry.stake_accounts_seed_begin {
+        if validator.entry.stake_seeds.end <= validator.entry.stake_seeds.begin {
             msg!("Can only stake-merge if there is at least one stake account to merge into.");
             return Err(LidoError::InvalidStakeAccount.into());
         }
@@ -319,14 +322,15 @@ pub fn process_stake_deposit(
             accounts.lido.key,
             validator,
             // Does not underflow, because end > begin >= 0.
-            validator.entry.stake_accounts_seed_end - 1,
+            validator.entry.stake_seeds.end - 1,
             accounts.stake_account_merge_into,
+            VALIDATOR_STAKE_ACCOUNT,
         )?;
         // The stake program checks that the two accounts can be merged; if we
         // tried to merge, but the epoch is different, then this will fail.
         msg!(
             "Merging into existing stake account at seed {} ...",
-            validator.entry.stake_accounts_seed_end - 1
+            validator.entry.stake_seeds.end - 1
         );
         let merge_instructions = stake_program::instruction::merge(
             accounts.stake_account_merge_into.key,
@@ -356,6 +360,103 @@ pub fn process_stake_deposit(
             ]],
         )?;
     }
+
+    lido.save(accounts.lido)
+}
+
+/// Unstakes from a validator, the funds are moved to the stake defined by the
+/// validator's unstake seed. Caller must be a maintainer.
+pub fn process_unstake(
+    program_id: &Pubkey,
+    amount: Lamports,
+    raw_accounts: &[AccountInfo],
+) -> ProgramResult {
+    let accounts = UnstakeAccountsInfo::try_from_slice(raw_accounts)?;
+    let mut lido = deserialize_lido(program_id, accounts.lido)?;
+    lido.check_maintainer(accounts.maintainer)?;
+    lido.check_stake_authority(program_id, accounts.lido.key, accounts.stake_authority)?;
+    let destination_bump_seed = check_unstake_accounts(program_id, &lido, &accounts)?;
+
+    let validator = lido.validators.get(accounts.validator_vote_account.key)?;
+    let seeds = [
+        &accounts.lido.key.to_bytes(),
+        &accounts.validator_vote_account.key.to_bytes(),
+        VALIDATOR_UNSTAKE_ACCOUNT,
+        &validator.entry.unstake_seeds.end.to_le_bytes()[..],
+        &[destination_bump_seed],
+    ];
+
+    split_stake_account(
+        accounts.lido.key,
+        &lido,
+        &SplitStakeAccounts {
+            source_stake_account: accounts.source_stake_account,
+            destination_stake_account: accounts.destination_stake_account,
+            authority: accounts.stake_authority,
+            system_program: accounts.system_program,
+            stake_program: accounts.stake_program,
+        },
+        amount,
+        &[&seeds],
+    )?;
+
+    let deactivate_stake_instruction = solana_program::stake::instruction::deactivate_stake(
+        accounts.destination_stake_account.key,
+        accounts.stake_authority.key,
+    );
+
+    // Deactivates the stake. After the stake has become inactive, the Lamports
+    // on this stake account need to go back to the reserve account by using
+    // another instruction.
+    invoke_signed(
+        &deactivate_stake_instruction,
+        &[
+            accounts.destination_stake_account.clone(),
+            accounts.sysvar_clock.clone(),
+            accounts.stake_authority.clone(),
+            accounts.stake_program.clone(),
+        ],
+        &[&[
+            &accounts.lido.key.to_bytes(),
+            STAKE_AUTHORITY,
+            &[lido.stake_authority_bump_seed],
+        ]],
+    )?;
+
+    let validator = lido
+        .validators
+        .get_mut(accounts.validator_vote_account.key)?;
+    // Increase the `unstake_accounts_balance` by `amount`.
+    if validator.entry.active {
+        if (validator.entry.stake_accounts_balance - amount)? < MINIMUM_STAKE_ACCOUNT_BALANCE {
+            msg!(
+            "Unstake operation will leave the active validator with {}, less than the minimum balance {}.\\
+            Only inactive validators can fall below the limit.",
+            validator.entry.stake_accounts_balance,
+            MINIMUM_STAKE_ACCOUNT_BALANCE
+        );
+            return Err(LidoError::InvalidAmount.into());
+        }
+    } else {
+        let full_amount = (validator.entry.stake_accounts_balance
+            - validator.entry.unstake_accounts_balance)
+            .expect("Unstake accounts balance is not greater than Stake accounts balance.");
+        if full_amount != amount {
+            msg!(
+                "An inactive validator must have all its stake withdrawn. Tried\\
+                to withdraw {}, Should withdraw {} instead. The full amount might be split\\
+                in several transaction, as there are limitations on how much can be unstaked\\
+                in a single transaction.",
+                amount,
+                full_amount,
+            );
+            return Err(LidoError::InvalidAmount.into());
+        } else {
+            validator.entry.stake_seeds.begin += 1;
+        }
+    }
+    validator.entry.unstake_accounts_balance = (validator.entry.unstake_accounts_balance + amount)?;
+    validator.entry.unstake_seeds.end += 1;
 
     lido.save(accounts.lido)
 }
@@ -472,17 +573,13 @@ pub fn process_withdraw_inactive_stake(
     let mut observed_total = Lamports(0);
     let mut excess_removed = Lamports(0);
     let mut stake_accounts = accounts.stake_accounts.iter();
-    let begin = validator.entry.stake_accounts_seed_begin;
-    let end = validator.entry.stake_accounts_seed_end;
+    let begin = validator.entry.stake_seeds.begin;
+    let end = validator.entry.stake_seeds.end;
 
     // Visit the stake accounts one by one, and check how much SOL is in there.
-    for seed in begin..end {
-        let (stake_account_address, _bump_seed) = Validator::find_stake_account_address(
-            program_id,
-            accounts.lido.key,
-            &validator.pubkey,
-            seed,
-        );
+    for seed in &validator.entry.stake_seeds {
+        let (stake_account_address, _bump_seed) =
+            validator.find_stake_account_address(program_id, accounts.lido.key, seed);
         let stake_account = match stake_accounts.next() {
             None => {
                 msg!(
@@ -635,27 +732,29 @@ pub fn process_withdraw(
     lido.check_exchange_rate_last_epoch(&clock, "Withdraw")?;
 
     // Should withdraw from the validator that has most stake
-    let provided_validator = lido.validators.get(accounts.validator_vote_account.key)?;
+    let validator = lido.validators.get(accounts.validator_vote_account.key)?;
 
-    for validator in lido.validators.entries.iter() {
-        if validator.entry.stake_accounts_balance > provided_validator.entry.stake_accounts_balance
-        {
+    let validator_staked_balance = (validator.entry.stake_accounts_balance
+        - validator.entry.unstake_accounts_balance)
+        .expect("Can't unstake more than the staked total.");
+    for val in lido.validators.entries.iter() {
+        if val.entry.stake_accounts_balance > validator_staked_balance {
             msg!(
                 "Validator {} has more stake than validator {}",
-                provided_validator.pubkey,
+                validator.pubkey,
                 validator.pubkey,
             );
             return Err(LidoError::ValidatorWithMoreStakeExists.into());
         }
     }
-    let (stake_account, _) = Validator::find_stake_account_address(
+    let (stake_account, _) = validator.find_stake_account_address(
         program_id,
         accounts.lido.key,
-        accounts.validator_vote_account.key,
-        provided_validator.entry.stake_accounts_seed_begin,
+        validator.entry.stake_seeds.begin,
     );
     if &stake_account != accounts.source_stake_account.key {
-        msg!("Stake account is different than the calculated by the given seed, should be {}, is {}.", stake_account, accounts.source_stake_account.key);
+        msg!("Stake account is different than the calculated by the given seed, should be {}, is {}.",
+        stake_account, accounts.source_stake_account.key);
         return Err(LidoError::InvalidStakeAccount.into());
     }
 
@@ -709,55 +808,18 @@ pub fn process_withdraw(
     // Update withdrawal metrics.
     lido.metrics.observe_withdrawal(amount, sol_to_withdraw)?;
 
-    // The Stake program already checks for a minimum rent on the destination
-    // stake account inside the `split` function.
-
-    // The Split instruction returns three instructions:
-    //   0 - Allocate instruction.
-    //   1 - Assign owner instruction.
-    //   2 - Split stake instruction.
-    let split_instructions = solana_program::stake::instruction::split(
-        &stake_account,
-        accounts.stake_authority.key,
-        sol_to_withdraw.0,
-        accounts.destination_stake_account.key,
-    );
-    assert_eq!(split_instructions.len(), 3);
-
-    let (allocate_instruction, assign_instruction, split_instruction) = (
-        &split_instructions[0],
-        &split_instructions[1],
-        &split_instructions[2],
-    );
-
-    invoke(
-        allocate_instruction,
-        &[
-            accounts.destination_stake_account.clone(),
-            accounts.system_program.clone(),
-        ],
-    )?;
-    invoke(
-        assign_instruction,
-        &[
-            accounts.destination_stake_account.clone(),
-            accounts.system_program.clone(),
-        ],
-    )?;
-
-    invoke_signed(
-        split_instruction,
-        &[
-            accounts.source_stake_account.clone(),
-            accounts.destination_stake_account.clone(),
-            accounts.stake_authority.clone(),
-            accounts.stake_program.clone(),
-        ],
-        &[&[
-            &accounts.lido.key.to_bytes(),
-            STAKE_AUTHORITY,
-            &[lido.stake_authority_bump_seed],
-        ]],
+    split_stake_account(
+        accounts.lido.key,
+        &lido,
+        &SplitStakeAccounts {
+            source_stake_account: accounts.source_stake_account,
+            destination_stake_account: accounts.destination_stake_account,
+            authority: accounts.stake_authority,
+            system_program: accounts.system_program,
+            stake_program: accounts.stake_program,
+        },
+        sol_to_withdraw,
+        &[&[]],
     )?;
 
     // Give control of the stake to the user.
@@ -791,6 +853,7 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
         LidoInstruction::StakeDeposit { amount } => {
             process_stake_deposit(program_id, amount, accounts)
         }
+        LidoInstruction::Unstake { amount } => process_unstake(program_id, amount, accounts),
         LidoInstruction::UpdateExchangeRate => process_update_exchange_rate(program_id, accounts),
         LidoInstruction::WithdrawInactiveStake => {
             process_withdraw_inactive_stake(program_id, accounts)

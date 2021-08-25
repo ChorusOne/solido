@@ -3,6 +3,8 @@
 
 //! State transition types
 
+use std::ops::Range;
+
 use serde::Serialize;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
@@ -19,12 +21,11 @@ use crate::logic::get_reserve_available_balance;
 use crate::metrics::Metrics;
 use crate::token::{self, Lamports, Rational, StLamports};
 use crate::util::serialize_b58;
-use crate::REWARDS_WITHDRAW_AUTHORITY;
 use crate::{
     account_map::{AccountMap, AccountSet, EntryConstantSize, PubkeyAndEntry},
     MINIMUM_STAKE_ACCOUNT_BALANCE, MINT_AUTHORITY, RESERVE_ACCOUNT, STAKE_AUTHORITY,
-    VALIDATOR_STAKE_ACCOUNT,
 };
+use crate::{REWARDS_WITHDRAW_AUTHORITY, VALIDATOR_STAKE_ACCOUNT, VALIDATOR_UNSTAKE_ACCOUNT};
 
 pub const LIDO_VERSION: u8 = 0;
 
@@ -32,7 +33,7 @@ pub const LIDO_VERSION: u8 = 0;
 ///
 /// To update this, run the tests and replace the value here with the test output.
 pub const LIDO_CONSTANT_SIZE: usize = 357;
-pub const VALIDATOR_CONSTANT_SIZE: usize = 65;
+pub const VALIDATOR_CONSTANT_SIZE: usize = 89;
 
 pub type Validators = AccountMap<Validator>;
 
@@ -497,9 +498,15 @@ impl Lido {
         validator: &PubkeyAndEntry<Validator>,
         stake_account_seed: u64,
         stake_account: &AccountInfo,
+        authority: &[u8],
     ) -> Result<u8, ProgramError> {
-        let (stake_addr, stake_addr_bump_seed) =
-            validator.find_stake_account_address(program_id, solido_address, stake_account_seed);
+        let (stake_addr, stake_addr_bump_seed) = validator
+            .find_stake_account_address_with_authority(
+                program_id,
+                solido_address,
+                authority,
+                stake_account_seed,
+            );
         if &stake_addr != stake_account.key {
             msg!(
                 "The derived stake address for seed {} is {}, \
@@ -601,7 +608,28 @@ pub struct Validator {
     #[serde(serialize_with = "serialize_b58")]
     pub fee_address: Pubkey,
 
-    /// Start (inclusive) of the seed range for currently active stake accounts.
+    /// Seeds for active stake accounts.
+    pub stake_seeds: SeedRange,
+    /// Seeds for inactive stake accounts.
+    pub unstake_seeds: SeedRange,
+
+    /// Sum of the balances of the stake accounts and unstake accounts.
+    pub stake_accounts_balance: Lamports,
+
+    /// Sum of the balances of the unstake accounts.
+    pub unstake_accounts_balance: Lamports,
+
+    /// Controls if a validator is allowed to have new stake deposits.
+    /// When removing a validator, this flag should be set to `false`.
+    pub active: bool,
+}
+
+#[repr(C)]
+#[derive(
+    Clone, Debug, Default, Eq, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema, Serialize,
+)]
+pub struct SeedRange {
+    /// Start (inclusive) of the seed range for stake accounts.
     ///
     /// When we stake deposited SOL, we take it out of the reserve account, and
     /// transfer it to a stake account. The stake account address is a derived
@@ -614,21 +642,30 @@ pub struct Validator {
     /// pool and bump `begin`. Accounts are not reused.
     ///
     /// The program enforces that creating new stake accounts is only allowed at
-    /// the `_end` seed, and depositing active stake is only allowed from the
-    /// `_begin` seed. This ensures that maintainers don’t race and accidentally
+    /// the `end` seed, and depositing active stake is only allowed from the
+    /// `begin` seed. This ensures that maintainers don’t race and accidentally
     /// stake more to this validator than intended. If the seed has changed
     /// since the instruction was created, the transaction fails.
-    pub stake_accounts_seed_begin: u64,
+    ///
+    /// When we unstake SOL, we follow an analogous symmetric mechanism. We
+    /// split the validator's stake in two, and retrieve the funds of the second
+    /// to the reserve account where it can be re-staked.
+    pub begin: u64,
 
-    /// End (exclusive) of the seed range for currently active stake accounts.
-    pub stake_accounts_seed_end: u64,
+    /// End (exclusive) of the seed range for stake accounts.
+    pub end: u64,
+}
 
-    /// Sum of the balances of the stake accounts.
-    pub stake_accounts_balance: Lamports,
+impl IntoIterator for &SeedRange {
+    type Item = u64;
+    type IntoIter = Range<u64>;
 
-    /// Controls if a validator is allowed to have new stake deposits.
-    /// When removing a validator, this flag should be set to `false`.
-    pub active: bool,
+    fn into_iter(self) -> Self::IntoIter {
+        Range {
+            start: self.begin,
+            end: self.end,
+        }
+    }
 }
 
 impl Validator {
@@ -638,21 +675,6 @@ impl Validator {
             ..Default::default()
         }
     }
-
-    pub fn find_stake_account_address(
-        program_id: &Pubkey,
-        solido_account: &Pubkey,
-        validator_vote_account: &Pubkey,
-        seed: u64,
-    ) -> (Pubkey, u8) {
-        let seeds = [
-            &solido_account.to_bytes(),
-            &validator_vote_account.to_bytes(),
-            VALIDATOR_STAKE_ACCOUNT,
-            &seed.to_le_bytes()[..],
-        ];
-        Pubkey::find_program_address(&seeds, program_id)
-    }
 }
 
 impl Default for Validator {
@@ -660,22 +682,84 @@ impl Default for Validator {
         Validator {
             fee_address: Pubkey::default(),
             fee_credit: StLamports(0),
-            stake_accounts_seed_begin: 0,
-            stake_accounts_seed_end: 0,
+            stake_seeds: SeedRange { begin: 0, end: 0 },
+            unstake_seeds: SeedRange { begin: 0, end: 0 },
             stake_accounts_balance: Lamports(0),
+            unstake_accounts_balance: Lamports(0),
             active: true,
         }
     }
 }
 
+impl Validator {
+    pub fn has_stake_accounts(&self) -> bool {
+        self.stake_seeds.begin != self.stake_seeds.end
+    }
+
+    pub fn check_can_be_removed(&self) -> Result<(), LidoError> {
+        if self.active {
+            msg!("Refusing to remove validator because it is still active, deactivate it first.");
+            return Err(LidoError::ValidatorIsStillActive);
+        }
+        if self.fee_credit != StLamports(0) {
+            msg!(
+                "Validator still has tokens to claim. Reclaim tokens before removing the validator"
+            );
+            return Err(LidoError::ValidatorHasUnclaimedCredit);
+        }
+        if self.has_stake_accounts() {
+            msg!("Refusing to remove validator because it still has stake accounts, unstake them first.");
+            return Err(LidoError::ValidatorShouldHaveNoStakeAccounts);
+        }
+        // If not, this is a bug.
+        assert_eq!(self.stake_accounts_balance, Lamports(0));
+        Ok(())
+    }
+}
+
 impl PubkeyAndEntry<Validator> {
+    pub fn find_stake_account_address_with_authority(
+        &self,
+        program_id: &Pubkey,
+        solido_account: &Pubkey,
+        authority: &[u8],
+        seed: u64,
+    ) -> (Pubkey, u8) {
+        let seeds = [
+            &solido_account.to_bytes(),
+            &self.pubkey.to_bytes(),
+            authority,
+            &seed.to_le_bytes()[..],
+        ];
+        Pubkey::find_program_address(&seeds, program_id)
+    }
+
     pub fn find_stake_account_address(
         &self,
         program_id: &Pubkey,
         solido_account: &Pubkey,
         seed: u64,
     ) -> (Pubkey, u8) {
-        Validator::find_stake_account_address(program_id, solido_account, &self.pubkey, seed)
+        self.find_stake_account_address_with_authority(
+            program_id,
+            solido_account,
+            VALIDATOR_STAKE_ACCOUNT,
+            seed,
+        )
+    }
+
+    pub fn find_unstake_account_address(
+        &self,
+        program_id: &Pubkey,
+        solido_account: &Pubkey,
+        seed: u64,
+    ) -> (Pubkey, u8) {
+        self.find_stake_account_address_with_authority(
+            program_id,
+            solido_account,
+            VALIDATOR_UNSTAKE_ACCOUNT,
+            seed,
+        )
     }
 }
 

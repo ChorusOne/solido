@@ -23,7 +23,7 @@ use solana_program::{instruction::Instruction, stake_history::StakeHistory};
 /// The sum of the four fields is equal to the SOL balance of the stake account.
 /// Note that a stake account can have a portion in `inactive` and a portion in
 /// `active`, with zero being activating or deactivating.
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct StakeBalance {
     pub inactive: Lamports,
     pub activating: Lamports,
@@ -31,7 +31,7 @@ pub struct StakeBalance {
     pub deactivating: Lamports,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 
 pub struct StakeAccount {
     pub balance: StakeBalance,
@@ -198,10 +198,17 @@ impl StakeAccount {
         // to true. See also https://github.com/ChorusOne/solido/issues/184#issuecomment-861653316.
         let fix_stake_deactivate = true;
 
-        let (active_lamports, activating_lamports, deactivating_lamports) = stake
+        let (mut active_lamports, activating_lamports, deactivating_lamports) = stake
             .delegation
             .stake_activating_and_deactivating(target_epoch, history, fix_stake_deactivate);
 
+        // `stake_activating_and_deactivating` counts deactivating stake both as
+        // part of the active lamports, and as part of the deactivating
+        // lamports, but we want to split the lamports into mutually exclusive
+        // categories, so for us, active should not include deactivating
+        // lamports. There cannot be more lamports deactivating than there are
+        // active lamports, so this does not underflow.
+        active_lamports -= deactivating_lamports;
         let inactive_lamports = account_lamports.0
             .checked_sub(active_lamports)
             .expect("Active stake cannot be larger than stake account balance.")

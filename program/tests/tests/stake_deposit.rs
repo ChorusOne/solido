@@ -23,8 +23,8 @@ async fn test_stake_deposit_append() {
     let solido_before = context.get_solido().await;
     let validator_before = &solido_before.validators.entries[0].entry;
     assert_eq!(validator_before.stake_accounts_balance, Lamports(0));
-    assert_eq!(validator_before.stake_accounts_seed_begin, 0);
-    assert_eq!(validator_before.stake_accounts_seed_end, 0);
+    assert_eq!(validator_before.stake_seeds.begin, 0);
+    assert_eq!(validator_before.stake_seeds.end, 0);
 
     // Now we make a deposit, and then delegate part of it.
     context.deposit(TEST_DEPOSIT_AMOUNT).await;
@@ -54,8 +54,8 @@ async fn test_stake_deposit_append() {
     );
 
     // This was also the first deposit, so that should have created one stake account.
-    assert_eq!(validator_after.stake_accounts_seed_begin, 0);
-    assert_eq!(validator_after.stake_accounts_seed_end, 1);
+    assert_eq!(validator_after.stake_seeds.begin, 0);
+    assert_eq!(validator_after.stake_seeds.end, 1);
 }
 
 #[tokio::test]
@@ -104,8 +104,8 @@ async fn test_stake_deposit_merge() {
     );
 
     // We merged, so only seed 0 should be consumed at this point.
-    assert_eq!(validator_after.stake_accounts_seed_begin, 0);
-    assert_eq!(validator_after.stake_accounts_seed_end, 1);
+    assert_eq!(validator_after.stake_seeds.begin, 0);
+    assert_eq!(validator_after.stake_seeds.end, 1);
 
     // Next, we will try to merge stake accounts created in different epochs,
     // which should fail.
@@ -145,7 +145,8 @@ async fn test_stake_deposit_merge() {
 #[tokio::test]
 async fn test_stake_deposit_succeeds_despite_donation() {
     let mut context = Context::new_with_maintainer().await;
-    let validator = context.add_validator().await;
+    context.add_validator().await;
+    let validator = &context.get_solido().await.validators.entries[0];
 
     let solido_before = context.get_solido().await;
     let validator_before = &solido_before.validators.entries[0];
@@ -164,7 +165,7 @@ async fn test_stake_deposit_succeeds_despite_donation() {
     context.deposit(TEST_DEPOSIT_AMOUNT).await;
     context
         .stake_deposit(
-            validator.vote_account,
+            validator.pubkey,
             StakeDeposit::Append,
             TEST_STAKE_DEPOSIT_AMOUNT,
         )
@@ -179,9 +180,7 @@ async fn test_stake_deposit_succeeds_despite_donation() {
     );
 
     // After we update the balance, it should.
-    context
-        .withdraw_inactive_stake(validator.vote_account)
-        .await;
+    context.withdraw_inactive_stake(validator.pubkey).await;
     let solido = context.get_solido().await;
     let validator_entry = &solido.validators.entries[0].entry;
     assert_eq!(

@@ -209,13 +209,9 @@ fn get_validator_stake_accounts(
     validator: &PubkeyAndEntry<Validator>,
 ) -> Result<Vec<(Pubkey, StakeAccount)>> {
     let mut result = Vec::new();
-    for seed in validator.entry.stake_accounts_seed_begin..validator.entry.stake_accounts_seed_end {
-        let (addr, _bump_seed) = Validator::find_stake_account_address(
-            solido_program_id,
-            solido_address,
-            &validator.pubkey,
-            seed,
-        );
+    for seed in validator.entry.stake_seeds.begin..validator.entry.stake_seeds.end {
+        let (addr, _bump_seed) =
+            validator.find_stake_account_address(solido_program_id, solido_address, seed);
         let account = config.client.get_account(&addr)?;
         let stake = deserialize_stake_account(&account.data)
             .expect("Derived stake account contains invalid data.");
@@ -354,7 +350,7 @@ impl SolidoState {
         let (stake_account_end, _bump_seed_end) = validator.find_stake_account_address(
             &self.solido_program_id,
             &self.solido_address,
-            validator.entry.stake_accounts_seed_end,
+            validator.entry.stake_seeds.end,
         );
 
         // Top up the validator to at most its target. If that means we don't use the full
@@ -410,29 +406,27 @@ impl SolidoState {
     /// Get an instruction to merge accounts.
     fn get_merge_instruction(
         &self,
-        validator_vote_key: Pubkey,
+        validator: &PubkeyAndEntry<Validator>,
         from_seed: u64,
         to_seed: u64,
     ) -> Instruction {
         // Stake Account created by this transaction.
-        let (from_stake, _bump_seed_end) = Validator::find_stake_account_address(
+        let (from_stake, _bump_seed_end) = validator.find_stake_account_address(
             &self.solido_program_id,
             &self.solido_address,
-            &validator_vote_key,
             from_seed,
         );
         // Stake Account created by this transaction.
-        let (to_stake, _bump_seed_end) = Validator::find_stake_account_address(
+        let (to_stake, _bump_seed_end) = validator.find_stake_account_address(
             &self.solido_program_id,
             &self.solido_address,
-            &validator_vote_key,
             to_seed,
         );
         lido::instruction::merge_stake(
             &self.solido_program_id,
             &lido::instruction::MergeStakeMeta {
                 lido: self.solido_address,
-                validator_vote_account: validator_vote_key,
+                validator_vote_account: validator.pubkey,
                 from_stake,
                 to_stake,
                 stake_authority: self.get_stake_authority(),
@@ -455,11 +449,8 @@ impl SolidoState {
                 let from_stake = stake_accounts[0];
                 let to_stake = stake_accounts[1];
                 if to_stake.1.can_merge(&from_stake.1) {
-                    let instruction = self.get_merge_instruction(
-                        validator.pubkey,
-                        from_stake.1.seed,
-                        to_stake.1.seed,
-                    );
+                    let instruction =
+                        self.get_merge_instruction(validator, from_stake.1.seed, to_stake.1.seed);
                     let task = MaintenanceOutput::MergeStake {
                         validator_vote_account: validator.pubkey,
                         from_stake: from_stake.0,
@@ -962,10 +953,9 @@ mod test {
         // balance.
         state.reserve_account.lamports += 4 * MINIMUM_STAKE_ACCOUNT_BALANCE.0;
 
-        let stake_account_0 = Validator::find_stake_account_address(
+        let stake_account_0 = state.solido.validators.entries[0].find_stake_account_address(
             &state.solido_program_id,
             &state.solido_address,
-            &state.solido.validators.entries[0].pubkey,
             0,
         );
 
@@ -979,10 +969,9 @@ mod test {
             }
         );
 
-        let stake_account_1 = Validator::find_stake_account_address(
+        let stake_account_1 = state.solido.validators.entries[1].find_stake_account_address(
             &state.solido_program_id,
             &state.solido_address,
-            &state.solido.validators.entries[1].pubkey,
             0,
         );
 

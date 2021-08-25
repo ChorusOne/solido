@@ -77,16 +77,12 @@ pub fn process_remove_validator(
 ) -> ProgramResult {
     let accounts = RemoveValidatorInfo::try_from_slice(accounts_raw)?;
     let mut lido = deserialize_lido(program_id, accounts.lido)?;
-    lido.check_manager(accounts.manager)?;
 
     let removed_validator = lido
         .validators
         .remove(accounts.validator_vote_account_to_remove.key)?;
 
-    if removed_validator.fee_credit != StLamports(0) {
-        msg!("Validator still has tokens to claim. Reclaim tokens before removing the validator");
-        return Err(LidoError::ValidatorHasUnclaimedCredit.into());
-    }
+    removed_validator.check_can_be_removed()?;
 
     lido.save(accounts.lido)
 }
@@ -192,22 +188,18 @@ pub fn process_merge_stake(program_id: &Pubkey, accounts_raw: &[AccountInfo]) ->
     let mut validator = lido
         .validators
         .get_mut(accounts.validator_vote_account.key)?;
-    let from_seed = validator.entry.stake_accounts_seed_begin;
-    let to_seed = validator.entry.stake_accounts_seed_begin + 1;
+    let from_seed = validator.entry.stake_seeds.begin;
+    let to_seed = validator.entry.stake_seeds.begin + 1;
 
     // Check that there are at least two accounts to merge
-    if to_seed >= validator.entry.stake_accounts_seed_end {
+    if to_seed >= validator.entry.stake_seeds.end {
         msg!("Attempting to merge accounts in a validator that has fewer than two stake accounts.");
         return Err(LidoError::InvalidStakeAccount.into());
     }
 
     // Recalculate the `from_stake`.
-    let (from_stake_addr, _) = Validator::find_stake_account_address(
-        program_id,
-        accounts.lido.key,
-        accounts.validator_vote_account.key,
-        from_seed,
-    );
+    let (from_stake_addr, _) =
+        validator.find_stake_account_address(program_id, accounts.lido.key, from_seed);
     // Compare with the stake passed in `accounts`.
     if &from_stake_addr != accounts.from_stake.key {
         msg!(
@@ -218,12 +210,8 @@ pub fn process_merge_stake(program_id: &Pubkey, accounts_raw: &[AccountInfo]) ->
         );
         return Err(LidoError::InvalidStakeAccount.into());
     }
-    let (to_stake_addr, _) = Validator::find_stake_account_address(
-        program_id,
-        accounts.lido.key,
-        accounts.validator_vote_account.key,
-        to_seed,
-    );
+    let (to_stake_addr, _) =
+        validator.find_stake_account_address(program_id, accounts.lido.key, to_seed);
     if &to_stake_addr != accounts.to_stake.key {
         msg!(
             "Calculated to_stake {} for seed {} is different from received {}.",
@@ -233,7 +221,7 @@ pub fn process_merge_stake(program_id: &Pubkey, accounts_raw: &[AccountInfo]) ->
         );
         return Err(LidoError::InvalidStakeAccount.into());
     }
-    validator.entry.stake_accounts_seed_begin += 1;
+    validator.entry.stake_seeds.begin += 1;
     // Merge `from_stake_addr` to `to_stake_addr`, at the end of the
     // instruction, `from_stake_addr` ceases to exist.
     let merge_instructions = solana_program::stake::instruction::merge(
