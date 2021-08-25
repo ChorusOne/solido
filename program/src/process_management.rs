@@ -77,16 +77,12 @@ pub fn process_remove_validator(
 ) -> ProgramResult {
     let accounts = RemoveValidatorInfo::try_from_slice(accounts_raw)?;
     let mut lido = deserialize_lido(program_id, accounts.lido)?;
-    lido.check_manager(accounts.manager)?;
 
     let removed_validator = lido
         .validators
         .remove(accounts.validator_vote_account_to_remove.key)?;
 
-    if removed_validator.fee_credit != StLamports(0) {
-        msg!("Validator still has tokens to claim. Reclaim tokens before removing the validator");
-        return Err(LidoError::ValidatorHasUnclaimedCredit.into());
-    }
+    removed_validator.check_can_be_removed()?;
 
     lido.save(accounts.lido)
 }

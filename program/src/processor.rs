@@ -427,7 +427,6 @@ pub fn process_unstake(
         .validators
         .get_mut(accounts.validator_vote_account.key)?;
     // Increase the `unstake_accounts_balance` by `amount`.
-
     if validator.entry.active {
         if (validator.entry.stake_accounts_balance - amount)? < MINIMUM_STAKE_ACCOUNT_BALANCE {
             msg!(

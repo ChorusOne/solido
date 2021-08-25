@@ -392,7 +392,7 @@ pub fn check_unstake_accounts(
     let validator = lido.validators.get(accounts.validator_vote_account.key)?;
 
     // If a validator doesn't have a stake account, it cannot be unstaked.
-    if validator.entry.stake_seeds.begin == validator.entry.stake_seeds.end {
+    if !validator.entry.has_stake_accounts() {
         msg!(
             "Attempting to unstake from a validator {} that has no stake accounts.",
             validator.pubkey

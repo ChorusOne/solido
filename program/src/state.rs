@@ -691,6 +691,32 @@ impl Default for Validator {
     }
 }
 
+impl Validator {
+    pub fn has_stake_accounts(&self) -> bool {
+        self.stake_seeds.begin != self.stake_seeds.end
+    }
+
+    pub fn check_can_be_removed(&self) -> Result<(), LidoError> {
+        if self.active {
+            msg!("Refusing to remove validator because it is still active, deactivate it first.");
+            return Err(LidoError::ValidatorIsStillActive);
+        }
+        if self.fee_credit != StLamports(0) {
+            msg!(
+                "Validator still has tokens to claim. Reclaim tokens before removing the validator"
+            );
+            return Err(LidoError::ValidatorHasUnclaimedCredit);
+        }
+        if self.has_stake_accounts() {
+            msg!("Refusing to remove validator because it still has stake accounts, unstake them first.");
+            return Err(LidoError::ValidatorShouldHaveNoStakeAccounts);
+        }
+        // If not, this is a bug.
+        assert_eq!(self.stake_accounts_balance, Lamports(0));
+        Ok(())
+    }
+}
+
 impl PubkeyAndEntry<Validator> {
     pub fn find_stake_account_address_with_authority(
         &self,
