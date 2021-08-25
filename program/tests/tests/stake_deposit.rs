@@ -208,3 +208,51 @@ async fn test_stake_deposit_fails_for_inactive_validator() {
 
     assert_solido_error!(result, LidoError::StakeToInactiveValidator);
 }
+
+#[tokio::test]
+async fn test_stake_deposit_fails_if_validator_with_less_stake_exists() {
+    let mut context = Context::new_with_maintainer().await;
+    let v1 = context.add_validator().await;
+    let v2 = context.add_validator().await;
+
+    context.deposit(Lamports(10_000_000_000)).await;
+
+    // Stake with v1. This should succeed, because both validators have 0 stake
+    // at this point, so every validator is as good as any.
+    context
+        .stake_deposit(
+            v1.vote_account,
+            StakeDeposit::Append,
+            Lamports(1_000_000_000),
+        )
+        .await;
+
+    // But if we try to stake with v1 again, that should be disallowed, because
+    // v2 has less stake, we should top that one up first.
+    let result = context
+        .try_stake_deposit(
+            v1.vote_account,
+            StakeDeposit::Append,
+            Lamports(1_000_000_000),
+        )
+        .await;
+    assert_solido_error!(result, LidoError::ValidatorWithLessStakeExists);
+
+    // Staking to v2 should succeed though.
+    context
+        .stake_deposit(
+            v2.vote_account,
+            StakeDeposit::Append,
+            Lamports(1_000_000_000),
+        )
+        .await;
+
+    // Now the validators have equal stake, so staking once more to v2 should succeed too.
+    context
+        .stake_deposit(
+            v2.vote_account,
+            StakeDeposit::Append,
+            Lamports(1_000_000_000),
+        )
+        .await;
+}
