@@ -1,12 +1,60 @@
 # Changelog
 
-## (unreleased)
+## v0.5.0
+
+Released 2021-08-25.
 
 **Compatibility**:
 
  * `solido run-maintainer` now accepts the listen address with the `--listen`
    option, instead of accepting it directly; this was an oversight in previous
    versions.
+ * The `Validator` struct, part of the on-chain `Lido` struct, now stores two
+   more stake account seeds, and the `weight: u32` has been replaced with
+   `active: bool`. Both of these play a role in validator removal and stake
+   redistribution. We intend for this to be the final on-chain format that will
+   be used in v1.
+ * The serialization format of some instructions changed, due to the
+   introduction of new instructions. From v1 onwards we will make sure to keep
+   these stable.
+
+New features:
+
+ * Withdrawals are now possible through the new `Withdraw` instruction that
+   splits off a stake account. For testing purposes and for advanced users,
+   `solido` gained a new subcommand, `withdraw`, to submit a withdraw
+   transaction.
+ * `solido create-solido` now accepts a mint address. This can be used to create
+   the stSOL mint in advance at a known address, which is what we did on
+   mainnet-beta.
+ * `solido` now includes more detail when printing some errors.
+ * `solido multisig` now outputs some details about the transaction for
+   `approve` and `execute-transaction`.
+ * Validators now have an `active` status (that supersedes `weight` — the stake
+   distribution will be uniform). Validators start out active, but can be
+   deactivated to initiate their removal.
+ * The new `solido deactivate-validator` subcommand can propose a multisig
+   transaction to deactivate a validator.
+ * There is a new `Unstake` instruction that will be used for active stake
+   rebalancing in a future version.
+
+Bugfixes:
+
+ * `solido` now properly handles derivation paths when using `usb://ledger`
+   keypair paths.
+ * The stake authority account is no longer writable for the `StakeDeposit`
+   instruction.
+
+Other changes:
+
+ * We updated to Solana from 1.7.3 to 1.7.8 and the Serum Multisig program from
+   v0.4.0 to v0.6.0, and we updated dependencies with `cargo audit` issues.
+ * A Grafana dashboard is available in `etc/grafana-dashboard.json`.
+ * The audit report of the Bramah Systems audit is now available in `audit`.
+ * A deposit transaction now logs what it did, to make it easier to understand
+   transactions on block explorers.
+ * The `StakeDeposit` instruction now requires staking with the validator that
+   has the least stake, to reduce the need to trust maintainers.
 
 ## v0.4.0
 
