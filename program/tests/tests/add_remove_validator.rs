@@ -9,7 +9,6 @@ use crate::assert_solido_error;
 use crate::context::{Context, StakeDeposit};
 
 use lido::error::LidoError;
-use lido::state::Validator;
 use lido::token::{Lamports, StLamports};
 
 pub const TEST_DEPOSIT_AMOUNT: Lamports = Lamports(100_000_000_000);
