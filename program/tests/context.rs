@@ -742,7 +742,7 @@ impl Context {
     }
 
     /// Create a new account, deposit from it, and return the resulting owner and stSOL account.
-    pub async fn deposit(&mut self, amount: Lamports) -> (Keypair, Pubkey) {
+    pub async fn try_deposit(&mut self, amount: Lamports) -> transport::Result<(Keypair, Pubkey)> {
         // Create a new user who is going to do the deposit. The user's account
         // will hold the SOL to deposit, and it will also be the owner of the
         // stSOL account that holds the proceeds.
@@ -769,10 +769,15 @@ impl Context {
             )],
             vec![&user],
         )
-        .await
-        .expect("Failed to call Deposit on Solido instance.");
+        .await?;
 
-        (user, recipient)
+        Ok((user, recipient))
+    }
+
+    pub async fn deposit(&mut self, amount: Lamports) -> (Keypair, Pubkey) {
+        self.try_deposit(amount)
+            .await
+            .expect("Failed to call Deposit on Solido instance.")
     }
 
     /// Withdraw from the validator at `self.validator`.

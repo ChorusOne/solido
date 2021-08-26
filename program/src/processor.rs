@@ -148,6 +148,7 @@ pub fn process_deposit(
     }
 
     let mut lido = deserialize_lido(program_id, accounts.lido)?;
+    lido.check_reserve_account(program_id, accounts.lido.key, accounts.reserve_account)?;
 
     invoke(
         &system_instruction::transfer(accounts.user.key, accounts.reserve_account.key, amount.0),
