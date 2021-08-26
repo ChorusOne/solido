@@ -434,6 +434,8 @@ impl SolidoState {
     }
 
     /// If there is a validator being deactivated, try to unstake its funds.
+    // TODO(#386): Solana could fail the transaction to unstake, in that case,
+    // it should be retried.
     pub fn try_unstake_from_inactive(&self) -> Option<(Instruction, MaintenanceOutput)> {
         for validator in &self.solido.validators.entries {
             // Validator is inactive, try to unstake from it.
