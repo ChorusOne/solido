@@ -6,6 +6,7 @@
 //! See also <https://prometheus.io/docs/instrumenting/exposition_formats/#text-based-format>.
 
 use lido::metrics::{LamportsHistogram, Metrics};
+use lido::token::{Lamports, StLamports};
 use std::io;
 use std::io::Write;
 use std::time::SystemTime;
@@ -21,6 +22,22 @@ pub struct MetricFamily<'a> {
     pub metrics: Vec<Metric<'a>>,
 }
 
+pub enum MetricValue {
+    /// Render the inner value as-is, as an integer.
+    Int(u64),
+
+    /// Divide the inner value by 10<sup>9</sup> and render as fixed-point number.
+    ///
+    /// E.g. `Nano(12)` renders as `0.000000012`.
+    Nano(u64),
+}
+
+impl From<u64> for MetricValue {
+    fn from(v: u64) -> MetricValue {
+        MetricValue::Int(v)
+    }
+}
+
 pub struct Metric<'a> {
     /// Suffix to append to the metric name, useful for e.g. the `_bucket` suffix on histograms.
     pub suffix: &'a str,
@@ -28,11 +45,8 @@ pub struct Metric<'a> {
     /// Name-value label pairs.
     pub labels: Vec<(&'a str, String)>,
 
-    /// Metric value.
-    pub value: u64,
-
-    /// When true, divide `value` by 10<sup>9</sup> and render as fixed-point number.
-    pub nano: bool,
+    /// Metric value, either an integer, or a fixed-point number.
+    pub value: MetricValue,
 
     /// Time at which this metric was observed, when proxying metrics.
     pub timestamp: Option<SystemTime>,
@@ -42,20 +56,25 @@ impl<'a> Metric<'a> {
     /// Construct a basic metric with just a value.
     ///
     /// Can be extended with the builder-style methods below.
-    pub fn new(value: u64) -> Metric<'a> {
+    pub fn new<T: Into<MetricValue>>(value: T) -> Metric<'a> {
         Metric {
             labels: Vec::new(),
             suffix: "",
-            value,
-            nano: false,
+            value: value.into(),
             timestamp: None,
         }
     }
 
-    /// Enable the 10<sup>-9</sup> multiplier.
-    pub fn nano(mut self) -> Metric<'a> {
-        self.nano = true;
-        self
+    /// Construct a metric that measures an amount of SOL.
+    pub fn new_sol(amount: Lamports) -> Metric<'a> {
+        // One Lamport is 1e-9 SOL, so we use nano here.
+        Metric::new(MetricValue::Nano(amount.0))
+    }
+
+    /// Construct a metric that measures an amount of stSOL.
+    pub fn new_st_sol(amount: StLamports) -> Metric<'a> {
+        // One stLamport is 1e-9 stSOL, so we use nano here.
+        Metric::new(MetricValue::Nano(amount.0))
     }
 
     /// Set the timestamp.
@@ -97,15 +116,11 @@ pub fn write_metric<W: Write>(out: &mut W, family: &MetricFamily) -> io::Result<
             write!(out, "}}")?;
         }
 
-        if metric.nano {
-            write!(
-                out,
-                " {}.{:0>9}",
-                metric.value / 1_000_000_000,
-                metric.value % 1_000_000_000
-            )?;
-        } else {
-            write!(out, " {}", metric.value)?;
+        match metric.value {
+            MetricValue::Int(v) => write!(out, " {}", v)?,
+            MetricValue::Nano(v) => {
+                write!(out, " {}.{:0>9}", v / 1_000_000_000, v % 1_000_000_000)?
+            }
         }
 
         if let Some(timestamp) = metric.timestamp {
@@ -150,12 +165,7 @@ pub fn solido_histogram_to_metrics(at: SystemTime, histogram: &LamportsHistogram
 
     // Aside from the buckets, histograms should have two additional metrics:
     // a _sum, and a _count (which is the same as the +Inf bucket).
-    metrics.push(
-        Metric::new(histogram.total.0)
-            .nano()
-            .with_suffix("_sum")
-            .at(at),
-    );
+    metrics.push(Metric::new_sol(histogram.total).with_suffix("_sum").at(at));
     metrics.push(
         Metric::new(histogram.num_observations())
             .with_suffix("_count")
@@ -176,7 +186,7 @@ pub fn write_solido_metrics_as_prometheus<W: io::Write>(
             name: "solido_fee_treasury_sol_total",
             help: "Total fees paid to the treasury, in SOL value before conversion to stSOL.",
             type_: "counter",
-            metrics: vec![Metric::new(metrics.fee_treasury_sol_total.0).nano().at(at)],
+            metrics: vec![Metric::new_sol(metrics.fee_treasury_sol_total).at(at)],
         },
     )?;
     write_metric(
@@ -185,9 +195,7 @@ pub fn write_solido_metrics_as_prometheus<W: io::Write>(
             name: "solido_fee_treasury_st_sol_total",
             help: "Total fees paid to the treasury.",
             type_: "counter",
-            metrics: vec![Metric::new(metrics.fee_treasury_st_sol_total.0)
-                .nano()
-                .at(at)],
+            metrics: vec![Metric::new_st_sol(metrics.fee_treasury_st_sol_total).at(at)],
         },
     )?;
     write_metric(
@@ -196,7 +204,7 @@ pub fn write_solido_metrics_as_prometheus<W: io::Write>(
             name: "solido_fee_validation_sol_total",
             help: "Total validation fees paid to validators (excluding commission they took), in SOL value before conversion to stSOL.",
             type_: "counter",
-            metrics: vec![Metric::new(metrics.fee_validation_sol_total.0).nano().at(at)],
+            metrics: vec![Metric::new_sol(metrics.fee_validation_sol_total).at(at)],
         },
     )?;
     write_metric(
@@ -205,7 +213,7 @@ pub fn write_solido_metrics_as_prometheus<W: io::Write>(
             name: "solido_fee_validation_st_sol_total",
             help: "Total validation fees paid to validators as stSOL (excluding commission they took).",
             type_: "counter",
-            metrics: vec![Metric::new(metrics.fee_validation_st_sol_total.0).nano().at(at)],
+            metrics: vec![Metric::new_st_sol(metrics.fee_validation_st_sol_total).at(at)],
         },
     )?;
     write_metric(
@@ -214,7 +222,7 @@ pub fn write_solido_metrics_as_prometheus<W: io::Write>(
             name: "solido_fee_developer_sol_total",
             help: "Total fees paid to the developer, in SOL value before conversion to stSOL.",
             type_: "counter",
-            metrics: vec![Metric::new(metrics.fee_developer_sol_total.0).nano().at(at)],
+            metrics: vec![Metric::new_sol(metrics.fee_developer_sol_total).at(at)],
         },
     )?;
     write_metric(
@@ -223,9 +231,7 @@ pub fn write_solido_metrics_as_prometheus<W: io::Write>(
             name: "solido_fee_developer_st_sol_total",
             help: "Total fees paid to the developer.",
             type_: "counter",
-            metrics: vec![Metric::new(metrics.fee_developer_st_sol_total.0)
-                .nano()
-                .at(at)],
+            metrics: vec![Metric::new_st_sol(metrics.fee_developer_st_sol_total).at(at)],
         },
     )?;
     write_metric(
@@ -234,9 +240,7 @@ pub fn write_solido_metrics_as_prometheus<W: io::Write>(
             name: "solido_st_sol_appreciation_sol_total",
             help: "Total SOL that went to benefit stSOL holders, i.e. rewards gained by users.",
             type_: "counter",
-            metrics: vec![Metric::new(metrics.st_sol_appreciation_sol_total.0)
-                .nano()
-                .at(at)],
+            metrics: vec![Metric::new_sol(metrics.st_sol_appreciation_sol_total).at(at)],
         },
     )?;
     write_metric(
@@ -255,7 +259,7 @@ pub fn write_solido_metrics_as_prometheus<W: io::Write>(
 mod test {
     use std::str;
 
-    use super::{write_metric, Metric, MetricFamily};
+    use super::{write_metric, Metric, MetricFamily, MetricValue};
 
     #[test]
     fn write_metric_without_labels() {
@@ -397,9 +401,9 @@ mod test {
                 type_: "gauge",
                 metrics: vec![
                     // One greater than 1, with no need for zero padding.
-                    Metric::new(67_533_128_017).nano(),
+                    Metric::new(MetricValue::Nano(67_533_128_017)),
                     // One smaller than 1, with the need for zero padding.
-                    Metric::new(128_017).nano(),
+                    Metric::new(MetricValue::Nano(128_017)),
                 ],
             },
         )

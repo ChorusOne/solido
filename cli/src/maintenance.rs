@@ -629,9 +629,7 @@ impl SolidoState {
                 name: "solido_maintainer_balance_sol",
                 help: "Balance of the maintainer account, in SOL.",
                 type_: "gauge",
-                metrics: vec![Metric::new(self.maintainer_account.lamports)
-                    // Enable 1e-9 factor: the metric is in SOL, but the value in lamports.
-                    .nano()
+                metrics: vec![Metric::new_sol(Lamports(self.maintainer_account.lamports))
                     .at(self.produced_at)
                     // Include the maintainer address, to prevent any confusion
                     // about which account this is monitoring.
@@ -640,10 +638,7 @@ impl SolidoState {
         )?;
 
         // Gather the different components that make up Solido's SOL balance.
-        // The values are stored in Lamports (1e-9 SOL), but Prometheus convention
-        // is to use base units, so we set `.nano()` to report them in SOL.
-        let mut balance_sol_metrics = vec![Metric::new(self.get_effective_reserve().0)
-            .nano()
+        let mut balance_sol_metrics = vec![Metric::new_sol(self.get_effective_reserve())
             .at(self.produced_at)
             .with_label("status", "reserve".to_string())];
 
@@ -663,8 +658,7 @@ impl SolidoState {
                 .map(|(_addr, stake_account)| stake_account.balance)
                 .sum();
             let metric = |amount: Lamports, status: &'static str| {
-                Metric::new(amount.0)
-                    .nano()
+                Metric::new_sol(amount)
                     .at(self.produced_at)
                     .with_label("status", status.to_string())
                     .with_label("vote_account", validator.pubkey.to_string())
@@ -697,13 +691,10 @@ impl SolidoState {
                 help: "Amount of stSOL that exists currently.",
                 type_: "gauge",
                 metrics: vec![
-                    // The supply is measured in stSOL lamports (1e-9 stSOL), so set .nano().
-                    Metric::new(st_sol_supply.0)
-                        .nano()
+                    Metric::new_st_sol(st_sol_supply)
                         .at(self.produced_at)
                         .with_label("status", "minted".to_string()),
-                    Metric::new(unclaimed_fees.0)
-                        .nano()
+                    Metric::new_st_sol(unclaimed_fees)
                         .at(self.produced_at)
                         .with_label("status", "unclaimed_fee".to_string()),
                 ],
@@ -716,12 +707,8 @@ impl SolidoState {
                 name: "solido_exchange_rate_supply_st_sol",
                 help: "Amount of stSOL that existed at the time of the last exchange rate update.",
                 type_: "gauge",
-                metrics: vec![
-                    // The supply is measured in stSOL lamports (1e-9 stSOL), so set .nano().
-                    Metric::new(self.solido.exchange_rate.st_sol_supply.0)
-                        .nano()
-                        .at(self.produced_at),
-                ],
+                metrics: vec![Metric::new_st_sol(self.solido.exchange_rate.st_sol_supply)
+                    .at(self.produced_at)],
             },
         )?;
         write_metric(
@@ -731,10 +718,7 @@ impl SolidoState {
                 help: "Amount of SOL managed at the time of the last exchange rate update.",
                 type_: "gauge",
                 metrics: vec![
-                    // The balance is measured in SOL lamports (1e-9 stSOL), so set .nano().
-                    Metric::new(self.solido.exchange_rate.sol_balance.0)
-                        .nano()
-                        .at(self.produced_at),
+                    Metric::new_sol(self.solido.exchange_rate.sol_balance).at(self.produced_at)
                 ],
             },
         )?;
