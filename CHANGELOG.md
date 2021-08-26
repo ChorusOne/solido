@@ -2,6 +2,13 @@
 
 ## (unreleased)
 
+**Compatibility**:
+
+ * The `--validator-vote-account` option has been removed from `solido
+   run-maintainer`. Previously this was used to specify the validator to claim
+   validation fees for, but now the maintenance bot will claim fees on behalf of
+   all validators whenever possible.
+
 New features:
 
  * `solido` now supports `--keypair` (and `SOLIDO_KEYPAIR` when passed as
