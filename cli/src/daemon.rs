@@ -20,7 +20,6 @@ use tiny_http::{Request, Response, Server};
 
 use crate::config::RunMaintainerOpts;
 use crate::error::AsPrettyError;
-use crate::maintenance::get_opt_default_pubkey;
 use crate::maintenance::{try_perform_maintenance, MaintenanceOutput, SolidoState};
 use crate::prometheus::{write_metric, Metric, MetricFamily};
 use crate::SnapshotClientConfig;
@@ -138,7 +137,6 @@ fn run_main_loop(
         transactions_claim_validator_fee: 0,
     };
     let mut rng = rand::thread_rng();
-    let validator_vote_account = get_opt_default_pubkey(*opts.validator_vote_account());
 
     loop {
         metrics.polls += 1;
@@ -148,7 +146,7 @@ fn run_main_loop(
             let state =
                 SolidoState::new(&mut config, opts.solido_program_id(), opts.solido_address())?;
 
-            match try_perform_maintenance(&mut config, validator_vote_account, &state)? {
+            match try_perform_maintenance(&mut config, &state)? {
                 None => {
                     // Nothing to be done, try again later.
                     do_wait = true;

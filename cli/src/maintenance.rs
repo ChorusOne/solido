@@ -786,7 +786,6 @@ impl SolidoState {
 
 pub fn try_perform_maintenance(
     config: &mut SnapshotConfig,
-    validator_vote_account: Option<Pubkey>,
     state: &SolidoState,
 ) -> Result<Option<MaintenanceOutput>> {
     // To prevent the maintenance transactions failing with mysterious errors
@@ -804,16 +803,6 @@ pub fn try_perform_maintenance(
         });
         return Err(error.into());
     }
-    let validator = validator_vote_account
-        .map(|pubkey| {
-            state.solido.validators.get(&pubkey).map_err(|_| {
-                MaintenanceError::new(format!(
-                    "Validator vote account {} is not part of the validator's set.",
-                    pubkey,
-                ))
-            })
-        })
-        .transpose()?;
 
     // Try all of these operations one by one, and select the first one that
     // produces an instruction.
@@ -852,18 +841,8 @@ pub fn run_perform_maintenance(
     config: &mut SnapshotConfig,
     opts: &PerformMaintenanceOpts,
 ) -> Result<Option<MaintenanceOutput>> {
-    let validator_vote_account = get_opt_default_pubkey(*opts.validator_vote_account());
     let state = SolidoState::new(config, opts.solido_program_id(), opts.solido_address())?;
-    try_perform_maintenance(config, validator_vote_account, &state)
-}
-
-/// If `pubkey` is `Pubkey::default`, aka `[0u8; 32]`, returns None,
-/// otherwise, returns `Some(pubkey)`.
-pub fn get_opt_default_pubkey(pubkey: Pubkey) -> Option<Pubkey> {
-    match pubkey {
-        pubkey if pubkey == Pubkey::default() => None,
-        pubkey => Some(pubkey),
-    }
+    try_perform_maintenance(config, &state)
 }
 
 #[cfg(test)]

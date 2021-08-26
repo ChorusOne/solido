@@ -621,12 +621,6 @@ cli_opt_struct! {
         /// Maximum time to wait in seconds after there was no maintenance to perform, before checking again. Defaults to 120s
         #[clap(long)]
         max_poll_interval_seconds: u64 => 120,
-
-        /// Vote account that the maintainer tries to claim validator's fees
-        /// from. If none is set, the validator will ignore the instruction to
-        /// claim fees.
-        #[clap(long)]
-        validator_vote_account : Pubkey => Pubkey::default(),
     }
 }
 
