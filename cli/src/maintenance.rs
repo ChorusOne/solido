@@ -794,14 +794,12 @@ pub fn try_perform_maintenance(
     // transaction fees.
     let minimum_maintainer_balance = Lamports(100_000_000);
     if Lamports(state.maintainer_account.lamports) < minimum_maintainer_balance {
-        let error: crate::error::Error = Box::new(MaintenanceError {
-            message: format!(
-                "Balance of the maintainer account {} is less than {}. \
-                Please fund the maintainer account.",
-                state.maintainer_address, minimum_maintainer_balance,
-            ),
-        });
-        return Err(error.into());
+        return Err(MaintenanceError::new(format!(
+            "Balance of the maintainer account {} is less than {}. \
+            Please fund the maintainer account.",
+            state.maintainer_address, minimum_maintainer_balance,
+        ))
+        .into());
     }
 
     // Try all of these operations one by one, and select the first one that
