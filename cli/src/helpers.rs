@@ -23,7 +23,7 @@ use lido::{
 use crate::{
     config::{
         AddRemoveMaintainerOpts, AddValidatorOpts, CreateSolidoOpts, DeactivateValidatorOpts,
-        DepositOpts, ShowSolidoAuthoritiesOpts, ShowSolidoOpts, WithdrawOpts,
+        DepositOpts, RemoveValidatorOpts, ShowSolidoAuthoritiesOpts, ShowSolidoOpts, WithdrawOpts,
     },
     error::CliError,
     get_signer_from_path,
@@ -242,6 +242,30 @@ pub fn command_add_validator(
             manager: multisig_address,
             validator_vote_account: *opts.validator_vote_account(),
             validator_fee_st_sol_account: *opts.validator_fee_account(),
+        },
+    );
+    propose_instruction(
+        config,
+        opts.multisig_program_id(),
+        *opts.multisig_address(),
+        instruction,
+    )
+}
+
+/// CLI entry point to remove a validator in Solido.
+pub fn command_remove_validator(
+    config: &mut SnapshotConfig,
+    opts: &RemoveValidatorOpts,
+) -> Result<ProposeInstructionOutput> {
+    let (multisig_address, _) =
+        get_multisig_program_address(opts.multisig_program_id(), opts.multisig_address());
+
+    let instruction = lido::instruction::remove_validator(
+        opts.solido_program_id(),
+        &lido::instruction::RemoveValidatorMeta {
+            lido: *opts.solido_address(),
+            manager: multisig_address,
+            validator_vote_account_to_remove: *opts.validator_vote_account(),
         },
     );
     propose_instruction(

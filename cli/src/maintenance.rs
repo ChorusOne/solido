@@ -88,6 +88,18 @@ pub enum MaintenanceOutput {
         from_stake_seed: u64,
         to_stake_seed: u64,
     },
+
+    UnstakeFromInactive {
+        #[serde(serialize_with = "serialize_b58")]
+        validator_vote_account: Pubkey,
+        #[serde(serialize_with = "serialize_b58")]
+        stake: Pubkey,
+        #[serde(serialize_with = "serialize_b58")]
+        unstake: Pubkey,
+        stake_seed: u64,
+        unstake_seed: u64,
+        amount: Lamports,
+    },
 }
 
 impl fmt::Display for MaintenanceOutput {
@@ -150,6 +162,24 @@ impl fmt::Display for MaintenanceOutput {
                     "  To stake:               {}, seed: {}",
                     to_stake, to_stake_seed
                 )?;
+            }
+            MaintenanceOutput::UnstakeFromInactive {
+                validator_vote_account,
+                stake,
+                unstake,
+                stake_seed,
+                unstake_seed,
+                amount,
+            } => {
+                writeln!(f, "Unstake from inactive validator")?;
+                writeln!(f, "  Validator vote account: {}", validator_vote_account)?;
+                writeln!(f, "  Stake:               {}, seed: {}", stake, stake_seed)?;
+                writeln!(
+                    f,
+                    "  Unstake:             {}, seed: {}",
+                    unstake, unstake_seed
+                )?;
+                writeln!(f, "  Amount:              {}", amount)?;
             }
         }
         Ok(())
@@ -401,6 +431,51 @@ impl SolidoState {
             stake_account: stake_account_end,
         };
         Some((instruction, task))
+    }
+
+    /// If there is a validator being deactivated, try to unstake its funds.
+    pub fn try_unstake_from_inactive(&self) -> Option<(Instruction, MaintenanceOutput)> {
+        for validator in &self.solido.validators.entries {
+            // Validator is inactive, try to unstake from it.
+            if !validator.entry.active {
+                let try_unstake_balance = validator.entry.effective_stake_balance();
+                let (validator_stake_account, _) = validator.find_stake_account_address(
+                    &self.solido_program_id,
+                    &self.solido_address,
+                    validator.entry.stake_seeds.begin,
+                );
+                let (validator_unstake_account, _) = validator.find_unstake_account_address(
+                    &self.solido_program_id,
+                    &self.solido_address,
+                    validator.entry.unstake_seeds.end,
+                );
+                let task = MaintenanceOutput::UnstakeFromInactive {
+                    validator_vote_account: validator.pubkey,
+                    stake: validator_stake_account,
+                    unstake: validator_unstake_account,
+                    stake_seed: validator.entry.stake_seeds.begin,
+                    unstake_seed: validator.entry.unstake_seeds.end,
+                    amount: try_unstake_balance,
+                };
+
+                return Some((
+                    lido::instruction::unstake(
+                        &self.solido_program_id,
+                        &lido::instruction::UnstakeAccountsMeta {
+                            lido: self.solido_address,
+                            maintainer: self.maintainer_address,
+                            validator_vote_account: validator.pubkey,
+                            source_stake_account: validator_stake_account,
+                            destination_stake_account: validator_unstake_account,
+                            stake_authority: self.get_stake_authority(),
+                        },
+                        try_unstake_balance,
+                    ),
+                    task,
+                ));
+            }
+        }
+        None
     }
 
     /// Get an instruction to merge accounts.
@@ -793,6 +868,7 @@ pub fn try_perform_maintenance(
         // ensure that the balance update needs to reference as few accounts
         // as possible.
         .or_else(|| state.try_merge_on_all_stakes())
+        .or_else(|| state.try_unstake_from_inactive())
         .or_else(|| state.try_update_exchange_rate())
         // Collecting validator fees goes after updating the exchange rate,
         // because it may be rejected if the exchange rate is outdated.

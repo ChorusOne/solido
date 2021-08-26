@@ -575,3 +575,37 @@ assert not solido_instance['solido']['validators']['entries'][0]['entry'][
     'active'
 ], 'Validator should be inactive after deactivation.'
 print('> Validator is inactive as expected.')
+
+print('\n Running maintenance (should unstake from inactive validator) ...')
+result = solido(
+    'perform-maintenance',
+    '--solido-address',
+    solido_address,
+    '--solido-program-id',
+    solido_program_id,
+    keypair_path=maintainer.keypair_path,
+)
+
+del result['UnstakeFromInactive']['stake']
+del result['UnstakeFromInactive']['unstake']
+expected_result = {
+    'UnstakeFromInactive': {
+        'validator_vote_account': validator_vote_account.pubkey,
+        'stake_seed': 0,
+        'unstake_seed': 0,
+        'amount': 2100500000,
+    }
+}
+assert result == expected_result, f'\nExpected: {expected_result}\nActual:   {result}'
+
+solido_instance = solido(
+    'show-solido',
+    '--solido-program-id',
+    solido_program_id,
+    '--solido-address',
+    solido_address,
+)
+# Should have bumped the validator's `stake_seeds` and `unstake_seeds`.
+val = solido_instance['solido']['validators']['entries'][0]['entry']
+assert val['stake_seeds'] == {'begin': 1, 'end': 1}
+assert val['unstake_seeds'] == {'begin': 0, 'end': 1}

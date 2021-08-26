@@ -5,6 +5,7 @@ use std::fmt;
 use std::path::PathBuf;
 
 use clap::Clap;
+use helpers::command_remove_validator;
 use helpers::command_show_solido_authorities;
 use helpers::command_withdraw;
 use serde::Serialize;
@@ -158,16 +159,19 @@ REWARDS
     ")]
     CreateSolido(CreateSolidoOpts),
 
-    /// Adds a new validator
+    /// Adds a new validator.
     AddValidator(AddValidatorOpts),
 
-    /// Deactivates a validator and initiates the removal process
+    /// Removes a validator.
+    RemoveValidator(RemoveValidatorOpts),
+
+    /// Deactivates a validator and initiates the removal process.
     DeactivateValidator(DeactivateValidatorOpts),
 
-    /// Adds a maintainer to the Solido instance
+    /// Adds a maintainer to the Solido instance.
     AddMaintainer(AddRemoveMaintainerOpts),
 
-    /// Removes a maintainer from the Solido instance
+    /// Removes a maintainer from the Solido instance.
     RemoveMaintainer(AddRemoveMaintainerOpts),
 
     /// Deposit some SOL, receive stSOL in return.
@@ -366,6 +370,11 @@ fn main() {
             let output = result.ok_or_abort_with("Failed to add validator.");
             print_output(output_mode, &output);
         }
+        SubCommand::RemoveValidator(cmd_opts) => {
+            let result = config.with_snapshot(|config| command_remove_validator(config, &cmd_opts));
+            let output = result.ok_or_abort_with("Failed to remove validator.");
+            print_output(output_mode, &output);
+        }
         SubCommand::DeactivateValidator(cmd_opts) => {
             let result =
                 config.with_snapshot(|config| command_deactivate_validator(config, &cmd_opts));
@@ -415,6 +424,7 @@ fn merge_with_config_and_environment(
     match subcommand {
         SubCommand::CreateSolido(opts) => opts.merge_with_config_and_environment(config_file),
         SubCommand::AddValidator(opts) => opts.merge_with_config_and_environment(config_file),
+        SubCommand::RemoveValidator(opts) => opts.merge_with_config_and_environment(config_file),
         SubCommand::DeactivateValidator(opts) => {
             opts.merge_with_config_and_environment(config_file)
         }
