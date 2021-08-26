@@ -579,31 +579,32 @@ impl SolidoState {
         None
     }
 
-    /// Checks if the configured validator has unclaimed fees in stSOL. If so,
+    /// Checks if any of the validators has unclaimed fees in stSOL. If so,
     /// claims it on behalf of the validator.
-    pub fn try_claim_validator_fee(
-        &self,
-        validator: Option<&PubkeyAndEntry<Validator>>,
-    ) -> Option<(Instruction, MaintenanceOutput)> {
-        let validator = validator?;
-        // No fees to claim
-        if validator.entry.fee_credit == StLamports(0) {
-            return None;
+    pub fn try_claim_validator_fee(&self) -> Option<(Instruction, MaintenanceOutput)> {
+        for validator in self.solido.validators.entries.iter() {
+            if validator.entry.fee_credit == StLamports(0) {
+                continue;
+            }
+
+            let instruction = lido::instruction::claim_validator_fee(
+                &self.solido_program_id,
+                &lido::instruction::ClaimValidatorFeeMeta {
+                    lido: self.solido_address,
+                    st_sol_mint: self.solido.st_sol_mint,
+                    mint_authority: self.get_mint_authority(),
+                    validator_fee_st_sol_account: validator.entry.fee_address,
+                },
+            );
+            let task = MaintenanceOutput::ClaimValidatorFee {
+                validator_vote_account: validator.pubkey,
+                fee_rewards: validator.entry.fee_credit,
+            };
+
+            return Some((instruction, task));
         }
-        let instruction = lido::instruction::claim_validator_fee(
-            &self.solido_program_id,
-            &lido::instruction::ClaimValidatorFeeMeta {
-                lido: self.solido_address,
-                st_sol_mint: self.solido.st_sol_mint,
-                mint_authority: self.get_mint_authority(),
-                validator_fee_st_sol_account: validator.entry.fee_address,
-            },
-        );
-        let task = MaintenanceOutput::ClaimValidatorFee {
-            validator_vote_account: validator.pubkey,
-            fee_rewards: validator.entry.fee_credit,
-        };
-        Some((instruction, task))
+
+        None
     }
 
     /// Write metrics about the current Solido instance in Prometheus format.
@@ -828,7 +829,7 @@ pub fn try_perform_maintenance(
         // Same for updating the validator balance.
         .or_else(|| state.try_withdraw_inactive_stake())
         .or_else(|| state.try_stake_deposit())
-        .or_else(|| state.try_claim_validator_fee(validator));
+        .or_else(|| state.try_claim_validator_fee());
 
     match instruction_output {
         Some((instruction, output)) => {
