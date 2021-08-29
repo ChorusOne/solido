@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunkdocs=self.webpackChunkdocs||[]).push([[6671],{2723:function(s){s.exports=JSON.parse('{"allTagsPath":"/solido/blog/tags","slug":"solana","name":"solana","count":1,"permalink":"/solido/blog/tags/solana"}')}}]);
