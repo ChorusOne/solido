@@ -87,9 +87,9 @@ async fn test_max_validators_maintainers() {
         context
             .stake_deposit(validator.vote_account, StakeDeposit::Append, amount)
             .await;
-        let vote_account = validator.vote_account;
-        context.validator = Some(validator);
-        context.unstake(vote_account, Lamports(1_000_000_000)).await;
+        context
+            .unstake(validator.vote_account, Lamports(1_000_000_000))
+            .await;
         // If we get here, then none of the transactions failed.
     }
 }
