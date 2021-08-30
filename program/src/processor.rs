@@ -741,8 +741,6 @@ pub fn process_withdraw_inactive_stake(
     // Try to withdraw from unstake accounts.
     let mut unstake_removed = Lamports(0);
     observed_total = Lamports(0);
-    let mut bump_seed_inc = 0;
-    let mut should_bump_seed = true;
     for seed in &validator.entry.unstake_seeds {
         let (unstake_account_address, _bump_seed) =
             validator.find_unstake_account_address(program_id, accounts.lido.key, seed);
@@ -764,25 +762,26 @@ pub fn process_withdraw_inactive_stake(
             account_balance
         );
 
-        let unstake_removed_here = withdraw_inactive_sol(
-            &WithdrawExcessOpts {
-                accounts: &accounts,
-                clock: &clock,
-                rent: &rent,
-                stake_history: &stake_history,
-                stake_account: unstake_account,
-            },
-            seed,
-            lido.stake_authority_bump_seed,
-            StakeType::Unstake,
-        )?;
-        if should_bump_seed && unstake_removed_here == account_balance {
-            bump_seed_inc += 1;
-        } else {
-            should_bump_seed = false;
+        // If validator's stake is at the beginning, try to withdraw.
+        if validator.entry.unstake_seeds.begin == seed {
+            let unstake_removed_here = withdraw_inactive_sol(
+                &WithdrawExcessOpts {
+                    accounts: &accounts,
+                    clock: &clock,
+                    rent: &rent,
+                    stake_history: &stake_history,
+                    stake_account: unstake_account,
+                },
+                seed,
+                lido.stake_authority_bump_seed,
+                StakeType::Unstake,
+            )?;
+            // If withdrew everything, bump the seed
+            if account_balance == unstake_removed_here {
+                validator.entry.unstake_seeds.begin += 1
+            }
+            unstake_removed = (unstake_removed + unstake_removed_here)?;
         }
-
-        unstake_removed = (unstake_removed + unstake_removed_here)?;
         observed_total = (observed_total + account_balance)?;
     }
 
@@ -795,9 +794,9 @@ pub fn process_withdraw_inactive_stake(
         msg!("This should not happen, aborting ...");
         return Err(LidoError::ValidatorBalanceDecreased.into());
     }
+    validator.entry.unstake_accounts_balance =
+        (observed_total - unstake_removed).expect("Does not underflow, because excess <= total.");
 
-    // Bump unstake seed.
-    validator.entry.unstake_seeds.begin += n_unstake_accounts;
     lido.save(accounts.lido)
 }
 
