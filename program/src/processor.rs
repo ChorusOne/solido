@@ -35,7 +35,7 @@ use crate::{
     VALIDATOR_UNSTAKE_ACCOUNT,
 };
 
-use solana_program::stake::{self as stake_program, state::Stake};
+use solana_program::stake::{self as stake_program};
 use solana_program::stake_history::StakeHistory;
 use {
     borsh::BorshDeserialize,
@@ -539,7 +539,6 @@ impl std::fmt::Display for StakeType {
 pub struct WithdrawExcessOpts<'a, 'b> {
     accounts: &'a WithdrawInactiveStakeInfo<'a, 'b>,
     clock: &'a Clock,
-    rent: &'a Rent,
     stake_history: &'a StakeHistory,
     stake_account: &'a AccountInfo<'b>,
 }
@@ -582,47 +581,18 @@ pub fn withdraw_inactive_sol(
     Ok(())
 }
 
-/// If a stake account contains more inactive SOL than needed to make it
-/// rent-exempt, withdraw the excess back to the reserve. Returns how much SOL
-/// was withdrawn. When withdrawing from an unstake account, withdraw all the
-/// balance, leaving the stake account empty.
-pub fn withdraw_from_stake_account(
+pub fn get_stake_account(
     withdraw_excess_opts: &WithdrawExcessOpts,
     stake_account_seed: u64,
-    stake_authority_bump_seed: u8,
-    stake_type: StakeType,
-) -> Result<Lamports, ProgramError> {
+) -> Result<StakeAccount, ProgramError> {
     let stake = deserialize_stake_account(&withdraw_excess_opts.stake_account.data.borrow())?;
-    let stake_info = StakeAccount::from_delegated_account(
+    Ok(StakeAccount::from_delegated_account(
         Lamports(withdraw_excess_opts.stake_account.lamports()),
         &stake,
         withdraw_excess_opts.clock,
         withdraw_excess_opts.stake_history,
         stake_account_seed,
-    );
-    let amount = match stake_type {
-        StakeType::Stake => stake_info.balance.inactive,
-        StakeType::Unstake => {
-            if stake_info.balance.inactive != stake_info.balance.total() {
-                msg!(
-                    "Unstake account {}, defined by seed {} has active/activating Lamports",
-                    withdraw_excess_opts.stake_account.key,
-                    stake_account_seed,
-                );
-                return Err(LidoError::InvalidStakeAccount.into());
-            }
-            stake_info.balance.total()
-        }
-    };
-
-    withdraw_inactive_sol(
-        withdraw_excess_opts,
-        stake_account_seed,
-        stake_authority_bump_seed,
-        amount,
-    )?;
-
-    Ok(amount)
+    ))
 }
 
 /// Checks that the `derived_stake_account_address` corresponds to the
@@ -665,7 +635,6 @@ pub fn process_withdraw_inactive_stake(
 ) -> ProgramResult {
     let accounts = WithdrawInactiveStakeInfo::try_from_slice(raw_accounts)?;
     let mut lido = deserialize_lido(program_id, accounts.lido)?;
-    let rent = Rent::from_account_info(accounts.sysvar_rent)?;
     let stake_history = StakeHistory::from_account_info(accounts.sysvar_stake_history)?;
     let clock = Clock::from_account_info(accounts.sysvar_clock)?;
 
@@ -707,21 +676,22 @@ pub fn process_withdraw_inactive_stake(
             seed,
             StakeType::Stake,
         )?;
+        let withdraw_opts = WithdrawExcessOpts {
+            accounts: &accounts,
+            clock: &clock,
+            stake_history: &stake_history,
+            stake_account,
+        };
+        let stake_account = get_stake_account(&withdraw_opts, seed)?;
 
-        let excess_removed_here = withdraw_from_stake_account(
-            &WithdrawExcessOpts {
-                accounts: &accounts,
-                clock: &clock,
-                rent: &rent,
-                stake_history: &stake_history,
-                stake_account,
-            },
+        withdraw_inactive_sol(
+            &withdraw_opts,
             seed,
             lido.stake_authority_bump_seed,
-            StakeType::Stake,
+            stake_account.balance.inactive,
         )?;
 
-        excess_removed = (excess_removed + excess_removed_here)?;
+        excess_removed = (excess_removed + stake_account.balance.inactive)?;
         stake_observed_total = (stake_observed_total + account_balance)?;
     }
 
@@ -763,23 +733,26 @@ pub fn process_withdraw_inactive_stake(
             StakeType::Unstake,
         )?;
 
+        let withdraw_opts = WithdrawExcessOpts {
+            accounts: &accounts,
+            clock: &clock,
+            stake_history: &stake_history,
+            stake_account: unstake_account,
+        };
+        let stake_account = get_stake_account(&withdraw_opts, seed)?;
+
         // If validator's stake is at the beginning, try to withdraw.
-        if validator.entry.unstake_seeds.begin == seed {
-            let unstake_removed_here = withdraw_from_stake_account(
-                &WithdrawExcessOpts {
-                    accounts: &accounts,
-                    clock: &clock,
-                    rent: &rent,
-                    stake_history: &stake_history,
-                    stake_account: unstake_account,
-                },
+        if validator.entry.unstake_seeds.begin == seed
+            && stake_account.balance.inactive == stake_account.balance.total()
+        {
+            withdraw_inactive_sol(
+                &withdraw_opts,
                 seed,
                 lido.stake_authority_bump_seed,
-                StakeType::Unstake,
+                stake_account.balance.inactive,
             )?;
-            assert_eq!(account_balance, unstake_removed_here);
             validator.entry.unstake_seeds.begin += 1;
-            unstake_removed = (unstake_removed + unstake_removed_here)?;
+            unstake_removed = (unstake_removed + stake_account.balance.inactive)?;
         }
         unstake_observed_total = (unstake_observed_total + account_balance)?;
     }
@@ -883,8 +856,6 @@ pub fn process_withdraw(
     amount: StLamports,
     raw_accounts: &[AccountInfo],
 ) -> ProgramResult {
-    use std::ops::Add;
-
     let accounts = WithdrawAccountsInfo::try_from_slice(raw_accounts)?;
     let mut lido = deserialize_lido(program_id, accounts.lido)?;
     let clock = Clock::from_account_info(accounts.sysvar_clock)?;
