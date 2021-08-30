@@ -762,22 +762,37 @@ pub fn process_withdraw(
     let clock = Clock::from_account_info(accounts.sysvar_clock)?;
     lido.check_exchange_rate_last_epoch(&clock, "Withdraw")?;
 
-    // Should withdraw from the validator that has most stake
+    // We should withdraw from the validator that has the most effective stake.
+    // With effective here we mean "total in stake accounts" - "total in unstake
+    // accounts", regardless of whether the stake in those accounts is active or not.
     let validator = lido.validators.get(accounts.validator_vote_account.key)?;
 
-    let validator_staked_balance = (validator.entry.stake_accounts_balance
-        - validator.entry.unstake_accounts_balance)
-        .expect("Can't unstake more than the staked total.");
-    for val in lido.validators.entries.iter() {
-        if val.entry.stake_accounts_balance > validator_staked_balance {
-            msg!(
-                "Validator {} has more stake than validator {}",
-                validator.pubkey,
-                validator.pubkey,
-            );
-            return Err(LidoError::ValidatorWithMoreStakeExists.into());
-        }
+    // Confirm that there is no other validator with a higher balance that
+    // we could withdraw from. This alone is not sufficient to guarantee a uniform
+    // stake balance, but prevents things from becoming more unbalanced than
+    // necessary.
+    let maximum_stake_validator = lido
+        .validators
+        .entries
+        .iter()
+        .max_by_key(|pair| pair.entry.effective_stake_balance())
+        .ok_or(LidoError::NoActiveValidators)?;
+
+    // Note that we compare balances, not keys, because the maximum might not be unique.
+    if validator.entry.effective_stake_balance()
+        < maximum_stake_validator.entry.effective_stake_balance()
+    {
+        msg!(
+            "Refusing to withdraw from {}, who has {} stake, \
+            because {} has more stake: {}. Withdraw from there instead.",
+            validator.pubkey,
+            validator.entry.effective_stake_balance(),
+            maximum_stake_validator.pubkey,
+            maximum_stake_validator.entry.effective_stake_balance(),
+        );
+        return Err(LidoError::ValidatorWithMoreStakeExists.into());
     }
+
     let (stake_account, _) = validator.find_stake_account_address(
         program_id,
         accounts.lido.key,

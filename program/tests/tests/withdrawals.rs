@@ -59,8 +59,15 @@ impl WithdrawContext {
     }
 
     async fn try_withdraw(&mut self, amount: StLamports) -> transport::Result<Pubkey> {
+        let vote_account = self.context.validator.as_ref().unwrap().vote_account;
         self.context
-            .try_withdraw(&self.user, self.token_addr, amount, self.stake_account)
+            .try_withdraw(
+                &self.user,
+                self.token_addr,
+                amount,
+                vote_account,
+                self.stake_account,
+            )
             .await
     }
 }
@@ -223,27 +230,117 @@ async fn test_withdrawal_result() {
 }
 
 #[tokio::test]
-async fn test_withdrawal_from_different_validator() {
-    let mut context = Context::new_with_maintainer_and_validator().await;
-    let amount = Lamports(100_000_000_000);
-    let validator = context.validator.take().unwrap();
-    let other_validator = context.add_validator().await;
+async fn test_withdraw_fails_if_validator_with_more_stake_exists() {
+    let mut context = Context::new_with_maintainer().await;
+    let validator_1 = context.add_validator().await;
+    let validator_2 = context.add_validator().await;
 
-    let (user, token_addr) = context.deposit(amount).await;
-    let stake_account = context
-        .stake_deposit(validator.vote_account, StakeDeposit::Append, amount)
+    let (user, token_addr) = context.deposit(Lamports(100_000_000_000)).await;
+
+    let stake_account_1 = context
+        .stake_deposit(
+            validator_1.vote_account,
+            StakeDeposit::Append,
+            Lamports(40_000_000_000),
+        )
         .await;
-    // Set the newly created validator as the default `context` one.
-    context.validator = Some(other_validator);
+    let stake_account_2 = context
+        .stake_deposit(
+            validator_2.vote_account,
+            StakeDeposit::Append,
+            Lamports(60_000_000_000),
+        )
+        .await;
 
+    // Wait for the stake accounts to become active.
     let epoch_schedule = context.context.genesis_config().epoch_schedule;
     let start_slot = epoch_schedule.first_normal_slot;
-
     context.context.warp_to_slot(start_slot).unwrap();
     context.update_exchange_rate().await;
 
+    // We should not be allowed to withdraw from validator 1, because validator 2 has more stake.
     let split_stake_account = context
-        .try_withdraw(&user, token_addr, StLamports(1_000_000_000), stake_account)
+        .try_withdraw(
+            &user,
+            token_addr,
+            StLamports(1_000_000_000),
+            validator_1.vote_account,
+            stake_account_1,
+        )
         .await;
+
     assert_solido_error!(split_stake_account, LidoError::ValidatorWithMoreStakeExists);
+
+    // But we should be allowed to withdraw from validator 2.
+    context
+        .withdraw(
+            &user,
+            token_addr,
+            StLamports(1_000_000_000),
+            validator_2.vote_account,
+            stake_account_2,
+        )
+        .await;
+}
+
+#[tokio::test]
+async fn test_withdraw_enforces_picking_most_stake_validator_in_presence_of_unstake_accounts() {
+    let mut context = Context::new_with_maintainer().await;
+    let validator_1 = context.add_validator().await;
+    let validator_2 = context.add_validator().await;
+
+    let (user, token_addr) = context.deposit(Lamports(100_000_000_000)).await;
+
+    // Prepare two stake accounts, such that validator 1 has the most stake.
+    let stake_account_1 = context
+        .stake_deposit(
+            validator_1.vote_account,
+            StakeDeposit::Append,
+            Lamports(60_000_000_000),
+        )
+        .await;
+    let stake_account_2 = context
+        .stake_deposit(
+            validator_2.vote_account,
+            StakeDeposit::Append,
+            Lamports(40_000_000_000),
+        )
+        .await;
+
+    // Wait for the stake to become active, so we can withdraw.
+    let epoch_schedule = context.context.genesis_config().epoch_schedule;
+    let start_slot = epoch_schedule.first_normal_slot;
+    context.context.warp_to_slot(start_slot).unwrap();
+    context.update_exchange_rate().await;
+
+    // Then unstake from validator 1. Now the effective stake is 30 SOL for validator 1,
+    // and 40 SOL for validator 2, even though validator 1 has a higher stake accounts
+    // balance.
+    context
+        .unstake(validator_1.vote_account, Lamports(30_000_000_000))
+        .await;
+
+    // Withdrawing from validator 1 should fail.
+    let split_stake_account = context
+        .try_withdraw(
+            &user,
+            token_addr,
+            StLamports(1_000_000_000),
+            validator_1.vote_account,
+            stake_account_1,
+        )
+        .await;
+
+    assert_solido_error!(split_stake_account, LidoError::ValidatorWithMoreStakeExists);
+
+    // Withdrawing from validator 2 should succeed.
+    context
+        .withdraw(
+            &user,
+            token_addr,
+            StLamports(1_000_000_000),
+            validator_2.vote_account,
+            stake_account_2,
+        )
+        .await;
 }
