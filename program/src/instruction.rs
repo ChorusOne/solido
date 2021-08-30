@@ -373,7 +373,7 @@ accounts_struct! {
         // Destination stake account is the oldest unstake stake account that will
         // receive the split of the funds. Determined by the program-derived
         // stake account for the given validator, with seed `unstake_seeds.end`.
-        pub destination_stake_account {
+        pub destination_unstake_account {
             is_signer: false,
             // Is writable due to the first two instructions from split.
             is_writable: true,

@@ -426,7 +426,7 @@ pub fn process_unstake(
         &lido,
         &SplitStakeAccounts {
             source_stake_account: accounts.source_stake_account,
-            destination_stake_account: accounts.destination_stake_account,
+            destination_stake_account: accounts.destination_unstake_account,
             authority: accounts.stake_authority,
             system_program: accounts.system_program,
             stake_program: accounts.stake_program,
@@ -436,7 +436,7 @@ pub fn process_unstake(
     )?;
 
     let deactivate_stake_instruction = solana_program::stake::instruction::deactivate_stake(
-        accounts.destination_stake_account.key,
+        accounts.destination_unstake_account.key,
         accounts.stake_authority.key,
     );
 
@@ -446,7 +446,7 @@ pub fn process_unstake(
     invoke_signed(
         &deactivate_stake_instruction,
         &[
-            accounts.destination_stake_account.clone(),
+            accounts.destination_unstake_account.clone(),
             accounts.sysvar_clock.clone(),
             accounts.stake_authority.clone(),
             accounts.stake_program.clone(),

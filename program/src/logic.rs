@@ -417,12 +417,12 @@ pub fn check_unstake_accounts(
 
     let (destination_stake_account, destination_bump_seed) = validator
         .find_unstake_account_address(program_id, accounts.lido.key, destination_stake_seed);
-    if &destination_stake_account != accounts.destination_stake_account.key {
+    if &destination_stake_account != accounts.destination_unstake_account.key {
         msg!(
             "Destination stake account differs from the one calculated by seed {}, should be {}, is {}.",
             destination_stake_seed,
             destination_stake_account,
-            accounts.destination_stake_account.key
+            accounts.destination_unstake_account.key
         );
         return Err(LidoError::InvalidStakeAccount.into());
     }

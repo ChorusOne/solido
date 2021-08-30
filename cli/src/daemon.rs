@@ -53,7 +53,7 @@ struct MaintenanceMetrics {
     // TODO(#96#issuecomment-859388866): Track how much the daemon spends on transaction fees,
     // so we know how much SOL it costs to operate.
     // spent_lamports_total: u64
-    /// Number of times we performed `UnstakeFromInactive`.
+    /// Number of times we performed `UnstakeFromInactiveValidator`.
     unstake_from_inactive: u64,
 }
 
@@ -175,7 +175,7 @@ fn run_main_loop(
                         MaintenanceOutput::ClaimValidatorFee { .. } => {
                             metrics.transactions_claim_validator_fee += 1
                         }
-                        MaintenanceOutput::UnstakeFromInactive { .. } => {
+                        MaintenanceOutput::UnstakeFromInactiveValidator { .. } => {
                             metrics.unstake_from_inactive += 1
                         }
                     }

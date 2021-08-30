@@ -371,29 +371,6 @@ cli_opt_struct! {
 }
 
 cli_opt_struct! {
-    RemoveValidatorOpts {
-        /// Address of the Solido program.
-        #[clap(long, value_name = "address")]
-        solido_program_id: Pubkey,
-        /// Account that stores the data for this Solido instance.
-        #[clap(long, value_name = "address")]
-        solido_address: Pubkey,
-
-        /// Address of the validator vote account.
-        #[clap(long, value_name = "address")]
-        validator_vote_account: Pubkey,
-
-        /// Multisig instance.
-        #[clap(long, value_name = "address")]
-        multisig_address: Pubkey,
-
-        /// Address of the Multisig program.
-        #[clap(long)]
-        multisig_program_id: Pubkey,
-    }
-}
-
-cli_opt_struct! {
     DeactivateValidatorOpts {
         /// Address of the Solido program.
         #[clap(long, value_name = "address")]
