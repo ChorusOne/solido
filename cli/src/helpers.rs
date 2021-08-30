@@ -456,7 +456,12 @@ impl fmt::Display for ShowSolidoOutput {
             .iter()
             .zip(&LamportsHistogram::BUCKET_UPPER_BOUNDS)
         {
-            writeln!(f, "  Number of deposits ≤ {}: {}", upper_bound, count)?;
+            writeln!(
+                f,
+                "  Number of deposits ≤ {:>25}: {}",
+                format!("{}", upper_bound),
+                count
+            )?;
         }
 
         writeln!(
@@ -469,22 +474,48 @@ impl fmt::Display for ShowSolidoOutput {
             writeln!(
                 f,
                 "\n  - \
-                Vote account:  {}\n    \
-                Fee address:   {}\n    \
-                Unclaimed fee: {}\n    \
-                Stake:         {}\n    \
-                Stake accounts (seed, address):",
+                Vote account:              {}\n    \
+                Fee address:               {}\n    \
+                Unclaimed fee:             {}\n    \
+                Stake in all accounts:     {}\n    \
+                Stake in stake accounts:   {}\n    \
+                Stake in unstake accounts: {}",
                 pe.pubkey,
                 pe.entry.fee_address,
                 pe.entry.fee_credit,
                 pe.entry.stake_accounts_balance,
+                pe.entry.effective_stake_balance(),
+                pe.entry.unstake_accounts_balance,
             )?;
+
+            writeln!(f, "    Stake accounts (seed, address):")?;
+            if pe.entry.stake_seeds.begin == pe.entry.stake_seeds.end {
+                writeln!(f, "      This validator has no stake accounts.")?;
+            };
             for seed in &pe.entry.stake_seeds {
                 writeln!(
                     f,
                     "      - {}: {}",
                     seed,
                     pe.find_stake_account_address(
+                        &self.solido_program_id,
+                        &self.solido_address,
+                        seed
+                    )
+                    .0
+                )?;
+            }
+
+            writeln!(f, "    Unstake accounts (seed, address):")?;
+            if pe.entry.unstake_seeds.begin == pe.entry.unstake_seeds.end {
+                writeln!(f, "      This validator has no unstake accounts.")?;
+            };
+            for seed in &pe.entry.unstake_seeds {
+                writeln!(
+                    f,
+                    "      - {}: {}",
+                    seed,
+                    pe.find_unstake_account_address(
                         &self.solido_program_id,
                         &self.solido_address,
                         seed
