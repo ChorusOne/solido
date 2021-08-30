@@ -705,6 +705,9 @@ impl Validator {
     pub fn has_stake_accounts(&self) -> bool {
         self.stake_seeds.begin != self.stake_seeds.end
     }
+    pub fn has_unstake_accounts(&self) -> bool {
+        self.unstake_seeds.begin != self.unstake_seeds.end
+    }
 
     pub fn check_can_be_removed(&self) -> Result<(), LidoError> {
         if self.active {

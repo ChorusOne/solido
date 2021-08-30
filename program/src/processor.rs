@@ -3,6 +3,8 @@
 
 //! Program state processor
 
+use std::slice::Iter;
+
 use crate::{
     error::LidoError,
     instruction::{
@@ -519,52 +521,82 @@ pub fn process_update_exchange_rate(
     lido.save(accounts.lido)
 }
 
+pub enum StakeType {
+    Stake,
+    Unstake,
+}
+
+impl std::fmt::Display for StakeType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            StakeType::Stake => write!(f, "stake"),
+            StakeType::Unstake => write!(f, "unstake"),
+        }
+    }
+}
+
+pub struct WithdrawExcessOpts<'a, 'b> {
+    accounts: &'a WithdrawInactiveStakeInfo<'a, 'b>,
+    clock: &'a Clock,
+    rent: &'a Rent,
+    stake_history: &'a StakeHistory,
+    stake_account: &'a AccountInfo<'b>,
+}
+
 /// If a stake account contains more inactive SOL than needed to make it rent-exempt,
 /// withdraw the excess back to the reserve. Returns how much SOL was withdrawn.
-pub fn withdraw_excess_inactive_sol<'a, 'b>(
-    accounts: &WithdrawInactiveStakeInfo<'a, 'b>,
-    clock: &Clock,
-    rent: &Rent,
-    stake_history: &StakeHistory,
-    stake_account: &AccountInfo<'b>,
+/// When withdrawing from an unstake account, try to withdraw all the balance,
+/// leaving the stake account empty.
+pub fn withdraw_inactive_sol(
+    withdraw_excess_opts: &WithdrawExcessOpts,
     stake_account_seed: u64,
     stake_authority_bump_seed: u8,
+    stake_type: StakeType,
 ) -> Result<Lamports, ProgramError> {
-    let stake_account_rent = Lamports(rent.minimum_balance(stake_account.data_len()));
-    let stake = deserialize_stake_account(&stake_account.data.borrow())?;
+    let stake = deserialize_stake_account(&withdraw_excess_opts.stake_account.data.borrow())?;
     let stake_info = StakeAccount::from_delegated_account(
-        Lamports(stake_account.lamports()),
+        Lamports(withdraw_excess_opts.stake_account.lamports()),
         &stake,
-        clock,
-        stake_history,
+        withdraw_excess_opts.clock,
+        withdraw_excess_opts.stake_history,
         stake_account_seed,
     );
-    let excess_balance = Lamports(
-        stake_info
-            .balance
-            .inactive
-            .0
-            .saturating_sub(stake_account_rent.0),
-    );
+    let excess_balance = match stake_type {
+        StakeType::Stake => {
+            let stake_account_rent = Lamports(
+                withdraw_excess_opts
+                    .rent
+                    .minimum_balance(withdraw_excess_opts.stake_account.data_len()),
+            );
+            Lamports(
+                stake_info
+                    .balance
+                    .inactive
+                    .0
+                    .saturating_sub(stake_account_rent.0),
+            )
+        }
+        StakeType::Unstake => Lamports(stake_info.balance.inactive.0),
+    };
     if excess_balance > Lamports(0) {
         let withdraw_instruction = StakeAccount::stake_account_withdraw(
             excess_balance,
-            stake_account.key,
-            accounts.reserve.key,
-            accounts.stake_authority.key,
+            withdraw_excess_opts.stake_account.key,
+            withdraw_excess_opts.accounts.reserve.key,
+            withdraw_excess_opts.accounts.stake_authority.key,
         );
         invoke_signed(
             &withdraw_instruction,
             &[
-                stake_account.clone(),
-                accounts.reserve.clone(),
-                accounts.sysvar_clock.clone(),
-                accounts.sysvar_stake_history.clone(),
-                accounts.stake_authority.clone(),
-                accounts.stake_program.clone(),
+                withdraw_excess_opts.stake_account.clone(),
+                withdraw_excess_opts.accounts.reserve.clone(),
+                withdraw_excess_opts.accounts.sysvar_clock.clone(),
+                withdraw_excess_opts.accounts.sysvar_stake_history.clone(),
+                withdraw_excess_opts.accounts.stake_authority.clone(),
+                withdraw_excess_opts.accounts.stake_program.clone(),
             ],
             &[&[
-                accounts.lido.key.as_ref(),
+                withdraw_excess_opts.accounts.lido.key.as_ref(),
                 STAKE_AUTHORITY,
                 &[stake_authority_bump_seed],
             ]],
@@ -579,8 +611,42 @@ pub fn withdraw_excess_inactive_sol<'a, 'b>(
     Ok(excess_balance)
 }
 
-/// Recover any inactive balance from the validator's stake accounts to the
-/// reserve account.
+pub fn compare_stake_account<'a, 'b>(
+    account_iter: &'a mut Iter<AccountInfo<'b>>,
+    n_unstake_accounts: usize,
+    n_stake_accounts: usize,
+    seed: u64,
+    stake_account_address: &Pubkey,
+    accounts: &'a WithdrawInactiveStakeInfo<'a, 'b>,
+    stake_type: StakeType,
+) -> Result<&'a AccountInfo<'b>, LidoError> {
+    match account_iter.next() {
+        None => {
+            msg!(
+                "Not enough {} accounts provided, got {} but expected {}.",
+                stake_type,
+                accounts.stake_accounts.len() - n_unstake_accounts as usize,
+                n_stake_accounts,
+            );
+            msg!("Account at seed {} is missing.", seed);
+            Err(LidoError::InvalidStakeAccount)
+        }
+        Some(account) if account.key != stake_account_address => {
+            msg!(
+                "Wrong {} account provided for seed {}: expected {} but got {}.",
+                stake_type,
+                seed,
+                stake_account_address,
+                account.key,
+            );
+            Err(LidoError::InvalidStakeAccount)
+        }
+        Some(account) => Ok(account),
+    }
+}
+
+/// Recover any inactive balance from the validator's stake/unstake accounts to
+/// the reserve account.
 /// Updates the validator's balance.
 /// This function is permissionless and can be called by anyone.
 pub fn process_withdraw_inactive_stake(
@@ -604,34 +670,23 @@ pub fn process_withdraw_inactive_stake(
     let mut observed_total = Lamports(0);
     let mut excess_removed = Lamports(0);
     let mut stake_accounts = accounts.stake_accounts.iter();
-    let begin = validator.entry.stake_seeds.begin;
-    let end = validator.entry.stake_seeds.end;
+    let n_stake_accounts = validator.entry.stake_seeds.end - validator.entry.stake_seeds.begin;
+    let n_unstake_accounts =
+        validator.entry.unstake_seeds.end - validator.entry.unstake_seeds.begin;
 
     // Visit the stake accounts one by one, and check how much SOL is in there.
     for seed in &validator.entry.stake_seeds {
         let (stake_account_address, _bump_seed) =
             validator.find_stake_account_address(program_id, accounts.lido.key, seed);
-        let stake_account = match stake_accounts.next() {
-            None => {
-                msg!(
-                    "Not enough stake accounts provided, got {} but expected {}.",
-                    accounts.stake_accounts.len(),
-                    end - begin,
-                );
-                msg!("Account at seed {} is missing.", seed);
-                return Err(LidoError::InvalidStakeAccount.into());
-            }
-            Some(account) if account.key != &stake_account_address => {
-                msg!(
-                    "Wrong stake account provided for seed {}: expected {} but got {}.",
-                    seed,
-                    stake_account_address,
-                    account.key,
-                );
-                return Err(LidoError::InvalidStakeAccount.into());
-            }
-            Some(account) => account,
-        };
+        let stake_account = compare_stake_account(
+            &mut stake_accounts,
+            n_unstake_accounts as usize,
+            n_stake_accounts as usize,
+            seed,
+            &stake_account_address,
+            &accounts,
+            StakeType::Stake,
+        )?;
         let account_balance = Lamports(**stake_account.lamports.borrow());
         msg!(
             "Stake account at seed {} ({}) contains {}.",
@@ -640,28 +695,31 @@ pub fn process_withdraw_inactive_stake(
             account_balance
         );
 
-        let excess_removed_here = withdraw_excess_inactive_sol(
-            &accounts,
-            &clock,
-            &rent,
-            &stake_history,
-            stake_account,
+        let excess_removed_here = withdraw_inactive_sol(
+            &WithdrawExcessOpts {
+                accounts: &accounts,
+                clock: &clock,
+                rent: &rent,
+                stake_history: &stake_history,
+                stake_account,
+            },
             seed,
             lido.stake_authority_bump_seed,
+            StakeType::Stake,
         )?;
 
         excess_removed = (excess_removed + excess_removed_here)?;
         observed_total = (observed_total + account_balance)?;
     }
 
-    if observed_total < validator.entry.stake_accounts_balance {
+    if observed_total < validator.entry.effective_stake_balance() {
         // Solana has no slashing at the time of writing, and only Solido can
         // withdraw from these accounts, so we should not observe a decrease in
         // balance.
         msg!(
             "Observed balance of {} is less than tracked balance of {}.",
             observed_total,
-            validator.entry.stake_accounts_balance
+            validator.entry.effective_stake_balance()
         );
         msg!("This should not happen, aborting ...");
         return Err(LidoError::ValidatorBalanceDecreased.into());
@@ -669,15 +727,77 @@ pub fn process_withdraw_inactive_stake(
 
     // We tracked in `stake_accounts_balance` what we put in there ourselves, so
     // the excess is a donation by some joker.
-    let donation = (observed_total - validator.entry.stake_accounts_balance)
+    let donation = (observed_total - validator.entry.effective_stake_balance())
         .expect("Does not underflow because observed_total >= stake_accounts_balance.");
     msg!("{} in donations observed.", donation);
 
     // Store the new total. If we withdrew any inactive stake back to the
     // reserve, that is now no longer part of the stake accounts, so subtract
     // that.
-    validator.entry.stake_accounts_balance =
-        (observed_total - excess_removed).expect("Does not underflow, because excess <= total.");
+    validator.entry.stake_accounts_balance = (validator.entry.stake_accounts_balance
+        - excess_removed)
+        .expect("Does not underflow, because excess <= total.");
+
+    // Try to withdraw from unstake accounts.
+    let mut unstake_removed = Lamports(0);
+    observed_total = Lamports(0);
+    let mut bump_seed_inc = 0;
+    let mut should_bump_seed = true;
+    for seed in &validator.entry.unstake_seeds {
+        let (unstake_account_address, _bump_seed) =
+            validator.find_unstake_account_address(program_id, accounts.lido.key, seed);
+
+        let unstake_account = compare_stake_account(
+            &mut stake_accounts,
+            n_unstake_accounts as usize,
+            n_stake_accounts as usize,
+            seed,
+            &unstake_account_address,
+            &accounts,
+            StakeType::Unstake,
+        )?;
+        let account_balance = Lamports(**unstake_account.lamports.borrow());
+        msg!(
+            "Unstake account at seed {} ({}) contains {}.",
+            seed,
+            unstake_account.key,
+            account_balance
+        );
+
+        let unstake_removed_here = withdraw_inactive_sol(
+            &WithdrawExcessOpts {
+                accounts: &accounts,
+                clock: &clock,
+                rent: &rent,
+                stake_history: &stake_history,
+                stake_account: unstake_account,
+            },
+            seed,
+            lido.stake_authority_bump_seed,
+            StakeType::Unstake,
+        )?;
+        if should_bump_seed && unstake_removed_here == account_balance {
+            bump_seed_inc += 1;
+        } else {
+            should_bump_seed = false;
+        }
+
+        unstake_removed = (unstake_removed + unstake_removed_here)?;
+        observed_total = (observed_total + account_balance)?;
+    }
+
+    if observed_total < validator.entry.unstake_accounts_balance {
+        msg!(
+            "Observed balance of {} is less than tracked balance of {}.",
+            observed_total,
+            validator.entry.unstake_accounts_balance
+        );
+        msg!("This should not happen, aborting ...");
+        return Err(LidoError::ValidatorBalanceDecreased.into());
+    }
+
+    // Bump unstake seed.
+    validator.entry.unstake_seeds.begin += n_unstake_accounts;
     lido.save(accounts.lido)
 }
 
