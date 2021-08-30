@@ -550,6 +550,9 @@ pub fn withdraw_inactive_sol(
     stake_authority_bump_seed: u8,
     amount: Lamports,
 ) -> Result<(), ProgramError> {
+    if amount == Lamports(0) {
+        return Ok(());
+    }
     let withdraw_instruction = StakeAccount::stake_account_withdraw(
         amount,
         withdraw_excess_opts.stake_account.key,
@@ -637,6 +640,7 @@ pub fn process_withdraw_inactive_stake(
     let mut lido = deserialize_lido(program_id, accounts.lido)?;
     let stake_history = StakeHistory::from_account_info(accounts.sysvar_stake_history)?;
     let clock = Clock::from_account_info(accounts.sysvar_clock)?;
+    let rent = Rent::from_account_info(accounts.sysvar_rent)?;
 
     // Confirm that the passed accounts are the ones configured in the state,
     // and confirm that they can receive stSOL.
@@ -662,7 +666,7 @@ pub fn process_withdraw_inactive_stake(
         accounts.stake_accounts.split_at(n_stake_accounts as usize);
 
     // Visit the stake accounts one by one, and check how much SOL is in there.
-    for (seed, stake_account) in validator
+    for (seed, provided_stake_account) in validator
         .entry
         .stake_seeds
         .into_iter()
@@ -672,7 +676,7 @@ pub fn process_withdraw_inactive_stake(
             validator.find_stake_account_address(program_id, accounts.lido.key, seed);
         let account_balance = check_address_and_get_balance(
             &stake_account_address,
-            stake_account,
+            provided_stake_account,
             seed,
             StakeType::Stake,
         )?;
@@ -680,18 +684,17 @@ pub fn process_withdraw_inactive_stake(
             accounts: &accounts,
             clock: &clock,
             stake_history: &stake_history,
-            stake_account,
+            stake_account: provided_stake_account,
         };
+
         let stake_account = get_stake_account(&withdraw_opts, seed)?;
+        let amount = (stake_account.balance.inactive
+            - Lamports(rent.minimum_balance(provided_stake_account.data_len())))
+        .expect("Should have at least the payed rent");
 
-        withdraw_inactive_sol(
-            &withdraw_opts,
-            seed,
-            lido.stake_authority_bump_seed,
-            stake_account.balance.inactive,
-        )?;
+        withdraw_inactive_sol(&withdraw_opts, seed, lido.stake_authority_bump_seed, amount)?;
 
-        excess_removed = (excess_removed + stake_account.balance.inactive)?;
+        excess_removed = (excess_removed + amount)?;
         stake_observed_total = (stake_observed_total + account_balance)?;
     }
 
