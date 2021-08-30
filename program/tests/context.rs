@@ -779,16 +779,18 @@ impl Context {
             .expect("Failed to call Deposit on Solido instance.")
     }
 
-    /// Withdraw from the validator at `self.validator`.
+    /// Withdraw from the given validator and stake account.
     pub async fn try_withdraw(
         &mut self,
         user: &Keypair,
         st_sol_account: Pubkey,
         amount: StLamports,
+        validator_vote_account: Pubkey,
         source_stake_account: Pubkey,
     ) -> transport::Result<Pubkey> {
         // Where the new stake will live.
         let new_stake = self.deterministic_keypair.new_keypair();
+
         send_transaction(
             &mut self.context,
             &mut self.nonce,
@@ -799,7 +801,7 @@ impl Context {
                     st_sol_mint: self.st_sol_mint,
                     st_sol_account_owner: user.pubkey(),
                     st_sol_account,
-                    validator_vote_account: self.validator.as_ref().unwrap().vote_account,
+                    validator_vote_account,
                     source_stake_account,
                     destination_stake_account: new_stake.pubkey(),
                     stake_authority: self.stake_authority,
@@ -812,17 +814,24 @@ impl Context {
         Ok(new_stake.pubkey())
     }
 
-    /// Withdraw from the validator at `self.validator`.
+    /// Withdraw from the given validator and vote account.
     pub async fn withdraw(
         &mut self,
         user: &Keypair,
         st_sol_account: Pubkey,
         amount: StLamports,
+        validator_vote_account: Pubkey,
         source_stake_account: Pubkey,
     ) -> Pubkey {
-        self.try_withdraw(user, st_sol_account, amount, source_stake_account)
-            .await
-            .expect("Failed to call Withdraw on Solido instance.")
+        self.try_withdraw(
+            user,
+            st_sol_account,
+            amount,
+            validator_vote_account,
+            source_stake_account,
+        )
+        .await
+        .expect("Failed to call Withdraw on Solido instance.")
     }
 
     /// Stake the given amount to the given validator, return the resulting stake account.
@@ -897,14 +906,15 @@ impl Context {
             .expect("Failed to call StakeDeposit on Solido instance.")
     }
 
-    /// Unstake from the validator at `self.validator`.
-    pub async fn try_unstake(&mut self, amount: Lamports) -> transport::Result<()> {
+    /// Try to unstake from the validator.
+    pub async fn try_unstake(
+        &mut self,
+        validator_vote_account: Pubkey,
+        amount: Lamports,
+    ) -> transport::Result<()> {
         // Where the new stake will live.
         let solido = self.get_solido().await;
-        let validator = solido
-            .validators
-            .get(&self.validator.as_ref().unwrap().vote_account)
-            .unwrap();
+        let validator = solido.validators.get(&validator_vote_account).unwrap();
 
         let (source_stake_account, _) = validator.find_stake_account_address(
             &id(),
@@ -924,7 +934,7 @@ impl Context {
                 &id(),
                 &instruction::UnstakeAccountsMeta {
                     lido: self.solido.pubkey(),
-                    validator_vote_account: self.validator.as_ref().unwrap().vote_account,
+                    validator_vote_account,
                     source_stake_account,
                     destination_stake_account,
                     stake_authority: self.stake_authority,
@@ -939,9 +949,9 @@ impl Context {
         Ok(())
     }
 
-    /// Withdraw from the validator at `self.validator`.
-    pub async fn unstake(&mut self, amount: Lamports) {
-        self.try_unstake(amount)
+    /// Unstake from the validator.
+    pub async fn unstake(&mut self, validator_vote_account: Pubkey, amount: Lamports) {
+        self.try_unstake(validator_vote_account, amount)
             .await
             .expect("Failed to call Unstake on Solido instance.");
     }
