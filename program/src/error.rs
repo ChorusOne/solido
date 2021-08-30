@@ -37,7 +37,7 @@ pub enum LidoError {
     #[error("InvalidFeeAmount")]
     InvalidFeeAmount = 7,
     /// Number of maximum validators reached
-    #[error("InvalidFeeAmount")]
+    #[error("MaximumNumberOfAccountsExceeded")]
     MaximumNumberOfAccountsExceeded = 8,
     /// The size of the account for the Solido state does not match `max_validators`.
     #[error("UnexpectedMaxValidators")]
@@ -65,7 +65,7 @@ pub enum LidoError {
     #[error("ValidatorCreditChanged")]
     ValidatorCreditChanged = 16,
     /// Fee account should be the same as the Stake pool fee'
-    #[error("ValidatorCreditChanged")]
+    #[error("InvalidFeeAccount")]
     InvalidFeeAccount = 17,
     /// One of the fee recipients is invalid
     #[error("InvalidFeeRecipient")]

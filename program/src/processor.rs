@@ -64,6 +64,18 @@ pub fn process_initialize(
     let accounts = InitializeAccountsInfo::try_from_slice(accounts_raw)?;
     let rent = &Rent::from_account_info(accounts.sysvar_rent)?;
     check_rent_exempt(rent, accounts.lido, "Solido account")?;
+    // MEDIUM
+    // There's no check on the `reserve_account` to make sure it's
+    // the address corresponding to `find_program_address([lido.key, RESERVE_ACCOUNT])`
+    // This means someone could instantiate a lido, have people deposit, and
+    // steal all the funds from the reserve immediately because they have the
+    // key to the reserve.
+    // As an alternative, you could have the reserve be an undelegated stake
+    // account. You can `system_instruction::transfer` into those no problem,
+    // and there are some transparent stake / withdraw authorities for moving
+    // funds out.
+    // As another note, are you planning on storing data on the reserve account
+    // at some point?
     check_rent_exempt(rent, accounts.reserve_account, "Reserve account")?;
 
     let is_uninitialized = accounts.lido.data.borrow()[..LIDO_CONSTANT_SIZE]
@@ -119,6 +131,11 @@ pub fn process_initialize(
         stake_authority_bump_seed: deposit_bump_seed,
         rewards_withdraw_authority_bump_seed,
         reward_distribution,
+        // LOW
+        // reward distribution is just accepted as it is. is there any risk with
+        // setting `st_sol_appreciation` from the outside before init?
+        // also, you could run a risk of overflowing, but that's more of a
+        // manager-error than anything else
         fee_recipients: FeeRecipients {
             treasury_account: *accounts.treasury_account.key,
             developer_account: *accounts.developer_account.key,
@@ -180,6 +197,8 @@ pub fn process_deposit(
         st_sol_amount
     );
 
+    // Is there a reason to not update the amount of `st_sol_supply` and `sol_balance`
+    // in the exchange rate?
     lido.metrics.deposit_amount.observe(amount)?;
     lido.save(accounts.lido)
 }
@@ -460,7 +479,16 @@ pub fn process_unstake(
         .validators
         .get_mut(accounts.validator_vote_account.key)?;
     // Increase the `unstake_accounts_balance` by `amount`.
+    // Note: this isn't a security bug, but the logic can be quite confusing.
+    // `validator.entry` represents more than one active stake account, but in this
+    // logic it's as if there's only one. I was very confused until I got to
+    // the `MergeStake` instruction.
     if validator.entry.active {
+        // LOW
+        // Should this be `accounts.source_stake_account.lamports() - amount` instead?
+        // Otherwise, if there are a lot of validator stake accounts and unstakes,
+        // you could actually drain an individual validator stake account to below
+        // `MINIMUM_STAKE_ACCOUNT_BALANCE`
         if (validator.entry.stake_accounts_balance - amount)? < MINIMUM_STAKE_ACCOUNT_BALANCE {
             msg!(
             "Unstake operation will leave the active validator with {}, less than the minimum balance {}.\\
@@ -471,6 +499,10 @@ pub fn process_unstake(
             return Err(LidoError::InvalidAmount.into());
         }
     } else {
+        // With more than one stake account on a validator, it's never possible
+        // to drain everything, since `full_amount` will always be greater than
+        // `source_stake_account.lamports()`, but it seems like `MergeStake`
+        // is meant to condense everything regularly.
         let full_amount = validator.entry.effective_stake_balance();
         if full_amount != amount {
             msg!(
@@ -492,6 +524,15 @@ pub fn process_unstake(
     lido.save(accounts.lido)
 }
 
+// nit: I'm probably missing some context, but it seems like you would be better off
+// simply updating these fields as they get changed and getting rid of this and
+// privilege `WithdrawInactiveStake` to do the accounting.
+// If this is called before all of the `WithdrawInactiveStake` instructions,
+// for that whole epoch, withdrawers will not get enough SOL back, and depositors
+// will get too many stSOL tokens.
+// For example, the stake pool program has a similar instruction, but in there,
+// it's actually checking all of the stake account balances to find out how much
+// SOL it has under management.
 pub fn process_update_exchange_rate(
     program_id: &Pubkey,
     raw_accounts: &[AccountInfo],
@@ -654,6 +695,13 @@ pub fn process_withdraw_inactive_stake(
         observed_total = (observed_total + account_balance)?;
     }
 
+    // LOW
+    // Since this is looking at the active validator stake accounts, and
+    // `stake_accounts_balance` also contains the balances of unstaking accounts,
+    // how does this work after an unstake instruction?
+    //
+    // Do you need to pass in all of the unstake accounts too in order to get
+    // the full balance?
     if observed_total < validator.entry.stake_accounts_balance {
         // Solana has no slashing at the time of writing, and only Solido can
         // withdraw from these accounts, so we should not observe a decrease in
@@ -669,6 +717,7 @@ pub fn process_withdraw_inactive_stake(
 
     // We tracked in `stake_accounts_balance` what we put in there ourselves, so
     // the excess is a donation by some joker.
+    // ^ this made me laugh
     let donation = (observed_total - validator.entry.stake_accounts_balance)
         .expect("Does not underflow because observed_total >= stake_accounts_balance.");
     msg!("{} in donations observed.", donation);
@@ -711,6 +760,12 @@ pub fn process_collect_validator_fee(
         accounts.rewards_withdraw_authority,
     )?;
 
+    // LOW
+    // Be sure to check that `validator_vote_account` is actually part of
+    // Lido! I don't think there's anything exploitable here, but if someone
+    // created a vote account and gave withdraw authority to Lido, and called
+    // this with their vote account, it would succeed.  If there's a change to
+    // the accounting, perhaps this could get exploited later.
     let vote_account_rent = rent.minimum_balance(accounts.validator_vote_account.data_len());
     // Subtract the rent from the vote account, we should remove those only once
     // validators are removed.
@@ -793,6 +848,10 @@ pub fn process_withdraw(
         return Err(LidoError::ValidatorWithMoreStakeExists.into());
     }
 
+    // Nit: this also creates the same kind of confusion as the unstake instruction,
+    // where it only uses `stake_seeds.begin`, so if there are multiple stake
+    // accounts, we have to merge before performing a withdraw, which may
+    // be confusing.
     let (stake_account, _) = validator.find_stake_account_address(
         program_id,
         accounts.lido.key,
@@ -817,6 +876,7 @@ pub fn process_withdraw(
     // at large balances, and in that case the constant is negligible, but the
     // constant does ensure that we can reach the minimum in a finite number of
     // withdrawals.
+    // Very smart!
     let max_withdraw_amount = (source_balance
         * Rational {
             numerator: 1,

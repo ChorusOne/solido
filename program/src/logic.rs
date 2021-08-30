@@ -67,6 +67,11 @@ pub(crate) fn check_mint(
         msg!("Mint should have an authority.");
         return Err(LidoError::InvalidMint.into());
     }
+    // LOW
+    // You may also want to check if there's an existing freeze authority to
+    // avoid any nasty surprises
+    // Additionally, check that `mint` is owned by the expected token program,
+    // probably `spl_token::id()`
     Ok(())
 }
 
@@ -78,6 +83,13 @@ pub fn get_reserve_available_balance(
     rent: &Rent,
     reserve_account: &AccountInfo,
 ) -> Result<Lamports, LidoError> {
+    // LOW
+    // There's a strange attack that can happen here -- if someone has instantiated
+    // a Lido with a reserve that has data allocated, its rent-exempt reserve will
+    // actually be bigger than `rent.minimum_balance(0)`, which means that this
+    // calculation can be wrong.  You can do `rent.minimum_balance(reserve_account.data_len())`
+    // to be totally safe.  Either way, you don't need to worry about a rent
+    // exemption for an account with 0 size.
     let minimum_balance = Lamports(rent.minimum_balance(0));
     match Lamports(reserve_account.lamports()) - minimum_balance {
         Ok(balance) => Ok(balance),
@@ -200,6 +212,9 @@ pub fn mint_st_sol_to<'a>(
     // use those.
     let mint_to_signers = [];
 
+    // nit: The spl_token instruction creator saves you here by checking
+    // `spl_token_program.key == spl_token::id()`, but to be safe, be sure to
+    // check for yourself that `spl_token_program.key` is the expected key.
     let instruction = spl_token::instruction::mint_to(
         spl_token_program.key,
         st_sol_mint.key,
@@ -237,6 +252,14 @@ pub fn burn_st_sol<'a, 'b>(
         spl_token::state::Account::unpack_from_slice(&accounts.st_sol_account.data.borrow())?;
 
     // Check if the user is the account owner.
+    // LOW
+    // This is a bit of an anti-pattern with SPL token. Typically, to
+    // be safe, we encourage people to approve a certain amount of their SPL
+    // tokens to a delegate, and then sign with that.  That way, if you're
+    // interacting with a program, you know that the program can only take the
+    // amount delegated, and nothing more.  When you sign with the owner, the
+    // program could take all of your tokens. So instead of forcing a signature from
+    // the owner, you want to allow a delegate to sign.
     if &st_sol_account.owner != accounts.st_sol_account_owner.key {
         msg!(
             "Token is owned by {}, but provided owner is {}.",
@@ -249,6 +272,8 @@ pub fn burn_st_sol<'a, 'b>(
     // The SPL token program supports multisig-managed mints, but we do not
     // use those.
     let burn_signers = [];
+    // nit: The spl_token instruction creator saves you again here, but in general
+    // be sure to check that it's the expected token program!
     let instruction = spl_token::instruction::burn(
         accounts.spl_token.key,
         accounts.st_sol_account.key,

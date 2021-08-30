@@ -27,6 +27,11 @@ use crate::{
 };
 use crate::{REWARDS_WITHDRAW_AUTHORITY, VALIDATOR_STAKE_ACCOUNT, VALIDATOR_UNSTAKE_ACCOUNT};
 
+// Nit:
+// Since an account is initialized with 0'ed out data, you can't tell if an
+// account has been initialized or not if you're looking for a 0.  That's fine
+// because you look through all the bytes on init, but for simplicity, you could
+// make this `1` and only check for that on init.
 pub const LIDO_VERSION: u8 = 0;
 
 /// Size of a serialized `Lido` struct excluding validators and maintainers.
@@ -157,6 +162,11 @@ impl ExchangeRate {
         // The result is in Lamports, because the type system considers Rational
         // dimensionless, but in this case `rate` has dimensions stSOL/SOL, so
         // we need to re-wrap the result in the right type.
+        //
+        // LOW
+        // This is a user error, but immediately after earning any rewards, 1 lamport
+        // would result in 0 stSOL, and the program will happily take the user's
+        // lamport without giving anything in return.
         (amount * rate).map(|x| StLamports(x.0))
     }
 
@@ -259,6 +269,9 @@ impl Lido {
 
     /// Confirm that the given account is an SPL token account with our stSOL mint as mint.
     pub fn check_is_st_sol_account(&self, token_account_info: &AccountInfo) -> ProgramResult {
+        // LOW
+        // You can add an owner check on `token_account_info` to make sure it's
+        // actually owned by the token program.
         let token_account =
             match spl_token::state::Account::unpack_from_slice(&token_account_info.data.borrow()) {
                 Ok(account) => account,
@@ -305,6 +318,7 @@ impl Lido {
 
             return Err(LidoError::InvalidMaintainer.into());
         }
+
         Ok(())
     }
 

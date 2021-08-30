@@ -23,6 +23,12 @@ use solana_program::{instruction::Instruction, stake_history::StakeHistory};
 /// The sum of the four fields is equal to the SOL balance of the stake account.
 /// Note that a stake account can have a portion in `inactive` and a portion in
 /// `active`, with zero being activating or deactivating.
+///
+// Note: it is actually possible for a stake account to be in a "mixed" state due to
+// cluster-wide movement of stake. This doesn't happen too often
+// anymore, but it is technically possible for a stake to have :
+// * inactive, activating, and active balance
+// * inactive, active, and deactivating balance
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct StakeBalance {
     pub inactive: Lamports,
@@ -121,6 +127,7 @@ pub fn deserialize_stake_account(account_data: &[u8]) -> Result<Stake, ProgramEr
 
     // We read 196 bytes from the data, so check that up front, so that bounds
     // checks can be optimized away below.
+    // I thought this was 200 the whole time, thanks for calculating this!
     if data.len() < 196 {
         return Err(LidoError::InvalidStakeAccount.into());
     }
@@ -196,6 +203,8 @@ impl StakeAccount {
 
         // This toggle is a historical quirk in Solana and should always be set
         // to true. See also https://github.com/ChorusOne/solido/issues/184#issuecomment-861653316.
+        // Note: this has all finally been removed in 1.7, so you can get rid of it
+        // whenever all of the code is updated to the newest SDK.
         let fix_stake_deactivate = true;
 
         let (mut active_lamports, activating_lamports, deactivating_lamports) = stake
@@ -265,6 +274,7 @@ impl StakeAccount {
             return true;
         }
         // The voter pubkey and credits observed must match. Voter must be the same by assumption.
+        // Note: You can get rid of this soon, hooray!
         if self.credits_observed == merge_from.credits_observed {
             // Two activated stakes.
             if self.is_active() && merge_from.is_active() {
