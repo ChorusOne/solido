@@ -726,7 +726,7 @@ impl Validator {
         }
         if self.has_unstake_accounts() {
             msg!("Refusing to remove validator because it still has unstake accounts, withdraw them first.");
-            return Err(LidoError::ValidatorShouldHaveNoUnStakeAccounts);
+            return Err(LidoError::ValidatorShouldHaveNoUnstakeAccounts);
         }
         // If not, this is a bug.
         assert_eq!(self.stake_accounts_balance, Lamports(0));
