@@ -633,9 +633,6 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
-        const sysvar_clock = sysvar::clock::id(),
-        const sysvar_stake_history = sysvar::stake_history::id(),
-        const sysvar_stake_program = stake_program::program::id(),
         const sysvar_rent = sysvar::rent::id(),
     }
 }
