@@ -70,7 +70,10 @@ pub fn process_add_validator(program_id: &Pubkey, accounts_raw: &[AccountInfo]) 
 
 /// Remove a validator.
 ///
-/// TODO(#365): It should only be possible to remove validators that have no stake.
+/// This instruction is the final cleanup step in the validator removal process,
+/// and it is callable by anybody. Initiation of the removal (`DeactivateValidator`)
+/// is restricted to the manager, but once a validator is inactive, and there is
+/// no more stake delegated to it, removing it from the list can be done by anybody.
 pub fn process_remove_validator(
     program_id: &Pubkey,
     accounts_raw: &[AccountInfo],

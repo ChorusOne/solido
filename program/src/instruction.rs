@@ -651,16 +651,10 @@ accounts_struct! {
             is_signer: false,
             is_writable: true,
         },
-        pub manager {
-            is_signer: true,
-            is_writable: false,
-        },
         pub validator_vote_account_to_remove {
             is_signer: false,
             is_writable: false,
         },
-        const sysvar_clock = sysvar::clock::id(),
-        const sysvar_stake_program = stake_program::program::id(),
     }
 }
 

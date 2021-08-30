@@ -732,11 +732,10 @@ impl Context {
                 &id(),
                 &lido::instruction::RemoveValidatorMeta {
                     lido: self.solido.pubkey(),
-                    manager: self.manager.pubkey(),
                     validator_vote_account_to_remove: vote_account,
                 },
             )],
-            vec![&self.manager],
+            vec![],
         )
         .await
     }
