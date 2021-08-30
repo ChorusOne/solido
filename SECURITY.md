@@ -3,16 +3,16 @@
 ## Reporting a vulnerability
 
 Lido for Solana has a bug bounty program managed by Immunefi at
-<https://immunefi.com/bounty/solido/>. Bounties are funded by the
+<https://immunefi.com/bounty/lidoforsolana/>. Bounties are funded by the
 [Lido DAO][dao].
 
 **Please report any security-sensitive issues through Immunefi’s secure
 platform.**
 
-After you report an issue, you can expect a response from Immunefi within TODO
-days. They will triage the issue, and contact the Solido development team if
-they determine that the report is valid. If the issue is critical, Immunefi has
-the means to reach us quickly.
+After you report an issue, you can generally expect a response from Immunefi
+within 24 hours. They will triage the issue, and contact the Solido development
+team if they determine that the report is valid. If the issue is critical,
+Immunefi has the means to reach us quickly.
 
 If a vulnerability requires deploying a new version on-chain, we will prepare
 this new version privately, and reach out to the [multisig][multisig] members
