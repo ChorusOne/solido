@@ -586,13 +586,13 @@ result = solido(
     keypair_path=maintainer.keypair_path,
 )
 
-del result['UnstakeFromInactiveValidator']['stake']
-del result['UnstakeFromInactiveValidator']['unstake']
+del result['UnstakeFromInactiveValidator']['from_stake_account']
+del result['UnstakeFromInactiveValidator']['to_unstake_account']
 expected_result = {
     'UnstakeFromInactiveValidator': {
         'validator_vote_account': validator_vote_account.pubkey,
-        'stake_seed': 0,
-        'unstake_seed': 0,
+        'from_stake_seed': 0,
+        'to_unstake_seed': 0,
         'amount': 2100500000,
     }
 }
