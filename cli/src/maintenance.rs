@@ -438,7 +438,7 @@ impl SolidoState {
     }
 
     /// If there is a validator being deactivated, try to unstake its funds.
-    pub fn try_unstake_from_inactive(&self) -> Option<(Instruction, MaintenanceOutput)> {
+    pub fn try_unstake_from_inactive_validator(&self) -> Option<(Instruction, MaintenanceOutput)> {
         for validator in &self.solido.validators.entries {
             // We are only interested in unstaking from inactive validators.
             if validator.entry.active {
@@ -874,7 +874,7 @@ pub fn try_perform_maintenance(
         // as possible.
         .or_else(|| state.try_merge_on_all_stakes())
         .or_else(|| state.try_update_exchange_rate())
-        .or_else(|| state.try_unstake_from_inactive())
+        .or_else(|| state.try_unstake_from_inactive_validator())
         // Collecting validator fees goes after updating the exchange rate,
         // because it may be rejected if the exchange rate is outdated.
         .or_else(|| state.try_collect_validator_fee())
