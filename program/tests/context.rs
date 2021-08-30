@@ -921,7 +921,7 @@ impl Context {
             &self.solido.pubkey(),
             validator.entry.stake_seeds.begin,
         );
-        let (destination_stake_account, _) = validator.find_unstake_account_address(
+        let (destination_unstake_account, _) = validator.find_unstake_account_address(
             &id(),
             &self.solido.pubkey(),
             validator.entry.unstake_seeds.end,
@@ -936,7 +936,7 @@ impl Context {
                     lido: self.solido.pubkey(),
                     validator_vote_account,
                     source_stake_account,
-                    destination_stake_account,
+                    destination_unstake_account,
                     stake_authority: self.stake_authority,
                     maintainer: self.maintainer.as_ref().unwrap().pubkey(),
                 },
