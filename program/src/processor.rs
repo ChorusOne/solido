@@ -724,7 +724,7 @@ pub fn process_withdraw_inactive_stake(
     // Try to withdraw from unstake accounts.
     let mut unstake_removed = Lamports(0);
     let mut unstake_observed_total = Lamports(0);
-    for (i, seed) in validator.entry.stake_seeds.into_iter().enumerate() {
+    for (i, seed) in validator.entry.unstake_seeds.into_iter().enumerate() {
         let (unstake_account_address, _bump_seed) =
             validator.find_unstake_account_address(program_id, accounts.lido.key, seed);
 
