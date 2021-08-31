@@ -4,6 +4,7 @@
 #![cfg(feature = "test-bpf")]
 
 use bincode::deserialize;
+use lido::stake_account::StakeAccount;
 use solana_program::stake::state::StakeState;
 use solana_program_test::tokio;
 use solana_sdk::native_token::LAMPORTS_PER_SOL;
@@ -185,19 +186,23 @@ async fn test_withdrawal_result() {
     );
     assert_eq!(solido_after.metrics.withdraw_amount.count, 1);
 
-    // Check that the staker/withdrawer authorities are set to the user.
+    // Check that the staker/withdrawer authorities are set to the user, and the
+    // stake account is deactivated.
     let stake_data = context.context.get_account(split_stake_account).await;
-    if let StakeState::Stake(meta, _stake) = deserialize::<StakeState>(&stake_data.data).unwrap() {
+    if let StakeState::Stake(meta, stake) = deserialize::<StakeState>(&stake_data.data).unwrap() {
+        let account_amount = Lamports(stake_data.lamports);
+        let stake_account = StakeAccount::from_delegated_account(
+            account_amount,
+            &stake,
+            &context.context.get_clock().await,
+            &context.context.get_stake_history().await,
+            0,
+        );
+        assert_eq!(stake_account.balance.inactive, Lamports(minimum_rent));
+        assert_eq!(stake_account.balance.deactivating, Lamports(1));
         assert_eq!(meta.authorized.staker, context.user.pubkey());
         assert_eq!(meta.authorized.withdrawer, context.user.pubkey());
     }
-
-    // Try to withdraw all stake SOL to user's account. First we need to
-    // deactivate the stake account
-    context
-        .context
-        .deactivate_stake_account(split_stake_account, &context.user)
-        .await;
 
     // Wait for the deactivation to be complete.
     let epoch_schedule = context.context.context.genesis_config().epoch_schedule;

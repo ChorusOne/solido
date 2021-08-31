@@ -14,7 +14,7 @@ use crate::{
     },
     logic::{
         burn_st_sol, check_mint, check_rent_exempt, check_unstake_accounts,
-        create_account_overwrite_if_exists, deserialize_lido, distribute_fees,
+        create_account_overwrite_if_exists, deactivate_stake, deserialize_lido, distribute_fees,
         initialize_stake_account_undelegated, mint_st_sol_to, split_stake_account,
         transfer_stake_authority, CreateAccountOptions, SplitStakeAccounts,
     },
@@ -435,27 +435,13 @@ pub fn process_unstake(
         &[&seeds],
     )?;
 
-    let deactivate_stake_instruction = solana_program::stake::instruction::deactivate_stake(
-        accounts.destination_stake_account.key,
-        accounts.stake_authority.key,
-    );
-
-    // Deactivates the stake. After the stake has become inactive, the Lamports
-    // on this stake account need to go back to the reserve account by using
-    // another instruction.
-    invoke_signed(
-        &deactivate_stake_instruction,
-        &[
-            accounts.destination_stake_account.clone(),
-            accounts.sysvar_clock.clone(),
-            accounts.stake_authority.clone(),
-            accounts.stake_program.clone(),
-        ],
-        &[&[
-            &accounts.lido.key.to_bytes(),
-            STAKE_AUTHORITY,
-            &[lido.stake_authority_bump_seed],
-        ]],
+    deactivate_stake(
+        accounts.destination_stake_account,
+        accounts.stake_authority,
+        accounts.lido,
+        accounts.sysvar_clock,
+        accounts.stake_program,
+        lido.stake_authority_bump_seed,
     )?;
 
     let validator = lido
@@ -978,6 +964,15 @@ pub fn process_withdraw(
         &[&[]],
     )?;
 
+    // Deactivates the stake before transferring ownership.
+    deactivate_stake(
+        accounts.destination_stake_account,
+        accounts.stake_authority,
+        accounts.lido,
+        accounts.sysvar_clock,
+        accounts.stake_program,
+        lido.stake_authority_bump_seed,
+    )?;
     // Give control of the stake to the user.
     transfer_stake_authority(&accounts, lido.stake_authority_bump_seed)?;
 

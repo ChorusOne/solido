@@ -316,6 +316,34 @@ pub fn transfer_stake_authority(
     )
 }
 
+// Deactivates the stake.
+pub fn deactivate_stake<'a>(
+    stake_account: &AccountInfo<'a>,
+    stake_authority: &AccountInfo<'a>,
+    lido: &AccountInfo<'a>,
+    clock: &AccountInfo<'a>,
+    stake_program: &AccountInfo<'a>,
+    stake_authority_bump_seed: u8,
+) -> ProgramResult {
+    invoke_signed(
+        &solana_program::stake::instruction::deactivate_stake(
+            stake_account.key,
+            stake_authority.key,
+        ),
+        &[
+            stake_account.clone(),
+            clock.clone(),
+            stake_authority.clone(),
+            stake_program.clone(),
+        ],
+        &[&[
+            &lido.key.to_bytes(),
+            STAKE_AUTHORITY,
+            &[stake_authority_bump_seed],
+        ]],
+    )
+}
+
 /// Mint stSOL for the given fees, and transfer them to the appropriate accounts.
 pub fn distribute_fees<'a, 'b>(
     solido: &mut Lido,
