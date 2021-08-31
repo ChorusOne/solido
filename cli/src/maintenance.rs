@@ -7,6 +7,10 @@ use std::fmt;
 use std::io;
 use std::time::SystemTime;
 
+use itertools::izip;
+
+use lido::processor::StakeType;
+use lido::token;
 use lido::REWARDS_WITHDRAW_AUTHORITY;
 use serde::Serialize;
 use solana_program::program_pack::Pack;
@@ -24,7 +28,6 @@ use lido::{
 };
 use lido::{
     state::{Lido, Validator},
-    token,
     token::Lamports,
     MINIMUM_STAKE_ACCOUNT_BALANCE, STAKE_AUTHORITY,
 };
@@ -214,6 +217,9 @@ pub struct SolidoState {
     /// the stake balance of the derived stake accounts from the begin seed until
     /// end seed.
     pub validator_stake_accounts: Vec<Vec<(Pubkey, StakeAccount)>>,
+    /// Similar to the stake accounts, holds the unstake balance of the derived
+    /// unstake accounts from the begin seed until end seed.
+    pub validator_unstake_accounts: Vec<Vec<(Pubkey, StakeAccount)>>,
     /// For each validator, in the same order as in `solido.validators`, holds
     /// the number of Lamports of the validator's vote account.
     pub validator_vote_account_balances: Vec<Lamports>,
@@ -241,11 +247,22 @@ fn get_validator_stake_accounts(
     clock: &Clock,
     stake_history: &StakeHistory,
     validator: &PubkeyAndEntry<Validator>,
+    stake_type: StakeType,
 ) -> Result<Vec<(Pubkey, StakeAccount)>> {
     let mut result = Vec::new();
-    for seed in validator.entry.stake_seeds.begin..validator.entry.stake_seeds.end {
-        let (addr, _bump_seed) =
-            validator.find_stake_account_address(solido_program_id, solido_address, seed);
+    let seeds = match stake_type {
+        StakeType::Stake => &validator.entry.stake_seeds,
+        StakeType::Unstake => &validator.entry.unstake_seeds,
+    };
+    for seed in seeds {
+        let (addr, _bump_seed) = match stake_type {
+            StakeType::Stake => {
+                validator.find_stake_account_address(solido_program_id, solido_address, seed)
+            }
+            StakeType::Unstake => {
+                validator.find_unstake_account_address(solido_program_id, solido_address, seed)
+            }
+        };
         let account = config.client.get_account(&addr)?;
         let stake = deserialize_stake_account(&account.data)
             .expect("Derived stake account contains invalid data.");
@@ -306,6 +323,7 @@ impl SolidoState {
         let stake_history = config.client.get_stake_history()?;
 
         let mut validator_stake_accounts = Vec::new();
+        let mut validator_unstake_accounts = Vec::new();
         let mut validator_vote_account_balances = Vec::new();
         for validator in solido.validators.entries.iter() {
             validator_vote_account_balances.push(get_vote_account_balance_except_rent(
@@ -321,6 +339,16 @@ impl SolidoState {
                 &clock,
                 &stake_history,
                 validator,
+                StakeType::Stake,
+            )?);
+            validator_unstake_accounts.push(get_validator_stake_accounts(
+                config,
+                solido_program_id,
+                solido_address,
+                &clock,
+                &stake_history,
+                validator,
+                StakeType::Unstake,
             )?);
         }
 
@@ -336,6 +364,7 @@ impl SolidoState {
             solido_address: *solido_address,
             solido,
             validator_stake_accounts,
+            validator_unstake_accounts,
             validator_vote_account_balances,
             reserve_address,
             reserve_account: reserve_account.clone(),
@@ -576,13 +605,11 @@ impl SolidoState {
     /// or if some joker donates to one of the stake accounts we can use the same function
     /// to claim these rewards back to the reserve account so they can be re-staked.
     pub fn try_withdraw_inactive_stake(&self) -> Option<(Instruction, MaintenanceOutput)> {
-        for (validator, stake_accounts) in self
-            .solido
-            .validators
-            .entries
-            .iter()
-            .zip(self.validator_stake_accounts.iter())
-        {
+        for (validator, stake_accounts, unstake_accounts) in izip!(
+            self.solido.validators.entries.iter(),
+            self.validator_stake_accounts.iter(),
+            self.validator_unstake_accounts.iter()
+        ) {
             let current_balance = stake_accounts
                 .iter()
                 .map(|(_addr, detail)| detail.balance.total())
@@ -601,7 +628,12 @@ impl SolidoState {
                     continue;
                 }
                 // The balance of this validator is not up to date, try to update it.
-                let stake_account_addrs = stake_accounts.iter().map(|(addr, _)| *addr).collect();
+                let mut stake_account_addrs: Vec<Pubkey> =
+                    stake_accounts.iter().map(|(addr, _)| *addr).collect();
+                // Try to also withdraw from unstake accounts
+                let mut unstake_account_addrs: Vec<Pubkey> =
+                    unstake_accounts.iter().map(|(addr, _)| *addr).collect();
+                stake_account_addrs.append(&mut unstake_account_addrs);
                 let instruction = lido::instruction::withdraw_inactive_stake(
                     &self.solido_program_id,
                     &lido::instruction::WithdrawInactiveStakeMeta {
@@ -926,6 +958,7 @@ mod test {
             solido_address: Pubkey::new_unique(),
             solido: Lido::default(),
             validator_stake_accounts: vec![],
+            validator_unstake_accounts: vec![],
             validator_vote_account_balances: vec![],
             st_sol_mint: Mint::default(),
             reserve_address: Pubkey::new_unique(),
