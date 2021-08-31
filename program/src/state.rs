@@ -705,6 +705,9 @@ impl Validator {
     pub fn has_stake_accounts(&self) -> bool {
         self.stake_seeds.begin != self.stake_seeds.end
     }
+    pub fn has_unstake_accounts(&self) -> bool {
+        self.unstake_seeds.begin != self.unstake_seeds.end
+    }
 
     pub fn check_can_be_removed(&self) -> Result<(), LidoError> {
         if self.active {
@@ -720,6 +723,10 @@ impl Validator {
         if self.has_stake_accounts() {
             msg!("Refusing to remove validator because it still has stake accounts, unstake them first.");
             return Err(LidoError::ValidatorShouldHaveNoStakeAccounts);
+        }
+        if self.has_unstake_accounts() {
+            msg!("Refusing to remove validator because it still has unstake accounts, withdraw them first.");
+            return Err(LidoError::ValidatorShouldHaveNoUnstakeAccounts);
         }
         // If not, this is a bug.
         assert_eq!(self.stake_accounts_balance, Lamports(0));

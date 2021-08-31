@@ -179,7 +179,6 @@ async fn test_stake_deposit_succeeds_despite_donation() {
         TEST_STAKE_DEPOSIT_AMOUNT
     );
 
-    // After we update the balance, it should.
     context.withdraw_inactive_stake(validator.pubkey).await;
     let solido = context.get_solido().await;
     let validator_entry = &solido.validators.entries[0].entry;
