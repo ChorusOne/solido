@@ -747,7 +747,17 @@ pub fn process_withdraw_inactive_stake(
         };
         let stake_account = get_stake_account(&withdraw_opts)?;
 
-        // If validator's stake is at the beginning, try to withdraw.
+        // If validator's stake is at the beginning, try to withdraw the full
+        // amount, which leaves the account empty, so we also bump the begin
+        // seed. Older accounts are at the start of the list, so it shouldn't
+        // happen that unstake account i is not fully inactive, but account
+        // j > i is. But in case it does happen, we should not leave holes in
+        // the list of stake accounts, so we only withdraw from the beginning.
+        // If an unstake account is still partially active, then for simplicity,
+        // we don't withdraw anything; we can withdraw in a later epoch when the
+        // account is 100% inactive. This means we would miss out on some
+        // rewards, but in practice deactivation happens in a single epoch, and
+        // this is not a concern.
         if validator.entry.unstake_seeds.begin == seed
             && stake_account.balance.inactive == stake_account.balance.total()
         {
