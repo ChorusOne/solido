@@ -63,7 +63,7 @@ pub enum MaintenanceOutput {
         /// This is only an expected value, because a different transaction might
         /// execute between us observing the state and concluding that there is
         /// a difference, and our `WithdrawInactiveStake` instruction executing.
-        #[serde(rename = "expected_difference_lamports")]
+        #[serde(rename = "expected_difference_stake_lamports")]
         expected_difference_stake: Lamports,
 
         #[serde(rename = "unstaked_amount_lamports")]
