@@ -64,7 +64,10 @@ pub enum MaintenanceOutput {
         /// execute between us observing the state and concluding that there is
         /// a difference, and our `WithdrawInactiveStake` instruction executing.
         #[serde(rename = "expected_difference_lamports")]
-        expected_difference: Lamports,
+        expected_difference_stake: Lamports,
+
+        #[serde(rename = "unstaked_amount_lamports")]
+        unstaked_amount: Lamports,
     },
 
     CollectValidatorFee {
@@ -123,11 +126,21 @@ impl fmt::Display for MaintenanceOutput {
             }
             MaintenanceOutput::WithdrawInactiveStake {
                 validator_vote_account,
-                expected_difference,
+                expected_difference_stake,
+                unstaked_amount,
             } => {
                 writeln!(f, "Withdrew inactive stake.")?;
-                writeln!(f, "  Validator vote account: {}", validator_vote_account)?;
-                writeln!(f, "  Expected difference:    {}", expected_difference)?;
+                writeln!(
+                    f,
+                    "  Validator vote account:        {}",
+                    validator_vote_account
+                )?;
+                writeln!(
+                    f,
+                    "  Expected difference in stake:  {}",
+                    expected_difference_stake
+                )?;
+                writeln!(f, "  Amount withdrawn from unstake: {}", unstaked_amount)?;
             }
             MaintenanceOutput::CollectValidatorFee {
                 validator_vote_account,
@@ -616,17 +629,35 @@ impl SolidoState {
                 .sum::<token::Result<Lamports>>()
                 .expect("If this overflows, there would be more than u64::MAX staked.");
 
-            if current_balance > validator.entry.stake_accounts_balance {
-                let expected_difference = (current_balance
-                    - validator.entry.stake_accounts_balance)
-                    .expect("Does not overflow because current > entry.balance.");
-                // If the expected difference is less than some defined amount
-                // of Lamports, we don't bother withdrawing. We try to do this
-                // so we don't pay more for fees than the amount that we'll
-                // withdraw.
-                if expected_difference < SolidoState::MINIMUM_WITHDRAW_AMOUNT {
-                    continue;
+            let expected_difference_stake =
+                if current_balance > validator.entry.stake_accounts_balance {
+                    let expected_difference = (current_balance
+                        - validator.entry.stake_accounts_balance)
+                        .expect("Does not overflow because current > entry.balance.");
+                    // If the expected difference is less than some defined amount
+                    // of Lamports, we don't bother withdrawing. We try to do this
+                    // so we don't pay more for fees than the amount that we'll
+                    // withdraw.
+                    if expected_difference >= SolidoState::MINIMUM_WITHDRAW_AMOUNT {
+                        expected_difference
+                    } else {
+                        Lamports(0)
+                    }
+                } else {
+                    Lamports(0)
+                };
+
+            let mut removed_unstake = Lamports(0);
+
+            for (_addr, unstake_account) in unstake_accounts.iter() {
+                if unstake_account.balance.inactive != unstake_account.balance.total() {
+                    break;
                 }
+                removed_unstake = (removed_unstake + unstake_account.balance.total())
+                    .expect("Summing unstake accounts should not overflow.");
+            }
+
+            if expected_difference_stake > Lamports(0) || removed_unstake > Lamports(0) {
                 // The balance of this validator is not up to date, try to update it.
                 let mut stake_account_addrs: Vec<Pubkey> =
                     stake_accounts.iter().map(|(addr, _)| *addr).collect();
@@ -646,7 +677,8 @@ impl SolidoState {
                 );
                 let task = MaintenanceOutput::WithdrawInactiveStake {
                     validator_vote_account: validator.pubkey,
-                    expected_difference,
+                    expected_difference_stake,
+                    unstaked_amount: (),
                 };
                 return Some((instruction, task));
             }
