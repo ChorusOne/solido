@@ -9,18 +9,40 @@ use lido::MINIMUM_STAKE_ACCOUNT_BALANCE;
 use lido::{error::LidoError, token::Lamports};
 use solana_program::stake::state::StakeState;
 use solana_program_test::tokio;
+use solana_sdk::instruction::InstructionError;
 use solana_sdk::signer::Signer;
+use solana_sdk::transaction::TransactionError;
+use solana_sdk::transport::TransportError;
+
 const STAKE_AMOUNT: Lamports = Lamports(10_000_000_000);
 
-async fn new_unstake_context(stake_amount: Lamports) -> Context {
-    let mut context = Context::new_with_maintainer_and_validator().await;
-    context.deposit(stake_amount).await;
-    let validator = context.validator.take().unwrap();
-    context
-        .stake_deposit(validator.vote_account, StakeDeposit::Append, STAKE_AMOUNT)
-        .await;
-    context.validator = Some(validator);
+// Shorthand to check for this error in tests.
+fn is_insufficient_funds_error<T>(result: Result<T, TransportError>) -> bool {
+    match result {
+        Err(TransportError::TransactionError(TransactionError::InstructionError(
+            _,
+            InstructionError::InsufficientFunds,
+        ))) => true,
+        _ => false,
+    }
+}
 
+/// Set up a Solido instance with one validator that has active stake accounts.
+///
+/// There will be one stake account for every element of `stake_amounts`.
+async fn new_unstake_context(stake_amounts: &[Lamports]) -> Context {
+    let mut context = Context::new_with_maintainer_and_validator().await;
+    let vote_account = context.validator.as_ref().unwrap().vote_account;
+
+    // Set up stake accounts with the given amounts.
+    for stake_amount in stake_amounts {
+        context.deposit(*stake_amount).await;
+        context
+            .stake_deposit(vote_account, StakeDeposit::Append, *stake_amount)
+            .await;
+    }
+
+    // Wait for the stake to activate.
     let epoch_schedule = context.context.genesis_config().epoch_schedule;
     let start_slot = epoch_schedule.first_normal_slot;
 
@@ -32,7 +54,7 @@ async fn new_unstake_context(stake_amount: Lamports) -> Context {
 
 #[tokio::test]
 async fn test_successful_unstake() {
-    let mut context = new_unstake_context(STAKE_AMOUNT).await;
+    let mut context = new_unstake_context(&[STAKE_AMOUNT]).await;
     let unstake_lamports = Lamports(1_000_000_000);
 
     let solido = context.get_solido().await;
@@ -57,51 +79,113 @@ async fn test_successful_unstake() {
 }
 
 #[tokio::test]
-async fn test_unstake_balance_combinations() {
-    let mut context = new_unstake_context(STAKE_AMOUNT).await;
+async fn test_unstake_requires_unstaking_at_least_the_rent_exempt_amount() {
+    let mut context = new_unstake_context(&[STAKE_AMOUNT]).await;
     let vote_account = context.validator.as_ref().unwrap().vote_account;
 
-    let result = context.try_unstake(vote_account, STAKE_AMOUNT).await;
-    // Should fail, because the validator will have less than the minimum.
-    assert_solido_error!(result, LidoError::InvalidAmount);
-    // Should fail, because we tried to unstake more than the validator has.
-    let result = context
-        .try_unstake(vote_account, (STAKE_AMOUNT + Lamports(1)).unwrap())
-        .await;
-    assert!(result.is_err()); // Insufficient funds error from Stake Program.
-
-    // Unstaking less than the rent should fail
     let rent = context.get_rent().await;
     let stake_rent = rent.minimum_balance(std::mem::size_of::<StakeState>());
+
+    // Unstaking less than the rent should fail, because the target account would
+    // not be rent-exempt.
     let result = context
         .try_unstake(vote_account, Lamports(stake_rent - 1))
         .await;
-    assert!(result.is_err());
+    assert!(is_insufficient_funds_error(result));
 
-    // If we unstake so that the validator still has the minimum, it should work.
+    // Unstaking just the rent-exempt amount is also disallowed by the stake
+    // program, but unstaking one lamport more is allowed.
     context
-        .unstake(
-            vote_account,
-            (STAKE_AMOUNT - MINIMUM_STAKE_ACCOUNT_BALANCE).unwrap(),
-        )
+        .unstake(vote_account, Lamports(stake_rent + 1))
         .await;
+}
 
-    let validator = &context.get_solido().await.validators.entries[0];
-    // Unstake all from an inactive validator
-    context.deactivate_validator(validator.pubkey).await;
-    context
-        .unstake(vote_account, MINIMUM_STAKE_ACCOUNT_BALANCE)
+#[tokio::test]
+async fn test_unstake_leaves_minimum_stake_account_balance_for_active_validator() {
+    let mut context = new_unstake_context(&[STAKE_AMOUNT, STAKE_AMOUNT]).await;
+    let vote_account = context.validator.as_ref().unwrap().vote_account;
+
+    // Both stake accounts should have STAKE_AMOUNT in them, so despite having
+    // more than `max_to_unstake` in stake accounts in total, we can only unstake
+    // this much at a time.
+    let max_to_unstake = (STAKE_AMOUNT - MINIMUM_STAKE_ACCOUNT_BALANCE).unwrap();
+
+    // We can't let the stake account balance drop below the minimum.
+    let result = context
+        .try_unstake(vote_account, Lamports(max_to_unstake.0 + 1))
         .await;
+    assert_solido_error!(result, LidoError::InvalidAmount);
 
-    let validator = &context.get_solido().await.validators.entries[0];
-    // No stake accounts should exist.
+    // Just the maximum should work.
+    context.unstake(vote_account, max_to_unstake).await;
+}
+
+#[tokio::test]
+async fn test_unstake_more_than_stake_account_balance_fails() {
+    let mut context = new_unstake_context(&[STAKE_AMOUNT]).await;
+    let vote_account = context.validator.as_ref().unwrap().vote_account;
+
+    // We can't unstake more than what's in the stake account. This is already
+    // disallowed because we'd leave the account with less than the minimum stake
+    // account balance, but we still test this to check overflow handling.
+    let result = context
+        .try_unstake(vote_account, Lamports(STAKE_AMOUNT.0 + 1))
+        .await;
+    assert!(is_insufficient_funds_error(result));
+}
+
+#[tokio::test]
+async fn test_unstake_from_inactive_validator() {
+    let mut context = new_unstake_context(&[STAKE_AMOUNT, STAKE_AMOUNT]).await;
+    let vote_account = context.validator.as_ref().unwrap().vote_account;
+
+    context.deactivate_validator(vote_account).await;
+
+    // We should not be allowed to unstake less than the full stake account balance.
+    // If we only try to unstake one lamport less, this is disallowed because it
+    // would leave the source account not rent-exempt.
+    let result = context
+        .try_unstake(vote_account, Lamports(STAKE_AMOUNT.0 - 1))
+        .await;
+    assert!(is_insufficient_funds_error(result));
+
+    // If we leave more behind, this is disallowed because we check for it.
+    let result = context
+        .try_unstake(vote_account, Lamports(STAKE_AMOUNT.0 / 2))
+        .await;
+    assert_solido_error!(result, LidoError::InvalidAmount);
+
+    // We can't unstake more either. This is a different case than
+    // `test_unstake_more_than_stake_account_balance_fails()`, because for
+    // inactive validators we do not need to leave the minimum stake account
+    // balance behind.
+    let result = context
+        .try_unstake(vote_account, Lamports(STAKE_AMOUNT.0 + 1))
+        .await;
+    assert!(is_insufficient_funds_error(result));
+
+    // But unstaking exactly the stake account balance should work.
+    let solido_before = context.get_solido().await;
+    context.unstake(vote_account, STAKE_AMOUNT).await;
+    let solido_after = context.get_solido().await;
+
     assert_eq!(
-        validator.entry.stake_seeds.begin,
-        validator.entry.stake_seeds.end
+        solido_before.validators.entries[0].entry.stake_seeds.begin + 1,
+        solido_after.validators.entries[0].entry.stake_seeds.begin,
+        "Unstaking the full stake account amount should have bumped the steed.",
+    );
+
+    // We should be able to do it a second time and unstake the second stake account.
+    context.unstake(vote_account, STAKE_AMOUNT).await;
+
+    let validator = &context.get_solido().await.validators.entries[0];
+    assert_eq!(
+        validator.entry.stake_seeds.begin, validator.entry.stake_seeds.end,
+        "No stake accounts should be left after unstaking both."
     );
     assert_eq!(
-        validator.entry.stake_accounts_balance,
-        validator.entry.unstake_accounts_balance
+        validator.entry.stake_accounts_balance, validator.entry.unstake_accounts_balance,
+        "The full balance should be in unstake accounts after unstaking both."
     );
     let (stake_account, _) = validator.find_stake_account_address(
         &crate::context::id(),
@@ -109,13 +193,15 @@ async fn test_unstake_balance_combinations() {
         validator.entry.stake_seeds.begin,
     );
     let account = context.try_get_account(stake_account).await;
-    // Previous stake shouldn't exist.
-    assert!(account.is_none());
+    assert!(
+        account.is_none(),
+        "Former stake account should no longer exist."
+    );
 }
 
 #[tokio::test]
 async fn test_unstake_with_funded_destination_stake() {
-    let mut context = new_unstake_context(STAKE_AMOUNT).await;
+    let mut context = new_unstake_context(&[STAKE_AMOUNT]).await;
     let validator = &context.get_solido().await.validators.entries[0];
     let (unstake_address, _) =
         validator.find_unstake_account_address(&crate::context::id(), &context.solido.pubkey(), 0);
