@@ -34,7 +34,6 @@ spl-associated-token-account = "1.0.2"
 spl-token = "3.1.1"
 tiny_http = "0.8.2"
 uriparse = "0.6.3"
-itertools = "0.10.1"
 
 [[bin]]
 name = "solido"
