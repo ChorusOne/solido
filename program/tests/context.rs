@@ -20,6 +20,7 @@ use solana_program_test::{processor, ProgramTest, ProgramTestBanksClientExt, Pro
 use solana_sdk::account::ReadableAccount;
 use solana_sdk::account::{from_account, Account};
 use solana_sdk::account_info::AccountInfo;
+use solana_sdk::clock::Epoch;
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::{Keypair, Signer};
 use solana_sdk::transaction::Transaction;
@@ -369,6 +370,16 @@ impl Context {
         send_transaction(&mut self.context, &mut self.nonce, &[memo_instr], vec![])
             .await
             .expect("Failed to send memo transaction.")
+    }
+
+    /// Warp to the given epoch after the first normal slot.
+    pub fn warp_to_epoch(&mut self, epoch: Epoch) {
+        let epoch_schedule = self.context.genesis_config().epoch_schedule;
+        let start_slot = epoch_schedule.first_normal_slot;
+        let warp_slot = start_slot + epoch * epoch_schedule.slots_per_epoch;
+        self.context
+            .warp_to_slot(warp_slot)
+            .expect("Failed to warp to epoch.");
     }
 
     /// Initialize a new SPL token mint, return its instance address.

@@ -43,10 +43,7 @@ async fn new_unstake_context(stake_amounts: &[Lamports]) -> Context {
     }
 
     // Wait for the stake to activate.
-    let epoch_schedule = context.context.genesis_config().epoch_schedule;
-    let start_slot = epoch_schedule.first_normal_slot;
-
-    context.context.warp_to_slot(start_slot).unwrap();
+    context.warp_to_epoch(0);
     context.update_exchange_rate().await;
 
     context
@@ -213,4 +210,31 @@ async fn test_unstake_with_funded_destination_stake() {
     // Since we already had something in the account that paid for the rent, we
     // can unstake all the requested amount.
     assert_eq!(unstake_account.balance.deactivating, unstake_lamports);
+}
+
+#[tokio::test]
+async fn test_unstake_allows_at_most_three_unstake_accounts() {
+    let mut context = new_unstake_context(&[STAKE_AMOUNT]).await;
+    let vote_account = context.validator.as_ref().unwrap().vote_account;
+    let unstake_amount = Lamports(1_000_000_000);
+
+    // The first three unstakes should be allowed.
+    context.unstake(vote_account, unstake_amount).await;
+    context.unstake(vote_account, unstake_amount).await;
+    context.unstake(vote_account, unstake_amount).await;
+
+    // But the fourth one is not; we can have at most three unstake accounts.
+    let result = context.try_unstake(vote_account, unstake_amount).await;
+    assert_solido_error!(result, LidoError::MaxUnstakeAccountsReached);
+
+    // Wait for the unstake accounts to deactivate.
+    context.warp_to_epoch(1);
+
+    // Withdraw the now-inactive stake accounts to the reserve to free up
+    // unstake accounts again.
+    // TODO: Enable this after #393 is merged.
+    // context.withdraw_inactive_stake(vote_account).await;
+
+    // Now we should be allowed to unstake again.
+    // context.unstake(vote_account, unstake_amount).await;
 }
