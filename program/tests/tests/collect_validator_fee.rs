@@ -35,10 +35,7 @@ async fn test_collect_validator_fee() {
     assert_eq!(fees, Lamports(0));
 
     // Skip ahead a number of epochs.
-    let epoch_schedule = context.context.genesis_config().epoch_schedule;
-    let start_slot = epoch_schedule.first_normal_slot;
-    let slots_per_epoch = epoch_schedule.slots_per_epoch;
-    context.context.warp_to_slot(start_slot).unwrap();
+    context.warp_to_normal_epoch(0);
 
     // In this new epoch, we should not be allowed to collect the validator's fee,
     // yet, because we haven’t updated the exchange rate yet.
@@ -73,10 +70,7 @@ async fn test_collect_validator_fee() {
     let solido_before = context.get_solido().await;
     let validator_before = solido_before.validators.entries[0].entry.fee_credit;
 
-    context
-        .context
-        .warp_to_slot(start_slot + slots_per_epoch)
-        .unwrap();
+    context.warp_to_normal_epoch(1);
     let account = context.get_account(validator.vote_account).await;
     let vote_account_rent = Lamports(context.get_rent().await.minimum_balance(account.data.len()));
     assert_eq!(vote_account_before, vote_account_rent);

@@ -43,7 +43,7 @@ async fn new_unstake_context(stake_amounts: &[Lamports]) -> Context {
     }
 
     // Wait for the stake to activate.
-    context.warp_to_epoch(0);
+    context.warp_to_normal_epoch(0);
     context.update_exchange_rate().await;
 
     context
@@ -228,7 +228,7 @@ async fn test_unstake_allows_at_most_three_unstake_accounts() {
     assert_solido_error!(result, LidoError::MaxUnstakeAccountsReached);
 
     // Wait for the unstake accounts to deactivate.
-    context.warp_to_epoch(1);
+    context.warp_to_normal_epoch(1);
 
     // Withdraw the now-inactive stake accounts to the reserve to free up
     // unstake accounts again.

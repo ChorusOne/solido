@@ -109,9 +109,7 @@ async fn test_stake_deposit_merge() {
 
     // Next, we will try to merge stake accounts created in different epochs,
     // which should fail.
-    let epoch_schedule = context.context.genesis_config().epoch_schedule;
-    let start_slot = epoch_schedule.first_normal_slot;
-    context.context.warp_to_slot(start_slot).unwrap();
+    context.warp_to_normal_epoch(0);
 
     let result = context
         .try_stake_deposit(
