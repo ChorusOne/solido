@@ -479,8 +479,8 @@ impl SolidoState {
     /// If there is a validator being deactivated, try to unstake its funds.
     pub fn try_unstake_from_inactive_validator(&self) -> Option<(Instruction, MaintenanceOutput)> {
         for validator in &self.solido.validators.entries {
-            // We are only interested in unstaking from inactive validators.
-            if validator.entry.active {
+            // We are only interested in unstaking from inactive validators that have stake accounts
+            if validator.entry.active || !validator.entry.has_stake_accounts() {
                 continue;
             }
             let try_unstake_balance = validator.entry.effective_stake_balance();
