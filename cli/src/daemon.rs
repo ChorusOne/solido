@@ -55,6 +55,9 @@ struct MaintenanceMetrics {
     // spent_lamports_total: u64
     /// Number of times we performed `UnstakeFromInactiveValidator`.
     unstake_from_inactive_validator: u64,
+
+    /// Number of times we performed `RemoveValidator`.
+    remove_validator: u64,
 }
 
 impl MaintenanceMetrics {
@@ -97,6 +100,8 @@ impl MaintenanceMetrics {
                         .with_label("operation", "ClaimValidatorFee".to_string()),
                     Metric::new(self.unstake_from_inactive_validator)
                         .with_label("operation", "UnstakeFromInactiveValidator".to_string()),
+                    Metric::new(self.remove_validator)
+                        .with_label("operation", "RemoveValidator".to_string()),
                 ],
             },
         )?;
@@ -140,6 +145,7 @@ fn run_main_loop(
         transactions_merge_stake: 0,
         transactions_claim_validator_fee: 0,
         unstake_from_inactive_validator: 0,
+        remove_validator: 0,
     };
     let mut rng = rand::thread_rng();
 
@@ -180,6 +186,7 @@ fn run_main_loop(
                         MaintenanceOutput::UnstakeFromInactiveValidator { .. } => {
                             metrics.unstake_from_inactive_validator += 1
                         }
+                        MaintenanceOutput::RemoveValidator { .. } => metrics.remove_validator += 1,
                     }
                 }
             }
