@@ -158,16 +158,16 @@ REWARDS
     ")]
     CreateSolido(CreateSolidoOpts),
 
-    /// Adds a new validator
+    /// Adds a new validator.
     AddValidator(AddValidatorOpts),
 
-    /// Deactivates a validator and initiates the removal process
+    /// Deactivates a validator and initiates the removal process.
     DeactivateValidator(DeactivateValidatorOpts),
 
-    /// Adds a maintainer to the Solido instance
+    /// Adds a maintainer to the Solido instance.
     AddMaintainer(AddRemoveMaintainerOpts),
 
-    /// Removes a maintainer from the Solido instance
+    /// Removes a maintainer from the Solido instance.
     RemoveMaintainer(AddRemoveMaintainerOpts),
 
     /// Deposit some SOL, receive stSOL in return.
