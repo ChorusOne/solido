@@ -619,15 +619,15 @@ impl SolidoState {
             self.validator_stake_accounts.iter(),
             self.validator_unstake_accounts.iter()
         ) {
-            let current_balance = stake_accounts
+            let current_stake_balance = stake_accounts
                 .iter()
                 .map(|(_addr, detail)| detail.balance.total())
                 .sum::<token::Result<Lamports>>()
                 .expect("If this overflows, there would be more than u64::MAX staked.");
 
             let expected_difference_stake =
-                if current_balance > validator.entry.stake_accounts_balance {
-                    let expected_difference = (current_balance
+                if current_stake_balance > validator.entry.stake_accounts_balance {
+                    let expected_difference = (current_stake_balance
                         - validator.entry.stake_accounts_balance)
                         .expect("Does not overflow because current > entry.balance.");
                     // If the expected difference is less than some defined amount
@@ -674,7 +674,7 @@ impl SolidoState {
                 let task = MaintenanceOutput::WithdrawInactiveStake {
                     validator_vote_account: validator.pubkey,
                     expected_difference_stake,
-                    unstaked_amount: (),
+                    unstaked_amount: removed_unstake,
                 };
                 return Some((instruction, task));
             }
