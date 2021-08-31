@@ -541,13 +541,13 @@ pub struct WithdrawExcessOpts<'a, 'b> {
     clock: &'a Clock,
     stake_history: &'a StakeHistory,
     stake_account: &'a AccountInfo<'b>,
+    stake_account_seed: u64,
+    stake_authority_bump_seed: u8,
 }
 
 /// Withdraw `amount` from `withdraw_excess_opts.stake_account`.
 pub fn withdraw_inactive_sol(
     withdraw_excess_opts: &WithdrawExcessOpts,
-    stake_account_seed: u64,
-    stake_authority_bump_seed: u8,
     amount: Lamports,
 ) -> Result<(), ProgramError> {
     if amount == Lamports(0) {
@@ -572,13 +572,13 @@ pub fn withdraw_inactive_sol(
         &[&[
             withdraw_excess_opts.accounts.lido.key.as_ref(),
             STAKE_AUTHORITY,
-            &[stake_authority_bump_seed],
+            &[withdraw_excess_opts.stake_authority_bump_seed],
         ]],
     )?;
     msg!(
         "Withdrew {} inactive stake back to the reserve from stake account at seed {}.",
         amount,
-        stake_account_seed
+        withdraw_excess_opts.stake_account_seed
     );
 
     Ok(())
@@ -586,7 +586,6 @@ pub fn withdraw_inactive_sol(
 
 pub fn get_stake_account(
     withdraw_excess_opts: &WithdrawExcessOpts,
-    stake_account_seed: u64,
 ) -> Result<StakeAccount, ProgramError> {
     let stake = deserialize_stake_account(&withdraw_excess_opts.stake_account.data.borrow())?;
     Ok(StakeAccount::from_delegated_account(
@@ -594,7 +593,7 @@ pub fn get_stake_account(
         &stake,
         withdraw_excess_opts.clock,
         withdraw_excess_opts.stake_history,
-        stake_account_seed,
+        withdraw_excess_opts.stake_account_seed,
     ))
 }
 
@@ -685,14 +684,16 @@ pub fn process_withdraw_inactive_stake(
             clock: &clock,
             stake_history: &stake_history,
             stake_account: provided_stake_account,
+            stake_account_seed: seed,
+            stake_authority_bump_seed: lido.stake_authority_bump_seed,
         };
 
-        let stake_account = get_stake_account(&withdraw_opts, seed)?;
+        let stake_account = get_stake_account(&withdraw_opts)?;
         let amount = (stake_account.balance.inactive
             - Lamports(rent.minimum_balance(provided_stake_account.data_len())))
         .expect("Should have at least the payed rent");
 
-        withdraw_inactive_sol(&withdraw_opts, seed, lido.stake_authority_bump_seed, amount)?;
+        withdraw_inactive_sol(&withdraw_opts, amount)?;
 
         excess_removed = (excess_removed + amount)?;
         stake_observed_total = (stake_observed_total + account_balance)?;
@@ -741,19 +742,16 @@ pub fn process_withdraw_inactive_stake(
             clock: &clock,
             stake_history: &stake_history,
             stake_account: unstake_account,
+            stake_account_seed: seed,
+            stake_authority_bump_seed: lido.stake_authority_bump_seed,
         };
-        let stake_account = get_stake_account(&withdraw_opts, seed)?;
+        let stake_account = get_stake_account(&withdraw_opts)?;
 
         // If validator's stake is at the beginning, try to withdraw.
         if validator.entry.unstake_seeds.begin == seed
             && stake_account.balance.inactive == stake_account.balance.total()
         {
-            withdraw_inactive_sol(
-                &withdraw_opts,
-                seed,
-                lido.stake_authority_bump_seed,
-                stake_account.balance.inactive,
-            )?;
+            withdraw_inactive_sol(&withdraw_opts, stake_account.balance.inactive)?;
             validator.entry.unstake_seeds.begin += 1;
             unstake_removed = (unstake_removed + stake_account.balance.inactive)?;
         }
