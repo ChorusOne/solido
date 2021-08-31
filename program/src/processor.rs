@@ -413,6 +413,18 @@ pub fn process_unstake(
     let destination_bump_seed = check_unstake_accounts(program_id, &lido, &accounts)?;
 
     let validator = lido.validators.get(accounts.validator_vote_account.key)?;
+
+    // Because `WithdrawInactiveStake` needs to reference all stake and unstake
+    // accounts in a single transaction, we shouldn't have too many of them.
+    // We should only need to do one unstake per epoch, right at the end, and in
+    // the next epoch it should be fully inactive, we withdraw it and bump the
+    // seed, and then we can unstake again.
+    if validator.entry.unstake_seeds.end - validator.entry.unstake_seeds.begin >= 3 {
+        msg!("This validator already has 3 unstake accounts.");
+        msg!("Please wait until the next epoch and withdraw them, then try to unstake again.");
+        return Err(LidoError::MaxUnstakeAccountsReached.into());
+    }
+
     let seeds = [
         &accounts.lido.key.to_bytes(),
         &accounts.validator_vote_account.key.to_bytes(),
@@ -420,6 +432,8 @@ pub fn process_unstake(
         &validator.entry.unstake_seeds.end.to_le_bytes()[..],
         &[destination_bump_seed],
     ];
+
+    let source_balance = Lamports(accounts.source_stake_account.lamports());
 
     split_stake_account(
         accounts.lido.key,
@@ -461,33 +475,37 @@ pub fn process_unstake(
     let validator = lido
         .validators
         .get_mut(accounts.validator_vote_account.key)?;
-    // Increase the `unstake_accounts_balance` by `amount`.
+
     if validator.entry.active {
-        if (validator.entry.stake_accounts_balance - amount)? < MINIMUM_STAKE_ACCOUNT_BALANCE {
+        // For active validators, we don't allow their stake accounts to contain
+        // less than the minimum stake account balance.
+        let new_source_balance = (source_balance - amount)?;
+        if new_source_balance < MINIMUM_STAKE_ACCOUNT_BALANCE {
             msg!(
-            "Unstake operation will leave the active validator with {}, less than the minimum balance {}.\\
-            Only inactive validators can fall below the limit.",
-            validator.entry.stake_accounts_balance,
-            MINIMUM_STAKE_ACCOUNT_BALANCE
-        );
+                "Unstake operation will leave the stake account with {}, less \
+                than the minimum balance {}. Only inactive validators can fall \
+                below the limit.",
+                new_source_balance,
+                MINIMUM_STAKE_ACCOUNT_BALANCE
+            );
             return Err(LidoError::InvalidAmount.into());
         }
     } else {
-        let full_amount = validator.entry.effective_stake_balance();
-        if full_amount != amount {
+        // For inactive validators on the other hand, we only allow unstaking
+        // the full stake account, so we can decrease the stake as quickly as
+        // possible. This leaves the source account empty, so we bump the seed.
+        if amount != source_balance {
             msg!(
-                "An inactive validator must have all its stake withdrawn. Tried\\
-                to withdraw {}, Should withdraw {} instead. The full amount might be split\\
-                in several transaction, as there are limitations on how much can be unstaked\\
-                in a single transaction.",
+                "An inactive validator must the full stake account withdrawn. \
+                Tried to withdraw {}, should withdraw {} instead.",
                 amount,
-                full_amount,
+                source_balance,
             );
             return Err(LidoError::InvalidAmount.into());
-        } else {
-            validator.entry.stake_seeds.begin += 1;
         }
+        validator.entry.stake_seeds.begin += 1;
     }
+
     validator.entry.unstake_accounts_balance = (validator.entry.unstake_accounts_balance + amount)?;
     validator.entry.unstake_seeds.end += 1;
 
