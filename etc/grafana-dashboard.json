@@ -619,7 +619,7 @@
         },
         {
           "exemplar": true,
-          "expr": "solido_exchange_rate_balance_sol / soldio_exchange_rate_supply_st_sol",
+          "expr": "solido_exchange_rate_balance_sol / solido_exchange_rate_supply_st_sol",
           "hide": false,
           "interval": "",
           "legendFormat": "epoch price of stSOL",
