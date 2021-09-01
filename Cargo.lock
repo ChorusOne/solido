@@ -1753,7 +1753,6 @@ dependencies = [
  "solana-vote-program",
  "spl-memo",
  "spl-token",
- "thiserror",
 ]
 
 [[package]]
