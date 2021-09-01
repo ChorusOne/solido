@@ -104,6 +104,8 @@ pub fn get_target_balance(
 
 /// Given a list of validators and their target balance, return the index of the
 /// one furthest below its target, and the amount by which it is below.
+///
+/// This assumes that there is at least one active validator. Panics otherwise.
 pub fn get_validator_furthest_below_target(
     validators: &Validators,
     target_balance: &[Lamports],
@@ -115,11 +117,11 @@ pub fn get_validator_furthest_below_target(
     );
 
     // Our initial index, that will be returned when no validator is below its target,
-    // is the first active validator, and if no validator is active, just the first validator.
+    // is the first active validator.
     let mut index = validators
         .iter_entries()
         .position(|v| v.active)
-        .unwrap_or(0);
+        .expect("get_validator_furthest_below_target requires at least one active validator.");
     let mut amount = Lamports(0);
 
     for (i, (validator, target)) in validators.iter_entries().zip(target_balance).enumerate() {
