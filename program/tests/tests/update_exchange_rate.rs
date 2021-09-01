@@ -17,7 +17,7 @@ async fn test_update_exchange_rate() {
     let mut context = Context::new_with_maintainer().await;
 
     // Move to the next epoch, then update the exchange rate.
-    context.warp_to_normal_epoch(0);
+    context.advance_to_normal_epoch(0);
     context.update_exchange_rate().await;
     let start_epoch = context.get_clock().await.epoch;
 
@@ -46,7 +46,7 @@ async fn test_update_exchange_rate() {
     let received_st_sol = context.get_st_sol_balance(recipient).await;
     assert_eq!(received_st_sol, StLamports(DEPOSIT_AMOUNT));
 
-    context.warp_to_normal_epoch(1);
+    context.advance_to_normal_epoch(1);
     context.update_exchange_rate().await;
 
     // There was one deposit, the exchange rate was 1:1, we should now have the
@@ -72,7 +72,7 @@ async fn test_update_exchange_rate() {
         .fund(context.reserve_address, Lamports(3 * DEPOSIT_AMOUNT))
         .await;
 
-    context.warp_to_normal_epoch(2);
+    context.advance_to_normal_epoch(2);
 
     // There is now not as much SOL as stSOL, but for deposits, the rate is still
     // 1:1. Even though we jumped to the next epoch! After all, we did not update

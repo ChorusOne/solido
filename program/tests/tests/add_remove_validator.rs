@@ -65,13 +65,13 @@ async fn test_remove_validator_with_unclaimed_credits() {
         .increment_vote_account_credits(&validator.vote_account, 1);
 
     // Skip ahead a number of epochs.
-    context.warp_to_normal_epoch(0);
+    context.advance_to_normal_epoch(0);
     context
         .context
         .increment_vote_account_credits(&validator.vote_account, 1);
 
     context.update_exchange_rate().await;
-    context.warp_to_normal_epoch(1);
+    context.advance_to_normal_epoch(1);
     context.update_exchange_rate().await;
     context.collect_validator_fee(validator.vote_account).await;
 

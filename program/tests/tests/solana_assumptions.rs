@@ -91,7 +91,7 @@ async fn measure_staking_rewards(mode: StakeMode) -> Lamports {
     let vote_account = context.validator.as_ref().unwrap().vote_account.clone();
     let authority = context.deterministic_keypair.new_keypair();
 
-    context.warp_to_normal_epoch(0);
+    context.advance_to_normal_epoch(0);
 
     // Create a stake account and delegate it to the vote account, which is a
     // 100% commission vote account, so all rewards go to the vote account.
@@ -109,7 +109,7 @@ async fn measure_staking_rewards(mode: StakeMode) -> Lamports {
     }
 
     // Move ahead one epoch so the stake becomes active.
-    context.warp_to_normal_epoch(1);
+    context.advance_to_normal_epoch(1);
 
     let balance_t0 = context.get_sol_balance(vote_account).await;
 
@@ -127,7 +127,7 @@ async fn measure_staking_rewards(mode: StakeMode) -> Lamports {
     context
         .context
         .increment_vote_account_credits(&vote_account, 1);
-    context.warp_to_normal_epoch(2);
+    context.advance_to_normal_epoch(2);
 
     let balance_t1 = context.get_sol_balance(vote_account).await;
 
@@ -188,7 +188,7 @@ async fn test_stake_accounts() {
         }
     );
 
-    context.warp_to_normal_epoch(0);
+    context.advance_to_normal_epoch(0);
 
     // Stake is now active.
     let active = activating;
@@ -234,7 +234,7 @@ async fn test_stake_accounts() {
         }
     );
 
-    context.warp_to_normal_epoch(1);
+    context.advance_to_normal_epoch(1);
 
     // Stake is now inactive.
     let deactivated = deactivating;

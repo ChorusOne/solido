@@ -67,7 +67,7 @@ async fn test_merge_stake_combinations() {
     let stake_deposit_amount = Lamports(2_000_000_000); // 2 Sol
     let mut context = Context::new_with_maintainer_and_validator().await;
 
-    context.warp_to_normal_epoch(0);
+    context.advance_to_normal_epoch(0);
 
     let validator = &context.get_solido().await.validators.entries[0];
     context.deposit(Lamports(100_000_000_000)).await;
@@ -75,7 +75,7 @@ async fn test_merge_stake_combinations() {
         .stake_deposit(validator.pubkey, StakeDeposit::Append, stake_deposit_amount)
         .await;
 
-    context.warp_to_normal_epoch(1);
+    context.advance_to_normal_epoch(1);
 
     // Create an activating stake account.
     context
@@ -92,7 +92,7 @@ async fn test_merge_stake_combinations() {
     // Merging active to activating should fail.
     assert_solido_error!(result, LidoError::WrongStakeState);
 
-    context.warp_to_normal_epoch(2);
+    context.advance_to_normal_epoch(2);
 
     let now_active_stake_account = context.get_stake_account_from_seed(&validator, 1).await;
     assert!(active_stake_account.is_active());

@@ -40,7 +40,7 @@ async fn test_withdraw_inactive_stake() {
     assert_eq!(solido_before, solido_after);
 
     // Skip ahead a number of epochs.
-    context.warp_to_normal_epoch(0);
+    context.advance_to_normal_epoch(0);
 
     // So after we update the exchange rate, we should be allowed to withdraw the inactive stake.
     context.update_exchange_rate().await;

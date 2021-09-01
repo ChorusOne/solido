@@ -109,7 +109,7 @@ async fn test_stake_deposit_merge() {
 
     // Next, we will try to merge stake accounts created in different epochs,
     // which should fail.
-    context.warp_to_normal_epoch(0);
+    context.advance_to_normal_epoch(0);
 
     let result = context
         .try_stake_deposit(

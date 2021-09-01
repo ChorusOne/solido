@@ -44,7 +44,7 @@ impl WithdrawContext {
             .await;
         context.validator = Some(validator);
 
-        context.warp_to_normal_epoch(0);
+        context.advance_to_normal_epoch(0);
         context.update_exchange_rate().await;
 
         WithdrawContext {
@@ -250,7 +250,7 @@ async fn test_withdraw_fails_if_validator_with_more_stake_exists() {
         .await;
 
     // Wait for the stake accounts to become active.
-    context.warp_to_normal_epoch(0);
+    context.advance_to_normal_epoch(0);
     context.update_exchange_rate().await;
 
     // We should not be allowed to withdraw from validator 1, because validator 2 has more stake.
@@ -303,7 +303,7 @@ async fn test_withdraw_enforces_picking_most_stake_validator_in_presence_of_unst
         .await;
 
     // Wait for the stake to become active, so we can withdraw.
-    context.warp_to_normal_epoch(0);
+    context.advance_to_normal_epoch(0);
     context.update_exchange_rate().await;
 
     // Then unstake from validator 1. Now the effective stake is 30 SOL for validator 1,

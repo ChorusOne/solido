@@ -375,7 +375,7 @@ impl Context {
     ///
     /// Note, the epoch number here is not the same as the epoch number of the
     /// clock sysvar; we start counting from the first "normal" slot.
-    pub fn warp_to_normal_epoch(&mut self, epoch: u64) {
+    pub fn advance_to_normal_epoch(&mut self, epoch: u64) {
         let epoch_schedule = self.context.genesis_config().epoch_schedule;
         let start_slot = epoch_schedule.first_normal_slot;
         let warp_slot = start_slot + epoch * epoch_schedule.slots_per_epoch;
