@@ -230,11 +230,20 @@ async fn test_unstake_allows_at_most_three_unstake_accounts() {
     // Wait for the unstake accounts to deactivate.
     context.advance_to_normal_epoch(1);
 
+    let solido_before = context.get_solido().await;
+    let validator_before = &solido_before.validators.entries[0].entry;
+    assert_eq!(validator_before.unstake_seeds.begin, 0);
+    assert_eq!(validator_before.unstake_seeds.end, 3);
+
     // Withdraw the now-inactive stake accounts to the reserve to free up
     // unstake accounts again.
-    // TODO: Enable this after #393 is merged.
-    // context.withdraw_inactive_stake(vote_account).await;
+    context.withdraw_inactive_stake(vote_account).await;
+
+    let solido_after = context.get_solido().await;
+    let validator_after = &solido_after.validators.entries[0].entry;
+    assert_eq!(validator_after.unstake_seeds.begin, 3);
+    assert_eq!(validator_after.unstake_seeds.end, 3);
 
     // Now we should be allowed to unstake again.
-    // context.unstake(vote_account, unstake_amount).await;
+    context.unstake(vote_account, unstake_amount).await;
 }

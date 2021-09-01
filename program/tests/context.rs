@@ -1070,16 +1070,19 @@ impl Context {
     ) -> transport::Result<()> {
         let solido = self.get_solido().await;
         let validator = solido.validators.get(&validator_vote_account).unwrap();
-        let begin = validator.entry.stake_seeds.begin;
-        let end = validator.entry.stake_seeds.end;
 
-        let stake_account_addrs: Vec<Pubkey> = (begin..end)
-            .map(|seed| {
-                validator
-                    .find_stake_account_address(&id(), &self.solido.pubkey(), seed)
-                    .0
-            })
-            .collect();
+        let mut stake_account_addrs: Vec<Pubkey> = Vec::new();
+
+        stake_account_addrs.extend(validator.entry.stake_seeds.into_iter().map(|seed| {
+            validator
+                .find_stake_account_address(&id(), &self.solido.pubkey(), seed)
+                .0
+        }));
+        stake_account_addrs.extend(validator.entry.unstake_seeds.into_iter().map(|seed| {
+            validator
+                .find_unstake_account_address(&id(), &self.solido.pubkey(), seed)
+                .0
+        }));
 
         send_transaction(
             &mut self.context,
@@ -1088,7 +1091,7 @@ impl Context {
                 &id(),
                 &instruction::WithdrawInactiveStakeMeta {
                     lido: self.solido.pubkey(),
-                    validator_vote_account: validator_vote_account,
+                    validator_vote_account,
                     stake_accounts: stake_account_addrs,
                     reserve: self.reserve_address,
                     stake_authority: self.stake_authority,
