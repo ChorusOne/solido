@@ -170,6 +170,13 @@ pub enum LidoError {
     /// Tried to remove a validator when it when it was active or had stake accounts.
     #[error("ValidatorShouldHaveNoUnStakeAccounts")]
     ValidatorShouldHaveNoUnstakeAccounts = 43,
+
+    /// The validator already has the maximum number of unstake accounts.
+    ///
+    /// We can't unstake more in this epoch, wait for stake to deactivate, close
+    /// the unstake accounts with `WithdrawInactiveStake`, and retry next epoch.
+    #[error("MaxUnstakeAccountsReached")]
+    MaxUnstakeAccountsReached = 44,
 }
 
 impl From<ArithmeticError> for LidoError {

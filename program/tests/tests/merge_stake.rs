@@ -60,13 +60,6 @@ async fn test_successful_merge_activating_stake() {
     );
 }
 
-fn advance_epoch(context: &mut Context, current_slot: &mut u64) {
-    let epoch_schedule = context.context.genesis_config().epoch_schedule;
-    let slots_per_epoch = epoch_schedule.slots_per_epoch;
-    *current_slot = *current_slot + slots_per_epoch;
-    context.context.warp_to_slot(*current_slot).unwrap();
-}
-
 // Test merging active to activating: should fail.
 // Test merging two activated stake accounts: should succeed.
 #[tokio::test]
@@ -74,15 +67,15 @@ async fn test_merge_stake_combinations() {
     let stake_deposit_amount = Lamports(2_000_000_000); // 2 Sol
     let mut context = Context::new_with_maintainer_and_validator().await;
 
+    context.advance_to_normal_epoch(0);
+
     let validator = &context.get_solido().await.validators.entries[0];
     context.deposit(Lamports(100_000_000_000)).await;
     context
         .stake_deposit(validator.pubkey, StakeDeposit::Append, stake_deposit_amount)
         .await;
 
-    let mut current_slot = 0;
-    // Skip ahead 1 epoch
-    advance_epoch(&mut context, &mut current_slot);
+    context.advance_to_normal_epoch(1);
 
     // Create an activating stake account.
     context
@@ -98,7 +91,8 @@ async fn test_merge_stake_combinations() {
     let result = context.try_merge_stake(&validator, 0, 1).await;
     // Merging active to activating should fail.
     assert_solido_error!(result, LidoError::WrongStakeState);
-    advance_epoch(&mut context, &mut current_slot);
+
+    context.advance_to_normal_epoch(2);
 
     let now_active_stake_account = context.get_stake_account_from_seed(&validator, 1).await;
     assert!(active_stake_account.is_active());

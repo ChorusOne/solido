@@ -371,6 +371,19 @@ impl Context {
             .expect("Failed to send memo transaction.")
     }
 
+    /// Warp to the given epoch after the first normal slot.
+    ///
+    /// Note, the epoch number here is not the same as the epoch number of the
+    /// clock sysvar; we start counting from the first "normal" slot.
+    pub fn advance_to_normal_epoch(&mut self, epoch: u64) {
+        let epoch_schedule = self.context.genesis_config().epoch_schedule;
+        let start_slot = epoch_schedule.first_normal_slot;
+        let warp_slot = start_slot + epoch * epoch_schedule.slots_per_epoch;
+        self.context
+            .warp_to_slot(warp_slot)
+            .expect("Failed to warp to epoch.");
+    }
+
     /// Initialize a new SPL token mint, return its instance address.
     pub async fn create_mint(&mut self, mint_authority: Pubkey) -> Pubkey {
         let mint = self.deterministic_keypair.new_keypair();
@@ -1057,16 +1070,19 @@ impl Context {
     ) -> transport::Result<()> {
         let solido = self.get_solido().await;
         let validator = solido.validators.get(&validator_vote_account).unwrap();
-        let begin = validator.entry.stake_seeds.begin;
-        let end = validator.entry.stake_seeds.end;
 
-        let stake_account_addrs: Vec<Pubkey> = (begin..end)
-            .map(|seed| {
-                validator
-                    .find_stake_account_address(&id(), &self.solido.pubkey(), seed)
-                    .0
-            })
-            .collect();
+        let mut stake_account_addrs: Vec<Pubkey> = Vec::new();
+
+        stake_account_addrs.extend(validator.entry.stake_seeds.into_iter().map(|seed| {
+            validator
+                .find_stake_account_address(&id(), &self.solido.pubkey(), seed)
+                .0
+        }));
+        stake_account_addrs.extend(validator.entry.unstake_seeds.into_iter().map(|seed| {
+            validator
+                .find_unstake_account_address(&id(), &self.solido.pubkey(), seed)
+                .0
+        }));
 
         send_transaction(
             &mut self.context,
@@ -1075,7 +1091,7 @@ impl Context {
                 &id(),
                 &instruction::WithdrawInactiveStakeMeta {
                     lido: self.solido.pubkey(),
-                    validator_vote_account: validator_vote_account,
+                    validator_vote_account,
                     stake_accounts: stake_account_addrs,
                     reserve: self.reserve_address,
                     stake_authority: self.stake_authority,
