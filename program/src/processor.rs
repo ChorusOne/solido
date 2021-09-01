@@ -14,7 +14,7 @@ use crate::{
     },
     logic::{
         burn_st_sol, check_mint, check_rent_exempt, check_unstake_accounts,
-        create_account_overwrite_if_exists, deserialize_lido, distribute_fees,
+        create_account_even_if_funded, deserialize_lido, distribute_fees,
         initialize_stake_account_undelegated, mint_st_sol_to, split_stake_account,
         transfer_stake_authority, CreateAccountOptions, SplitStakeAccounts,
     },
@@ -272,7 +272,7 @@ pub fn process_stake_deposit(
 
     // Create the account that is going to hold the new stake account data.
     // Even if it was already funded.
-    create_account_overwrite_if_exists(
+    create_account_even_if_funded(
         accounts.lido.key,
         CreateAccountOptions {
             fund_amount: amount,

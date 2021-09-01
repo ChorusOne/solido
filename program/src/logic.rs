@@ -106,11 +106,11 @@ pub struct CreateAccountOptions<'a, 'b> {
 /// Create a new account and fund it from the reserve.
 ///
 /// Unlike `system_instruction::create_account`, this will not fail if the account
-/// already exists. This is important, because if account creation would fail for
+/// is already funded. This is important, because if account creation would fail for
 /// stake accounts, then someone could transfer a small amount to the next stake
 /// account for a validator, and that would prevent us from delegating more stake
 /// to that validator.
-pub fn create_account_overwrite_if_exists<'a, 'b>(
+pub fn create_account_even_if_funded<'a, 'b>(
     solido_address: &Pubkey,
     options: CreateAccountOptions<'a, 'b>,
     reserve: &AccountInfo<'b>,
