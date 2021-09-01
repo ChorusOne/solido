@@ -359,10 +359,9 @@ impl SolidoState {
 
     /// If there is a deposit that can be staked, return the instructions to do so.
     pub fn try_stake_deposit(&self) -> Option<(Instruction, MaintenanceOutput)> {
-        // We can only stake if there is an active validator.
-        if self.solido.validators.iter_active().next().is_none() {
-            return None;
-        }
+        // We can only stake if there is an active validator. If there is none,
+        // this will short-circuit and return None.
+        self.solido.validators.iter_active().next()?;
 
         let reserve_balance = self.get_effective_reserve();
 
