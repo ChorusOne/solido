@@ -183,3 +183,18 @@ async fn test_collect_validator_fee_withdraws_donations_to_the_reserve() {
         StLamports(5_000)
     );
 }
+
+#[tokio::test]
+async fn test_collect_validator_fee_rejects_foreign_validators() {
+    let mut context = Context::new_with_maintainer_and_validator().await;
+
+    // Create a vote account that is not part of Solido (but which does have the
+    // withdraw authority set to the instance).
+    let validator_identity = context.deterministic_keypair.new_keypair();
+    let vote_account = context.create_vote_account(&validator_identity).await;
+    context.fund(vote_account, Lamports(1_000_000_000)).await;
+
+    // We should refuse to withdraw from it, even though we could.
+    let result = context.try_collect_validator_fee(vote_account).await;
+    assert_solido_error!(result, LidoError::InvalidAccountMember);
+}
