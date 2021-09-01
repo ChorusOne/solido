@@ -113,11 +113,21 @@ pub fn get_validator_furthest_below_target(
         target_balance.len(),
         "Must have as many target balances as current balances."
     );
-    let mut index = 0;
+
+    // Our initial index, that will be returned when no validator is below its target,
+    // is the first active validator, and if no validator is active, just the first validator.
+    let mut index = validators
+        .iter_entries()
+        .position(|v| v.active)
+        .unwrap_or(0);
     let mut amount = Lamports(0);
 
     for (i, (validator, target)) in validators.iter_entries().zip(target_balance).enumerate() {
-        let amount_below = Lamports(target.0.saturating_sub(validator.stake_accounts_balance.0));
+        let amount_below = Lamports(
+            target
+                .0
+                .saturating_sub(validator.effective_stake_balance().0),
+        );
         if amount_below > amount {
             amount = amount_below;
             index = i;
@@ -133,11 +143,7 @@ pub fn get_validator_to_withdraw(
     validators
         .entries
         .iter()
-        .max_by(|&x, &y| {
-            x.entry
-                .stake_accounts_balance
-                .cmp(&y.entry.stake_accounts_balance)
-        })
+        .max_by_key(|v| v.entry.effective_stake_balance())
         .ok_or(LidoError::NoActiveValidators)
 }
 
