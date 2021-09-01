@@ -364,15 +364,11 @@ impl SolidoState {
         // If there is enough reserve, we can make a deposit. To keep the pool
         // balanced, find the validator furthest below its target balance, and
         // deposit to that validator.
-        let mut targets = vec![Lamports(0); self.solido.validators.len()];
 
         let undelegated_lamports = reserve_balance;
-        lido::balance::get_target_balance(
-            undelegated_lamports,
-            &self.solido.validators,
-            &mut targets[..],
-        )
-        .expect("Failed to compute target balance.");
+        let targets =
+            lido::balance::get_target_balance(undelegated_lamports, &self.solido.validators)
+                .expect("Failed to compute target balance.");
 
         let (validator_index, amount_below_target) =
             lido::balance::get_validator_furthest_below_target(

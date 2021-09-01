@@ -3,6 +3,8 @@
 
 //! Logic for keeping the stake pool balanced.
 
+use std::ops::Mul;
+
 use crate::account_map::PubkeyAndEntry;
 use crate::state::{Validator, Validators};
 use crate::{
@@ -13,23 +15,13 @@ use crate::{
 
 /// Compute the ideal stake balance for each validator.
 ///
-/// The validator order in `target_balance` is the same as in `current_balance`.
+/// The validator order in the result is the same as in `current_balance`.
 ///
-/// At the moment, this function targets a uniform distribution over all
-/// validators. In the future we could do something more sophisticated (such as
-/// allocating more stake to faster validators, or ones with a proven track
-/// record).
+/// This function targets a uniform distribution over all active validators.
 pub fn get_target_balance(
     undelegated_lamports: Lamports,
     validators: &Validators,
-    target_balance: &mut [Lamports],
-) -> Result<(), LidoError> {
-    assert_eq!(
-        validators.len(),
-        target_balance.len(),
-        "Must have as many target balance outputs as current balance inputs."
-    );
-
+) -> Result<Vec<Lamports>, LidoError> {
     let total_delegated_lamports: token::Result<Lamports> = validators
         .iter_entries()
         .map(|v| v.stake_accounts_balance)
@@ -45,18 +37,25 @@ pub fn get_target_balance(
     if num_active_validators == 0 {
         return Err(LidoError::NoActiveValidators);
     }
-    // Target an uniform distribution. A division by zero cannot happen because
-    // of the test above.
-    for (target, validator) in target_balance.iter_mut().zip(validators.iter_entries()) {
-        if validator.active {
-            *target = (total_lamports
-                * Rational {
-                    numerator: 1,
-                    denominator: num_active_validators,
-                })
-            .expect("Does not happen, error caught when testing if `num_active_validators == 0`")
-        }
-    }
+
+    let lamports_per_validator = total_lamports
+        .mul(Rational {
+            numerator: 1,
+            denominator: num_active_validators,
+        })
+        .expect("Does not divide by zero because `num_active_validators != 0`");
+
+    // Target an uniform distribution.
+    let mut target_balance: Vec<Lamports> = validators
+        .iter_entries()
+        .map(|validator| {
+            if validator.active {
+                lamports_per_validator
+            } else {
+                Lamports(0)
+            }
+        })
+        .collect();
 
     // The total lamports to distribute may be slightly larger than the total
     // lamports we distributed so far, because we round down.
@@ -100,7 +99,7 @@ pub fn get_target_balance(
 
     assert_eq!(total_lamports_distributed, total_lamports);
 
-    Ok(())
+    Ok(target_balance)
 }
 
 /// Given a list of validators and their target balance, return the index of the
@@ -153,10 +152,8 @@ mod test {
         // 100 Lamports delegated + 50 undelegated => 150 per validator target.
         let mut validators = Validators::new_fill_default(1);
         validators.entries[0].entry.stake_accounts_balance = Lamports(100);
-        let mut targets = [Lamports(0); 1];
         let undelegated_stake = Lamports(50);
-        let result = get_target_balance(undelegated_stake, &validators, &mut targets[..]);
-        assert!(result.is_ok());
+        let targets = get_target_balance(undelegated_stake, &validators).unwrap();
         assert_eq!(targets[0], Lamports(150));
 
         // With only one validator, that one is the least balanced. It is
@@ -174,10 +171,8 @@ mod test {
         validators.entries[0].entry.stake_accounts_balance = Lamports(101);
         validators.entries[1].entry.stake_accounts_balance = Lamports(99);
 
-        let mut targets = [Lamports(0); 2];
         let undelegated_stake = Lamports(50);
-        let result = get_target_balance(undelegated_stake, &validators, &mut targets[..]);
-        assert!(result.is_ok());
+        let targets = get_target_balance(undelegated_stake, &validators).unwrap();
         assert_eq!(targets, [Lamports(125), Lamports(125)]);
 
         // The second validator is further away from its target.
@@ -195,10 +190,8 @@ mod test {
         validators.entries[0].entry.stake_accounts_balance = Lamports(101);
         validators.entries[1].entry.stake_accounts_balance = Lamports(99);
 
-        let mut targets = [Lamports(0); 2];
         let undelegated_stake = Lamports(51);
-        let result = get_target_balance(undelegated_stake, &validators, &mut targets[..]);
-        assert!(result.is_ok());
+        let targets = get_target_balance(undelegated_stake, &validators).unwrap();
         assert_eq!(targets, [Lamports(126), Lamports(125)]);
 
         // The second validator is further from its target, by one Lamport.
@@ -214,10 +207,8 @@ mod test {
         validators.entries[0].entry.stake_accounts_balance = Lamports(50);
         validators.entries[1].entry.stake_accounts_balance = Lamports(50);
 
-        let mut targets = [Lamports(0); 2];
         let undelegated_stake = Lamports(0);
-        let result = get_target_balance(undelegated_stake, &validators, &mut targets[..]);
-        assert!(result.is_ok());
+        let targets = get_target_balance(undelegated_stake, &validators).unwrap();
         assert_eq!(targets, [Lamports(50), Lamports(50)]);
 
         assert_eq!(
@@ -233,10 +224,8 @@ mod test {
         validators.entries[1].entry.active = false;
         validators.entries[2].entry.stake_accounts_balance = Lamports(99);
 
-        let mut targets = [Lamports(0); 3];
         let undelegated_stake = Lamports(51);
-        let result = get_target_balance(undelegated_stake, &validators, &mut targets[..]);
-        assert!(result.is_ok());
+        let targets = get_target_balance(undelegated_stake, &validators).unwrap();
         assert_eq!(targets, [Lamports(126), Lamports(0), Lamports(125)]);
 
         assert_eq!(
@@ -255,10 +244,8 @@ mod test {
         validators.entries[1].entry.active = false;
         validators.entries[2].entry.stake_accounts_balance = Lamports(300);
 
-        let mut targets = [Lamports(0); 3];
         let undelegated_stake = Lamports(0);
-        let result = get_target_balance(undelegated_stake, &validators, &mut targets[..]);
-        assert!(result.is_ok());
+        let targets = get_target_balance(undelegated_stake, &validators).unwrap();
         assert_eq!(targets, [Lamports(250), Lamports(0), Lamports(250)]);
 
         assert_eq!(
@@ -278,9 +265,8 @@ mod test {
         validators.entries[1].entry.active = false;
         validators.entries[2].entry.active = false;
 
-        let mut targets = [Lamports(0); 3];
         let undelegated_stake = Lamports(0);
-        let result = get_target_balance(undelegated_stake, &validators, &mut targets[..]);
+        let result = get_target_balance(undelegated_stake, &validators);
         assert!(result.is_err());
     }
 }
