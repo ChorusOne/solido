@@ -359,12 +359,17 @@ impl SolidoState {
 
     /// If there is a deposit that can be staked, return the instructions to do so.
     pub fn try_stake_deposit(&self) -> Option<(Instruction, MaintenanceOutput)> {
+        // We can only stake if there is an active validator.
+        if self.solido.validators.iter_active().next().is_none() {
+            return None;
+        }
+
         let reserve_balance = self.get_effective_reserve();
 
         // If there is enough reserve, we can make a deposit. To keep the pool
         // balanced, find the validator furthest below its target balance, and
-        // deposit to that validator.
-
+        // deposit to that validator. If we get here there is at least one active
+        // validator, so computing the target balance should not fail.
         let undelegated_lamports = reserve_balance;
         let targets =
             lido::balance::get_target_balance(undelegated_lamports, &self.solido.validators)
