@@ -726,36 +726,30 @@ impl Validator {
         assert_eq!(self.stake_accounts_balance, Lamports(0));
         Ok(())
     }
-    pub fn show_removed_error_msg(error: Result<(), LidoError>) -> Result<(), LidoError> {
+    pub fn show_removed_error_msg(error: &Result<(), LidoError>) {
         if let Err(err) = error {
             match err {
                 LidoError::ValidatorIsStillActive => {
                     msg!(
                                 "Refusing to remove validator because it is still active, deactivate it first."
                             );
-                    return Err(err);
                 }
                 LidoError::ValidatorHasUnclaimedCredit => {
                     msg!(
                         "Validator still has tokens to claim. Reclaim tokens before removing the validator"
                     );
-                    return Err(err);
                 }
                 LidoError::ValidatorShouldHaveNoStakeAccounts => {
                     msg!("Refusing to remove validator because it still has stake accounts, unstake them first.");
-                    return Err(err);
                 }
                 LidoError::ValidatorShouldHaveNoUnstakeAccounts => {
                     msg!("Refusing to remove validator because it still has unstake accounts, withdraw them first.");
-                    return Err(err);
                 }
                 _ => {
                     msg!("Invalid error when removing a validator: shouldn't happen.");
-                    return Err(err);
                 }
             }
         }
-        Ok(())
     }
 }
 

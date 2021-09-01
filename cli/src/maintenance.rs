@@ -979,11 +979,9 @@ pub fn try_perform_maintenance(
         .or_else(|| state.try_collect_validator_fee())
         // Same for updating the validator balance.
         .or_else(|| state.try_withdraw_inactive_stake())
-        // Try to remove validator should happen before withdrawing inactive
-        // stake and collecting validator's fees.
-        .or_else(|| state.try_remove_validator())
         .or_else(|| state.try_stake_deposit())
-        .or_else(|| state.try_claim_validator_fee());
+        .or_else(|| state.try_claim_validator_fee())
+        .or_else(|| state.try_remove_validator());
 
     match instruction_output {
         Some((instruction, output)) => {

@@ -532,7 +532,7 @@ expected_result = {
 }
 print('> Staked as expected.')
 
-print(f'\n Deactivating validator {validator_vote_account.pubkey} ...')
+print(f'\nDeactivating validator {validator_vote_account.pubkey} ...')
 transaction_result = solido(
     'deactivate-validator',
     '--multisig-program-id',
