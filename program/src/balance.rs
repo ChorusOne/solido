@@ -275,4 +275,22 @@ mod test {
         let result = get_target_balance(undelegated_stake, &validators);
         assert!(result.is_err());
     }
+
+    #[test]
+    fn get_target_balance_no_preference_but_some_inactive() {
+        // Every validator is exactly at its target, no validator is below.
+        // But the validator furthest below target should still be an active one,
+        // not the inactive one.
+        let mut validators = Validators::new_fill_default(2);
+        validators.entries[0].entry.stake_accounts_balance = Lamports(0);
+        validators.entries[1].entry.stake_accounts_balance = Lamports(10);
+        validators.entries[0].entry.active = false;
+
+        let undelegated_stake = Lamports(0);
+        let targets = get_target_balance(undelegated_stake, &validators).unwrap();
+        assert_eq!(
+            get_validator_furthest_below_target(&validators, &targets[..]),
+            (1, Lamports(0)),
+        );
+    }
 }
