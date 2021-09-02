@@ -7,6 +7,7 @@ use crate::context::{id, Context, StakeDeposit};
 use crate::{assert_error_code, assert_solido_error};
 
 use lido::error::LidoError;
+use lido::processor::StakeType;
 use lido::token::Lamports;
 use solana_program_test::tokio;
 use solana_sdk::signer::Signer;
@@ -109,9 +110,7 @@ async fn test_stake_deposit_merge() {
 
     // Next, we will try to merge stake accounts created in different epochs,
     // which should fail.
-    let epoch_schedule = context.context.genesis_config().epoch_schedule;
-    let start_slot = epoch_schedule.first_normal_slot;
-    context.context.warp_to_slot(start_slot).unwrap();
+    context.advance_to_normal_epoch(0);
 
     let result = context
         .try_stake_deposit(
@@ -152,8 +151,12 @@ async fn test_stake_deposit_succeeds_despite_donation() {
     let validator_before = &solido_before.validators.entries[0];
 
     // Figure out what the next stake account is going to be.
-    let (stake_account_addr, _) =
-        validator_before.find_stake_account_address(&id(), &context.solido.pubkey(), 0);
+    let (stake_account_addr, _) = validator_before.find_stake_account_address(
+        &id(),
+        &context.solido.pubkey(),
+        0,
+        &StakeType::Stake,
+    );
 
     // Put some SOL in that account, so it is no longer non-existent.
     context

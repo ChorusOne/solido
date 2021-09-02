@@ -19,6 +19,7 @@ use spl_token::state::Mint;
 use crate::error::LidoError;
 use crate::logic::get_reserve_available_balance;
 use crate::metrics::Metrics;
+use crate::processor::StakeType;
 use crate::token::{self, Lamports, Rational, StLamports};
 use crate::util::serialize_b58;
 use crate::{
@@ -775,27 +776,13 @@ impl PubkeyAndEntry<Validator> {
         program_id: &Pubkey,
         solido_account: &Pubkey,
         seed: u64,
+        stake_type: &StakeType,
     ) -> (Pubkey, u8) {
-        self.find_stake_account_address_with_authority(
-            program_id,
-            solido_account,
-            VALIDATOR_STAKE_ACCOUNT,
-            seed,
-        )
-    }
-
-    pub fn find_unstake_account_address(
-        &self,
-        program_id: &Pubkey,
-        solido_account: &Pubkey,
-        seed: u64,
-    ) -> (Pubkey, u8) {
-        self.find_stake_account_address_with_authority(
-            program_id,
-            solido_account,
-            VALIDATOR_UNSTAKE_ACCOUNT,
-            seed,
-        )
+        let authority = match stake_type {
+            StakeType::Stake => VALIDATOR_STAKE_ACCOUNT,
+            StakeType::Unstake => VALIDATOR_UNSTAKE_ACCOUNT,
+        };
+        self.find_stake_account_address_with_authority(program_id, solido_account, authority, seed)
     }
 }
 

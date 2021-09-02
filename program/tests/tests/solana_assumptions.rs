@@ -91,11 +91,7 @@ async fn measure_staking_rewards(mode: StakeMode) -> Lamports {
     let vote_account = context.validator.as_ref().unwrap().vote_account.clone();
     let authority = context.deterministic_keypair.new_keypair();
 
-    let epoch_schedule = context.context.genesis_config().epoch_schedule;
-    let slots_per_epoch = epoch_schedule.slots_per_epoch;
-    let start_slot = epoch_schedule.first_normal_slot;
-
-    context.context.warp_to_slot(start_slot).unwrap();
+    context.advance_to_normal_epoch(0);
 
     // Create a stake account and delegate it to the vote account, which is a
     // 100% commission vote account, so all rewards go to the vote account.
@@ -113,10 +109,7 @@ async fn measure_staking_rewards(mode: StakeMode) -> Lamports {
     }
 
     // Move ahead one epoch so the stake becomes active.
-    context
-        .context
-        .warp_to_slot(start_slot + 1 * slots_per_epoch)
-        .unwrap();
+    context.advance_to_normal_epoch(1);
 
     let balance_t0 = context.get_sol_balance(vote_account).await;
 
@@ -134,10 +127,7 @@ async fn measure_staking_rewards(mode: StakeMode) -> Lamports {
     context
         .context
         .increment_vote_account_credits(&vote_account, 1);
-    context
-        .context
-        .warp_to_slot(start_slot + 2 * slots_per_epoch)
-        .unwrap();
+    context.advance_to_normal_epoch(2);
 
     let balance_t1 = context.get_sol_balance(vote_account).await;
 
@@ -198,11 +188,7 @@ async fn test_stake_accounts() {
         }
     );
 
-    let epoch_schedule = context.context.genesis_config().epoch_schedule;
-    let slots_per_epoch = epoch_schedule.slots_per_epoch;
-    let start_slot = epoch_schedule.first_normal_slot;
-
-    context.context.warp_to_slot(start_slot).unwrap();
+    context.advance_to_normal_epoch(0);
 
     // Stake is now active.
     let active = activating;
@@ -248,8 +234,7 @@ async fn test_stake_accounts() {
         }
     );
 
-    let warp_to_slot = context.get_clock().await.slot + slots_per_epoch;
-    context.context.warp_to_slot(warp_to_slot).unwrap();
+    context.advance_to_normal_epoch(1);
 
     // Stake is now inactive.
     let deactivated = deactivating;
