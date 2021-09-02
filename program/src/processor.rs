@@ -689,8 +689,12 @@ pub fn process_withdraw_inactive_stake(
         .into_iter()
         .zip(stake_accounts.iter())
     {
-        let (stake_account_address, _bump_seed) =
-            validator.find_stake_account_address(program_id, accounts.lido.key, seed);
+        let (stake_account_address, _bump_seed) = validator.find_stake_account_address(
+            program_id,
+            accounts.lido.key,
+            seed,
+            &StakeType::Stake,
+        );
         let account_balance = check_address_and_get_balance(
             &stake_account_address,
             provided_stake_account,
@@ -745,8 +749,12 @@ pub fn process_withdraw_inactive_stake(
         .into_iter()
         .zip(unstake_accounts)
     {
-        let (unstake_account_address, _bump_seed) =
-            validator.find_unstake_account_address(program_id, accounts.lido.key, seed);
+        let (unstake_account_address, _bump_seed) = validator.find_stake_account_address(
+            program_id,
+            accounts.lido.key,
+            seed,
+            &StakeType::Unstake,
+        );
 
         let account_balance = check_address_and_get_balance(
             &unstake_account_address,
@@ -928,6 +936,7 @@ pub fn process_withdraw(
         program_id,
         accounts.lido.key,
         validator.entry.stake_seeds.begin,
+        &StakeType::Stake,
     );
     if &stake_account != accounts.source_stake_account.key {
         msg!("Stake account is different than the calculated by the given seed, should be {}, is {}.",
