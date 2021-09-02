@@ -843,6 +843,9 @@ pub fn process_collect_validator_fee(
     let clock = Clock::from_account_info(accounts.sysvar_clock)?;
     lido.check_exchange_rate_last_epoch(&clock, "CollectValidatorFee")?;
 
+    // Confirm that the vote account passed in is actually part of the validator set.
+    lido.validators.get(accounts.validator_vote_account.key)?;
+
     let rewards_withdraw_authority = lido.check_rewards_withdraw_authority(
         program_id,
         accounts.lido.key,
