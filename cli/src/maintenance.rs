@@ -18,7 +18,6 @@ use solana_program::{clock::Clock, pubkey::Pubkey, rent::Rent, stake_history::St
 use solana_sdk::account::ReadableAccount;
 use solana_sdk::fee_calculator::DEFAULT_TARGET_LAMPORTS_PER_SIGNATURE;
 use solana_sdk::{account::Account, instruction::Instruction};
-use solana_stake_program::stake_state::StakeState;
 use spl_token::state::Mint;
 
 use lido::token::StLamports;
@@ -668,8 +667,6 @@ impl SolidoState {
     /// or if some joker donates to one of the stake accounts we can use the same function
     /// to claim these rewards back to the reserve account so they can be re-staked.
     pub fn try_withdraw_inactive_stake(&self) -> Option<(Instruction, MaintenanceOutput)> {
-        let stake_rent_lamports =
-            Lamports(self.rent.minimum_balance(std::mem::size_of::<StakeState>()));
         for (validator, stake_accounts, unstake_accounts) in izip!(
             self.solido.validators.entries.iter(),
             self.validator_stake_accounts.iter(),
@@ -683,15 +680,8 @@ impl SolidoState {
 
             let expected_difference_stake =
                 if current_stake_balance > validator.entry.stake_accounts_balance {
-                    let expected_difference = (current_stake_balance
-                        - validator.entry.stake_accounts_balance)
-                        .expect("Does not overflow because current > entry.balance.");
-                    // If the expected difference is less than some defined amount
-                    // of Lamports, we don't bother withdrawing. We try to do this
-                    // so we don't pay more for fees than the amount that we'll
-                    // withdraw.
-                    (expected_difference - stake_rent_lamports)
-                        .expect("Stake account should have at least the paid rent.")
+                    (current_stake_balance - validator.entry.stake_accounts_balance)
+                        .expect("Does not overflow because current > entry.balance.")
                 } else {
                     Lamports(0)
                 };
@@ -706,6 +696,10 @@ impl SolidoState {
                     .expect("Summing unstake accounts should not overflow.");
             }
 
+            // If the expected difference is less than some defined amount
+            // of Lamports, we don't bother withdrawing. We try to do this
+            // so we don't pay more for fees than the amount that we'll
+            // withdraw. Or if we have stake to remove from unstake accounts.
             if expected_difference_stake > SolidoState::MINIMUM_WITHDRAW_AMOUNT
                 || removed_unstake > Lamports(0)
             {
