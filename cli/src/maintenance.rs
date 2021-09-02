@@ -451,10 +451,6 @@ impl SolidoState {
             if validator.entry.active || stake_accounts.is_empty() {
                 continue;
             }
-            // Validator's stake account is not fully inactive.
-            if stake_accounts[0].1.balance.inactive != stake_accounts[0].1.balance.total() {
-                continue;
-            }
             // Validator already has 3 unstake accounts.
             if validator.entry.unstake_seeds.end - validator.entry.unstake_seeds.begin >= 3 {
                 continue;
@@ -470,7 +466,7 @@ impl SolidoState {
                 to_unstake_account: validator_unstake_account,
                 from_stake_seed: validator.entry.stake_seeds.begin,
                 to_unstake_seed: validator.entry.unstake_seeds.end,
-                amount: stake_accounts[0].1.balance.inactive,
+                amount: stake_accounts[0].1.balance.total(),
             };
 
             return Some((
@@ -484,7 +480,7 @@ impl SolidoState {
                         destination_unstake_account: validator_unstake_account,
                         stake_authority: self.get_stake_authority(),
                     },
-                    stake_accounts[0].1.balance.inactive,
+                    stake_accounts[0].1.balance.total(),
                 ),
                 task,
             ));
