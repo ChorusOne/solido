@@ -7,6 +7,7 @@ use crate::context::{id, Context, StakeDeposit};
 use crate::{assert_error_code, assert_solido_error};
 
 use lido::error::LidoError;
+use lido::processor::StakeType;
 use lido::token::Lamports;
 use solana_program_test::tokio;
 use solana_sdk::signer::Signer;
@@ -150,8 +151,12 @@ async fn test_stake_deposit_succeeds_despite_donation() {
     let validator_before = &solido_before.validators.entries[0];
 
     // Figure out what the next stake account is going to be.
-    let (stake_account_addr, _) =
-        validator_before.find_stake_account_address(&id(), &context.solido.pubkey(), 0);
+    let (stake_account_addr, _) = validator_before.find_stake_account_address(
+        &id(),
+        &context.solido.pubkey(),
+        0,
+        &StakeType::Stake,
+    );
 
     // Put some SOL in that account, so it is no longer non-existent.
     context

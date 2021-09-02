@@ -5,6 +5,7 @@
 
 use crate::assert_solido_error;
 use crate::context::{Context, StakeDeposit};
+use lido::processor::StakeType;
 use lido::MINIMUM_STAKE_ACCOUNT_BALANCE;
 use lido::{error::LidoError, token::Lamports};
 use solana_program::stake::state::StakeState;
@@ -188,6 +189,7 @@ async fn test_unstake_from_inactive_validator() {
         &crate::context::id(),
         &context.solido.pubkey(),
         validator.entry.stake_seeds.begin,
+        &StakeType::Stake,
     );
     let account = context.try_get_account(stake_account).await;
     assert!(
@@ -200,8 +202,12 @@ async fn test_unstake_from_inactive_validator() {
 async fn test_unstake_with_funded_destination_stake() {
     let mut context = new_unstake_context(&[STAKE_AMOUNT]).await;
     let validator = &context.get_solido().await.validators.entries[0];
-    let (unstake_address, _) =
-        validator.find_unstake_account_address(&crate::context::id(), &context.solido.pubkey(), 0);
+    let (unstake_address, _) = validator.find_stake_account_address(
+        &crate::context::id(),
+        &context.solido.pubkey(),
+        0,
+        &StakeType::Unstake,
+    );
     context.fund(unstake_address, Lamports(500_000_000)).await;
     let unstake_lamports = Lamports(1_000_000_000);
 
