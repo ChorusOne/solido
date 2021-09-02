@@ -448,7 +448,7 @@ impl SolidoState {
         {
             // We are only interested in unstaking from inactive validators that
             // have stake accounts.
-            if validator.entry.active || stake_accounts.len() == 0 {
+            if validator.entry.active || stake_accounts.is_empty() {
                 continue;
             }
             // Validator's stake account is not fully inactive.
