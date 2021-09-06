@@ -506,17 +506,9 @@ impl SolidoState {
             if validator.entry.unstake_seeds.end - validator.entry.unstake_seeds.begin >= 3 {
                 continue;
             }
-            match stake_accounts.first() {
-                // Cannot unstake if it’s still activating, only if it’s fully active.
-                Some((_pubkey, stake_account))
-                    if stake_account.balance.activating > Lamports(0) =>
-                {
-                    continue
-                }
-                // No stake account to unstake from.
-                None => continue,
-                // In this case, we should be able to unstake.
-                _ => {}
+            // No stake account to unstake from.
+            if stake_accounts.first().is_none() {
+                continue;
             }
             let (validator_unstake_account, _) = validator.find_stake_account_address(
                 &self.solido_program_id,
