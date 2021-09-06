@@ -106,7 +106,7 @@ pub struct CreateAccountOptions<'a, 'b> {
 /// Create a new account and fund it from the reserve.
 ///
 /// Unlike `system_instruction::create_account`, this will not fail if the account
-/// is already funded. This is important, because if account creation would fail for
+/// is already funded. This is important, because if account creation fails for
 /// stake accounts, then someone could transfer a small amount to the next stake
 /// account for a validator, and that would prevent us from delegating more stake
 /// to that validator.
