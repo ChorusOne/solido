@@ -129,6 +129,28 @@ class VoteAccount(NamedTuple):
     num_votes: int
 
 
+def print_color(message: str, *, ansi_color_code: str, end: str = '\n') -> None:
+    # Switch to the given color, print the message, then reset formatting.
+    print(f'\x1b[{ansi_color_code}m{message}\x1b[0m', end=end)
+
+
+def print_error(message: str) -> None:
+    # 31 is red.
+    print_color(f'ERROR {message}', ansi_color_code='31')
+
+
+def print_ok(message: str) -> None:
+    # 32 is green. For OK, we only make the prefix green, not the entire message,
+    # to make validation failures stand out more.
+    print_color(f'OK   ', ansi_color_code='32', end=' ')
+    print(message)
+
+
+def print_warn(message: str) -> None:
+    # 32 is yellow.
+    print_color(f'WARN  {message}', ansi_color_code='33')
+
+
 class ValidatorResponse(NamedTuple):
     timestamp: str
     email: str
@@ -159,63 +181,63 @@ class ValidatorResponse(NamedTuple):
         vote_account = self.get_vote_account()
 
         if vote_account.authorized_withdrawer == SOLIDO_AUTHORIZED_WITHDAWER:
-            print('  OK: Authorized withdrawer set to Solido.')
+            print_ok('Authorized withdrawer set to Solido.')
         else:
-            print('  ERROR: Wrong authorized withdrawer.')
+            print_error('Wrong authorized withdrawer.')
 
         if vote_account.num_votes > 0:
-            print('  OK: Vote account has votes.')
+            print_ok('Vote account has votes.')
         else:
-            print('  WARN: Vote account has not voted yet.')
+            print_warn('Vote account has not voted yet.')
 
         if vote_account.commission == 100:
-            print('  OK: Vote account commission is 100%.')
+            print_ok('Vote account commission is 100%.')
         else:
-            print('  ERROR: Vote account commission is not 100%.')
+            print_error('Vote account commission is not 100%.')
 
         validator_info = validators_by_identity.get(vote_account.validator_identity_address)
         if validator_info is None:
-            print('  ERROR: Validator identity does not exist.')
+            print_error('Validator identity does not exist.')
             return
         else:
-            print('  OK: Validator identity exists.')
+            print_ok('Validator identity exists.')
 
         if validator_info.keybase_username == self.keybase_username:
-            print('  OK: Keybase username in form matches username in identity account.')
+            print_ok('Keybase username in form matches username in identity account.')
         else:
-            print('  ERROR: Keybase username in identity account does not match the form.')
+            print_error('Keybase username in identity account does not match the form.')
 
         if validator_info.name.startswith('Lido / '):
-            print('  OK: Validator identity name starts with "Lido / ".')
+            print_ok('Validator identity name starts with "Lido / ".')
         else:
-            print('  ERROR: Validator identity name does not start with "Lido / ".')
+            print_error('Validator identity name does not start with "Lido / ".')
 
         if validator_info.name == self.identity_name:
-            print('  OK: Name in identity account matches name in form.')
+            print_ok('Name in identity account matches name in form.')
         else:
-            print('  ERROR: Name in identity account does not mach name in form.')
+            print_error('Name in identity account does not mach name in form.')
 
         if check_keybase_has_identity_address(self.keybase_username, vote_account.validator_identity_address):
-            print('  OK: Validator identity confirmed on Keybase.')
+            print_ok(f'Validator identity public key is on Keybase under {self.keybase_username}.')
         else:
-            print('  ERROR: Could not verify validator identity through Keybase.')
+            print_error('Could not verify validator identity through Keybase.')
 
         token_account = get_token_account(self.st_sol_account_address)
         if token_account is not None:
-            print('  OK: Fee account exists.')
+            print_ok('Fee account exists.')
         else:
-            print(f'  ERROR: Fee account {self.st_sol_account_address} does not exist.')
+            print_error(f'Fee account {self.st_sol_account_address} does not exist.')
             return
 
-        if token_account.mint_address == ST_SOL_MINT:
-            print('  OK: Fee account has the right mint.')
-        else:
-            print('  ERROR: Fee account is not an stSOL account, the mint is wrong.')
-
         if token_account.state == "initialized":
-            print('  OK: Token account is in initialized state.')
+            print_ok('Token account is in initialized state.')
         else:
-            print('  ERROR: Token account is not initialized state.')
+            print_error('Token account is not initialized state.')
+
+        if token_account.mint_address == ST_SOL_MINT:
+            print_ok('Fee account is an stSOL account (it has the right mint).')
+        else:
+            print_error('Fee account is not an stSOL account, the mint is wrong.')
 
 
 def iter_rows_from_stdin() -> Iterable[ValidatorResponse]:
