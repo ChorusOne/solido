@@ -36,6 +36,11 @@ impl PartialVoteState {
         validator_vote_account: &AccountInfo,
     ) -> Result<Self, LidoError> {
         if validator_vote_account.owner != &solana_program::vote::program::id() {
+            msg!(
+                "Expected validator's vote account to be owned by {}, it's owned by {} instead.",
+                solana_program::vote::program::id(),
+                validator_vote_account.owner
+            );
             return Err(LidoError::ValidatorVoteAccountHasDifferentOwner);
         }
         let data = validator_vote_account.data.borrow();

@@ -260,6 +260,14 @@ impl Lido {
 
     /// Confirm that the given account is an SPL token account with our stSOL mint as mint.
     pub fn check_is_st_sol_account(&self, token_account_info: &AccountInfo) -> ProgramResult {
+        if token_account_info.owner != &spl_token::id() {
+            msg!(
+                "Expected SPL token account to be owned by {}, but it's owned by {} instead.",
+                spl_token::id(),
+                token_account_info.owner
+            );
+            return Err(LidoError::InvalidStSolAccount.into());
+        }
         let token_account =
             match spl_token::state::Account::unpack_from_slice(&token_account_info.data.borrow()) {
                 Ok(account) => account,
