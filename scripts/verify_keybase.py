@@ -41,17 +41,37 @@ import json
 import subprocess
 import sys
 
-from typing import Any, Dict, Iterable, NamedTuple
+from typing import Any, Dict, Iterable, NamedTuple, Optional
 
 
 SOLIDO_AUTHORIZED_WITHDAWER = 'GgrQiJ8s2pfHsfMbEFtNcejnzLegzZ16c9XtJ2X2FpuF'
 ST_SOL_MINT = '7dHbWXmci3dT8UFYWYZweBLXgycu7Y3iL6trKn1Y7ARj'
 
 
-def solana(*args: str) -> Dict[str, Any]:
+def solana(*args: str) -> Any:
     full_args = ['solana', '--url', 'https://api.mainnet-beta.solana.com', *args]
     result = subprocess.run(full_args, check=True, capture_output=True, encoding='utf-8')
     return json.loads(result.stdout)
+
+
+class ValidatorInfo(NamedTuple):
+    identity_address: str
+    info_address: str
+    keybase_username: Optional[str]
+    name: Optional[str]
+
+
+def iter_validator_infos() -> Iterable[ValidatorInfo]:
+    """
+    Return the validator info for all validators on mainnet.
+    """
+    for info in solana('validator-info', 'get', '--output', 'json'):
+        yield ValidatorInfo(
+            identity_address=info['identityPubkey'],
+            info_address=info['infoPubkey'],
+            keybase_username=info['info'].get('keybaseUsername'),
+            name=info['info'].get('name'),
+        )
 
 
 class VoteAccount(NamedTuple):
@@ -86,7 +106,7 @@ class ValidatorResponse(NamedTuple):
             num_votes=len(result['votes'])
         )
 
-    def check(self) -> None:
+    def check(self, validators_by_identity: Dict[str, ValidatorInfo]) -> None:
         print(self.validator_name)
         vote_account = self.get_vote_account()
 
@@ -100,6 +120,36 @@ class ValidatorResponse(NamedTuple):
         else:
             print('  WARN: Vote account has not voted yet.')
 
+        if vote_account.commission == 100:
+            print('  OK: Vote account commission is 100%.')
+        else:
+            print('  ERROR: Vote account commission is not 100%.')
+
+        validator_info = validators_by_identity.get(vote_account.validator_identity_address)
+        if validator_info is None:
+            print('  ERROR: Validator identity does not exist.')
+            return
+        else:
+            print('  OK: Validator identity exists.')
+
+        if validator_info.keybase_username == self.keybase_username:
+            print('  OK: Keybase username in form matches username in identity account.')
+        else:
+            print('  ERROR: Keybase username in identity account does not match the form.')
+
+        if validator_info.name.startswith('Lido / '):
+            print('  OK: Validator identity name starts with "Lido / ".')
+        else:
+            print('  ERROR: Validator identity name does not start with "Lido / ".')
+
+        if validator_info.name == self.identity_name:
+            print('  OK: Name in identity account matches name in form.')
+        else:
+            print('  ERROR: Name in identity account does not mach name in form.')
+
+        # TODO: Check mint of stSOL account.
+        # TODO: Check Keybase for public key.
+
 
 def iter_rows_from_stdin() -> Iterable[ValidatorResponse]:
     """
@@ -112,12 +162,18 @@ def iter_rows_from_stdin() -> Iterable[ValidatorResponse]:
 
 
 def main() -> None:
+    # Build a map of validators by identity address.
+    validators_by_identity: Dict[str, ValidatorInfo] = {
+        info.identity_address: info
+        for info in iter_validator_infos()
+    }
+
     for row in iter_rows_from_stdin():
         if row.timestamp == 'Timestamp':
             # This is the header row, skip over it.
             continue
 
-        row.check()
+        row.check(validators_by_identity)
 
 
 if __name__ == '__main__':
