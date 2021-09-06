@@ -452,7 +452,9 @@ impl SolidoState {
                 continue;
             }
             // Validator already has 3 unstake accounts.
-            if validator.entry.unstake_seeds.end - validator.entry.unstake_seeds.begin >= 3 {
+            if validator.entry.unstake_seeds.end - validator.entry.unstake_seeds.begin
+                >= lido::MAXIMUM_UNSTAKE_ACCOUNTS
+            {
                 continue;
             }
             let (validator_unstake_account, _) = validator.find_unstake_account_address(

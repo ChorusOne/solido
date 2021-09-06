@@ -64,6 +64,9 @@ pub fn find_authority_program_address(
 /// 1 SOL should be sufficient for that.
 pub const MINIMUM_STAKE_ACCOUNT_BALANCE: token::Lamports = token::Lamports(1_000_000_000);
 
+/// The maximum number of unstake accounts that a validator can have simultaneously.
+pub const MAXIMUM_UNSTAKE_ACCOUNTS: u64 = 3;
+
 #[cfg(test)]
 mod test {
     use super::*;

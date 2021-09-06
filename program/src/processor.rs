@@ -30,8 +30,8 @@ use crate::{
         LIDO_CONSTANT_SIZE, LIDO_VERSION,
     },
     token::{Lamports, Rational, StLamports},
-    vote_instruction, MINIMUM_STAKE_ACCOUNT_BALANCE, MINT_AUTHORITY, RESERVE_ACCOUNT,
-    REWARDS_WITHDRAW_AUTHORITY, STAKE_AUTHORITY, VALIDATOR_STAKE_ACCOUNT,
+    vote_instruction, MAXIMUM_UNSTAKE_ACCOUNTS, MINIMUM_STAKE_ACCOUNT_BALANCE, MINT_AUTHORITY,
+    RESERVE_ACCOUNT, REWARDS_WITHDRAW_AUTHORITY, STAKE_AUTHORITY, VALIDATOR_STAKE_ACCOUNT,
     VALIDATOR_UNSTAKE_ACCOUNT,
 };
 
@@ -419,7 +419,9 @@ pub fn process_unstake(
     // We should only need to do one unstake per epoch, right at the end, and in
     // the next epoch it should be fully inactive, we withdraw it and bump the
     // seed, and then we can unstake again.
-    if validator.entry.unstake_seeds.end - validator.entry.unstake_seeds.begin >= 3 {
+    if validator.entry.unstake_seeds.end - validator.entry.unstake_seeds.begin
+        >= MAXIMUM_UNSTAKE_ACCOUNTS
+    {
         msg!("This validator already has 3 unstake accounts.");
         msg!("Please wait until the next epoch and withdraw them, then try to unstake again.");
         return Err(LidoError::MaxUnstakeAccountsReached.into());
