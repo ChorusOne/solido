@@ -78,6 +78,24 @@ def iter_validator_infos() -> Iterable[ValidatorInfo]:
         )
 
 
+class TokenAccount(NamedTuple):
+    mint_address: str
+    state: str
+
+
+def get_token_account(address: str) -> Optional[TokenAccount]:
+    cmd = ['spl-token', '--url', 'https://api.mainnet-beta.solana.com', 'account-info', '--address', address, '--output', 'json']
+    try:
+        process = subprocess.run(cmd, check=True, capture_output=True, encoding='utf-8')
+        result = json.loads(process.stdout)
+        return TokenAccount(
+            mint_address=result['mint'],
+            state=result['state'],
+        )
+    except subprocess.CalledProcessError:
+        return None
+
+
 def check_keybase_has_identity_address(username: str, identity_account_address: str) -> bool:
     """
     Check whether the given Keybase user has published a file with the given identity address.
@@ -137,7 +155,7 @@ class ValidatorResponse(NamedTuple):
         )
 
     def check(self, validators_by_identity: Dict[str, ValidatorInfo]) -> None:
-        print(self.validator_name)
+        print('\n' + self.validator_name)
         vote_account = self.get_vote_account()
 
         if vote_account.authorized_withdrawer == SOLIDO_AUTHORIZED_WITHDAWER:
@@ -182,7 +200,22 @@ class ValidatorResponse(NamedTuple):
         else:
             print('  ERROR: Could not verify validator identity through Keybase.')
 
-        # TODO: Check mint of stSOL account.
+        token_account = get_token_account(self.st_sol_account_address)
+        if token_account is not None:
+            print('  OK: Fee account exists.')
+        else:
+            print(f'  ERROR: Fee account {self.st_sol_account_address} does not exist.')
+            return
+
+        if token_account.mint_address == ST_SOL_MINT:
+            print('  OK: Fee account has the right mint.')
+        else:
+            print('  ERROR: Fee account is not an stSOL account, the mint is wrong.')
+
+        if token_account.state == "initialized":
+            print('  OK: Token account is in initialized state.')
+        else:
+            print('  ERROR: Token account is not initialized state.')
 
 
 def iter_rows_from_stdin() -> Iterable[ValidatorResponse]:
