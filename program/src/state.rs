@@ -727,6 +727,7 @@ impl Validator {
         assert_eq!(self.stake_accounts_balance, Lamports(0));
         Ok(())
     }
+
     pub fn show_removed_error_msg(error: &Result<(), LidoError>) {
         if let Err(err) = error {
             match err {
