@@ -866,7 +866,7 @@ impl Context {
             &id(),
             &self.solido.pubkey(),
             validator_entry.entry.stake_seeds.end,
-            &StakeType::Stake,
+            StakeType::Stake,
         );
 
         let (stake_account_merge_into, _) = validator_entry.find_stake_account_address(
@@ -879,7 +879,7 @@ impl Context {
                 // same as the end account.
                 StakeDeposit::Merge => validator_entry.entry.stake_seeds.end.wrapping_sub(1),
             },
-            &StakeType::Stake,
+            StakeType::Stake,
         );
 
         let maintainer = self
@@ -936,13 +936,13 @@ impl Context {
             &id(),
             &self.solido.pubkey(),
             validator.entry.stake_seeds.begin,
-            &StakeType::Stake,
+            StakeType::Stake,
         );
         let (destination_unstake_account, _) = validator.find_stake_account_address(
             &id(),
             &self.solido.pubkey(),
             validator.entry.unstake_seeds.end,
-            &StakeType::Unstake,
+            StakeType::Unstake,
         );
 
         send_transaction(
@@ -1033,14 +1033,14 @@ impl Context {
             &id(),
             &self.solido.pubkey(),
             from_seed,
-            &StakeType::Stake,
+            StakeType::Stake,
         );
 
         let (to_stake_account, _) = validator.find_stake_account_address(
             &id(),
             &self.solido.pubkey(),
             to_seed,
-            &StakeType::Stake,
+            StakeType::Stake,
         );
 
         send_transaction(
@@ -1088,12 +1088,12 @@ impl Context {
 
         stake_account_addrs.extend(validator.entry.stake_seeds.into_iter().map(|seed| {
             validator
-                .find_stake_account_address(&id(), &self.solido.pubkey(), seed, &StakeType::Stake)
+                .find_stake_account_address(&id(), &self.solido.pubkey(), seed, StakeType::Stake)
                 .0
         }));
         stake_account_addrs.extend(validator.entry.unstake_seeds.into_iter().map(|seed| {
             validator
-                .find_stake_account_address(&id(), &self.solido.pubkey(), seed, &StakeType::Unstake)
+                .find_stake_account_address(&id(), &self.solido.pubkey(), seed, StakeType::Unstake)
                 .0
         }));
 
@@ -1321,7 +1321,7 @@ impl Context {
             &id(),
             &self.solido.pubkey(),
             seed,
-            &StakeType::Stake,
+            StakeType::Stake,
         );
 
         let clock = self.get_clock().await;
@@ -1340,7 +1340,7 @@ impl Context {
             &id(),
             &self.solido.pubkey(),
             seed,
-            &StakeType::Unstake,
+            StakeType::Unstake,
         );
 
         let clock = self.get_clock().await;

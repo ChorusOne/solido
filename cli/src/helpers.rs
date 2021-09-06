@@ -502,7 +502,7 @@ impl fmt::Display for ShowSolidoOutput {
                         &self.solido_program_id,
                         &self.solido_address,
                         seed,
-                        &StakeType::Stake,
+                        StakeType::Stake,
                     )
                     .0
                 )?;
@@ -521,7 +521,7 @@ impl fmt::Display for ShowSolidoOutput {
                         &self.solido_program_id,
                         &self.solido_address,
                         seed,
-                        &StakeType::Unstake,
+                        StakeType::Unstake,
                     )
                     .0
                 )?;
@@ -807,7 +807,7 @@ pub fn command_withdraw(
             opts.solido_program_id(),
             opts.solido_address(),
             heaviest_validator.entry.stake_seeds.begin,
-            &StakeType::Stake,
+            StakeType::Stake,
         );
 
         let destination_stake_account = Keypair::new();

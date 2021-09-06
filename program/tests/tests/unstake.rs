@@ -189,7 +189,7 @@ async fn test_unstake_from_inactive_validator() {
         &crate::context::id(),
         &context.solido.pubkey(),
         validator.entry.stake_seeds.begin,
-        &StakeType::Stake,
+        StakeType::Stake,
     );
     let account = context.try_get_account(stake_account).await;
     assert!(
@@ -206,7 +206,7 @@ async fn test_unstake_with_funded_destination_stake() {
         &crate::context::id(),
         &context.solido.pubkey(),
         0,
-        &StakeType::Unstake,
+        StakeType::Unstake,
     );
     context.fund(unstake_address, Lamports(500_000_000)).await;
     let unstake_lamports = Lamports(1_000_000_000);

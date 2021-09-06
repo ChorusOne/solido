@@ -206,7 +206,7 @@ pub fn process_merge_stake(program_id: &Pubkey, accounts_raw: &[AccountInfo]) ->
         program_id,
         accounts.lido.key,
         from_seed,
-        &StakeType::Stake,
+        StakeType::Stake,
     );
     // Compare with the stake passed in `accounts`.
     if &from_stake_addr != accounts.from_stake.key {
@@ -222,7 +222,7 @@ pub fn process_merge_stake(program_id: &Pubkey, accounts_raw: &[AccountInfo]) ->
         program_id,
         accounts.lido.key,
         to_seed,
-        &StakeType::Stake,
+        StakeType::Stake,
     );
     if &to_stake_addr != accounts.to_stake.key {
         msg!(

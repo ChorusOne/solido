@@ -155,7 +155,7 @@ async fn test_merge_with_donated_stake() {
         &crate::context::id(),
         &context.solido.pubkey(),
         0,
-        &StakeType::Stake,
+        StakeType::Stake,
     );
     context
         .fund(from_stake_account, Lamports(100_000_000_000))

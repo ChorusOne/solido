@@ -539,7 +539,7 @@ pub fn process_update_exchange_rate(
     lido.save(accounts.lido)
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone, Copy)]
 pub enum StakeType {
     Stake,
     Unstake,
@@ -693,7 +693,7 @@ pub fn process_withdraw_inactive_stake(
             program_id,
             accounts.lido.key,
             seed,
-            &StakeType::Stake,
+            StakeType::Stake,
         );
         let account_balance = check_address_and_get_balance(
             &stake_account_address,
@@ -753,7 +753,7 @@ pub fn process_withdraw_inactive_stake(
             program_id,
             accounts.lido.key,
             seed,
-            &StakeType::Unstake,
+            StakeType::Unstake,
         );
 
         let account_balance = check_address_and_get_balance(
@@ -936,7 +936,7 @@ pub fn process_withdraw(
         program_id,
         accounts.lido.key,
         validator.entry.stake_seeds.begin,
-        &StakeType::Stake,
+        StakeType::Stake,
     );
     if &stake_account != accounts.source_stake_account.key {
         msg!("Stake account is different than the calculated by the given seed, should be {}, is {}.",

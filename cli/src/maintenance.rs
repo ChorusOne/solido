@@ -264,7 +264,7 @@ fn get_validator_stake_accounts(
     clock: &Clock,
     stake_history: &StakeHistory,
     validator: &PubkeyAndEntry<Validator>,
-    stake_type: &StakeType,
+    stake_type: StakeType,
 ) -> Result<Vec<(Pubkey, StakeAccount)>> {
     let mut result = Vec::new();
     let seeds = match stake_type {
@@ -354,7 +354,7 @@ impl SolidoState {
                 &clock,
                 &stake_history,
                 validator,
-                &StakeType::Stake,
+                StakeType::Stake,
             )?);
             validator_unstake_accounts.push(get_validator_stake_accounts(
                 config,
@@ -363,7 +363,7 @@ impl SolidoState {
                 &clock,
                 &stake_history,
                 validator,
-                &StakeType::Unstake,
+                StakeType::Unstake,
             )?);
         }
 
@@ -429,7 +429,7 @@ impl SolidoState {
             &self.solido_program_id,
             &self.solido_address,
             validator.entry.stake_seeds.end,
-            &StakeType::Stake,
+            StakeType::Stake,
         );
 
         // Top up the validator to at most its target. If that means we don't use the full
@@ -508,7 +508,7 @@ impl SolidoState {
                 &self.solido_program_id,
                 &self.solido_address,
                 validator.entry.unstake_seeds.end,
-                &StakeType::Unstake,
+                StakeType::Unstake,
             );
             let task = MaintenanceOutput::UnstakeFromInactiveValidator {
                 validator_vote_account: validator.pubkey,
@@ -550,14 +550,14 @@ impl SolidoState {
             &self.solido_program_id,
             &self.solido_address,
             from_seed,
-            &StakeType::Stake,
+            StakeType::Stake,
         );
         // Stake Account created by this transaction.
         let (to_stake, _bump_seed_end) = validator.find_stake_account_address(
             &self.solido_program_id,
             &self.solido_address,
             to_seed,
-            &StakeType::Stake,
+            StakeType::Stake,
         );
         lido::instruction::merge_stake(
             &self.solido_program_id,
@@ -1076,7 +1076,7 @@ mod test {
             &state.solido_program_id,
             &state.solido_address,
             0,
-            &StakeType::Stake,
+            StakeType::Stake,
         );
 
         // The first attempt should stake with the first validator.
@@ -1093,7 +1093,7 @@ mod test {
             &state.solido_program_id,
             &state.solido_address,
             0,
-            &StakeType::Stake,
+            StakeType::Stake,
         );
 
         // Pretend that the amount was actually staked.

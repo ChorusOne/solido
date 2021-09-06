@@ -757,7 +757,7 @@ impl PubkeyAndEntry<Validator> {
         program_id: &Pubkey,
         solido_account: &Pubkey,
         seed: u64,
-        stake_type: &StakeType,
+        stake_type: StakeType,
     ) -> (Pubkey, u8) {
         let authority = match stake_type {
             StakeType::Stake => VALIDATOR_STAKE_ACCOUNT,

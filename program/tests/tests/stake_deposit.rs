@@ -155,7 +155,7 @@ async fn test_stake_deposit_succeeds_despite_donation() {
         &id(),
         &context.solido.pubkey(),
         0,
-        &StakeType::Stake,
+        StakeType::Stake,
     );
 
     // Put some SOL in that account, so it is no longer non-existent.

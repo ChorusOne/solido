@@ -407,7 +407,7 @@ pub fn check_unstake_accounts(
         program_id,
         accounts.lido.key,
         source_stake_seed,
-        &StakeType::Stake,
+        StakeType::Stake,
     );
 
     if &source_stake_account != accounts.source_stake_account.key {
@@ -424,7 +424,7 @@ pub fn check_unstake_accounts(
         program_id,
         accounts.lido.key,
         destination_stake_seed,
-        &StakeType::Unstake,
+        StakeType::Unstake,
     );
     if &destination_stake_account != accounts.destination_unstake_account.key {
         msg!(
