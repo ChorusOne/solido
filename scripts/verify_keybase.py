@@ -54,7 +54,9 @@ ST_SOL_MINT = '7dHbWXmci3dT8UFYWYZweBLXgycu7Y3iL6trKn1Y7ARj'
 
 def solana(*args: str) -> Any:
     full_args = ['solana', '--url', 'https://api.mainnet-beta.solana.com', *args]
-    result = subprocess.run(full_args, check=True, capture_output=True, encoding='utf-8')
+    result = subprocess.run(
+        full_args, check=True, capture_output=True, encoding='utf-8'
+    )
     return json.loads(result.stdout)
 
 
@@ -84,7 +86,16 @@ class TokenAccount(NamedTuple):
 
 
 def get_token_account(address: str) -> Optional[TokenAccount]:
-    cmd = ['spl-token', '--url', 'https://api.mainnet-beta.solana.com', 'account-info', '--address', address, '--output', 'json']
+    cmd = [
+        'spl-token',
+        '--url',
+        'https://api.mainnet-beta.solana.com',
+        'account-info',
+        '--address',
+        address,
+        '--output',
+        'json',
+    ]
     try:
         process = subprocess.run(cmd, check=True, capture_output=True, encoding='utf-8')
         result = json.loads(process.stdout)
@@ -96,7 +107,9 @@ def get_token_account(address: str) -> Optional[TokenAccount]:
         return None
 
 
-def check_keybase_has_identity_address(username: str, identity_account_address: str) -> bool:
+def check_keybase_has_identity_address(
+    username: str, identity_account_address: str
+) -> bool:
     """
     Check whether the given Keybase user has published a file with the given identity address.
     """
@@ -173,7 +186,7 @@ class ValidatorResponse(NamedTuple):
             validator_identity_address=result['validatorIdentity'],
             authorized_withdrawer=result['authorizedWithdrawer'],
             commission=result['commission'],
-            num_votes=len(result['votes'])
+            num_votes=len(result['votes']),
         )
 
     def check(self, validators_by_identity: Dict[str, ValidatorInfo]) -> None:
@@ -195,7 +208,9 @@ class ValidatorResponse(NamedTuple):
         else:
             print_error('Vote account commission is not 100%.')
 
-        validator_info = validators_by_identity.get(vote_account.validator_identity_address)
+        validator_info = validators_by_identity.get(
+            vote_account.validator_identity_address
+        )
         if validator_info is None:
             print_error('Validator identity does not exist.')
             return
@@ -217,8 +232,12 @@ class ValidatorResponse(NamedTuple):
         else:
             print_error('Name in identity account does not mach name in form.')
 
-        if check_keybase_has_identity_address(self.keybase_username, vote_account.validator_identity_address):
-            print_ok(f'Validator identity public key is on Keybase under {self.keybase_username}.')
+        if check_keybase_has_identity_address(
+            self.keybase_username, vote_account.validator_identity_address
+        ):
+            print_ok(
+                f'Validator identity public key is on Keybase under {self.keybase_username}.'
+            )
         else:
             print_error('Could not verify validator identity through Keybase.')
 
@@ -253,8 +272,7 @@ def iter_rows_from_stdin() -> Iterable[ValidatorResponse]:
 def main() -> None:
     # Build a map of validators by identity address.
     validators_by_identity: Dict[str, ValidatorInfo] = {
-        info.identity_address: info
-        for info in iter_validator_infos()
+        info.identity_address: info for info in iter_validator_infos()
     }
 
     for row in iter_rows_from_stdin():
