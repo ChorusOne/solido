@@ -160,7 +160,7 @@ def print_ok(message: str) -> None:
 
 
 def print_warn(message: str) -> None:
-    # 32 is yellow.
+    # 33 is yellow.
     print_color(f'WARN  {message}', ansi_color_code='33')
 
 
