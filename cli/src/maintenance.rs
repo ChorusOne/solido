@@ -106,6 +106,10 @@ pub enum MaintenanceOutput {
         to_unstake_seed: u64,
         amount: Lamports,
     },
+    RemoveValidator {
+        #[serde(serialize_with = "serialize_b58")]
+        validator_vote_account: Pubkey,
+    },
 }
 
 impl fmt::Display for MaintenanceOutput {
@@ -204,6 +208,12 @@ impl fmt::Display for MaintenanceOutput {
                     to_unstake_account, to_unstake_seed
                 )?;
                 writeln!(f, "  Amount:              {}", amount)?;
+            }
+            MaintenanceOutput::RemoveValidator {
+                validator_vote_account,
+            } => {
+                writeln!(f, "Remove validator")?;
+                writeln!(f, "  Validator vote account: {}", validator_vote_account)?;
             }
         }
         Ok(())
@@ -534,6 +544,31 @@ impl SolidoState {
                         stake_authority: self.get_stake_authority(),
                     },
                     stake_account_balance.balance.total(),
+                ),
+                task,
+            ));
+        }
+        None
+    }
+
+    /// If there is a validator ready for removal, try to remove it.
+    pub fn try_remove_validator(&self) -> Option<(Instruction, MaintenanceOutput)> {
+        for validator in &self.solido.validators.entries {
+            // We are only interested in validators that can be removed.
+            if validator.entry.check_can_be_removed().is_err() {
+                continue;
+            }
+            let task = MaintenanceOutput::RemoveValidator {
+                validator_vote_account: validator.pubkey,
+            };
+
+            return Some((
+                lido::instruction::remove_validator(
+                    &self.solido_program_id,
+                    &lido::instruction::RemoveValidatorMeta {
+                        lido: self.solido_address,
+                        validator_vote_account_to_remove: validator.pubkey,
+                    },
                 ),
                 task,
             ));
@@ -956,7 +991,8 @@ pub fn try_perform_maintenance(
         // Same for updating the validator balance.
         .or_else(|| state.try_withdraw_inactive_stake())
         .or_else(|| state.try_stake_deposit())
-        .or_else(|| state.try_claim_validator_fee());
+        .or_else(|| state.try_claim_validator_fee())
+        .or_else(|| state.try_remove_validator());
 
     match instruction_output {
         Some((instruction, output)) => {

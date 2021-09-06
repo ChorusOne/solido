@@ -532,7 +532,7 @@ expected_result = {
 }
 print('> Staked as expected.')
 
-print(f'\n Deactivating validator {validator_vote_account.pubkey} ...')
+print(f'\nDeactivating validator {validator_vote_account.pubkey} ...')
 transaction_result = solido(
     'deactivate-validator',
     '--multisig-program-id',
@@ -576,7 +576,7 @@ assert not solido_instance['solido']['validators']['entries'][0]['entry'][
 ], 'Validator should be inactive after deactivation.'
 print('> Validator is inactive as expected.')
 
-print('\n Running maintenance (should unstake from inactive validator) ...')
+print('\nRunning maintenance (should unstake from inactive validator) ...')
 result = solido(
     'perform-maintenance',
     '--solido-address',
@@ -609,3 +609,49 @@ solido_instance = solido(
 val = solido_instance['solido']['validators']['entries'][0]['entry']
 assert val['stake_seeds'] == {'begin': 1, 'end': 1}
 assert val['unstake_seeds'] == {'begin': 0, 'end': 1}
+
+print('\nRunning maintenance (should withdraw from validator\'s unstake account) ...')
+result = solido(
+    'perform-maintenance',
+    '--solido-address',
+    solido_address,
+    '--solido-program-id',
+    solido_program_id,
+    keypair_path=maintainer.keypair_path,
+)
+expected_result = {
+    'WithdrawInactiveStake': {
+        'validator_vote_account': validator_vote_account.pubkey,
+        'expected_difference_stake_lamports': 0,
+        'unstaked_amount_lamports': 2100500000,
+    }
+}
+assert result == expected_result, f'\nExpected: {expected_result}\nActual:   {result}'
+
+print('\nRunning maintenance (should remove the validator) ...')
+result = solido(
+    'perform-maintenance',
+    '--solido-address',
+    solido_address,
+    '--solido-program-id',
+    solido_program_id,
+    keypair_path=maintainer.keypair_path,
+)
+expected_result = {
+    'RemoveValidator': {
+        'validator_vote_account': validator_vote_account.pubkey,
+    }
+}
+assert result == expected_result, f'\nExpected: {expected_result}\nActual:   {result}'
+
+solido_instance = solido(
+    'show-solido',
+    '--solido-program-id',
+    solido_program_id,
+    '--solido-address',
+    solido_address,
+)
+number_validators = len(solido_instance['solido']['validators']['entries'])
+assert (
+    number_validators == 0
+), f'\nExpected no validators\nGot: {number_validators} validators'

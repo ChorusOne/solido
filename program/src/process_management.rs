@@ -86,7 +86,9 @@ pub fn process_remove_validator(
         .validators
         .remove(accounts.validator_vote_account_to_remove.key)?;
 
-    removed_validator.check_can_be_removed()?;
+    let result = removed_validator.check_can_be_removed();
+    Validator::show_removed_error_msg(&result);
+    result?;
 
     lido.save(accounts.lido)
 }
