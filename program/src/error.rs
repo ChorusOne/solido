@@ -159,6 +159,9 @@ pub enum LidoError {
     /// We can't unstake more in this epoch, wait for stake to deactivate, close
     /// the unstake accounts with `WithdrawInactiveStake`, and retry next epoch.
     MaxUnstakeAccountsReached = 44,
+
+    /// The validator's vote account is not owned by the vote program.
+    ValidatorVoteAccountHasDifferentOwner = 45,
 }
 
 // Just reuse the generated Debug impl for Display. It shows the variant names.
