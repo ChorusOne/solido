@@ -665,12 +665,9 @@ impl SolidoState {
                 || removed_unstake > Lamports(0)
             {
                 // The balance of this validator is not up to date, try to update it.
-                let mut stake_account_addrs: Vec<Pubkey> =
-                    stake_accounts.iter().map(|(addr, _)| *addr).collect();
-                // Try to also withdraw from unstake accounts
-                let mut unstake_account_addrs: Vec<Pubkey> =
-                    unstake_accounts.iter().map(|(addr, _)| *addr).collect();
-                stake_account_addrs.append(&mut unstake_account_addrs);
+                let mut stake_account_addrs = Vec::new();
+                stake_account_addrs.extend(stake_accounts.iter().map(|(addr, _)| *addr));
+                stake_account_addrs.extend(unstake_accounts.iter().map(|(addr, _)| *addr));
                 let instruction = lido::instruction::withdraw_inactive_stake(
                     &self.solido_program_id,
                     &lido::instruction::WithdrawInactiveStakeMeta {
