@@ -462,13 +462,14 @@ impl SolidoState {
                 &self.solido_address,
                 validator.entry.unstake_seeds.end,
             );
+            let (stake_account_address, stake_account_balance) = stake_accounts[0];
             let task = MaintenanceOutput::UnstakeFromInactiveValidator {
                 validator_vote_account: validator.pubkey,
-                from_stake_account: stake_accounts[0].0,
+                from_stake_account: stake_account_address,
                 to_unstake_account: validator_unstake_account,
                 from_stake_seed: validator.entry.stake_seeds.begin,
                 to_unstake_seed: validator.entry.unstake_seeds.end,
-                amount: stake_accounts[0].1.balance.total(),
+                amount: stake_account_balance.balance.total(),
             };
 
             return Some((
@@ -478,11 +479,11 @@ impl SolidoState {
                         lido: self.solido_address,
                         maintainer: self.maintainer_address,
                         validator_vote_account: validator.pubkey,
-                        source_stake_account: stake_accounts[0].0,
+                        source_stake_account: stake_account_address,
                         destination_unstake_account: validator_unstake_account,
                         stake_authority: self.get_stake_authority(),
                     },
-                    stake_accounts[0].1.balance.total(),
+                    stake_account_balance.balance.total(),
                 ),
                 task,
             ));
