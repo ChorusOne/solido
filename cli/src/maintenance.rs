@@ -66,8 +66,8 @@ pub enum MaintenanceOutput {
         #[serde(rename = "expected_difference_stake_lamports")]
         expected_difference_stake: Lamports,
 
-        #[serde(rename = "unstaked_amount_lamports")]
-        unstaked_amount: Lamports,
+        #[serde(rename = "unstake_withdrawn_to_reserve_lamports")]
+        unstake_withdrawn_to_reserve: Lamports,
     },
 
     CollectValidatorFee {
@@ -127,7 +127,7 @@ impl fmt::Display for MaintenanceOutput {
             MaintenanceOutput::WithdrawInactiveStake {
                 validator_vote_account,
                 expected_difference_stake,
-                unstaked_amount,
+                unstake_withdrawn_to_reserve,
             } => {
                 writeln!(f, "Withdrew inactive stake.")?;
                 writeln!(
@@ -140,7 +140,11 @@ impl fmt::Display for MaintenanceOutput {
                     "  Expected difference in stake:  {}",
                     expected_difference_stake
                 )?;
-                writeln!(f, "  Amount withdrawn from unstake: {}", unstaked_amount)?;
+                writeln!(
+                    f,
+                    "  Amount withdrawn from unstake: {}",
+                    unstake_withdrawn_to_reserve
+                )?;
             }
             MaintenanceOutput::CollectValidatorFee {
                 validator_vote_account,
@@ -680,7 +684,7 @@ impl SolidoState {
                 let task = MaintenanceOutput::WithdrawInactiveStake {
                     validator_vote_account: validator.pubkey,
                     expected_difference_stake,
-                    unstaked_amount: removed_unstake,
+                    unstake_withdrawn_to_reserve: removed_unstake,
                 };
                 return Some((instruction, task));
             }
