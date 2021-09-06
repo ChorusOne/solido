@@ -35,6 +35,10 @@ This script then verifies:
  * That the stSOL account has the right mint.
 
 The header row will be stripped.
+
+This script is meant to be used as a one-off in the onboarding process, it does
+not do proper error handling etc. It is expected to run on trusted input; verify
+the tsv file manually to confirm that no weird Keybase usernames etc. are in there.
 """
 
 import json
@@ -72,6 +76,32 @@ def iter_validator_infos() -> Iterable[ValidatorInfo]:
             keybase_username=info['info'].get('keybaseUsername'),
             name=info['info'].get('name'),
         )
+
+
+def check_keybase_has_identity_address(username: str, identity_account_address: str) -> bool:
+    """
+    Check whether the given Keybase user has published a file with the given identity address.
+    """
+    assert '/' not in username
+    assert '?' not in username
+    assert '%' not in username
+    assert '&' not in username
+    assert '.' not in username
+    # This is the url from which keybase serves the raw file. It serves a web-
+    # based file browser at keybase.pub/{username}, but that one does not serve
+    # a 404 when the file is missing, and the raw url does.
+    url = f'https://{username}.keybase.pub/solana/validator-{identity_account_address}'
+    # Previously I tried with Python's urllib, but it complains:
+    #
+    #    Hostname mismatch, certificate is not valid for 'bd_validators.keybase.pub'
+    #
+    # Chromium and Curl do not have any problems validating the certificate,
+    # so I am going to assume it's an urllib problem, and just call Curl instead.
+    cmd = ['curl', '--head', url]
+    result = subprocess.run(cmd, check=True, capture_output=True, encoding='utf-8')
+    # We know that Keybase serves http/2, so we can just hard-code this. The
+    # trailing space is intentional.
+    return result.stdout.splitlines()[0] == 'HTTP/2 200 '
 
 
 class VoteAccount(NamedTuple):
@@ -147,8 +177,12 @@ class ValidatorResponse(NamedTuple):
         else:
             print('  ERROR: Name in identity account does not mach name in form.')
 
+        if check_keybase_has_identity_address(self.keybase_username, vote_account.validator_identity_address):
+            print('  OK: Validator identity confirmed on Keybase.')
+        else:
+            print('  ERROR: Could not verify validator identity through Keybase.')
+
         # TODO: Check mint of stSOL account.
-        # TODO: Check Keybase for public key.
 
 
 def iter_rows_from_stdin() -> Iterable[ValidatorResponse]:
