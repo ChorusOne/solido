@@ -11,6 +11,7 @@ use solana_program::{
     stake as stake_program, system_instruction,
 };
 
+use crate::processor::StakeType;
 use crate::STAKE_AUTHORITY;
 use crate::{
     error::LidoError,
@@ -402,8 +403,12 @@ pub fn check_unstake_accounts(
     let source_stake_seed = validator.entry.stake_seeds.begin;
     let destination_stake_seed = validator.entry.unstake_seeds.end;
 
-    let (source_stake_account, _) =
-        validator.find_stake_account_address(program_id, accounts.lido.key, source_stake_seed);
+    let (source_stake_account, _) = validator.find_stake_account_address(
+        program_id,
+        accounts.lido.key,
+        source_stake_seed,
+        StakeType::Stake,
+    );
 
     if &source_stake_account != accounts.source_stake_account.key {
         msg!(
@@ -415,8 +420,12 @@ pub fn check_unstake_accounts(
         return Err(LidoError::InvalidStakeAccount.into());
     }
 
-    let (destination_stake_account, destination_bump_seed) = validator
-        .find_unstake_account_address(program_id, accounts.lido.key, destination_stake_seed);
+    let (destination_stake_account, destination_bump_seed) = validator.find_stake_account_address(
+        program_id,
+        accounts.lido.key,
+        destination_stake_seed,
+        StakeType::Unstake,
+    );
     if &destination_stake_account != accounts.destination_unstake_account.key {
         msg!(
             "Destination stake account differs from the one calculated by seed {}, should be {}, is {}.",

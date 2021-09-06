@@ -7,6 +7,7 @@ use solana_program::sysvar::Sysvar;
 use solana_program::{account_info::AccountInfo, entrypoint::ProgramResult, msg, pubkey::Pubkey};
 
 use crate::logic::check_rent_exempt;
+use crate::processor::StakeType;
 use crate::vote_state::PartialVoteState;
 use crate::{
     error::LidoError,
@@ -201,8 +202,12 @@ pub fn process_merge_stake(program_id: &Pubkey, accounts_raw: &[AccountInfo]) ->
     }
 
     // Recalculate the `from_stake`.
-    let (from_stake_addr, _) =
-        validator.find_stake_account_address(program_id, accounts.lido.key, from_seed);
+    let (from_stake_addr, _) = validator.find_stake_account_address(
+        program_id,
+        accounts.lido.key,
+        from_seed,
+        StakeType::Stake,
+    );
     // Compare with the stake passed in `accounts`.
     if &from_stake_addr != accounts.from_stake.key {
         msg!(
@@ -213,8 +218,12 @@ pub fn process_merge_stake(program_id: &Pubkey, accounts_raw: &[AccountInfo]) ->
         );
         return Err(LidoError::InvalidStakeAccount.into());
     }
-    let (to_stake_addr, _) =
-        validator.find_stake_account_address(program_id, accounts.lido.key, to_seed);
+    let (to_stake_addr, _) = validator.find_stake_account_address(
+        program_id,
+        accounts.lido.key,
+        to_seed,
+        StakeType::Stake,
+    );
     if &to_stake_addr != accounts.to_stake.key {
         msg!(
             "Calculated to_stake {} for seed {} is different from received {}.",

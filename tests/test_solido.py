@@ -459,7 +459,6 @@ expected_result = {
         'amount_lamports': int(1.0e9),
     }
 }
-
 stake_account_address = result['StakeDeposit']['stake_account']
 del result['StakeDeposit'][
     'stake_account'
@@ -503,7 +502,8 @@ result = solido(
 assert 'WithdrawInactiveStake' in result
 assert result['WithdrawInactiveStake'] == {
     'validator_vote_account': validator_vote_account.pubkey,
-    'expected_difference_lamports': 100_000_000,  # We donated 0.1 SOL.
+    'expected_difference_stake_lamports': 100_000_000,  # We donated 0.1 SOL.
+    'unstake_withdrawn_to_reserve_lamports': 0,  # Nothing was unstaked.
 }
 
 print('> Performed WithdrawInactiveStake as expected.')

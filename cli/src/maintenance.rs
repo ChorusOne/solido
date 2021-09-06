@@ -7,6 +7,10 @@ use std::fmt;
 use std::io;
 use std::time::SystemTime;
 
+use itertools::izip;
+
+use lido::processor::StakeType;
+use lido::token;
 use lido::REWARDS_WITHDRAW_AUTHORITY;
 use serde::Serialize;
 use solana_program::program_pack::Pack;
@@ -24,7 +28,6 @@ use lido::{
 };
 use lido::{
     state::{Lido, Validator},
-    token,
     token::Lamports,
     MINIMUM_STAKE_ACCOUNT_BALANCE, STAKE_AUTHORITY,
 };
@@ -60,8 +63,11 @@ pub enum MaintenanceOutput {
         /// This is only an expected value, because a different transaction might
         /// execute between us observing the state and concluding that there is
         /// a difference, and our `WithdrawInactiveStake` instruction executing.
-        #[serde(rename = "expected_difference_lamports")]
-        expected_difference: Lamports,
+        #[serde(rename = "expected_difference_stake_lamports")]
+        expected_difference_stake: Lamports,
+
+        #[serde(rename = "unstake_withdrawn_to_reserve_lamports")]
+        unstake_withdrawn_to_reserve: Lamports,
     },
 
     CollectValidatorFee {
@@ -120,11 +126,25 @@ impl fmt::Display for MaintenanceOutput {
             }
             MaintenanceOutput::WithdrawInactiveStake {
                 validator_vote_account,
-                expected_difference,
+                expected_difference_stake,
+                unstake_withdrawn_to_reserve,
             } => {
                 writeln!(f, "Withdrew inactive stake.")?;
-                writeln!(f, "  Validator vote account: {}", validator_vote_account)?;
-                writeln!(f, "  Expected difference:    {}", expected_difference)?;
+                writeln!(
+                    f,
+                    "  Validator vote account:        {}",
+                    validator_vote_account
+                )?;
+                writeln!(
+                    f,
+                    "  Expected difference in stake:  {}",
+                    expected_difference_stake
+                )?;
+                writeln!(
+                    f,
+                    "  Amount withdrawn from unstake: {}",
+                    unstake_withdrawn_to_reserve
+                )?;
             }
             MaintenanceOutput::CollectValidatorFee {
                 validator_vote_account,
@@ -214,6 +234,9 @@ pub struct SolidoState {
     /// the stake balance of the derived stake accounts from the begin seed until
     /// end seed.
     pub validator_stake_accounts: Vec<Vec<(Pubkey, StakeAccount)>>,
+    /// Similar to the stake accounts, holds the unstaked balance of the derived
+    /// unstake accounts from the begin seed until end seed.
+    pub validator_unstake_accounts: Vec<Vec<(Pubkey, StakeAccount)>>,
     /// For each validator, in the same order as in `solido.validators`, holds
     /// the number of Lamports of the validator's vote account.
     pub validator_vote_account_balances: Vec<Lamports>,
@@ -241,11 +264,20 @@ fn get_validator_stake_accounts(
     clock: &Clock,
     stake_history: &StakeHistory,
     validator: &PubkeyAndEntry<Validator>,
+    stake_type: StakeType,
 ) -> Result<Vec<(Pubkey, StakeAccount)>> {
     let mut result = Vec::new();
-    for seed in validator.entry.stake_seeds.begin..validator.entry.stake_seeds.end {
-        let (addr, _bump_seed) =
-            validator.find_stake_account_address(solido_program_id, solido_address, seed);
+    let seeds = match stake_type {
+        StakeType::Stake => &validator.entry.stake_seeds,
+        StakeType::Unstake => &validator.entry.unstake_seeds,
+    };
+    for seed in seeds {
+        let (addr, _bump_seed) = validator.find_stake_account_address(
+            solido_program_id,
+            solido_address,
+            seed,
+            stake_type,
+        );
         let account = config.client.get_account(&addr)?;
         let stake = deserialize_stake_account(&account.data)
             .expect("Derived stake account contains invalid data.");
@@ -306,6 +338,7 @@ impl SolidoState {
         let stake_history = config.client.get_stake_history()?;
 
         let mut validator_stake_accounts = Vec::new();
+        let mut validator_unstake_accounts = Vec::new();
         let mut validator_vote_account_balances = Vec::new();
         for validator in solido.validators.entries.iter() {
             validator_vote_account_balances.push(get_vote_account_balance_except_rent(
@@ -321,6 +354,16 @@ impl SolidoState {
                 &clock,
                 &stake_history,
                 validator,
+                StakeType::Stake,
+            )?);
+            validator_unstake_accounts.push(get_validator_stake_accounts(
+                config,
+                solido_program_id,
+                solido_address,
+                &clock,
+                &stake_history,
+                validator,
+                StakeType::Unstake,
             )?);
         }
 
@@ -336,6 +379,7 @@ impl SolidoState {
             solido_address: *solido_address,
             solido,
             validator_stake_accounts,
+            validator_unstake_accounts,
             validator_vote_account_balances,
             reserve_address,
             reserve_account: reserve_account.clone(),
@@ -385,6 +429,7 @@ impl SolidoState {
             &self.solido_program_id,
             &self.solido_address,
             validator.entry.stake_seeds.end,
+            StakeType::Stake,
         );
 
         // Top up the validator to at most its target. If that means we don't use the full
@@ -448,7 +493,7 @@ impl SolidoState {
         {
             // We are only interested in unstaking from inactive validators that
             // have stake accounts.
-            if validator.entry.active || stake_accounts.is_empty() {
+            if validator.entry.active {
                 continue;
             }
             // Validator already has 3 unstake accounts.
@@ -457,10 +502,15 @@ impl SolidoState {
             {
                 continue;
             }
-            let (validator_unstake_account, _) = validator.find_unstake_account_address(
+            // No stake account to unstake from.
+            if stake_accounts.first().is_none() {
+                continue;
+            }
+            let (validator_unstake_account, _) = validator.find_stake_account_address(
                 &self.solido_program_id,
                 &self.solido_address,
                 validator.entry.unstake_seeds.end,
+                StakeType::Unstake,
             );
             let (stake_account_address, stake_account_balance) = stake_accounts[0];
             let task = MaintenanceOutput::UnstakeFromInactiveValidator {
@@ -503,12 +553,14 @@ impl SolidoState {
             &self.solido_program_id,
             &self.solido_address,
             from_seed,
+            StakeType::Stake,
         );
         // Stake Account created by this transaction.
         let (to_stake, _bump_seed_end) = validator.find_stake_account_address(
             &self.solido_program_id,
             &self.solido_address,
             to_seed,
+            StakeType::Stake,
         );
         lido::instruction::merge_stake(
             &self.solido_program_id,
@@ -579,32 +631,46 @@ impl SolidoState {
     /// or if some joker donates to one of the stake accounts we can use the same function
     /// to claim these rewards back to the reserve account so they can be re-staked.
     pub fn try_withdraw_inactive_stake(&self) -> Option<(Instruction, MaintenanceOutput)> {
-        for (validator, stake_accounts) in self
-            .solido
-            .validators
-            .entries
-            .iter()
-            .zip(self.validator_stake_accounts.iter())
-        {
-            let current_balance = stake_accounts
+        for (validator, stake_accounts, unstake_accounts) in izip!(
+            self.solido.validators.entries.iter(),
+            self.validator_stake_accounts.iter(),
+            self.validator_unstake_accounts.iter()
+        ) {
+            let current_stake_balance = stake_accounts
                 .iter()
                 .map(|(_addr, detail)| detail.balance.total())
                 .sum::<token::Result<Lamports>>()
                 .expect("If this overflows, there would be more than u64::MAX staked.");
 
-            if current_balance > validator.entry.stake_accounts_balance {
-                let expected_difference = (current_balance
-                    - validator.entry.stake_accounts_balance)
-                    .expect("Does not overflow because current > entry.balance.");
-                // If the expected difference is less than some defined amount
-                // of Lamports, we don't bother withdrawing. We try to do this
-                // so we don't pay more for fees than the amount that we'll
-                // withdraw.
-                if expected_difference < SolidoState::MINIMUM_WITHDRAW_AMOUNT {
-                    continue;
+            let expected_difference_stake =
+                if current_stake_balance > validator.entry.effective_stake_balance() {
+                    (current_stake_balance - validator.entry.effective_stake_balance())
+                        .expect("Does not overflow because current > entry.balance.")
+                } else {
+                    Lamports(0)
+                };
+
+            let mut removed_unstake = Lamports(0);
+
+            for (_addr, unstake_account) in unstake_accounts.iter() {
+                if unstake_account.balance.inactive != unstake_account.balance.total() {
+                    break;
                 }
+                removed_unstake = (removed_unstake + unstake_account.balance.total())
+                    .expect("Summing unstake accounts should not overflow.");
+            }
+
+            // If the expected difference is less than some defined amount
+            // of Lamports, we don't bother withdrawing. We try to do this
+            // so we don't pay more for fees than the amount that we'll
+            // withdraw. Or if we have stake to remove from unstake accounts.
+            if expected_difference_stake > SolidoState::MINIMUM_WITHDRAW_AMOUNT
+                || removed_unstake > Lamports(0)
+            {
                 // The balance of this validator is not up to date, try to update it.
-                let stake_account_addrs = stake_accounts.iter().map(|(addr, _)| *addr).collect();
+                let mut stake_account_addrs = Vec::new();
+                stake_account_addrs.extend(stake_accounts.iter().map(|(addr, _)| *addr));
+                stake_account_addrs.extend(unstake_accounts.iter().map(|(addr, _)| *addr));
                 let instruction = lido::instruction::withdraw_inactive_stake(
                     &self.solido_program_id,
                     &lido::instruction::WithdrawInactiveStakeMeta {
@@ -617,7 +683,8 @@ impl SolidoState {
                 );
                 let task = MaintenanceOutput::WithdrawInactiveStake {
                     validator_vote_account: validator.pubkey,
-                    expected_difference,
+                    expected_difference_stake,
+                    unstake_withdrawn_to_reserve: removed_unstake,
                 };
                 return Some((instruction, task));
             }
@@ -929,6 +996,7 @@ mod test {
             solido_address: Pubkey::new_unique(),
             solido: Lido::default(),
             validator_stake_accounts: vec![],
+            validator_unstake_accounts: vec![],
             validator_vote_account_balances: vec![],
             st_sol_mint: Mint::default(),
             reserve_address: Pubkey::new_unique(),
@@ -1008,6 +1076,7 @@ mod test {
             &state.solido_program_id,
             &state.solido_address,
             0,
+            StakeType::Stake,
         );
 
         // The first attempt should stake with the first validator.
@@ -1024,6 +1093,7 @@ mod test {
             &state.solido_program_id,
             &state.solido_address,
             0,
+            StakeType::Stake,
         );
 
         // Pretend that the amount was actually staked.

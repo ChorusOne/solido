@@ -5,6 +5,7 @@
 
 use crate::assert_solido_error;
 use crate::context::{Context, StakeDeposit};
+use lido::processor::StakeType;
 use lido::MINIMUM_STAKE_ACCOUNT_BALANCE;
 use lido::{error::LidoError, token::Lamports};
 use solana_program::stake::state::StakeState;
@@ -188,6 +189,7 @@ async fn test_unstake_from_inactive_validator() {
         &crate::context::id(),
         &context.solido.pubkey(),
         validator.entry.stake_seeds.begin,
+        StakeType::Stake,
     );
     let account = context.try_get_account(stake_account).await;
     assert!(
@@ -200,8 +202,12 @@ async fn test_unstake_from_inactive_validator() {
 async fn test_unstake_with_funded_destination_stake() {
     let mut context = new_unstake_context(&[STAKE_AMOUNT]).await;
     let validator = &context.get_solido().await.validators.entries[0];
-    let (unstake_address, _) =
-        validator.find_unstake_account_address(&crate::context::id(), &context.solido.pubkey(), 0);
+    let (unstake_address, _) = validator.find_stake_account_address(
+        &crate::context::id(),
+        &context.solido.pubkey(),
+        0,
+        StakeType::Unstake,
+    );
     context.fund(unstake_address, Lamports(500_000_000)).await;
     let unstake_lamports = Lamports(1_000_000_000);
 
@@ -246,4 +252,43 @@ async fn test_unstake_allows_at_most_three_unstake_accounts() {
 
     // Now we should be allowed to unstake again.
     context.unstake(vote_account, unstake_amount).await;
+}
+
+#[tokio::test]
+async fn test_unstake_activating() {
+    let mut context = Context::new_with_maintainer_and_validator().await;
+    let unstake_lamports = Lamports(1_000_000_000);
+
+    let solido = context.get_solido().await;
+    let validator = &solido.validators.entries[0];
+
+    context.deposit(Lamports(10_000_000_000)).await;
+    context
+        .stake_deposit(
+            validator.pubkey,
+            StakeDeposit::Append,
+            Lamports(10_000_000_000),
+        )
+        .await;
+
+    let rent = context.get_rent().await;
+    let stake_rent = rent.minimum_balance(std::mem::size_of::<StakeState>());
+
+    let stake_account_before = context.get_stake_account_from_seed(&validator, 0).await;
+    assert_eq!(stake_account_before.balance.active, Lamports(0));
+    assert_eq!(
+        stake_account_before.balance.activating,
+        (Lamports(10_000_000_000) - Lamports(stake_rent)).unwrap()
+    );
+
+    context.unstake(validator.pubkey, unstake_lamports).await;
+    let stake_account_after = context.get_stake_account_from_seed(&validator, 0).await;
+    assert_eq!(
+        (stake_account_before.balance.total() - stake_account_after.balance.total()).unwrap(),
+        unstake_lamports
+    );
+    let unstake_account = context.get_unstake_account_from_seed(&validator, 0).await;
+
+    // Unstaking activating Sol will become inactive right away.
+    assert_eq!(unstake_account.balance.inactive, unstake_lamports);
 }

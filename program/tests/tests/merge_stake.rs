@@ -5,6 +5,7 @@
 
 use crate::assert_solido_error;
 use crate::context::{get_account_info, Context, StakeDeposit};
+use lido::processor::StakeType;
 use lido::{error::LidoError, token::Lamports};
 use solana_program_test::tokio;
 use solana_sdk::signer::Signer;
@@ -150,8 +151,12 @@ async fn test_merge_validator_with_zero_and_one_stake_account() {
 async fn test_merge_with_donated_stake() {
     let (mut context, _stake_account_pubkeys) = Context::new_with_two_stake_accounts().await;
     let validator = &context.get_solido().await.validators.entries[0];
-    let (from_stake_account, _) =
-        validator.find_stake_account_address(&crate::context::id(), &context.solido.pubkey(), 0);
+    let (from_stake_account, _) = validator.find_stake_account_address(
+        &crate::context::id(),
+        &context.solido.pubkey(),
+        0,
+        StakeType::Stake,
+    );
     context
         .fund(from_stake_account, Lamports(100_000_000_000))
         .await;

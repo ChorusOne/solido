@@ -14,6 +14,7 @@ use lido::{
     balance::get_validator_to_withdraw,
     find_authority_program_address,
     metrics::LamportsHistogram,
+    processor::StakeType,
     state::{Lido, RewardDistribution},
     token::{Lamports, StLamports},
     util::serialize_b58,
@@ -500,7 +501,8 @@ impl fmt::Display for ShowSolidoOutput {
                     pe.find_stake_account_address(
                         &self.solido_program_id,
                         &self.solido_address,
-                        seed
+                        seed,
+                        StakeType::Stake,
                     )
                     .0
                 )?;
@@ -515,10 +517,11 @@ impl fmt::Display for ShowSolidoOutput {
                     f,
                     "      - {}: {}",
                     seed,
-                    pe.find_unstake_account_address(
+                    pe.find_stake_account_address(
                         &self.solido_program_id,
                         &self.solido_address,
-                        seed
+                        seed,
+                        StakeType::Unstake,
                     )
                     .0
                 )?;
@@ -804,6 +807,7 @@ pub fn command_withdraw(
             opts.solido_program_id(),
             opts.solido_address(),
             heaviest_validator.entry.stake_seeds.begin,
+            StakeType::Stake,
         );
 
         let destination_stake_account = Keypair::new();
