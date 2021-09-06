@@ -222,7 +222,7 @@ class ValidatorResponse(NamedTuple):
         else:
             print_error('Keybase username in identity account does not match the form.')
 
-        if validator_info.name.startswith('Lido / '):
+        if validator_info.name is not None and validator_info.name.startswith('Lido / '):
             print_ok('Validator identity name starts with "Lido / ".')
         else:
             print_error('Validator identity name does not start with "Lido / ".')
