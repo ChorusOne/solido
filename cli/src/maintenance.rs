@@ -439,29 +439,37 @@ impl SolidoState {
 
     /// If there is a validator being deactivated, try to unstake its funds.
     pub fn try_unstake_from_inactive_validator(&self) -> Option<(Instruction, MaintenanceOutput)> {
-        for validator in &self.solido.validators.entries {
-            // We are only interested in unstaking from inactive validators.
-            if validator.entry.active {
+        for (validator, stake_accounts) in self
+            .solido
+            .validators
+            .entries
+            .iter()
+            .zip(self.validator_stake_accounts.iter())
+        {
+            // We are only interested in unstaking from inactive validators that
+            // have stake accounts.
+            if validator.entry.active || stake_accounts.is_empty() {
                 continue;
             }
-            let try_unstake_balance = validator.entry.effective_stake_balance();
-            let (validator_stake_account, _) = validator.find_stake_account_address(
-                &self.solido_program_id,
-                &self.solido_address,
-                validator.entry.stake_seeds.begin,
-            );
+            // Validator already has 3 unstake accounts.
+            if validator.entry.unstake_seeds.end - validator.entry.unstake_seeds.begin
+                >= lido::MAXIMUM_UNSTAKE_ACCOUNTS
+            {
+                continue;
+            }
             let (validator_unstake_account, _) = validator.find_unstake_account_address(
                 &self.solido_program_id,
                 &self.solido_address,
                 validator.entry.unstake_seeds.end,
             );
+            let (stake_account_address, stake_account_balance) = stake_accounts[0];
             let task = MaintenanceOutput::UnstakeFromInactiveValidator {
                 validator_vote_account: validator.pubkey,
-                from_stake_account: validator_stake_account,
+                from_stake_account: stake_account_address,
                 to_unstake_account: validator_unstake_account,
                 from_stake_seed: validator.entry.stake_seeds.begin,
                 to_unstake_seed: validator.entry.unstake_seeds.end,
-                amount: try_unstake_balance,
+                amount: stake_account_balance.balance.total(),
             };
 
             return Some((
@@ -471,11 +479,11 @@ impl SolidoState {
                         lido: self.solido_address,
                         maintainer: self.maintainer_address,
                         validator_vote_account: validator.pubkey,
-                        source_stake_account: validator_stake_account,
+                        source_stake_account: stake_account_address,
                         destination_unstake_account: validator_unstake_account,
                         stake_authority: self.get_stake_authority(),
                     },
-                    try_unstake_balance,
+                    stake_account_balance.balance.total(),
                 ),
                 task,
             ));
