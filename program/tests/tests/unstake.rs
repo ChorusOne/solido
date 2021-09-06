@@ -253,3 +253,42 @@ async fn test_unstake_allows_at_most_three_unstake_accounts() {
     // Now we should be allowed to unstake again.
     context.unstake(vote_account, unstake_amount).await;
 }
+
+#[tokio::test]
+async fn test_unstake_activating() {
+    let mut context = Context::new_with_maintainer_and_validator().await;
+    let unstake_lamports = Lamports(1_000_000_000);
+
+    let solido = context.get_solido().await;
+    let validator = &solido.validators.entries[0];
+
+    context.deposit(Lamports(10_000_000_000)).await;
+    context
+        .stake_deposit(
+            validator.pubkey,
+            StakeDeposit::Append,
+            Lamports(10_000_000_000),
+        )
+        .await;
+
+    let rent = context.get_rent().await;
+    let stake_rent = rent.minimum_balance(std::mem::size_of::<StakeState>());
+
+    let stake_account_before = context.get_stake_account_from_seed(&validator, 0).await;
+    assert_eq!(stake_account_before.balance.active, Lamports(0));
+    assert_eq!(
+        stake_account_before.balance.activating,
+        (Lamports(10_000_000_000) - Lamports(stake_rent)).unwrap()
+    );
+
+    context.unstake(validator.pubkey, unstake_lamports).await;
+    let stake_account_after = context.get_stake_account_from_seed(&validator, 0).await;
+    assert_eq!(
+        (stake_account_before.balance.total() - stake_account_after.balance.total()).unwrap(),
+        unstake_lamports
+    );
+    let unstake_account = context.get_unstake_account_from_seed(&validator, 0).await;
+
+    // Unstaking activating Sol will become inactive right away.
+    assert_eq!(unstake_account.balance.inactive, unstake_lamports);
+}
