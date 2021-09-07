@@ -7,11 +7,13 @@ from typing import Iterable, NamedTuple
 
 Address = str
 
+
 class ValidatorResponse(NamedTuple):
     """
     This struct mirrors the columns in the response sheet of the validator
     onboarding form.
     """
+
     timestamp: str
     email: str
     validator_name: str

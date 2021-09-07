@@ -35,11 +35,15 @@ def main() -> None:
                 '--output',
                 'json',
                 'add-validator',
-                '--validator-vote-account', row.vote_account_address,
-                '--validator-fee-account', row.st_sol_account_address,
+                '--validator-vote-account',
+                row.vote_account_address,
+                '--validator-fee-account',
+                row.st_sol_account_address,
             ]
             try:
-                result = subprocess.run(cmd, check=True, capture_output=True, encoding='utf-8')
+                result = subprocess.run(
+                    cmd, check=True, capture_output=True, encoding='utf-8'
+                )
 
             except subprocess.CalledProcessError as exc:
                 print('Command failed:', ' '.join(cmd))
@@ -48,7 +52,9 @@ def main() -> None:
                 sys.exit(1)
 
             transaction_address = json.loads(result.stdout)['transaction_address']
-            transaction_file.write(f'{transaction_address}  # Add {row.validator_name}\n')
+            transaction_file.write(
+                f'{transaction_address}  # Add {row.validator_name}\n'
+            )
             transaction_file.flush()
             print(f'-> {transaction_address}')
 

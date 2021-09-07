@@ -157,9 +157,7 @@ def print_warn(message: str) -> None:
 
 def get_vote_account(self: ValidatorResponse) -> Optional[VoteAccount]:
     try:
-        result = solana(
-            'vote-account', '--output', 'json', self.vote_account_address
-        )
+        result = solana('vote-account', '--output', 'json', self.vote_account_address)
         return VoteAccount(
             validator_identity_address=result['validatorIdentity'],
             authorized_withdrawer=result['authorizedWithdrawer'],
@@ -202,9 +200,7 @@ def check_validator_response(
     else:
         print_error('Vote account commission is not 100%.')
 
-    validator_info = validators_by_identity.get(
-        vote_account.validator_identity_address
-    )
+    validator_info = validators_by_identity.get(vote_account.validator_identity_address)
     if validator_info is None:
         print_error('Validator identity does not exist.')
         return
@@ -216,9 +212,7 @@ def check_validator_response(
     else:
         print_error('Keybase username in identity account does not match the form.')
 
-    if validator_info.name is not None and validator_info.name.startswith(
-        'Lido / '
-    ):
+    if validator_info.name is not None and validator_info.name.startswith('Lido / '):
         print_ok('Validator identity name starts with "Lido / ".')
     else:
         print_error('Validator identity name does not start with "Lido / ".')
@@ -268,9 +262,7 @@ def check_validator_response(
     else:
         print_ok('Identity account is unique among responses seen so far.')
 
-    name = st_sol_accounts.setdefault(
-        self.st_sol_account_address, self.validator_name
-    )
+    name = st_sol_accounts.setdefault(self.st_sol_account_address, self.validator_name)
     if name != self.validator_name:
         print_error(f'Fee stSOL account is already in use by {name}.')
     else:
