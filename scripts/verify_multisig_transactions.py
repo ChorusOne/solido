@@ -37,7 +37,9 @@ def main() -> None:
         print(__doc__)
         sys.exit(1)
 
-    for form_response, transaction_address in zip(iter_rows_from_stdin(), iter_transaction_addresses()):
+    for form_response, transaction_address in zip(
+        iter_rows_from_stdin(), iter_transaction_addresses()
+    ):
         print(f'\n{form_response.validator_name}:')
         cmd = [
             'target/debug/solido',
@@ -50,11 +52,13 @@ def main() -> None:
             '--transaction-address',
             transaction_address,
         ]
-        result = subprocess.run(
-            cmd, check=True, capture_output=True, encoding='utf-8'
-        )
+        result = subprocess.run(cmd, check=True, capture_output=True, encoding='utf-8')
         transaction = json.loads(result.stdout)
-        instruction = transaction.get('parsed_instruction', {}).get('SolidoInstruction', {}).get('AddValidator')
+        instruction = (
+            transaction.get('parsed_instruction', {})
+            .get('SolidoInstruction', {})
+            .get('AddValidator')
+        )
 
         if instruction is None:
             print_error('Instruction is not an AddValidator instruction.')
@@ -64,12 +68,19 @@ def main() -> None:
         if form_response.vote_account_address == instruction['validator_vote_account']:
             print_ok('Validator vote account in form response matches instruction.')
         else:
-            print_error('Validator vote account in form response does not match instruction.')
+            print_error(
+                'Validator vote account in form response does not match instruction.'
+            )
 
-        if form_response.st_sol_account_address == instruction['validator_fee_st_sol_account']:
+        if (
+            form_response.st_sol_account_address
+            == instruction['validator_fee_st_sol_account']
+        ):
             print_ok('Fee stSOL account in form response matches instruction.')
         else:
-            print_error('Fee stSOL account in form response does not match instruction.')
+            print_error(
+                'Fee stSOL account in form response does not match instruction.'
+            )
 
         if instruction['solido_instance'] == SOLIDO_ADDRESS:
             print_ok('Solido instance is the mainnet instance.')
