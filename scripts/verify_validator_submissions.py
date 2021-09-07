@@ -185,7 +185,9 @@ class ValidatorResponse(NamedTuple):
 
     def get_vote_account(self) -> Optional[VoteAccount]:
         try:
-            result = solana('vote-account', '--output', 'json', self.vote_account_address)
+            result = solana(
+                'vote-account', '--output', 'json', self.vote_account_address
+            )
             return VoteAccount(
                 validator_identity_address=result['validatorIdentity'],
                 authorized_withdrawer=result['authorizedWithdrawer'],
@@ -197,11 +199,11 @@ class ValidatorResponse(NamedTuple):
             return None
 
     def check(
-            self,
-            validators_by_identity: Dict[Address, ValidatorInfo],
-            vote_accounts: Dict[Address, str],
-            identity_accounts: Dict[Address, str],
-            st_sol_accounts: Dict[Address, str],
+        self,
+        validators_by_identity: Dict[Address, ValidatorInfo],
+        vote_accounts: Dict[Address, str],
+        identity_accounts: Dict[Address, str],
+        st_sol_accounts: Dict[Address, str],
     ) -> None:
         print('\n' + self.validator_name)
         vote_account = self.get_vote_account()
@@ -241,7 +243,9 @@ class ValidatorResponse(NamedTuple):
         else:
             print_error('Keybase username in identity account does not match the form.')
 
-        if validator_info.name is not None and validator_info.name.startswith('Lido / '):
+        if validator_info.name is not None and validator_info.name.startswith(
+            'Lido / '
+        ):
             print_ok('Validator identity name starts with "Lido / ".')
         else:
             print_error('Validator identity name does not start with "Lido / ".')
@@ -283,13 +287,17 @@ class ValidatorResponse(NamedTuple):
         else:
             print_ok('Vote account address is unique among responses seen so far.')
 
-        name = identity_accounts.setdefault(vote_account.validator_identity_address, self.validator_name)
+        name = identity_accounts.setdefault(
+            vote_account.validator_identity_address, self.validator_name
+        )
         if name != self.validator_name:
             print_error(f'Identity account is already in use by {name}.')
         else:
             print_ok('Identity account is unique among responses seen so far.')
 
-        name = st_sol_accounts.setdefault(self.st_sol_account_address, self.validator_name)
+        name = st_sol_accounts.setdefault(
+            self.st_sol_account_address, self.validator_name
+        )
         if name != self.validator_name:
             print_error(f'Fee stSOL account is already in use by {name}.')
         else:
@@ -325,10 +333,11 @@ def main() -> None:
             # This is the header row, skip over it.
             continue
 
-        row.check(validators_by_identity,
-                  vote_accounts,
-                  identity_accounts,
-                  st_sol_accounts,
+        row.check(
+            validators_by_identity,
+            vote_accounts,
+            identity_accounts,
+            st_sol_accounts,
         )
 
 
