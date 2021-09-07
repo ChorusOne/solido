@@ -17,38 +17,7 @@ import json
 import subprocess
 import sys
 
-from typing import Iterable, NamedTuple
-
-
-# A type alias to make some things more self-documenting.
-Address = str
-
-
-class ValidatorResponse(NamedTuple):
-    timestamp: str
-    email: str
-    validator_name: str
-    keybase_username: str
-    vote_account_address: Address
-    withdraw_authority_check: Address
-    commission_check: str
-    will_vote_check: str
-    st_sol_account_address: Address
-    st_sol_mint_check: Address
-    added_to_keybase_check: str
-    identity_name: str
-    unused: str = ''
-    maintainer_address: Address = ''
-
-
-def iter_rows_from_stdin() -> Iterable[ValidatorResponse]:
-    """
-    Yield rows from stdin, including header, excluding blank lines.
-    """
-    for line in sys.stdin:
-        if line.strip() == '':
-            continue
-        yield ValidatorResponse(*line.strip().split('\t'))
+from validator_onboarding import iter_rows_from_stdin
 
 
 def main() -> None:
@@ -58,10 +27,6 @@ def main() -> None:
 
     with open(sys.argv[2], 'w', encoding='utf-8') as transaction_file:
         for row in iter_rows_from_stdin():
-            if row.timestamp == 'Timestamp':
-                # This is the header row, skip over it.
-                continue
-
             print(f'Creating transaction to add {row.validator_name} ...')
             cmd = [
                 'target/debug/solido',
