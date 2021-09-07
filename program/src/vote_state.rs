@@ -120,7 +120,7 @@ mod test {
             find_authority_program_address(&program_id, &lido_address, REWARDS_WITHDRAW_AUTHORITY);
 
         let acc_key = Pubkey::new_unique();
-        let owner = Pubkey::new_unique();
+        let owner = solana_program::vote::program::id();
         let mut lamports = 0;
         let account = AccountInfo::new(
             &acc_key,
@@ -162,7 +162,7 @@ mod test {
             Pubkey::from_str("DZtP4b6tZSY3XWBQDpuATc2mxB8LUh4Pp5t8Jnz9HLWC").unwrap();
 
         let acc_key = Pubkey::new_unique();
-        let owner = Pubkey::new_unique();
+        let owner = solana_program::vote::program::id();
         let mut lamports = 0;
         let account = AccountInfo::new(
             &acc_key,
