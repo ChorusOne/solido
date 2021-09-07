@@ -51,6 +51,9 @@ from typing import Any, Dict, Iterable, NamedTuple, Optional
 SOLIDO_AUTHORIZED_WITHDAWER = 'GgrQiJ8s2pfHsfMbEFtNcejnzLegzZ16c9XtJ2X2FpuF'
 ST_SOL_MINT = '7dHbWXmci3dT8UFYWYZweBLXgycu7Y3iL6trKn1Y7ARj'
 
+# A type alias to make some things more self-documenting.
+Address = str
+
 
 def solana(*args: str) -> Any:
     full_args = ['solana', '--url', 'https://api.mainnet-beta.solana.com', *args]
@@ -61,8 +64,8 @@ def solana(*args: str) -> Any:
 
 
 class ValidatorInfo(NamedTuple):
-    identity_address: str
-    info_address: str
+    identity_address: Address
+    info_address: Address
     keybase_username: Optional[str]
     name: Optional[str]
 
@@ -81,11 +84,11 @@ def iter_validator_infos() -> Iterable[ValidatorInfo]:
 
 
 class TokenAccount(NamedTuple):
-    mint_address: str
+    mint_address: Address
     state: str
 
 
-def get_token_account(address: str) -> Optional[TokenAccount]:
+def get_token_account(address: Address) -> Optional[TokenAccount]:
     cmd = [
         'spl-token',
         '--url',
@@ -108,7 +111,7 @@ def get_token_account(address: str) -> Optional[TokenAccount]:
 
 
 def check_keybase_has_identity_address(
-    username: str, identity_account_address: str
+    username: str, identity_account_address: Address
 ) -> bool:
     """
     Check whether the given Keybase user has published a file with the given identity address.
@@ -136,8 +139,8 @@ def check_keybase_has_identity_address(
 
 
 class VoteAccount(NamedTuple):
-    validator_identity_address: str
-    authorized_withdrawer: str
+    validator_identity_address: Address
+    authorized_withdrawer: Address
     commission: int
     num_votes: int
 
@@ -169,16 +172,16 @@ class ValidatorResponse(NamedTuple):
     email: str
     validator_name: str
     keybase_username: str
-    vote_account_address: str
-    withdraw_authority_check: str
+    vote_account_address: Address
+    withdraw_authority_check: Address
     commission_check: str
     will_vote_check: str
-    st_sol_account_address: str
-    st_sol_mint_check: str
+    st_sol_account_address: Address
+    st_sol_mint_check: Address
     added_to_keybase_check: str
     identity_name: str
     unused: str = ''
-    maintainer_address: str = ''
+    maintainer_address: Address = ''
 
     def get_vote_account(self) -> Optional[VoteAccount]:
         try:
@@ -193,7 +196,13 @@ class ValidatorResponse(NamedTuple):
         except subprocess.CalledProcessError:
             return None
 
-    def check(self, validators_by_identity: Dict[str, ValidatorInfo]) -> None:
+    def check(
+            self,
+            validators_by_identity: Dict[Address, ValidatorInfo],
+            vote_accounts: Dict[Address, str],
+            identity_accounts: Dict[Address, str],
+            st_sol_accounts: Dict[Address, str],
+    ) -> None:
         print('\n' + self.validator_name)
         vote_account = self.get_vote_account()
 
@@ -268,6 +277,24 @@ class ValidatorResponse(NamedTuple):
         else:
             print_error('Fee account is not an stSOL account, the mint is wrong.')
 
+        name = vote_accounts.setdefault(self.vote_account_address, self.validator_name)
+        if name != self.validator_name:
+            print_error(f'Vote account is already in use by {name}.')
+        else:
+            print_ok('Vote account address is unique among responses seen so far.')
+
+        name = identity_accounts.setdefault(vote_account.validator_identity_address, self.validator_name)
+        if name != self.validator_name:
+            print_error(f'Identity account is already in use by {name}.')
+        else:
+            print_ok('Identity account is unique among responses seen so far.')
+
+        name = st_sol_accounts.setdefault(self.st_sol_account_address, self.validator_name)
+        if name != self.validator_name:
+            print_error(f'Fee stSOL account is already in use by {name}.')
+        else:
+            print_ok('Fee stSOL account is unique among responses seen so far.')
+
 
 def iter_rows_from_stdin() -> Iterable[ValidatorResponse]:
     """
@@ -285,12 +312,24 @@ def main() -> None:
         info.identity_address: info for info in iter_validator_infos()
     }
 
+    # We expect all validators to use different vote accounts, identity accounts,
+    # and fee accounts. Track them in sets, so we can report an error if there is
+    # a duplicate. This works for the initial onboarding; if we add more validators
+    # later, we would also need to add the current validators here.
+    vote_accounts: Dict[str, str] = {}
+    identity_accounts: Dict[str, str] = {}
+    st_sol_accounts: Dict[str, str] = {}
+
     for row in iter_rows_from_stdin():
         if row.timestamp == 'Timestamp':
             # This is the header row, skip over it.
             continue
 
-        row.check(validators_by_identity)
+        row.check(validators_by_identity,
+                  vote_accounts,
+                  identity_accounts,
+                  st_sol_accounts,
+        )
 
 
 if __name__ == '__main__':
