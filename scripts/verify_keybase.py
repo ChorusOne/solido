@@ -180,18 +180,28 @@ class ValidatorResponse(NamedTuple):
     unused: str = ''
     maintainer_address: str = ''
 
-    def get_vote_account(self) -> VoteAccount:
-        result = solana('vote-account', '--output', 'json', self.vote_account_address)
-        return VoteAccount(
-            validator_identity_address=result['validatorIdentity'],
-            authorized_withdrawer=result['authorizedWithdrawer'],
-            commission=result['commission'],
-            num_votes=len(result['votes']),
-        )
+    def get_vote_account(self) -> Optional[VoteAccount]:
+        try:
+            result = solana('vote-account', '--output', 'json', self.vote_account_address)
+            return VoteAccount(
+                validator_identity_address=result['validatorIdentity'],
+                authorized_withdrawer=result['authorizedWithdrawer'],
+                commission=result['commission'],
+                num_votes=len(result['votes']),
+            )
+
+        except subprocess.CalledProcessError:
+            return None
 
     def check(self, validators_by_identity: Dict[str, ValidatorInfo]) -> None:
         print('\n' + self.validator_name)
         vote_account = self.get_vote_account()
+
+        if vote_account is not None:
+            print_ok('Vote account address holds a vote account.')
+        else:
+            print_error('Vote account address does not hold a vote account.')
+            return
 
         if vote_account.authorized_withdrawer == SOLIDO_AUTHORIZED_WITHDAWER:
             print_ok('Authorized withdrawer set to Solido.')
