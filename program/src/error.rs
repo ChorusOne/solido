@@ -163,7 +163,7 @@ pub enum LidoError {
     /// The validator's vote account is not owned by the vote program.
     ValidatorVoteAccountHasDifferentOwner = 45,
 
-    /// We expected the StSol account to be owned by the SPL program.
+    /// We expected the StSol account to be owned by the SPL token program.
     InvalidStSolAccountOwner = 46,
 }
 
