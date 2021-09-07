@@ -623,7 +623,7 @@ expected_result = {
     'WithdrawInactiveStake': {
         'validator_vote_account': validator_vote_account.pubkey,
         'expected_difference_stake_lamports': 0,
-        'unstaked_amount_lamports': 2100500000,
+        'unstake_withdrawn_to_reserve_lamports': 2100500000,
     }
 }
 assert result == expected_result, f'\nExpected: {expected_result}\nActual:   {result}'
