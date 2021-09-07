@@ -53,12 +53,13 @@ pub fn process_add_validator(program_id: &Pubkey, accounts_raw: &[AccountInfo]) 
         "Validator vote account",
     )?;
     // Deserialize also checks if the vote account is a valid Solido vote
-    // account: The withdraw authority should be set to the program_id, and it
-    // should have 100% commission.
+    // account: The vote account should be owned by the vote program, the
+    // withdraw authority should be set to the program_id, and it should have
+    // 100% commission.
     let _partial_vote_state = PartialVoteState::deserialize(
         program_id,
         accounts.lido.key,
-        &accounts.validator_vote_account.data.borrow(),
+        accounts.validator_vote_account,
     )?;
 
     lido.validators.add(

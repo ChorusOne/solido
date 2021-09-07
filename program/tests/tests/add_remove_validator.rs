@@ -4,9 +4,10 @@
 #![cfg(feature = "test-bpf")]
 
 use solana_program_test::tokio;
+use solana_sdk::signer::Signer;
 
 use crate::assert_solido_error;
-use crate::context::{Context, StakeDeposit};
+use crate::context::{Context, StakeDeposit, ValidatorAccounts};
 
 use lido::error::LidoError;
 use lido::token::{Lamports, StLamports};
@@ -34,6 +35,34 @@ async fn test_successful_add_validator() {
     // Adding the validator a second time should fail.
     let result = context.try_add_validator(&validator).await;
     assert_solido_error!(result, LidoError::DuplicatedEntry);
+}
+
+#[tokio::test]
+async fn test_add_validator_with_invalid_owner() {
+    let mut context = Context::new_with_maintainer().await;
+
+    let solido = context.get_solido().await;
+    assert_eq!(solido.validators.len(), 0);
+    let node_key = context.deterministic_keypair.new_keypair();
+    let real_vote_account = context.create_vote_account(&node_key).await;
+
+    let vote_account = context.get_account(real_vote_account).await;
+    let owner = context.deterministic_keypair.new_keypair();
+
+    let invalid_vote_account = context
+        .create_account(&owner, vote_account.data.len())
+        .await;
+
+    let node_account = context.deterministic_keypair.new_keypair();
+    let fee_account = context.create_st_sol_account(node_account.pubkey()).await;
+    let result = context
+        .try_add_validator(&ValidatorAccounts {
+            node_account: node_account,
+            vote_account: invalid_vote_account,
+            fee_account: fee_account,
+        })
+        .await;
+    assert_solido_error!(result, LidoError::ValidatorVoteAccountHasDifferentOwner);
 }
 
 #[tokio::test]

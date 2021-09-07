@@ -592,6 +592,30 @@ impl Context {
         vote_account.pubkey()
     }
 
+    /// Create an account with a given owner and size.
+    pub async fn create_account(&mut self, owner: &Keypair, size: usize) -> Pubkey {
+        let account = self.deterministic_keypair.new_keypair();
+        let payer = self.context.payer.pubkey();
+        let rent = self.get_rent().await;
+        let lamports = rent.minimum_balance(size);
+
+        send_transaction(
+            &mut self.context,
+            &mut self.nonce,
+            &[system_instruction::create_account(
+                &payer,
+                &account.pubkey(),
+                lamports,
+                size as u64,
+                &owner.pubkey(),
+            )],
+            vec![&account],
+        )
+        .await
+        .expect("Failed to create account.");
+        account.pubkey()
+    }
+
     /// Make `amount` appear in the recipient's account by transferring it from the context's funder.
     pub async fn fund(&mut self, recipient: Pubkey, amount: Lamports) {
         // Prevent test authors from shooting themselves in their feet by not
