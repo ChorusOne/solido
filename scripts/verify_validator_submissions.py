@@ -50,6 +50,8 @@ from typing import Any, Dict, Iterable, NamedTuple, Optional
 
 SOLIDO_AUTHORIZED_WITHDAWER = 'GgrQiJ8s2pfHsfMbEFtNcejnzLegzZ16c9XtJ2X2FpuF'
 ST_SOL_MINT = '7dHbWXmci3dT8UFYWYZweBLXgycu7Y3iL6trKn1Y7ARj'
+VOTE_PROGRAM = 'Vote111111111111111111111111111111111111111'
+SPL_TOKEN_PROGRAM = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'
 
 # A type alias to make some things more self-documenting.
 Address = str
@@ -108,6 +110,12 @@ def get_token_account(address: Address) -> Optional[TokenAccount]:
         )
     except subprocess.CalledProcessError:
         return None
+
+
+def get_account_owner(address: Address) -> Address:
+    result = solana('account', address, '--output', 'json')
+    owner: Address = result['account']['owner']
+    return owner
 
 
 def check_keybase_has_identity_address(
@@ -302,6 +310,16 @@ class ValidatorResponse(NamedTuple):
             print_error(f'Fee stSOL account is already in use by {name}.')
         else:
             print_ok('Fee stSOL account is unique among responses seen so far.')
+
+        if get_account_owner(self.vote_account_address) == VOTE_PROGRAM:
+            print_ok('Vote account is owned by the vote program.')
+        else:
+            print_error('Vote account is not owned by the vote program.')
+
+        if get_account_owner(self.st_sol_account_address) == SPL_TOKEN_PROGRAM:
+            print_ok('Fee stSOL account is owned by the SPL token program.')
+        else:
+            print_error('Fee stSOL account is not owned by the SPL token program.')
 
 
 def iter_rows_from_stdin() -> Iterable[ValidatorResponse]:
