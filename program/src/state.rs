@@ -266,7 +266,7 @@ impl Lido {
                 spl_token::id(),
                 token_account_info.owner
             );
-            return Err(LidoError::InvalidStSolAccount.into());
+            return Err(LidoError::InvalidStSolAccountOwner.into());
         }
         let token_account =
             match spl_token::state::Account::unpack_from_slice(&token_account_info.data.borrow()) {
@@ -1323,5 +1323,32 @@ mod test_lido {
             let lido_recovered = try_from_slice_unchecked(&res[..]).unwrap();
             assert_eq!(lido, lido_recovered);
         }
+    }
+
+    #[test]
+    fn test_check_is_st_sol_account_fails_with_different_owner() {
+        let lido = Lido::default();
+        let key = Pubkey::new_unique();
+        let mut lamports = 0;
+        let mut data = [];
+        let owner = Pubkey::new_unique();
+        let token_account = &AccountInfo::new(
+            &key,
+            false,
+            true,
+            &mut lamports,
+            &mut data,
+            &owner,
+            false,
+            0,
+        );
+        let result = lido.check_is_st_sol_account(token_account);
+        match result {
+            Err(ProgramError::Custom(err_code)) => {
+                assert_eq!(err_code, LidoError::InvalidStSolAccountOwner as u32)
+            }
+            _ => panic!("Should be the InvalidStSolAccountOwner error"),
+        }
+        assert!(result.is_err());
     }
 }

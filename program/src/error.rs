@@ -162,6 +162,9 @@ pub enum LidoError {
 
     /// The validator's vote account is not owned by the vote program.
     ValidatorVoteAccountHasDifferentOwner = 45,
+
+    /// We expected the StSol account to be owned by the SPL program.
+    InvalidStSolAccountOwner = 46,
 }
 
 // Just reuse the generated Debug impl for Display. It shows the variant names.
