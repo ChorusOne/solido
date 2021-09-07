@@ -32,7 +32,7 @@ This script then verifies:
  * That the public key of the identity account of the vote account has been
    added to Keybase.
  * That the name of the identity account matches the name provided here.
- * That the stSOL account has the right mint.
+ * That the stSOL account has the correct mint.
 
 The header row will be stripped.
 
@@ -259,12 +259,12 @@ class ValidatorResponse(NamedTuple):
             return
 
         if token_account.state == "initialized":
-            print_ok('Token account is in initialized state.')
+            print_ok('Token account is in an initialized state.')
         else:
             print_error('Token account is not initialized state.')
 
         if token_account.mint_address == ST_SOL_MINT:
-            print_ok('Fee account is an stSOL account (it has the right mint).')
+            print_ok('Fee account is an stSOL account (it has the correct mint).')
         else:
             print_error('Fee account is not an stSOL account, the mint is wrong.')
 
