@@ -29,6 +29,7 @@ import subprocess
 
 from typing import Any, Dict, Iterable, NamedTuple, Optional
 from validator_onboarding import Address, ValidatorResponse, iter_rows_from_stdin
+from validator_onboarding import print_ok, print_warn, print_error
 
 
 SOLIDO_AUTHORIZED_WITHDAWER = 'GgrQiJ8s2pfHsfMbEFtNcejnzLegzZ16c9XtJ2X2FpuF'
@@ -131,28 +132,6 @@ class VoteAccount(NamedTuple):
     authorized_withdrawer: Address
     commission: int
     num_votes: int
-
-
-def print_color(message: str, *, ansi_color_code: str, end: str = '\n') -> None:
-    # Switch to the given color, print the message, then reset formatting.
-    print(f'\x1b[{ansi_color_code}m{message}\x1b[0m', end=end)
-
-
-def print_error(message: str) -> None:
-    # 31 is red.
-    print_color(f'ERROR {message}', ansi_color_code='31')
-
-
-def print_ok(message: str) -> None:
-    # 32 is green. For OK, we only make the prefix green, not the entire message,
-    # to make validation failures stand out more.
-    print_color(f'OK   ', ansi_color_code='32', end=' ')
-    print(message)
-
-
-def print_warn(message: str) -> None:
-    # 33 is yellow.
-    print_color(f'WARN  {message}', ansi_color_code='33')
 
 
 def get_vote_account(self: ValidatorResponse) -> Optional[VoteAccount]:
