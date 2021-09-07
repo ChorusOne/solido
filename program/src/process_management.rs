@@ -59,7 +59,7 @@ pub fn process_add_validator(program_id: &Pubkey, accounts_raw: &[AccountInfo]) 
     let _partial_vote_state = PartialVoteState::deserialize(
         program_id,
         accounts.lido.key,
-        &accounts.validator_vote_account,
+        accounts.validator_vote_account,
     )?;
 
     lido.validators.add(
