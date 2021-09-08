@@ -1,6 +1,8 @@
 # Changelog
 
-## (unreleased)
+## v1.0.0
+
+Released 2021-09-08.
 
 **Compatibility**:
 
@@ -15,6 +17,17 @@ New features:
    environment variable) as an alternative to `--keypair-path`. This is useful
    for example to load the signer key from Hashicorp Vault with
    [Vaultenv](https://github.com/channable/vaultenv).
+ * We added scripts to automate some of the checks for validator onboarding.
+
+Bugfixes:
+
+ * Issues identified by Neodyme have been fixed, including one critical issue
+   that enabled an attacker to asymptotically own 100% of the stSOL supply.
+ * Issues identified by Jon Cinque in a peer review have been fixed. Thanks Jon!
+
+Other changes:
+
+ * Solido now has a bug bounty and security policy, see SECURITY.md.
 
 ## v0.5.0
 
