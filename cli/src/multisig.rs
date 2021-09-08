@@ -1202,12 +1202,21 @@ fn approve_batch(
     let transaction_addresses = std::fs::read_to_string(opts.transaction_addresses_path())
         .expect("Failed to read transaction addresses from file.");
     for (i, line) in transaction_addresses.lines().enumerate() {
-        match Pubkey::from_str(line.trim()) {
-            Ok(addr) => {
-                println!("\nTransaction {}:", addr);
+        // Take the first word from the line; the remainder can contain a comment
+        // about what the transaction is for.
+        match line
+            .split_ascii_whitespace()
+            .next()
+            .and_then(|addr_str| Pubkey::from_str(addr_str).ok())
+        {
+            Some(addr) => {
+                // Now that we know the transaction address is valid, print the
+                // full line, to preserve any trailing content. (But trim the
+                // newline, println already adds one.)
+                println!("\nTransaction {}", line.trim());
                 approve_transaction_interactive(config, opts, &addr)?;
             }
-            Err(_) => {
+            None => {
                 println!("\nInvalid transaction address on line {}, skipping.", i + 1);
             }
         }

@@ -580,7 +580,6 @@ cli_opt_struct! {
 
 cli_opt_struct! {
     ApproveBatchOpts {
-        // TODO: Can be omitted, we can obtain it from the transaction account.
         /// The multisig account whose owners should vote for this proposal.
         #[clap(long, value_name = "address")]
         multisig_address: Pubkey,
