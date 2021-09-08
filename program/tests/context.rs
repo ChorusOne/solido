@@ -1373,6 +1373,14 @@ impl Context {
         let stake = self.get_stake_state(stake_address).await;
         StakeAccount::from_delegated_account(stake_balance, &stake, &clock, &stake_history, seed)
     }
+
+    pub async fn get_vote_account(
+        &mut self,
+        vote_account: Pubkey,
+    ) -> Result<VoteState, InstructionError> {
+        let vote_acc = self.get_account(vote_account).await;
+        VoteState::deserialize(&vote_acc.data)
+    }
 }
 
 /// Return an `AccountInfo` for the given account, with `is_signer` and `is_writable` set to false.
