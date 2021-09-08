@@ -29,8 +29,9 @@ use lido::{
 };
 
 use crate::config::{
-    ApproveOpts, ConfigFile, CreateMultisigOpts, ExecuteTransactionOpts, ProposeChangeMultisigOpts,
-    ProposeUpgradeOpts, ShowMultisigOpts, ShowTransactionOpts, TransferTokenOpts,
+    ApproveBatchOpts, ApproveOpts, ConfigFile, CreateMultisigOpts, ExecuteTransactionOpts,
+    ProposeChangeMultisigOpts, ProposeUpgradeOpts, ShowMultisigOpts, ShowTransactionOpts,
+    TransferTokenOpts,
 };
 use crate::error::{Abort, AsPrettyError};
 use crate::print_output;
@@ -65,6 +66,7 @@ impl MultisigOpts {
             SubCommand::ExecuteTransaction(opts) => {
                 opts.merge_with_config_and_environment(config_file)
             }
+            SubCommand::ApproveBatch(opts) => opts.merge_with_config_and_environment(config_file),
             SubCommand::Token(token_sub_command) => match token_sub_command {
                 TokenSubCommand::Transfer(opts) => {
                     opts.merge_with_config_and_environment(config_file)
@@ -97,6 +99,9 @@ enum SubCommand {
     /// Execute a transaction that has enough approvals.
     ExecuteTransaction(ExecuteTransactionOpts),
 
+    /// Approve a batch of multisig transactions one by one.
+    ApproveBatch(ApproveBatchOpts),
+
     /// Execute SPL token operations.
     Token(TokenSubCommand),
 }
@@ -121,7 +126,14 @@ pub fn main(config: &mut SnapshotClientConfig, multisig_opts: MultisigOpts) {
             print_output(output_mode, &output);
         }
         SubCommand::ShowTransaction(cmd_opts) => {
-            let result = config.with_snapshot(|config| show_transaction(config, &cmd_opts));
+            let result = config.with_snapshot(|config| {
+                show_transaction(
+                    config,
+                    cmd_opts.transaction_address(),
+                    cmd_opts.multisig_program_id(),
+                    cmd_opts.solido_program_id(),
+                )
+            });
             let output = result.ok_or_abort_with("Failed to read multisig.");
             print_output(output_mode, &output);
         }
@@ -136,14 +148,30 @@ pub fn main(config: &mut SnapshotClientConfig, multisig_opts: MultisigOpts) {
             print_output(output_mode, &output);
         }
         SubCommand::Approve(cmd_opts) => {
-            let result = approve(config, &cmd_opts);
+            let result = approve(
+                config,
+                cmd_opts.transaction_address(),
+                cmd_opts.multisig_program_id(),
+                cmd_opts.multisig_address(),
+            );
             let output = result.ok_or_abort_with("Failed to approve multisig transaction.");
             print_output(output_mode, &output);
         }
         SubCommand::ExecuteTransaction(cmd_opts) => {
-            let result = config.with_snapshot(|config| execute_transaction(config, &cmd_opts));
+            let result = config.with_snapshot(|config| {
+                execute_transaction(
+                    config,
+                    cmd_opts.transaction_address(),
+                    cmd_opts.multisig_program_id(),
+                    cmd_opts.multisig_address(),
+                )
+            });
             let output = result.ok_or_abort_with("Failed to execute multisig transaction.");
             print_output(output_mode, &output);
+        }
+        SubCommand::ApproveBatch(cmd_opts) => {
+            let result = approve_batch(config, &cmd_opts);
+            result.ok_or_abort_with("Failed to batch-approve multisig transactions.");
         }
         SubCommand::Token(token_sub_command) => match token_sub_command {
             TokenSubCommand::Transfer(cmd_opts) => {
@@ -716,11 +744,12 @@ fn changed_addr(
 
 fn show_transaction(
     config: &mut SnapshotConfig,
-    opts: &ShowTransactionOpts,
+    transaction_address: &Pubkey,
+    multisig_program_id: &Pubkey,
+    solido_program_id: &Pubkey,
 ) -> Result<ShowTransactionOutput> {
-    let transaction: serum_multisig::Transaction = config
-        .client
-        .get_account_deserialize(opts.transaction_address())?;
+    let transaction: serum_multisig::Transaction =
+        config.client.get_account_deserialize(transaction_address)?;
 
     // Also query the multisig, to get the owner public keys, so we can display
     // exactly who voted.
@@ -774,7 +803,7 @@ fn show_transaction(
     // currently (https://github.com/project-serum/anchor/issues/243), so we
     // hard-code the tag here (it is stable as long as the namespace and
     // function name do not change).
-    else if instr.program_id == *opts.multisig_program_id()
+    else if instr.program_id == *multisig_program_id
         && instr.data[..8] == [122, 49, 168, 177, 231, 28, 167, 204]
     {
         if let Ok(instr) =
@@ -787,7 +816,7 @@ fn show_transaction(
         } else {
             ParsedInstruction::Unrecognized
         }
-    } else if &instr.program_id == opts.solido_program_id() {
+    } else if &instr.program_id == solido_program_id {
         // Probably a Solido instruction
         match try_parse_solido_instruction(config, &instr) {
             Ok(instr) => instr,
@@ -1112,20 +1141,22 @@ impl fmt::Display for ApproveOutput {
 
 fn approve(
     config: &mut SnapshotClientConfig,
-    opts: &ApproveOpts,
+    transaction_address: &Pubkey,
+    multisig_program_id: &Pubkey,
+    multisig_address: &Pubkey,
 ) -> std::result::Result<ApproveOutput, crate::Error> {
     // First, do the actual approval.
     let signature = config.with_snapshot(|config| {
         let approve_accounts = multisig_accounts::Approve {
-            multisig: *opts.multisig_address(),
-            transaction: *opts.transaction_address(),
+            multisig: *multisig_address,
+            transaction: *transaction_address,
             // The owner that signs the multisig proposed transaction, should be
             // the public key that signs the entire approval transaction (which
             // is also the payer).
             owner: config.signer.pubkey(),
         };
         let approve_instruction = Instruction {
-            program_id: *opts.multisig_program_id(),
+            program_id: *multisig_program_id,
             data: multisig_instruction::Approve.data(),
             accounts: approve_accounts.to_account_metas(None),
         };
@@ -1135,13 +1166,11 @@ fn approve(
     // After a successful approval, query the new state of the transaction, so
     // we can show it to the user.
     let result = config.with_snapshot(|config| {
-        let multisig: serum_multisig::Multisig = config
-            .client
-            .get_account_deserialize(opts.multisig_address())?;
+        let multisig: serum_multisig::Multisig =
+            config.client.get_account_deserialize(multisig_address)?;
 
-        let transaction: serum_multisig::Transaction = config
-            .client
-            .get_account_deserialize(opts.transaction_address())?;
+        let transaction: serum_multisig::Transaction =
+            config.client.get_account_deserialize(transaction_address)?;
 
         let result = ApproveOutput {
             transaction_id: signature,
@@ -1153,6 +1182,122 @@ fn approve(
     })?;
 
     Ok(result)
+}
+
+fn approve_batch(
+    config: &mut SnapshotClientConfig,
+    opts: &ApproveBatchOpts,
+) -> std::result::Result<(), crate::Error> {
+    use crate::config::OutputMode;
+    use std::str::FromStr;
+
+    match config.output_mode {
+        OutputMode::Json => {
+            println!("Json output mode is not supported for batch approval; it requires an interactive TTY.");
+            return Ok(());
+        }
+        OutputMode::Text => { /* This is fine. */ }
+    }
+
+    let transaction_addresses = std::fs::read_to_string(opts.transaction_addresses_path())
+        .expect("Failed to read transaction addresses from file.");
+    for (i, line) in transaction_addresses.lines().enumerate() {
+        // Take the first word from the line; the remainder can contain a comment
+        // about what the transaction is for.
+        match line
+            .split_ascii_whitespace()
+            .next()
+            .and_then(|addr_str| Pubkey::from_str(addr_str).ok())
+        {
+            Some(addr) => {
+                // Now that we know the transaction address is valid, print the
+                // full line, to preserve any trailing content. (But trim the
+                // newline, println already adds one.)
+                println!("\nTransaction {}", line.trim());
+                approve_transaction_interactive(config, opts, &addr)?;
+            }
+            None => {
+                println!("\nInvalid transaction address on line {}, skipping.", i + 1);
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Prompt the user to enter 'Y' or 'N'.
+fn ask_user_y_n(prompt: &'static str) -> bool {
+    use std::io::{BufRead, Write};
+    let mut buf = String::new();
+    loop {
+        print!("{} [Y/N] ", prompt);
+        std::io::stdout()
+            .lock()
+            .flush()
+            .expect("Failed to flush to stdout.");
+        std::io::stdin()
+            .lock()
+            .read_line(&mut buf)
+            .expect("Failed to read from stdin.");
+
+        match &buf[..] {
+            "Y\n" => return true,
+            "N\n" => return false,
+            _ => {
+                println!("Please enter the character 'Y' or 'N' (case-sensitive).");
+                buf.clear();
+            }
+        }
+    }
+}
+
+fn approve_transaction_interactive(
+    config: &mut SnapshotClientConfig,
+    opts: &ApproveBatchOpts,
+    transaction_address: &Pubkey,
+) -> std::result::Result<(), crate::Error> {
+    config.with_snapshot(|config| {
+        let output = show_transaction(
+            config,
+            transaction_address,
+            opts.multisig_program_id(),
+            opts.solido_program_id(),
+        )?;
+        println!("{}", output);
+        Ok(())
+    })?;
+
+    if !ask_user_y_n("Sign and submit approval transaction?") {
+        println!(
+            "Not approving transaction {}, continuing with next transaction if any.",
+            transaction_address
+        );
+        return Ok(());
+    }
+
+    let approve_result = approve(
+        config,
+        transaction_address,
+        opts.multisig_program_id(),
+        opts.multisig_address(),
+    )?;
+    println!("{}", approve_result);
+
+    let can_execute = approve_result.num_approvals >= approve_result.threshold;
+    if can_execute && ask_user_y_n("Transaction can be executed, sign and submit execution?") {
+        config.with_snapshot(|config| {
+            let execute_result = execute_transaction(
+                config,
+                transaction_address,
+                opts.multisig_program_id(),
+                opts.multisig_address(),
+            )?;
+            println!("{}", execute_result);
+            Ok(())
+        })?;
+    }
+
+    Ok(())
 }
 
 /// Wrapper type needed to implement `ToAccountMetas`.
@@ -1214,14 +1359,15 @@ impl fmt::Display for ExecuteOutput {
 
 fn execute_transaction(
     config: &mut SnapshotConfig,
-    opts: &ExecuteTransactionOpts,
+    transaction_address: &Pubkey,
+    multisig_program_id: &Pubkey,
+    multisig_address: &Pubkey,
 ) -> Result<ExecuteOutput> {
     let (program_derived_address, _nonce) =
-        get_multisig_program_address(opts.multisig_program_id(), opts.multisig_address());
+        get_multisig_program_address(multisig_program_id, multisig_address);
 
-    let transaction: serum_multisig::Transaction = config
-        .client
-        .get_account_deserialize(opts.transaction_address())?;
+    let transaction: serum_multisig::Transaction =
+        config.client.get_account_deserialize(transaction_address)?;
 
     let tx_inner_accounts = TransactionAccounts {
         accounts: transaction.accounts,
@@ -1229,15 +1375,15 @@ fn execute_transaction(
     };
 
     let mut accounts = multisig_accounts::ExecuteTransaction {
-        multisig: *opts.multisig_address(),
+        multisig: *multisig_address,
         multisig_signer: program_derived_address,
-        transaction: *opts.transaction_address(),
+        transaction: *transaction_address,
     }
     .to_account_metas(None);
     accounts.append(&mut tx_inner_accounts.to_account_metas(None));
 
     let multisig_instruction = Instruction {
-        program_id: *opts.multisig_program_id(),
+        program_id: *multisig_program_id,
         data: multisig_instruction::ExecuteTransaction.data(),
         accounts,
     };

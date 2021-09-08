@@ -579,6 +579,26 @@ cli_opt_struct! {
 }
 
 cli_opt_struct! {
+    ApproveBatchOpts {
+        /// The multisig account whose owners should vote for this proposal.
+        #[clap(long, value_name = "address")]
+        multisig_address: Pubkey,
+
+        /// Path to a file that contains base58 transaction addresses, one per line.
+        #[clap(long, value_name = "path")]
+        transaction_addresses_path: PathBuf,
+
+        /// Address of the Multisig program.
+        #[clap(long)]
+        multisig_program_id: Pubkey,
+
+        /// Address of the Solido program.
+        #[clap(long)]
+        solido_program_id: Pubkey,
+    }
+}
+
+cli_opt_struct! {
     ProposeChangeMultisigOpts {
         /// The multisig account to modify.
         #[clap(long)]
