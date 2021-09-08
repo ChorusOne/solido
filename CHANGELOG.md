@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.0.1
+
+Released 2021-09-08.
+
+Bugfixes:
+
+ * Fix an outdated version number and filename in `buildimage.sh` that caused
+   it to fail. No changes to the on-chain program or `solido`.
+
 ## v1.0.0
 
 Released 2021-09-08.
