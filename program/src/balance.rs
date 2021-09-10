@@ -102,7 +102,11 @@ pub fn get_target_balance(
     Ok(target_balance)
 }
 
-pub fn get_minimum_stake_validator(
+/// Given a list of validators and their target balance, return the index of the
+/// validator that has less stake, and the amount by which it is below its target.
+///
+/// This assumes that there is at least one active validator. Panics otherwise.
+pub fn get_minimum_stake_validator_index_amount(
     validators: &Validators,
     target_balance: &[Lamports],
 ) -> (usize, Lamports) {
@@ -126,7 +130,7 @@ pub fn get_minimum_stake_validator(
     );
 
     for (i, (validator, target)) in validators.iter_entries().zip(target_balance).enumerate() {
-        if validator.effective_stake_balance() < lowest_balance {
+        if validator.active && validator.effective_stake_balance() < lowest_balance {
             index = i;
             amount = Lamports(
                 target
@@ -134,43 +138,6 @@ pub fn get_minimum_stake_validator(
                     .saturating_sub(validator.effective_stake_balance().0),
             );
             lowest_balance = validator.effective_stake_balance();
-        }
-    }
-
-    (index, amount)
-}
-
-/// Given a list of validators and their target balance, return the index of the
-/// one furthest below its target, and the amount by which it is below.
-///
-/// This assumes that there is at least one active validator. Panics otherwise.
-pub fn get_validator_furthest_below_target(
-    validators: &Validators,
-    target_balance: &[Lamports],
-) -> (usize, Lamports) {
-    assert_eq!(
-        validators.len(),
-        target_balance.len(),
-        "Must have as many target balances as current balances."
-    );
-
-    // Our initial index, that will be returned when no validator is below its target,
-    // is the first active validator.
-    let mut index = validators
-        .iter_entries()
-        .position(|v| v.active)
-        .expect("get_validator_furthest_below_target requires at least one active validator.");
-    let mut amount = Lamports(0);
-
-    for (i, (validator, target)) in validators.iter_entries().zip(target_balance).enumerate() {
-        let amount_below = Lamports(
-            target
-                .0
-                .saturating_sub(validator.effective_stake_balance().0),
-        );
-        if amount_below > amount {
-            amount = amount_below;
-            index = i;
         }
     }
 
@@ -189,7 +156,7 @@ pub fn get_validator_to_withdraw(
 
 #[cfg(test)]
 mod test {
-    use super::{get_target_balance, get_validator_furthest_below_target};
+    use super::{get_minimum_stake_validator_index_amount, get_target_balance};
     use crate::state::Validators;
     use crate::token::Lamports;
 
@@ -205,7 +172,7 @@ mod test {
         // With only one validator, that one is the least balanced. It is
         // missing the 50 undelegated Lamports.
         assert_eq!(
-            get_validator_furthest_below_target(&validators, &targets[..]),
+            get_minimum_stake_validator_index_amount(&validators, &targets[..]),
             (0, Lamports(50))
         );
     }
@@ -223,7 +190,7 @@ mod test {
 
         // The second validator is further away from its target.
         assert_eq!(
-            get_validator_furthest_below_target(&validators, &targets[..]),
+            get_minimum_stake_validator_index_amount(&validators, &targets[..]),
             (1, Lamports(26))
         );
     }
@@ -242,7 +209,7 @@ mod test {
 
         // The second validator is further from its target, by one Lamport.
         assert_eq!(
-            get_validator_furthest_below_target(&validators, &targets[..]),
+            get_minimum_stake_validator_index_amount(&validators, &targets[..]),
             (1, Lamports(26))
         );
     }
@@ -258,7 +225,7 @@ mod test {
         assert_eq!(targets, [Lamports(50), Lamports(50)]);
 
         assert_eq!(
-            get_validator_furthest_below_target(&validators, &targets[..]),
+            get_minimum_stake_validator_index_amount(&validators, &targets[..]),
             (0, Lamports(0))
         );
     }
@@ -275,7 +242,7 @@ mod test {
         assert_eq!(targets, [Lamports(126), Lamports(0), Lamports(125)]);
 
         assert_eq!(
-            get_validator_furthest_below_target(&validators, &targets[..]),
+            get_minimum_stake_validator_index_amount(&validators, &targets[..]),
             (2, Lamports(26))
         );
     }
@@ -295,7 +262,7 @@ mod test {
         assert_eq!(targets, [Lamports(250), Lamports(0), Lamports(250)]);
 
         assert_eq!(
-            get_validator_furthest_below_target(&validators, &targets[..]),
+            get_minimum_stake_validator_index_amount(&validators, &targets[..]),
             (0, Lamports(150))
         );
     }
@@ -329,8 +296,25 @@ mod test {
         let undelegated_stake = Lamports(0);
         let targets = get_target_balance(undelegated_stake, &validators).unwrap();
         assert_eq!(
-            get_validator_furthest_below_target(&validators, &targets[..]),
+            get_minimum_stake_validator_index_amount(&validators, &targets[..]),
             (1, Lamports(0)),
+        );
+    }
+
+    #[test]
+    fn get_target_balance_works_for_minimum_staked_validator() {
+        let mut validators = Validators::new_fill_default(3);
+        validators.entries[0].entry.stake_accounts_balance = Lamports(101);
+        validators.entries[1].entry.stake_accounts_balance = Lamports(101);
+        validators.entries[2].entry.stake_accounts_balance = Lamports(100);
+
+        let undelegated_stake = Lamports(200);
+        let targets = get_target_balance(undelegated_stake, &validators).unwrap();
+        assert_eq!(targets, [Lamports(168), Lamports(167), Lamports(167)]);
+
+        assert_eq!(
+            get_minimum_stake_validator_index_amount(&validators, &targets[..]),
+            (2, Lamports(67))
         );
     }
 }
