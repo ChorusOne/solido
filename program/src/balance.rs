@@ -102,6 +102,44 @@ pub fn get_target_balance(
     Ok(target_balance)
 }
 
+pub fn get_minimum_stake_validator(
+    validators: &Validators,
+    target_balance: &[Lamports],
+) -> (usize, Lamports) {
+    assert_eq!(
+        validators.len(),
+        target_balance.len(),
+        "Must have as many target balances as current balances."
+    );
+
+    // Our initial index, that will be returned when no validator is below its target,
+    // is the first active validator.
+    let mut index = validators
+        .iter_entries()
+        .position(|v| v.active)
+        .expect("get_validator_furthest_below_target requires at least one active validator.");
+    let mut lowest_balance = validators.entries[index].entry.effective_stake_balance();
+    let mut amount = Lamports(
+        target_balance[index]
+            .0
+            .saturating_sub(validators.entries[index].entry.effective_stake_balance().0),
+    );
+
+    for (i, (validator, target)) in validators.iter_entries().zip(target_balance).enumerate() {
+        if validator.effective_stake_balance() < lowest_balance {
+            index = i;
+            amount = Lamports(
+                target
+                    .0
+                    .saturating_sub(validator.effective_stake_balance().0),
+            );
+            lowest_balance = validator.effective_stake_balance();
+        }
+    }
+
+    (index, amount)
+}
+
 /// Given a list of validators and their target balance, return the index of the
 /// one furthest below its target, and the amount by which it is below.
 ///

@@ -429,10 +429,8 @@ impl SolidoState {
                 .expect("Failed to compute target balance.");
 
         let (validator_index, amount_below_target) =
-            lido::balance::get_validator_furthest_below_target(
-                &self.solido.validators,
-                &targets[..],
-            );
+            lido::balance::get_minimum_stake_validator(&self.solido.validators, &targets[..]);
+
         let validator = &self.solido.validators.entries[validator_index];
 
         let (stake_account_end, _bump_seed_end) = validator.find_stake_account_address(
