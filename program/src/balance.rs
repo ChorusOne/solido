@@ -117,7 +117,7 @@ pub fn get_minimum_stake_validator(
     let mut index = validators
         .iter_entries()
         .position(|v| v.active)
-        .expect("get_validator_furthest_below_target requires at least one active validator.");
+        .expect("get_minimum_stake_validator requires at least one active validator.");
     let mut lowest_balance = validators.entries[index].entry.effective_stake_balance();
     let mut amount = Lamports(
         target_balance[index]
