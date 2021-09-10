@@ -9,7 +9,7 @@
         <generator>https://github.com/jpmonette/feed</generator>
         <item>
             <title><![CDATA[test blog post]]></title>
-            <link>https://chorusone.github.io/solido/blog/test</link>
+            <link>https://chorusone.github.io/blog/test</link>
             <guid>test</guid>
             <pubDate>Thu, 20 May 2021 00:00:00 GMT</pubDate>
             <description><![CDATA[Blog features are powered by the blog plugin. Simply add files to the blog directory. It supports tags as well!]]></description>
