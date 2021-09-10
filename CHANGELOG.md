@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.0.2
+
+Released 2021-09-10.
+
+Bugfixes:
+
+ * Fix to the maintainer logic so that it chooses the active validator that has the least amount of stake for the stake deposit, instead of that which is farthest from the target.
+
 ## v1.0.1
 
 Released 2021-09-08.
