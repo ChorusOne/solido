@@ -867,7 +867,8 @@ impl SolidoState {
         None
     }
 
-    pub fn try_unstake_to_balance_validators(&self) -> Option<(Instruction, MaintenanceOutput)> {
+    /// Unstake from active validators in order to rebalance validators.
+    pub fn try_unstake_from_active_validators(&self) -> Option<(Instruction, MaintenanceOutput)> {
         // Get the target for each validator. Undelegated stake can be balanced
         // when staking with validators.
         let targets = lido::balance::get_target_balance(Lamports(0), &self.solido.validators)
@@ -890,7 +891,7 @@ impl SolidoState {
             let min_idx = unstake_amounts
                 .iter()
                 .enumerate()
-                .max_by(|(_, a), (_, b)| a.partial_cmp(b).expect("Order always exists"))
+                .max_by(|(_, &a), (_, &b)| a.partial_cmp(b).expect("Order always exists"))
                 .map(|(idx, _)| idx)?;
 
             let validator = &self.solido.validators.entries[min_idx];
@@ -1354,7 +1355,7 @@ pub fn try_perform_maintenance(
         .or_else(|| state.try_collect_validator_fee())
         // Same for updating the validator balance.
         .or_else(|| state.try_withdraw_inactive_stake())
-        .or_else(|| state.try_unstake_to_balance_validators())
+        .or_else(|| state.try_unstake_from_active_validators())
         .or_else(|| state.try_stake_deposit())
         .or_else(|| state.try_claim_validator_fee())
         .or_else(|| state.try_remove_validator());
