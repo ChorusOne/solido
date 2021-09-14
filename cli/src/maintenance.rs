@@ -910,31 +910,6 @@ impl SolidoState {
         } else {
             None
         }
-
-        // let mut instruction = None;
-        // for (validator, stake_accounts, unstake_amount) in izip!(
-        //     self.solido.validators.entries.iter(),
-        //     self.validator_stake_accounts.iter(),
-        //     unstake_amounts.iter()
-        // ) {
-        //     if unstake_amount > Lamports(0) {
-        //         instruction = Some(self.get_unstake_instruction(
-        //             validator,
-        //             &stake_accounts[0],
-        //             Lamports(unstake_amount),
-        //         ));
-        //     }
-
-        //     let ratio = (unstake_amount * 100) / validator.entry.effective_stake_balance().0;
-        //     if ratio > SolidoState::UNBALANCE_THRESHOLD {
-        //         rebalance = true;
-        //     }
-        // }
-        // if rebalance {
-        //     todo!()
-        // } else {
-        //     None
-        // }
     }
 
     /// Write metrics about the current Solido instance in Prometheus format.
@@ -1379,6 +1354,7 @@ pub fn try_perform_maintenance(
         .or_else(|| state.try_collect_validator_fee())
         // Same for updating the validator balance.
         .or_else(|| state.try_withdraw_inactive_stake())
+        .or_else(|| state.try_unstake_to_balance_validators())
         .or_else(|| state.try_stake_deposit())
         .or_else(|| state.try_claim_validator_fee())
         .or_else(|| state.try_remove_validator());
