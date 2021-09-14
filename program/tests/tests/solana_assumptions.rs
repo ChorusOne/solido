@@ -8,9 +8,7 @@
 //! In some places the Solana documentation is absent or incomplete, so we test
 //! the implementation to see how Solana actually works.
 
-use solana_program::{
-    pubkey::Pubkey, stake::state::StakeState, system_instruction, system_program,
-};
+use solana_program::{pubkey::Pubkey, stake::state::StakeState};
 use solana_program_test::tokio;
 use solana_sdk::signature::{Keypair, Signer};
 
@@ -18,10 +16,7 @@ use lido::{
     stake_account::{StakeAccount, StakeBalance},
     token::Lamports,
 };
-use solana_vote_program::{
-    vote_instruction,
-    vote_state::{VoteInit, VoteState},
-};
+use solana_vote_program::vote_instruction;
 
 use crate::context::{send_transaction, Context};
 
@@ -268,7 +263,8 @@ async fn test_stake_accounts() {
 async fn update_commission(
     context: &mut Context,
     vote_account: &Pubkey,
-    withdraw_authority: &Keypair,
+    withdraw_authority: &Pubkey,
+    signer: &Keypair,
     new_commission: u8,
 ) -> solana_sdk::transport::Result<()> {
     send_transaction(
@@ -276,10 +272,10 @@ async fn update_commission(
         &mut context.nonce,
         &[vote_instruction::update_commission(
             &vote_account,
-            &withdraw_authority.pubkey(),
+            withdraw_authority,
             new_commission,
         )],
-        vec![&withdraw_authority],
+        vec![signer],
     )
     .await
 }
@@ -289,45 +285,13 @@ async fn test_only_withdrawer_can_change_commission() {
     let mut context = Context::new_empty().await;
     let withdraw_authority = context.deterministic_keypair.new_keypair();
     let node_key = context.deterministic_keypair.new_keypair();
-    let vote_account = context.deterministic_keypair.new_keypair();
-
-    let rent = context.context.banks_client.get_rent().await.unwrap();
-    let rent_voter = rent.minimum_balance(VoteState::size_of());
-
-    let payer = context.context.payer.pubkey();
-    let mut instructions = vec![system_instruction::create_account(
-        &payer,
-        &node_key.pubkey(),
-        0,
-        0,
-        &system_program::id(),
-    )];
 
     // Create vote account.
-    instructions.extend(vote_instruction::create_account(
-        &payer,
-        &vote_account.pubkey(),
-        &VoteInit {
-            node_pubkey: node_key.pubkey(),
-            authorized_voter: withdraw_authority.pubkey(),
-            authorized_withdrawer: withdraw_authority.pubkey(),
-            commission: 0,
-        },
-        rent_voter,
-    ));
-    send_transaction(
-        &mut context.context,
-        &mut context.nonce,
-        &instructions,
-        vec![&node_key, &vote_account],
-    )
-    .await
-    .unwrap();
+    let vote_account = context
+        .create_vote_account(&node_key, withdraw_authority.pubkey(), 0)
+        .await;
 
-    let vote_state = context
-        .get_vote_account(vote_account.pubkey())
-        .await
-        .unwrap();
+    let vote_state = context.get_vote_account(vote_account).await.unwrap();
     assert_eq!(vote_state.commission, 0);
     assert_eq!(
         vote_state.authorized_withdrawer,
@@ -335,14 +299,17 @@ async fn test_only_withdrawer_can_change_commission() {
     );
 
     // Test if `withdraw_authority` is allowed to change the commission.
-    update_commission(&mut context, &vote_account.pubkey(), &withdraw_authority, 1)
-        .await
-        .unwrap();
+    update_commission(
+        &mut context,
+        &vote_account,
+        &withdraw_authority.pubkey(),
+        &withdraw_authority,
+        1,
+    )
+    .await
+    .unwrap();
 
-    let vote_state = context
-        .get_vote_account(vote_account.pubkey())
-        .await
-        .unwrap();
+    let vote_state = context.get_vote_account(vote_account).await.unwrap();
     assert_eq!(vote_state.commission, 1);
 
     let new_withdrawer = context.deterministic_keypair.new_keypair();
@@ -351,7 +318,7 @@ async fn test_only_withdrawer_can_change_commission() {
         &mut context.context,
         &mut context.nonce,
         &[vote_instruction::authorize(
-            &vote_account.pubkey(),
+            &vote_account,
             &withdraw_authority.pubkey(),
             &new_withdrawer.pubkey(),
             solana_vote_program::vote_state::VoteAuthorize::Withdrawer,
@@ -362,24 +329,30 @@ async fn test_only_withdrawer_can_change_commission() {
     .unwrap();
 
     // Test if we the withdraw authority was changed.
-    let vote_state = context
-        .get_vote_account(vote_account.pubkey())
-        .await
-        .unwrap();
+    let vote_state = context.get_vote_account(vote_account).await.unwrap();
     assert_eq!(vote_state.authorized_withdrawer, new_withdrawer.pubkey());
 
     // Old withdraw authority shouldn't be able to change the commission.
-    let result =
-        update_commission(&mut context, &vote_account.pubkey(), &withdraw_authority, 2).await;
+    let result = update_commission(
+        &mut context,
+        &vote_account,
+        &withdraw_authority.pubkey(),
+        &withdraw_authority,
+        2,
+    )
+    .await;
     assert!(result.is_err());
 
     // New withdraw authority can change the commission.
-    update_commission(&mut context, &vote_account.pubkey(), &new_withdrawer, 2)
-        .await
-        .unwrap();
-    let vote_state = context
-        .get_vote_account(vote_account.pubkey())
-        .await
-        .unwrap();
+    update_commission(
+        &mut context,
+        &vote_account,
+        &new_withdrawer.pubkey(),
+        &new_withdrawer,
+        2,
+    )
+    .await
+    .unwrap();
+    let vote_state = context.get_vote_account(vote_account).await.unwrap();
     assert_eq!(vote_state.commission, 2);
 }

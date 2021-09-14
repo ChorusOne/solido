@@ -552,7 +552,12 @@ impl Context {
     }
 
     /// Create a vote account for the given validator.
-    pub async fn create_vote_account(&mut self, node_key: &Keypair) -> Pubkey {
+    pub async fn create_vote_account(
+        &mut self,
+        node_key: &Keypair,
+        authorized_withdrawer: Pubkey,
+        commission: u8,
+    ) -> Pubkey {
         let rent = self.context.banks_client.get_rent().await.unwrap();
         let rent_voter = rent.minimum_balance(VoteState::size_of());
 
@@ -576,8 +581,8 @@ impl Context {
             &VoteInit {
                 node_pubkey: node_key.pubkey(),
                 authorized_voter: node_key.pubkey(),
-                authorized_withdrawer: self.withdraw_authority,
-                commission: 100,
+                authorized_withdrawer,
+                commission,
             },
             rent_voter,
         ));
@@ -729,7 +734,9 @@ impl Context {
     pub async fn add_validator(&mut self) -> ValidatorAccounts {
         let node_account = self.deterministic_keypair.new_keypair();
         let fee_account = self.create_st_sol_account(node_account.pubkey()).await;
-        let vote_account = self.create_vote_account(&node_account).await;
+        let vote_account = self
+            .create_vote_account(&node_account, self.withdraw_authority, 100)
+            .await;
 
         let accounts = ValidatorAccounts {
             node_account,
