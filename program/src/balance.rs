@@ -102,6 +102,22 @@ pub fn get_target_balance(
     Ok(target_balance)
 }
 
+pub fn get_unstake_to_rebalance(
+    validators: &Validators,
+    target_balance: &Vec<Lamports>,
+) -> Vec<Lamports> {
+    let mut unstake_to_rebalance = Vec::new();
+    for (validator, target) in validators.entries.iter().zip(target_balance) {
+        let unstake_amount = validator
+            .entry
+            .effective_stake_balance()
+            .0
+            .saturating_sub(target.0);
+        unstake_to_rebalance.push(Lamports(unstake_amount));
+    }
+    return unstake_to_rebalance;
+}
+
 /// Given a list of validators and their target balance, return the index of the
 /// validator that has less stake, and the amount by which it is below its target.
 ///
