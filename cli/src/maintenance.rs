@@ -107,7 +107,7 @@ pub enum MaintenanceOutput {
         #[serde(serialize_with = "serialize_b58")]
         validator_vote_account: Pubkey,
     },
-    UnstakeFromValidator(Unstake),
+    UnstakeFromActiveValidator(Unstake),
 }
 
 #[derive(Debug, Eq, PartialEq, Serialize)]
@@ -222,8 +222,8 @@ impl fmt::Display for MaintenanceOutput {
                 writeln!(f, "Unstake from inactive validator")?;
                 print_unstake(f, unstake)?;
             }
-            MaintenanceOutput::UnstakeFromValidator(unstake) => {
-                writeln!(f, "Unstake from validator")?;
+            MaintenanceOutput::UnstakeFromActiveValidator(unstake) => {
+                writeln!(f, "Unstake from active validator")?;
                 print_unstake(f, unstake)?;
             }
             MaintenanceOutput::RemoveValidator {
@@ -891,7 +891,7 @@ impl SolidoState {
             let min_idx = unstake_amounts
                 .iter()
                 .enumerate()
-                .max_by(|(_, &a), (_, &b)| a.partial_cmp(b).expect("Order always exists"))
+                .max_by(|(_, a), (_, b)| a.partial_cmp(b).expect("Order always exists"))
                 .map(|(idx, _)| idx)?;
 
             let validator = &self.solido.validators.entries[min_idx];
@@ -899,13 +899,13 @@ impl SolidoState {
             let amount = unstake_amounts[min_idx];
             let (unstake_account, instruction) =
                 self.get_unstake_instruction(validator, stake_account, amount);
-            let task = MaintenanceOutput::UnstakeFromInactiveValidator(Unstake {
+            let task = MaintenanceOutput::UnstakeFromActiveValidator(Unstake {
                 validator_vote_account: validator.pubkey,
                 from_stake_account: stake_account.0,
                 to_unstake_account: unstake_account,
                 from_stake_seed: validator.entry.stake_seeds.begin,
                 to_unstake_seed: validator.entry.unstake_seeds.end,
-                amount: amount,
+                amount,
             });
             Some((instruction, task))
         } else {

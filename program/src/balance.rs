@@ -104,7 +104,7 @@ pub fn get_target_balance(
 
 pub fn get_unstake_to_rebalance(
     validators: &Validators,
-    target_balance: &Vec<Lamports>,
+    target_balance: &[Lamports],
 ) -> Vec<Lamports> {
     let mut unstake_to_rebalance = Vec::new();
     for (validator, target) in validators.entries.iter().zip(target_balance) {
@@ -115,7 +115,7 @@ pub fn get_unstake_to_rebalance(
             .saturating_sub(target.0);
         unstake_to_rebalance.push(Lamports(unstake_amount));
     }
-    return unstake_to_rebalance;
+    unstake_to_rebalance
 }
 
 /// Given a list of validators and their target balance, return the index of the

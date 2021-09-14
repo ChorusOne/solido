@@ -61,8 +61,8 @@ struct MaintenanceMetrics {
     /// Number of times we performed `RemoveValidator`.
     transactions_remove_validator: u64,
 
-    /// Number of times we performed `Unstake` on a validator for balancing purposes.
-    transactions_unstake_from_validator: u64,
+    /// Number of times we performed `Unstake` on an active validator for balancing purposes.
+    transactions_unstake_from_active_validator: u64,
 }
 
 impl MaintenanceMetrics {
@@ -136,8 +136,8 @@ impl MaintenanceMetrics {
                 self.transactions_unstake_from_inactive_validator += 1
             }
             MaintenanceOutput::RemoveValidator { .. } => self.transactions_remove_validator += 1,
-            MaintenanceOutput::UnstakeFromValidator { .. } => {
-                self.transactions_unstake_from_validator += 1
+            MaintenanceOutput::UnstakeFromActiveValidator { .. } => {
+                self.transactions_unstake_from_active_validator += 1
             }
         }
     }
@@ -291,7 +291,7 @@ impl<'a, 'b> Daemon<'a, 'b> {
             transactions_claim_validator_fee: 0,
             transactions_unstake_from_inactive_validator: 0,
             transactions_remove_validator: 0,
-            transactions_unstake_from_validator: 0,
+            transactions_unstake_from_active_validator: 0,
         };
         Daemon {
             config,
