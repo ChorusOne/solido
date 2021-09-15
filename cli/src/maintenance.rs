@@ -948,6 +948,7 @@ impl SolidoState {
 
         Ok(())
     }
+
     fn get_stake_authority(&self) -> Pubkey {
         let (stake_authority, _bump_seed_authority) = lido::find_authority_program_address(
             &self.solido_program_id,
@@ -974,6 +975,53 @@ impl SolidoState {
             MINT_AUTHORITY,
         );
         mint_authority
+    }
+
+    /// Return the maintainer who is currently on "maintainer duty".
+    ///
+    /// The maintenance tasks need to be executed by somebody. Every task
+    /// preferably needs to be executed by a single maintainer. For most
+    /// operations, the on-chain program either guarantees that in case of
+    /// racing transactions, only one succeeds, or the operation is idempotent.
+    /// But for some operations (like unstake) we don't have this protection
+    /// yet, and besides, it is wasteful for all maintainers to create the same
+    /// transaction and have all but one of them fail.
+    ///
+    /// The solution to this is to introduce _maintainer duty_. We divide time
+    /// into slices based on slot number, and every maintainer will only perform
+    /// maintenance during their assigned slice. This assumes that the maintainers
+    /// all cooperate and run this version of the maintainer software, but the
+    /// worst thing that will happen if they don't is that some transactions may
+    /// get submitted by multiple maintainers. All maintainers can agree about
+    /// who is on duty, because this is a pure function of the current Solido
+    /// state and clock sysvar.
+    ///
+    /// One decision to make, is the duration of the duty slice.
+    ///
+    /// * Shorter cycles mean more risk of races (because a maintainer can
+    ///   create a transaction just before the end of its duty, and it may not
+    ///   yet have executed at the start of the next maintainer's duty, so the
+    ///   next maintainer performs the same operation). To mitigate this, we
+    ///   can leave a small gap between duty slices.
+    /// * Larger slices avoid races, but increase the latency when the
+    ///   maintainer that's on duty is offline.
+    ///
+    /// As an middle ground between those two, we take 100 slots, which at a
+    /// block time of 550ms is a little under a minute per maintainer. If only
+    /// one maintainer is offline, this means maintenance operations get delayed
+    /// by at most ~55s.
+    fn get_current_maintainer_duty(&self) -> Option<Pubkey> {
+        let duty_slice = self.clock.slot / 100;
+        let slot_in_duty_slice = self.clock.slot % 100;
+
+        // In the last 10% of the slice, nobody is on duty, to minimize races at
+        // the duty slice boundary.
+        if slot_in_duty_slice > 90 {
+            return None;
+        }
+
+        let maintainer_index = duty_slice % self.solido.maintainers.len() as u64;
+        Some(self.solido.maintainers.entries[maintainer_index])
     }
 }
 
