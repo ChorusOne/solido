@@ -1023,7 +1023,7 @@ impl SolidoState {
     /// block time of 550ms is a little under a minute per maintainer. If only
     /// one maintainer is offline, this means maintenance operations get delayed
     /// by at most ~55s.
-    fn get_current_maintainer_duty(&self) -> Option<Pubkey> {
+    pub fn get_current_maintainer_duty(&self) -> Option<Pubkey> {
         if self.solido.maintainers.entries.is_empty() {
             return None;
         }
@@ -1049,7 +1049,7 @@ impl SolidoState {
     /// next duty slice, not the start of the current duty slice.
     ///
     /// See also [`get_current_maintainer_duty`].
-    fn get_next_maintainer_duty_slot(&self, maintainer: &Pubkey) -> Option<Slot> {
+    pub fn get_next_maintainer_duty_slot(&self, maintainer: &Pubkey) -> Option<Slot> {
         // Compute the start of the current "cycle", where in every cycle, every
         // maintainer has a single duty slice.
         let cycle_length =

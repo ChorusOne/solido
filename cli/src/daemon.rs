@@ -167,6 +167,14 @@ fn run_maintenance_iteration(
 ) -> MaintenanceResult {
     let result = config.with_snapshot(|mut config| {
         let state = SolidoState::new(&mut config, opts.solido_program_id(), opts.solido_address())?;
+
+        // If it's not our maintainer duty at this time, then don't try to
+        // perform maintenance; a different maintainer should be doing it
+        // right now.
+        if state.get_current_maintainer_duty() != Some(config.signer.pubkey()) {
+            return Ok(MaintenanceResult::OkIdle(state));
+        }
+
         match try_perform_maintenance(&mut config, &state) {
             Ok(None) => Ok(MaintenanceResult::OkIdle(state)),
             Ok(Some(output)) => Ok(MaintenanceResult::OkMaintenance(state, output)),
