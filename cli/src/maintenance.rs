@@ -1295,16 +1295,20 @@ mod test {
                     .unwrap();
             }
 
-            // Check the next slot in reverse, so the duty start slots do not
-            // all fall in the same cycle.
-            let maintainers: Vec<Pubkey> = state
+            let maintainer_keys: Vec<Pubkey> = state
                 .solido
                 .maintainers
                 .entries
                 .iter()
-                .rev()
                 .map(|p| p.pubkey)
                 .collect();
+
+            // Check the next slot in forward order but also reverse order. With
+            // forward order, the duty start slots all fall in the same cycle,
+            // so by iterating backwards, we also test the other branch.
+            let mut maintainers = Vec::new();
+            maintainers.extend(maintainer_keys.iter().rev());
+            maintainers.extend(maintainer_keys.iter());
 
             // Don't start at slot 0, to avoid wrapping below.
             state.clock.slot = SolidoState::MAINTAINER_DUTY_SLICE_LENGTH;
