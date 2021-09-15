@@ -3,6 +3,7 @@
 
 //! Logic for keeping the stake pool balanced.
 
+use std::cmp::Ordering;
 use std::ops::Mul;
 
 use crate::account_map::PubkeyAndEntry;
@@ -102,6 +103,7 @@ pub fn get_target_balance(
     Ok(target_balance)
 }
 
+/// Get the amount that should be unstaked from each validator.
 pub fn get_unstake_to_rebalance(
     validators: &Validators,
     target_balance: &[Lamports],
@@ -116,6 +118,20 @@ pub fn get_unstake_to_rebalance(
         unstake_to_rebalance.push(Lamports(unstake_amount));
     }
     unstake_to_rebalance
+}
+
+/// Get the index for the minimum amount.
+pub fn get_minimum_unstake_validator_index(unstake_amounts: &[Lamports]) -> Option<usize> {
+    unstake_amounts
+        .iter()
+        .enumerate()
+        .min_by(|(_, a), (_, b)| {
+            if a == &&Lamports(0) {
+                return Ordering::Greater;
+            }
+            a.partial_cmp(b).expect("Order always exists")
+        })
+        .map(|(idx, _)| idx)
 }
 
 /// Given a list of validators and their target balance, return the index of the
@@ -172,7 +188,7 @@ pub fn get_validator_to_withdraw(
 
 #[cfg(test)]
 mod test {
-    use super::{get_minimum_stake_validator_index_amount, get_target_balance};
+    use super::*;
     use crate::state::Validators;
     use crate::token::Lamports;
 
@@ -332,5 +348,20 @@ mod test {
             get_minimum_stake_validator_index_amount(&validators, &targets[..]),
             (2, Lamports(67))
         );
+    }
+
+    #[test]
+    fn get_unstake_from_active_validator() {
+        let mut validators = Validators::new_fill_default(3);
+        validators.entries[0].entry.stake_accounts_balance = Lamports(10);
+        validators.entries[1].entry.stake_accounts_balance = Lamports(30);
+        validators.entries[2].entry.stake_accounts_balance = Lamports(21);
+
+        let targets = get_target_balance(Lamports(0), &validators).unwrap();
+
+        let unstake_amounts = get_unstake_to_rebalance(&validators, &targets);
+        assert_eq!(unstake_amounts, [Lamports(0), Lamports(10), Lamports(1)]);
+        let minimum_unstake = get_minimum_unstake_validator_index(&unstake_amounts);
+        assert_eq!(minimum_unstake, Some(2));
     }
 }
