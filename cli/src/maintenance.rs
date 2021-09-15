@@ -870,7 +870,7 @@ impl SolidoState {
     /// Unstake from active validators in order to rebalance validators.
     pub fn try_unstake_from_active_validators(&self) -> Option<(Instruction, MaintenanceOutput)> {
         // Get the target for each validator. Undelegated Lamports can be
-        // balanced when staking with validators.
+        // sent when staking with validators.
         let targets = lido::balance::get_target_balance(Lamports(0), &self.solido.validators)
             .expect("Failed to compute target balance.");
         let unstake_amounts =
@@ -884,7 +884,9 @@ impl SolidoState {
         )?;
         let validator = &self.solido.validators.entries[validator_index];
         let stake_account = &self.validator_stake_accounts[validator_index][0];
-        let amount = unstake_amounts[validator_index];
+
+        // Get the maximum that can be unstaked from the stake account.
+        let amount = unstake_amounts[validator_index].min(stake_account.1.balance.total());
         let (unstake_account, instruction) =
             self.get_unstake_instruction(validator, stake_account, amount);
         let task = MaintenanceOutput::UnstakeFromActiveValidator(Unstake {
