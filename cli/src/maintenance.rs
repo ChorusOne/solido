@@ -869,48 +869,33 @@ impl SolidoState {
 
     /// Unstake from active validators in order to rebalance validators.
     pub fn try_unstake_from_active_validators(&self) -> Option<(Instruction, MaintenanceOutput)> {
-        // Get the target for each validator. Undelegated stake can be balanced
-        // when staking with validators.
+        // Get the target for each validator. Undelegated Lamports can be
+        // balanced when staking with validators.
         let targets = lido::balance::get_target_balance(Lamports(0), &self.solido.validators)
             .expect("Failed to compute target balance.");
         let unstake_amounts =
             lido::balance::get_unstake_to_rebalance(&self.solido.validators, &targets);
 
-        let rebalance = self
-            .solido
-            .validators
-            .entries
-            .iter()
-            .zip(unstake_amounts.iter())
-            .any(|(validator, unstake_amount)| {
-                (unstake_amount.0 * 100) / validator.entry.effective_stake_balance().0
-                    > SolidoState::UNBALANCE_THRESHOLD
-            });
-
-        if rebalance {
-            let min_idx = unstake_amounts
-                .iter()
-                .enumerate()
-                .max_by(|(_, a), (_, b)| a.partial_cmp(b).expect("Order always exists"))
-                .map(|(idx, _)| idx)?;
-
-            let validator = &self.solido.validators.entries[min_idx];
-            let stake_account = &self.validator_stake_accounts[min_idx][0];
-            let amount = unstake_amounts[min_idx];
-            let (unstake_account, instruction) =
-                self.get_unstake_instruction(validator, stake_account, amount);
-            let task = MaintenanceOutput::UnstakeFromActiveValidator(Unstake {
-                validator_vote_account: validator.pubkey,
-                from_stake_account: stake_account.0,
-                to_unstake_account: unstake_account,
-                from_stake_seed: validator.entry.stake_seeds.begin,
-                to_unstake_seed: validator.entry.unstake_seeds.end,
-                amount,
-            });
-            Some((instruction, task))
-        } else {
-            None
-        }
+        let validator_index = lido::balance::get_unstake_validator_index(
+            &self.solido.validators,
+            &targets,
+            &unstake_amounts,
+            SolidoState::UNBALANCE_THRESHOLD,
+        )?;
+        let validator = &self.solido.validators.entries[validator_index];
+        let stake_account = &self.validator_stake_accounts[validator_index][0];
+        let amount = unstake_amounts[validator_index];
+        let (unstake_account, instruction) =
+            self.get_unstake_instruction(validator, stake_account, amount);
+        let task = MaintenanceOutput::UnstakeFromActiveValidator(Unstake {
+            validator_vote_account: validator.pubkey,
+            from_stake_account: stake_account.0,
+            to_unstake_account: unstake_account,
+            from_stake_seed: validator.entry.stake_seeds.begin,
+            to_unstake_seed: validator.entry.unstake_seeds.end,
+            amount,
+        });
+        Some((instruction, task))
     }
 
     /// Write metrics about the current Solido instance in Prometheus format.
