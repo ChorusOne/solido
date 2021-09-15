@@ -222,7 +222,7 @@ impl fmt::Display for MaintenanceOutput {
 
 /// A snapshot of on-chain accounts relevant to Solido.
 pub struct SolidoState {
-    /// The time at which we finished querying the Solido state.
+    /// The label for the time at which we finished querying the Solido state.
     ///
     /// This is used in metrics to assign a timestamp to metrics that we proxy
     /// from the state and then expose to Prometheus. Because the time at which
@@ -234,6 +234,10 @@ pub struct SolidoState {
     /// that performed the query. However, when you run `solana-test-validator`,
     /// that timestamp goes out of date quickly, so use the actual observed time
     /// instead.
+    ///
+    /// This field holds the current datetime indicated by the OS, which is
+    /// useful for communicating that time externally (to Prometheus), but which
+    /// is not suitable for measuring durations.
     pub produced_at: SystemTime,
 
     pub solido_program_id: Pubkey,

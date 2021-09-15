@@ -13,15 +13,16 @@ use std::io;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread::JoinHandle;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use rand::Rng;
+use rand::{rngs::ThreadRng, Rng};
 use tiny_http::{Request, Response, Server};
 
 use crate::config::RunMaintainerOpts;
-use crate::error::AsPrettyError;
+use crate::error::{AsPrettyError, Error};
 use crate::maintenance::{try_perform_maintenance, MaintenanceOutput, SolidoState};
 use crate::prometheus::{write_metric, Metric, MetricFamily};
+use crate::snapshot::SnapshotError;
 use crate::SnapshotClientConfig;
 
 /// Metrics counters that track how many maintenance operations we performed.
@@ -107,6 +108,32 @@ impl MaintenanceMetrics {
         )?;
         Ok(())
     }
+
+    /// Increment the counter for a maintenance operation.
+    pub fn observe_maintenance(&mut self, maintenance_output: &MaintenanceOutput) {
+        match *maintenance_output {
+            MaintenanceOutput::StakeDeposit { .. } => {
+                self.transactions_stake_deposit += 1;
+            }
+            MaintenanceOutput::UpdateExchangeRate => {
+                self.transactions_update_exchange_rate += 1;
+            }
+            MaintenanceOutput::WithdrawInactiveStake { .. } => {
+                self.transactions_withdraw_inactive_stake += 1;
+            }
+            MaintenanceOutput::CollectValidatorFee { .. } => {
+                self.transactions_collect_validator_fee += 1
+            }
+            MaintenanceOutput::MergeStake { .. } => self.transactions_merge_stake += 1,
+            MaintenanceOutput::ClaimValidatorFee { .. } => {
+                self.transactions_claim_validator_fee += 1
+            }
+            MaintenanceOutput::UnstakeFromInactiveValidator { .. } => {
+                self.transactions_unstake_from_inactive_validator += 1
+            }
+            MaintenanceOutput::RemoveValidator { .. } => self.transactions_remove_validator += 1,
+        }
+    }
 }
 
 /// Snapshot of metrics and Solido state.
@@ -119,6 +146,42 @@ struct Snapshot {
     solido: Option<SolidoState>,
 }
 
+enum MaintenanceResult {
+    /// We failed to obtain a snapshot of the on-chain state at all, possibly a connectivity problem.
+    ErrSnapshot(Error),
+
+    /// We have a state snapshot and there was maintenance to perform, but that failed.
+    ErrMaintenance(SolidoState, Error),
+
+    /// We have a state snapshot, and there was no maintenance to perform.
+    OkIdle(SolidoState),
+
+    /// We have a state snapshot, and we performed maintenance.
+    OkMaintenance(SolidoState, MaintenanceOutput),
+}
+
+/// Run a single maintenance iteration.
+fn run_maintenance_iteration(
+    config: &mut SnapshotClientConfig,
+    opts: &RunMaintainerOpts,
+) -> MaintenanceResult {
+    let result = config.with_snapshot(|mut config| {
+        let state = SolidoState::new(&mut config, opts.solido_program_id(), opts.solido_address())?;
+        match try_perform_maintenance(&mut config, &state) {
+            Ok(None) => Ok(MaintenanceResult::OkIdle(state)),
+            Ok(Some(output)) => Ok(MaintenanceResult::OkMaintenance(state, output)),
+            Err(SnapshotError::MissingAccount) => Err(SnapshotError::MissingAccount),
+            Err(SnapshotError::OtherError(err)) => {
+                Ok(MaintenanceResult::ErrMaintenance(state, err))
+            }
+        }
+    });
+    match result {
+        Err(err) => MaintenanceResult::ErrSnapshot(err),
+        Ok(result) => result,
+    }
+}
+
 /// Mutex that holds the latest snapshot.
 ///
 /// At startup it holds None, after that it will always hold Some Arc.
@@ -129,104 +192,126 @@ struct Snapshot {
 /// to swap the Arc.
 type SnapshotMutex = Mutex<Option<Arc<Snapshot>>>;
 
-/// Run the maintenance loop.
-fn run_main_loop(
-    config: &mut SnapshotClientConfig,
-    opts: &RunMaintainerOpts,
-    snapshot_mutex: &SnapshotMutex,
-) {
-    let mut metrics = MaintenanceMetrics {
-        polls: 0,
-        errors: 0,
-        transactions_stake_deposit: 0,
-        transactions_update_exchange_rate: 0,
-        transactions_withdraw_inactive_stake: 0,
-        transactions_collect_validator_fee: 0,
-        transactions_merge_stake: 0,
-        transactions_claim_validator_fee: 0,
-        transactions_unstake_from_inactive_validator: 0,
-        transactions_remove_validator: 0,
-    };
-    let mut rng = rand::thread_rng();
+struct Daemon<'a, 'b> {
+    config: &'a mut SnapshotClientConfig<'b>,
 
-    loop {
-        metrics.polls += 1;
-        let mut do_wait = false;
+    opts: &'a RunMaintainerOpts,
 
-        let result = config.with_snapshot(|mut config| {
-            let state =
-                SolidoState::new(&mut config, opts.solido_program_id(), opts.solido_address())?;
+    /// Random number generator used for exponential backoff with jitter on errors.
+    rng: ThreadRng,
 
-            match try_perform_maintenance(&mut config, &state)? {
-                None => {
-                    // Nothing to be done, try again later.
-                    do_wait = true;
-                }
-                Some(maintenance_output) => {
-                    println!("{}", maintenance_output);
-                    match maintenance_output {
-                        MaintenanceOutput::StakeDeposit { .. } => {
-                            metrics.transactions_stake_deposit += 1;
-                        }
-                        MaintenanceOutput::UpdateExchangeRate => {
-                            metrics.transactions_update_exchange_rate += 1;
-                        }
-                        MaintenanceOutput::WithdrawInactiveStake { .. } => {
-                            metrics.transactions_withdraw_inactive_stake += 1;
-                        }
-                        MaintenanceOutput::CollectValidatorFee { .. } => {
-                            metrics.transactions_collect_validator_fee += 1
-                        }
-                        MaintenanceOutput::MergeStake { .. } => {
-                            metrics.transactions_merge_stake += 1
-                        }
-                        MaintenanceOutput::ClaimValidatorFee { .. } => {
-                            metrics.transactions_claim_validator_fee += 1
-                        }
-                        MaintenanceOutput::UnstakeFromInactiveValidator { .. } => {
-                            metrics.transactions_unstake_from_inactive_validator += 1
-                        }
-                        MaintenanceOutput::RemoveValidator { .. } => {
-                            metrics.transactions_remove_validator += 1
-                        }
-                    }
-                }
-            }
+    /// The instant after we successfully queried the on-chain state for the last time.
+    last_read_success: Instant,
 
-            Ok(state)
-        });
+    /// Metrics counters to track status.
+    metrics: MaintenanceMetrics,
 
-        let state = match result {
-            Ok(state) => Some(state),
-            Err(err) => {
-                println!("Error in maintenance.");
-                err.print_pretty();
-                metrics.errors += 1;
+    /// Mutex where we publish the latest snapshot for use by the webserver.
+    snapshot_mutex: Arc<SnapshotMutex>,
+}
 
-                // If the error was caused by a connectivity problem, we shouldn't
-                // hammer the RPC again straight away. Even better would be to do
-                // exponential backoff with jitter, but let's not go there right now.
-                do_wait = true;
-
-                None
-            }
+impl<'a, 'b> Daemon<'a, 'b> {
+    pub fn new(config: &'a mut SnapshotClientConfig<'b>, opts: &'a RunMaintainerOpts) -> Self {
+        let metrics = MaintenanceMetrics {
+            polls: 0,
+            errors: 0,
+            transactions_stake_deposit: 0,
+            transactions_update_exchange_rate: 0,
+            transactions_withdraw_inactive_stake: 0,
+            transactions_collect_validator_fee: 0,
+            transactions_merge_stake: 0,
+            transactions_claim_validator_fee: 0,
+            transactions_unstake_from_inactive_validator: 0,
+            transactions_remove_validator: 0,
         };
+        Daemon {
+            config,
+            opts,
+            rng: rand::thread_rng(),
+            last_read_success: Instant::now(),
+            metrics,
+            snapshot_mutex: Arc::new(Mutex::new(None)),
+        }
+    }
 
-        // Publish the new state and metrics, so the webserver can serve them.
+    /// Publish a new snapshot that from now on will be served by the http server.
+    fn publish_snapshot(&mut self, solido: Option<SolidoState>) {
+        if solido.is_some() {
+            self.last_read_success = Instant::now();
+        }
+
         let snapshot = Snapshot {
-            metrics: metrics.clone(),
-            solido: state,
+            metrics: self.metrics.clone(),
+            solido,
         };
-        snapshot_mutex.lock().unwrap().replace(Arc::new(snapshot));
+        self.snapshot_mutex
+            .lock()
+            .unwrap()
+            .replace(Arc::new(snapshot));
+    }
 
-        if do_wait {
-            // Sleep a random time, to avoid a thundering herd problem, in case
-            // multiple maintainer bots happened to run in sync. They would all
-            // try to create the same transaction, and only one would pass.
-            let max_poll_interval = Duration::from_secs(*opts.max_poll_interval_seconds());
-            let sleep_time = rng.gen_range(Duration::from_secs(0)..max_poll_interval);
-            println!("Sleeping {:?} until next iteration ...", sleep_time);
-            std::thread::sleep(sleep_time);
+    /// Sleep with exponential backoff and jitter.
+    fn sleep_after_error(&mut self) {
+        // For the sleep time we use exponential backoff with jitter [1]. By taking
+        // the time since the last success as the target sleep time, we get
+        // exponential backoff. We clamp this to ensure we don't wait indefinitely.
+        // 1: https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/
+        let time_since_last_success = self.last_read_success.elapsed();
+        let min_sleep_time = Duration::from_secs_f32(0.2);
+        let max_sleep_time = Duration::from_secs_f32(300.0);
+        let target_sleep_time = time_since_last_success.clamp(min_sleep_time, max_sleep_time);
+        let sleep_time = self
+            .rng
+            .gen_range(Duration::from_secs(0)..target_sleep_time);
+        println!("Sleeping {:?} after error ...", sleep_time);
+        std::thread::sleep(sleep_time);
+    }
+
+    /// Sleep either for the configured poll interval, or until it is our maintainer duty.
+    ///
+    /// TODO(ruuda): Implement the sleeping until maintainer duty part.
+    fn sleep_until_next_iteration(&mut self) {
+        let sleep_time = Duration::from_secs(*self.opts.max_poll_interval_seconds());
+        println!("Sleeping {:?} until next iteration ...", sleep_time);
+        std::thread::sleep(sleep_time);
+    }
+
+    /// Run maintenance in a loop.
+    fn run(mut self) -> ! {
+        loop {
+            self.metrics.polls += 1;
+            match run_maintenance_iteration(self.config, self.opts) {
+                MaintenanceResult::ErrSnapshot(err) => {
+                    println!("Error while obtaining on-chain state.");
+                    err.print_pretty();
+                    self.metrics.errors += 1;
+                    self.publish_snapshot(None);
+                    self.sleep_after_error();
+                }
+                MaintenanceResult::ErrMaintenance(state, err) => {
+                    println!("Error while performing maintenance.");
+                    err.print_pretty();
+                    self.metrics.errors += 1;
+                    self.publish_snapshot(Some(state));
+                    // After a failed maintenance transaction, we sleep the regular
+                    // poll interval. This ensures that if there is a bug that causes
+                    // maintenance transactions to always fail (like [1]), we don't
+                    // go in a busy loop submitting failing transactions.
+                    // 1: https://github.com/ChorusOne/solido/issues/422
+                    self.sleep_until_next_iteration();
+                }
+                MaintenanceResult::OkIdle(state) => {
+                    self.publish_snapshot(Some(state));
+                    self.sleep_until_next_iteration();
+                }
+                MaintenanceResult::OkMaintenance(state, output) => {
+                    println!("{}", output);
+                    self.metrics.observe_maintenance(&output);
+                    self.publish_snapshot(Some(state));
+                    // Note, we do not sleep here. If we performed maintenance, we
+                    // might not be done yet, so we should immediately check again.
+                }
+            };
         }
     }
 }
@@ -311,14 +396,7 @@ fn start_http_server(
 
 /// Run the maintenance daemon.
 pub fn main(config: &mut SnapshotClientConfig, opts: &RunMaintainerOpts) {
-    let snapshot_mutex = Arc::new(Mutex::new(None));
-    let http_threads = start_http_server(opts, snapshot_mutex.clone());
-
-    run_main_loop(config, opts, &*snapshot_mutex);
-
-    // We never get here, the main loop should run indefinitely until the program
-    // is killed, and while the main loop runs, the http server also serves.
-    for thread in http_threads {
-        thread.join().unwrap();
-    }
+    let daemon = Daemon::new(config, opts);
+    let _http_threads = start_http_server(opts, daemon.snapshot_mutex.clone());
+    daemon.run();
 }
