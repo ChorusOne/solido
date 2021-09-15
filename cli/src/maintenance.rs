@@ -869,6 +869,9 @@ impl SolidoState {
 
     /// Unstake from active validators in order to rebalance validators.
     pub fn try_unstake_from_active_validators(&self) -> Option<(Instruction, MaintenanceOutput)> {
+        // Return None if there's no active validator to unstake from.
+        self.solido.validators.iter_active().next()?;
+
         // Get the target for each validator. Undelegated Lamports can be
         // sent when staking with validators.
         let targets = lido::balance::get_target_balance(Lamports(0), &self.solido.validators)
