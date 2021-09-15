@@ -44,7 +44,9 @@ async fn test_add_validator_with_invalid_owner() {
     let solido = context.get_solido().await;
     assert_eq!(solido.validators.len(), 0);
     let node_key = context.deterministic_keypair.new_keypair();
-    let real_vote_account = context.create_vote_account(&node_key).await;
+    let real_vote_account = context
+        .create_vote_account(&node_key, context.withdraw_authority, 100)
+        .await;
 
     let vote_account = context.get_account(real_vote_account).await;
     let owner = context.deterministic_keypair.new_keypair();
