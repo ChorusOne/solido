@@ -358,7 +358,7 @@ impl SolidoState {
     const MINIMUM_WITHDRAW_AMOUNT: Lamports = Lamports(DEFAULT_TARGET_LAMPORTS_PER_SIGNATURE * 100);
 
     // Threshold that will trigger unstake on validators.
-    // Expressed as a percentage between 0-1.
+    // Expressed as a percentage between 0-100.
     const UNBALANCE_THRESHOLD: u64 = 10;
     /// Read the state from the on-chain data.
     pub fn new(

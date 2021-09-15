@@ -140,6 +140,9 @@ pub fn get_unstake_validator_index(
                 let target_difference = target
                     .0
                     .saturating_sub(validator.entry.effective_stake_balance().0);
+                if target == &Lamports(0) {
+                    return false;
+                }
                 (target_difference * 100) / target.0 >= threshold
             });
 
@@ -149,7 +152,10 @@ pub fn get_unstake_validator_index(
         .enumerate()
         .zip(unstake_amounts.iter())
         .find_map(|((idx, validator), unstake_amount)| {
-            if ((unstake_amount.0 * 100) / validator.entry.effective_stake_balance().0 >= threshold)
+            if validator.entry.effective_stake_balance() == Lamports(0) {
+                None
+            } else if ((unstake_amount.0 * 100) / validator.entry.effective_stake_balance().0
+                >= threshold)
                 || (unstake_amount > &Lamports(0) && needs_unstake)
             {
                 // If validator needs to be unstaked because if falls above the
