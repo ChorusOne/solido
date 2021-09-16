@@ -184,7 +184,11 @@ impl AsPrettyError for ClientError {
                 println!(" IO error\n\n{:?}", inner);
             }
             ClientErrorKind::Reqwest(inner) => {
-                println!(" \"Reqwest\" error\n\n{:?}", inner);
+                println!(" \"Reqwest\" error");
+                print_key("Message:");
+                println!(" {}", inner);
+                print_key("Raw:");
+                println!(" {:#?}", inner);
             }
             ClientErrorKind::RpcError(inner) => match inner {
                 RpcError::RpcRequestError(message) => {
