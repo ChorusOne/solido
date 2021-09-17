@@ -1066,7 +1066,7 @@ impl SolidoState {
         let self_slice_start_slot =
             current_cycle_start_slot + self_index * Self::MAINTAINER_DUTY_SLICE_LENGTH;
 
-        if self_slice_start_slot < self.clock.slot {
+        if self_slice_start_slot <= self.clock.slot {
             // It might be that we already had our duty in the current cycle.
             // In that case, the next duty is in the next cycle.
             Some(self_slice_start_slot + cycle_length)
@@ -1283,7 +1283,7 @@ mod test {
     }
 
     #[test]
-    fn next_maintainer_maintainer_duty_slot_agrees_with_current_duty() {
+    fn next_maintainer_duty_slot_agrees_with_current_duty() {
         for num_maintainers in 1..10 {
             let mut state = new_empty_solido();
             state.solido.maintainers.maximum_entries = num_maintainers;
@@ -1344,6 +1344,20 @@ mod test {
 
             let not_maintainer = Pubkey::new_unique();
             assert_eq!(state.get_next_maintainer_duty_slot(&not_maintainer), None);
+        }
+    }
+
+    #[test]
+    fn next_maintainer_duty_returns_slot_greater_than_current_slot() {
+        let mut state = new_empty_solido();
+        let maintainer = Pubkey::new_unique();
+        state.solido.maintainers.maximum_entries = 1;
+        state.solido.maintainers.add(maintainer, ()).unwrap();
+
+        for _ in 0..10 {
+            let next_slot = state.get_next_maintainer_duty_slot(&maintainer).unwrap();
+            assert!(next_slot > state.clock.slot);
+            state.clock.slot = next_slot;
         }
     }
 }
