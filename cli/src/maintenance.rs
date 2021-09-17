@@ -1050,6 +1050,10 @@ impl SolidoState {
     ///
     /// See also [`get_current_maintainer_duty`].
     pub fn get_next_maintainer_duty_slot(&self, maintainer: &Pubkey) -> Option<Slot> {
+        if self.solido.maintainers.entries.is_empty() {
+            return None;
+        }
+
         // Compute the start of the current "cycle", where in every cycle, every
         // maintainer has a single duty slice.
         let cycle_length =
