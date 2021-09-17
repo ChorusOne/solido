@@ -634,13 +634,12 @@ cli_opt_struct! {
         #[clap(long)]
         listen: String => "0.0.0.0:8923".to_owned(),
 
-        // The expected wait time is half the max poll interval. A max poll interval
-        // of a few minutes should be plenty fast for a production deployment, but
-        // for testing you can reduce this value to make the daemon more responsive,
+        // A max poll interval of twice a minute should be plenty fast for a production deployment,
+        // but for testing you can reduce this value to make the daemon more responsive,
         // to eliminate some waiting time.
-        /// Maximum time to wait in seconds after there was no maintenance to perform, before checking again. Defaults to 120s
+        /// Maximum time to wait in seconds after there was no maintenance to perform, before checking again. Defaults to 30s
         #[clap(long)]
-        max_poll_interval_seconds: u64 => 120,
+        max_poll_interval_seconds: u64 => 30,
     }
 }
 
