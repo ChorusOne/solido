@@ -251,6 +251,10 @@ pub struct SolidoState {
     /// the number of Lamports of the validator's vote account.
     pub validator_vote_account_balances: Vec<Lamports>,
 
+    /// For each maintainer, in the same order as in `solido.maintainers`, holds
+    /// the number of Lamports in the maintainer's account.
+    pub maintainer_balances: Vec<Lamports>,
+
     /// SPL token mint for stSOL, to know the current supply.
     pub st_sol_mint: Mint,
 
@@ -262,9 +266,6 @@ pub struct SolidoState {
     /// Public key of the maintainer executing the maintenance.
     /// Must be a member of `solido.maintainers`.
     pub maintainer_address: Pubkey,
-
-    /// Current state of the maintainer account.
-    pub maintainer_account: Account,
 }
 
 fn get_validator_stake_accounts(
@@ -377,11 +378,17 @@ impl SolidoState {
             )?);
         }
 
+        let mut maintainer_balances = Vec::new();
+        for maintainer in solido.maintainers.entries.iter() {
+            maintainer_balances.push(Lamports(
+                config.client.get_account(&maintainer.pubkey)?.lamports,
+            ));
+        }
+
         // The entity executing the maintenance transactions, is the maintainer.
         // We don't verify here if it is part of the maintainer set, the on-chain
         // program does that anyway.
         let maintainer_address = config.signer.pubkey();
-        let maintainer_account = config.client.get_account(&maintainer_address)?;
 
         Ok(SolidoState {
             produced_at: SystemTime::now(),
@@ -391,13 +398,13 @@ impl SolidoState {
             validator_stake_accounts,
             validator_unstake_accounts,
             validator_vote_account_balances,
+            maintainer_balances,
             reserve_address,
             reserve_account: reserve_account.clone(),
             st_sol_mint,
             rent,
             clock,
             maintainer_address,
-            maintainer_account: maintainer_account.clone(),
         })
     }
 
@@ -819,13 +826,20 @@ impl SolidoState {
             out,
             &MetricFamily {
                 name: "solido_maintainer_balance_sol",
-                help: "Balance of the maintainer account, in SOL.",
+                help: "Balance of the maintainer accounts, in SOL.",
                 type_: "gauge",
-                metrics: vec![Metric::new_sol(Lamports(self.maintainer_account.lamports))
-                    .at(self.produced_at)
-                    // Include the maintainer address, to prevent any confusion
-                    // about which account this is monitoring.
-                    .with_label("maintainer_address", self.maintainer_address.to_string())],
+                metrics: self
+                    .solido
+                    .maintainers
+                    .entries
+                    .iter()
+                    .zip(&self.maintainer_balances)
+                    .map(|(maintainer, balance)| {
+                        Metric::new_sol(*balance)
+                            .at(self.produced_at)
+                            .with_label("maintainer_address", maintainer.pubkey.to_string())
+                    })
+                    .collect(),
             },
         )?;
 
@@ -968,13 +982,25 @@ pub fn try_perform_maintenance(
     // check to ensure that the maintainer has at least some SOL to pay the
     // transaction fees.
     let minimum_maintainer_balance = Lamports(100_000_000);
-    if Lamports(state.maintainer_account.lamports) < minimum_maintainer_balance {
-        return Err(MaintenanceError::new(format!(
-            "Balance of the maintainer account {} is less than {}. \
-            Please fund the maintainer account.",
-            state.maintainer_address, minimum_maintainer_balance,
-        ))
-        .into());
+    match state
+        .solido
+        .maintainers
+        .entries
+        .iter()
+        .zip(&state.maintainer_balances)
+        .filter(|(m, _)| m.pubkey == state.maintainer_address)
+        .map(|(_, balance)| balance)
+        .next()
+    {
+        Some(balance) if balance < &minimum_maintainer_balance => {
+            return Err(MaintenanceError::new(format!(
+                "Balance of the maintainer account {} is less than {}. \
+                Please fund the maintainer account.",
+                state.maintainer_address, minimum_maintainer_balance,
+            ))
+            .into())
+        }
+        _ => {}
     }
 
     // Try all of these operations one by one, and select the first one that
@@ -1035,13 +1061,13 @@ mod test {
             validator_stake_accounts: vec![],
             validator_unstake_accounts: vec![],
             validator_vote_account_balances: vec![],
+            maintainer_balances: vec![],
             st_sol_mint: Mint::default(),
             reserve_address: Pubkey::new_unique(),
             reserve_account: Account::default(),
             rent: Rent::default(),
             clock: Clock::default(),
             maintainer_address: Pubkey::new_unique(),
-            maintainer_account: Account::default(),
         };
 
         // The reserve should be rent-exempt.
