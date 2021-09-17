@@ -343,13 +343,21 @@ impl<'a, 'b> Daemon<'a, 'b> {
         // Find out when our next maintainer duty slice starts (if any), and
         // estimate how long it will take (after the previous snapshot publish,
         // but this method should be called right after) until then.
-        let next_duty_slot = self
+        let is_on_duty_and_next_duty_slot = self
             .snapshot_mutex
             .lock()
             .unwrap()
             .as_ref()
             .and_then(|snapshot| snapshot.solido.as_ref())
-            .and_then(|solido| solido.get_next_maintainer_duty_slot(&maintainer));
+            .map(|solido| {
+                (
+                    solido.get_current_maintainer_duty() == Some(maintainer),
+                    solido.get_next_maintainer_duty_slot(&maintainer),
+                )
+            });
+
+        let is_on_duty = is_on_duty_and_next_duty_slot.map(|(on_duty, _)| on_duty);
+        let next_duty_slot = is_on_duty_and_next_duty_slot.and_then(|(_, slot)| slot);
 
         let sleep_time = next_duty_slot
             .and_then(|slot| self.block_time_estimator.estimate_time_until_slot(slot))
@@ -369,7 +377,12 @@ impl<'a, 'b> Daemon<'a, 'b> {
         }
 
         println!(
-            "Sleeping until next iteration. Slot: {}, next duty slot: {}, block time: {}, sleep time: {}",
+            "{}Sleeping until next iteration. Slot: {}, next duty slot: {}, block time: {}, sleep time: {}",
+            match is_on_duty {
+                Some(true) => "ON-DUTY  ",
+                Some(false) => "OFF-DUTY ",
+                None => "",
+            },
             fmt_option(self.block_time_estimator.get_most_recent_slot()),
             fmt_option(next_duty_slot),
             fmt_option_duration(self.block_time_estimator.get_average_block_time()),
