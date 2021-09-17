@@ -362,12 +362,18 @@ impl<'a, 'b> Daemon<'a, 'b> {
                 .unwrap_or("n/a".to_string())
         }
 
+        fn fmt_option_duration(opt_value: Option<Duration>) -> String {
+            opt_value
+                .map(|x| format!("{:.3}s", x.as_secs_f32()))
+                .unwrap_or("n/a".to_string())
+        }
+
         println!(
-            "Sleeping until next iteration. Slot: {}, next duty slot: {}, block time: {}, sleep time: {:?}",
+            "Sleeping until next iteration. Slot: {}, next duty slot: {}, block time: {}, sleep time: {}",
             fmt_option(self.block_time_estimator.get_most_recent_slot()),
             fmt_option(next_duty_slot),
-            fmt_option(self.block_time_estimator.get_average_block_time()),
-            sleep_time,
+            fmt_option_duration(self.block_time_estimator.get_average_block_time()),
+            fmt_option_duration(Some(sleep_time)),
         );
 
         std::thread::sleep(sleep_time);
