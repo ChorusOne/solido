@@ -23,6 +23,7 @@ use solana_program::{
 use solana_sdk::account::ReadableAccount;
 use solana_sdk::fee_calculator::DEFAULT_TARGET_LAMPORTS_PER_SIGNATURE;
 use solana_sdk::{account::Account, instruction::Instruction};
+use solana_vote_program::vote_state::VoteState;
 use spl_token::state::Mint;
 
 use lido::token::StLamports;
@@ -253,12 +254,18 @@ pub struct SolidoState {
     /// the stake balance of the derived stake accounts from the begin seed until
     /// end seed.
     pub validator_stake_accounts: Vec<Vec<(Pubkey, StakeAccount)>>,
+
     /// Similar to the stake accounts, holds the unstaked balance of the derived
     /// unstake accounts from the begin seed until end seed.
     pub validator_unstake_accounts: Vec<Vec<(Pubkey, StakeAccount)>>,
+
     /// For each validator, in the same order as in `solido.validators`, holds
     /// the number of Lamports of the validator's vote account.
     pub validator_vote_account_balances: Vec<Lamports>,
+
+    /// For each validator, in the same order as in `solido.validators`, holds
+    /// the deserialized vote account.
+    pub validator_vote_accounts: Vec<VoteState>,
 
     /// For each maintainer, in the same order as in `solido.maintainers`, holds
     /// the number of Lamports in the maintainer's account.
@@ -320,17 +327,10 @@ fn get_validator_stake_accounts(
     Ok(result)
 }
 
-fn get_vote_account_balance_except_rent(
-    config: &mut SnapshotConfig,
-    rent: &Rent,
-    validator_vote_account: &Pubkey,
-) -> Result<Lamports> {
-    let vote_account = config.client.get_account(validator_vote_account)?;
+fn get_vote_account_balance_except_rent(rent: &Rent, vote_account: &Account) -> Lamports {
     let vote_rent = rent.minimum_balance(vote_account.data().len());
-    Ok(
-        (Lamports(vote_account.lamports()) - Lamports(vote_rent)).expect(
-            "Shouldn't happen. The vote account balance should be at least its rent-exempt balance.",
-        ),
+    (Lamports(vote_account.lamports()) - Lamports(vote_rent)).expect(
+        "Shouldn't happen. The vote account balance should be at least its rent-exempt balance.",
     )
 }
 
@@ -360,12 +360,18 @@ impl SolidoState {
         let mut validator_stake_accounts = Vec::new();
         let mut validator_unstake_accounts = Vec::new();
         let mut validator_vote_account_balances = Vec::new();
+        let mut validator_vote_accounts = Vec::new();
         for validator in solido.validators.entries.iter() {
-            validator_vote_account_balances.push(get_vote_account_balance_except_rent(
-                config,
-                &rent,
-                &validator.pubkey,
-            )?);
+            let vote_account = config.client.get_account(&validator.pubkey)?;
+            let vote_state = VoteState::deserialize(vote_account.data()).map_err(|_| {
+                MaintenanceError::new(format!(
+                    "Failed to deserialize vote account at {}.",
+                    validator.pubkey
+                ))
+            })?;
+            validator_vote_accounts.push(vote_state);
+            validator_vote_account_balances
+                .push(get_vote_account_balance_except_rent(&rent, vote_account));
 
             validator_stake_accounts.push(get_validator_stake_accounts(
                 config,
@@ -407,6 +413,7 @@ impl SolidoState {
             validator_stake_accounts,
             validator_unstake_accounts,
             validator_vote_account_balances,
+            validator_vote_accounts,
             maintainer_balances,
             reserve_address,
             reserve_account: reserve_account.clone(),
@@ -1168,6 +1175,7 @@ mod test {
             validator_stake_accounts: vec![],
             validator_unstake_accounts: vec![],
             validator_vote_account_balances: vec![],
+            validator_vote_accounts: vec![],
             maintainer_balances: vec![],
             st_sol_mint: Mint::default(),
             reserve_address: Pubkey::new_unique(),
