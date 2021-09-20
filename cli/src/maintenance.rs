@@ -876,6 +876,7 @@ impl SolidoState {
         let mut last_voted_slot_metrics = Vec::new();
         let mut last_voted_timestamp_metrics = Vec::new();
         let mut identity_account_balance_metrics = Vec::new();
+        let mut vote_credits_metrics = Vec::new();
 
         // Track if there are any unclaimed (and therefore unminted) validation
         // fees.
@@ -922,7 +923,12 @@ impl SolidoState {
                 Metric::new_sol(*identity_account_balance)
                     .at(self.produced_at)
                     .with_label("vote_account", validator.pubkey.to_string()),
-            )
+            );
+            vote_credits_metrics.push(
+                Metric::new(vote_account.credits())
+                    .at(self.produced_at)
+                    .with_label("vote_account", validator.pubkey.to_string()),
+            );
         }
 
         write_metric(
@@ -961,9 +967,23 @@ impl SolidoState {
             out,
             &MetricFamily {
                 name: "solido_validator_identity_account_balance_sol",
-                help: "Balance of the validator's identity account (that pays for votes).",
+                help: "Balance of the validator's identity account (that pays for votes) minus rent-exempt amount.",
                 type_: "gauge",
                 metrics: identity_account_balance_metrics,
+            },
+        )?;
+
+        write_metric(
+            out,
+            &MetricFamily {
+                name: "solido_validator_vote_credits_total",
+                help: "Vote credits in the validator's vote account.",
+                // This is a counter due to the way vote credits work in Solana.
+                // The credits only ever go up, they don't reset when a new epoch
+                // starts. Older vote accounts (that have been voting continuously)
+                // will have more vote credits.
+                type_: "counter",
+                metrics: vote_credits_metrics,
             },
         )?;
 
@@ -1239,6 +1259,7 @@ mod test {
             validator_unstake_accounts: vec![],
             validator_vote_account_balances: vec![],
             validator_vote_accounts: vec![],
+            validator_identity_account_balances: vec![],
             maintainer_balances: vec![],
             st_sol_mint: Mint::default(),
             reserve_address: Pubkey::new_unique(),
