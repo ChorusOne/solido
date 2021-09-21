@@ -23,6 +23,7 @@ use solana_program::{
 use solana_sdk::account::ReadableAccount;
 use solana_sdk::fee_calculator::DEFAULT_TARGET_LAMPORTS_PER_SIGNATURE;
 use solana_sdk::{account::Account, instruction::Instruction};
+use solana_vote_program::vote_state::VoteState;
 use spl_token::state::Mint;
 
 use lido::token::StLamports;
@@ -253,12 +254,23 @@ pub struct SolidoState {
     /// the stake balance of the derived stake accounts from the begin seed until
     /// end seed.
     pub validator_stake_accounts: Vec<Vec<(Pubkey, StakeAccount)>>,
+
     /// Similar to the stake accounts, holds the unstaked balance of the derived
     /// unstake accounts from the begin seed until end seed.
     pub validator_unstake_accounts: Vec<Vec<(Pubkey, StakeAccount)>>,
+
     /// For each validator, in the same order as in `solido.validators`, holds
     /// the number of Lamports of the validator's vote account.
     pub validator_vote_account_balances: Vec<Lamports>,
+
+    /// For each validator, in the same order as in `solido.validators`, holds
+    /// the deserialized vote account.
+    pub validator_vote_accounts: Vec<VoteState>,
+
+    /// For each validator, in the same order as in `solido.validators`, holds
+    /// the balance of the validator's identity account (which pays for the
+    /// votes).
+    pub validator_identity_account_balances: Vec<Lamports>,
 
     /// For each maintainer, in the same order as in `solido.maintainers`, holds
     /// the number of Lamports in the maintainer's account.
@@ -320,18 +332,10 @@ fn get_validator_stake_accounts(
     Ok(result)
 }
 
-fn get_vote_account_balance_except_rent(
-    config: &mut SnapshotConfig,
-    rent: &Rent,
-    validator_vote_account: &Pubkey,
-) -> Result<Lamports> {
-    let vote_account = config.client.get_account(validator_vote_account)?;
-    let vote_rent = rent.minimum_balance(vote_account.data().len());
-    Ok(
-        (Lamports(vote_account.lamports()) - Lamports(vote_rent)).expect(
-            "Shouldn't happen. The vote account balance should be at least its rent-exempt balance.",
-        ),
-    )
+fn get_account_balance_except_rent(rent: &Rent, account: &Account) -> Lamports {
+    let rent_amount = rent.minimum_balance(account.data().len());
+    (Lamports(account.lamports()) - Lamports(rent_amount))
+        .expect("Shouldn't happen. The account balance should be at least its rent-exempt balance.")
 }
 
 impl SolidoState {
@@ -360,12 +364,22 @@ impl SolidoState {
         let mut validator_stake_accounts = Vec::new();
         let mut validator_unstake_accounts = Vec::new();
         let mut validator_vote_account_balances = Vec::new();
+        let mut validator_identity_account_balances = Vec::new();
+        let mut validator_vote_accounts = Vec::new();
         for validator in solido.validators.entries.iter() {
-            validator_vote_account_balances.push(get_vote_account_balance_except_rent(
-                config,
-                &rent,
-                &validator.pubkey,
-            )?);
+            let vote_account = config.client.get_account(&validator.pubkey)?;
+            let vote_state = VoteState::deserialize(vote_account.data()).map_err(|_| {
+                MaintenanceError::new(format!(
+                    "Failed to deserialize vote account at {}.",
+                    validator.pubkey
+                ))
+            })?;
+            let identity_account = config.client.get_account(&vote_state.node_pubkey)?;
+            validator_vote_accounts.push(vote_state);
+            validator_vote_account_balances
+                .push(get_account_balance_except_rent(&rent, vote_account));
+            validator_identity_account_balances
+                .push(get_account_balance_except_rent(&rent, identity_account));
 
             validator_stake_accounts.push(get_validator_stake_accounts(
                 config,
@@ -407,6 +421,8 @@ impl SolidoState {
             validator_stake_accounts,
             validator_unstake_accounts,
             validator_vote_account_balances,
+            validator_vote_accounts,
+            validator_identity_account_balances,
             maintainer_balances,
             reserve_address,
             reserve_account: reserve_account.clone(),
@@ -857,16 +873,23 @@ impl SolidoState {
             .at(self.produced_at)
             .with_label("status", "reserve".to_string())];
 
+        let mut last_voted_slot_metrics = Vec::new();
+        let mut last_voted_timestamp_metrics = Vec::new();
+        let mut identity_account_balance_metrics = Vec::new();
+        let mut vote_credits_metrics = Vec::new();
+
         // Track if there are any unclaimed (and therefore unminted) validation
         // fees.
         let mut unclaimed_fees = StLamports(0);
 
-        for (validator, stake_accounts) in self
+        for (((validator, stake_accounts), vote_account), identity_account_balance) in self
             .solido
             .validators
             .entries
             .iter()
             .zip(self.validator_stake_accounts.iter())
+            .zip(self.validator_vote_accounts.iter())
+            .zip(self.validator_identity_account_balances.iter())
         {
             let stake_balance: StakeBalance = stake_accounts
                 .iter()
@@ -885,6 +908,27 @@ impl SolidoState {
 
             unclaimed_fees = (unclaimed_fees + validator.entry.fee_credit)
                 .expect("There shouldn't be so many fees to cause stSOL overflow.");
+
+            last_voted_slot_metrics.push(
+                Metric::new(vote_account.last_timestamp.slot)
+                    .at(self.produced_at)
+                    .with_label("vote_account", validator.pubkey.to_string()),
+            );
+            last_voted_timestamp_metrics.push(
+                Metric::new(vote_account.last_timestamp.timestamp as u64)
+                    .at(self.produced_at)
+                    .with_label("vote_account", validator.pubkey.to_string()),
+            );
+            identity_account_balance_metrics.push(
+                Metric::new_sol(*identity_account_balance)
+                    .at(self.produced_at)
+                    .with_label("vote_account", validator.pubkey.to_string()),
+            );
+            vote_credits_metrics.push(
+                Metric::new(vote_account.credits())
+                    .at(self.produced_at)
+                    .with_label("vote_account", validator.pubkey.to_string()),
+            );
         }
 
         write_metric(
@@ -894,6 +938,52 @@ impl SolidoState {
                 help: "Amount of SOL currently managed by Solido.",
                 type_: "gauge",
                 metrics: balance_sol_metrics,
+            },
+        )?;
+
+        write_metric(
+            out,
+            &MetricFamily {
+                name: "solido_validator_last_voted_slot",
+                help: "The slot that the validator last voted on.",
+                type_: "gauge",
+                metrics: last_voted_slot_metrics,
+            },
+        )?;
+
+        write_metric(
+            out,
+            &MetricFamily {
+                name: "solido_validator_last_voted_timestamp",
+                help: "The Unix timestamp (in seconds) that the validator included \
+                    in its last vote. Note that this is provided by the validator itself, \
+                    it may not be accurate.",
+                type_: "gauge",
+                metrics: last_voted_timestamp_metrics,
+            },
+        )?;
+
+        write_metric(
+            out,
+            &MetricFamily {
+                name: "solido_validator_identity_account_balance_sol",
+                help: "Balance of the validator's identity account (that pays for votes) minus rent-exempt amount.",
+                type_: "gauge",
+                metrics: identity_account_balance_metrics,
+            },
+        )?;
+
+        write_metric(
+            out,
+            &MetricFamily {
+                name: "solido_validator_vote_credits_total",
+                help: "Vote credits in the validator's vote account.",
+                // This is a counter due to the way vote credits work in Solana.
+                // The credits only ever go up, they don't reset when a new epoch
+                // starts. Older vote accounts (that have been voting continuously)
+                // will have more vote credits.
+                type_: "counter",
+                metrics: vote_credits_metrics,
             },
         )?;
 
@@ -1168,6 +1258,8 @@ mod test {
             validator_stake_accounts: vec![],
             validator_unstake_accounts: vec![],
             validator_vote_account_balances: vec![],
+            validator_vote_accounts: vec![],
+            validator_identity_account_balances: vec![],
             maintainer_balances: vec![],
             st_sol_mint: Mint::default(),
             reserve_address: Pubkey::new_unique(),
