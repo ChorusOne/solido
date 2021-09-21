@@ -38,6 +38,7 @@ mod multisig;
 mod prometheus;
 mod snapshot;
 mod spl_token_utils;
+mod validator_info_utils;
 
 /// Solido -- Interact with Lido for Solana.
 // While it is nice to have Clap handle all inputs, we also want to read

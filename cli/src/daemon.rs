@@ -180,6 +180,9 @@ fn run_maintenance_iteration(
             Ok(None) => Ok(MaintenanceResult::OkIdle(state)),
             Ok(Some(output)) => Ok(MaintenanceResult::OkMaintenance(state, output)),
             Err(SnapshotError::MissingAccount) => Err(SnapshotError::MissingAccount),
+            Err(SnapshotError::MissingValidatorIdentity(addr)) => {
+                Err(SnapshotError::MissingValidatorIdentity(addr))
+            }
             Err(SnapshotError::OtherError(err)) => {
                 Ok(MaintenanceResult::ErrMaintenance(state, err))
             }

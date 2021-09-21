@@ -47,13 +47,22 @@ use lido::state::Lido;
 use lido::token::Lamports;
 use spl_token::solana_program::hash::Hash;
 
-use crate::error::{Error, MissingAccountError, SerializationError};
+use crate::error::{Error, MissingAccountError, MissingValidatorInfoError, SerializationError};
+use crate::validator_info_utils::ValidatorInfo;
 
 pub enum SnapshotError {
     /// We tried to access an account, but it was not present in the snapshot.
     ///
     /// When this happens, we need to retry, with a new set of accounts.
     MissingAccount,
+
+    /// We tried to get the validator info, but the validator identity is not known.
+    ///
+    /// Contains the validator identity account address.
+    ///
+    /// When this happens, we have to refresh the mapping of validator identities
+    /// to config account addresses.
+    MissingValidatorIdentity(Pubkey),
 
     /// An error occurred that was not related to account lookup in the snapshot.
     ///
@@ -128,6 +137,14 @@ pub struct Snapshot<'a> {
     /// * The key is not present. This means that we did not include it in the
     ///   snapshot, so we need to retry.
     accounts: &'a HashMap<Pubkey, Option<Account>>,
+
+    /// Mapping from validator identity account address to config account address.
+    ///
+    /// Because there is no way to know a priori in which account the validator
+    /// info is stored, we need to build this mapping before we make the snapshot,
+    /// and then if we read validator info from the snapshot, we confirm that the
+    /// config account still holds the info for the expected validator.
+    validator_info_addrs: &'a HashMap<Pubkey, Pubkey>,
 
     /// The accounts referenced so far, in the order of first reference.
     ///
@@ -249,6 +266,27 @@ impl<'a> Snapshot<'a> {
         Ok(Lamports(rent.minimum_balance(data_len)))
     }
 
+    /// Return the metadata of the validator with the given identity account.
+    pub fn get_validator_info(&mut self, validator_identity: &Pubkey) -> Result<ValidatorInfo> {
+        let config_addr = match self.validator_info_addrs.get(validator_identity) {
+            Some(addr) => addr,
+            None => return Err(SnapshotError::MissingValidatorIdentity(*validator_identity)),
+        };
+        let config_account = self.get_account(config_addr)?;
+        let (info_identity, validator_info) =
+            crate::validator_info_utils::deserialize_validator_info(*config_addr, config_account)?;
+        if info_identity == *validator_identity {
+            Ok(validator_info)
+        } else {
+            // We expected to find the validator info for `validator_identity`,
+            // but we found something else instead. If this happens, then the
+            // config program re-used a config account to store validator info
+            // for a different validator that the config account previously held.
+            // We need to refresh our mapping.
+            Err(SnapshotError::MissingValidatorIdentity(*validator_identity))
+        }
+    }
+
     /// Read the account and deserialize the Solido struct.
     pub fn get_solido(&mut self, solido_address: &Pubkey) -> Result<Lido> {
         let account = self.get_account(solido_address)?;
@@ -256,7 +294,7 @@ impl<'a> Snapshot<'a> {
             Ok(solido) => Ok(solido),
             Err(err) => {
                 let error: Error = Box::new(SerializationError {
-                    cause: err.into(),
+                    cause: Some(err.into()),
                     address: *solido_address,
                     context: format!(
                         "Failed to deserialize Lido struct, data length is {} bytes.",
@@ -361,6 +399,9 @@ pub struct SnapshotClient {
     /// going to access.
     accounts_to_query: OrderedSet<Pubkey>,
 
+    /// Map from validator identity account address to config account address.
+    validator_info_addrs: HashMap<Pubkey, Pubkey>,
+
     /// The maximum number of accounts that we can request per `GetMultipleAccounts` call.
     ///
     /// This is an empirical observation: initially we set it to `usize::MAX`,
@@ -395,6 +436,7 @@ impl SnapshotClient {
         SnapshotClient {
             rpc_client,
             accounts_to_query: OrderedSet::new(),
+            validator_info_addrs: HashMap::new(),
             max_items_per_call: usize::MAX,
         }
     }
@@ -507,6 +549,7 @@ impl SnapshotClient {
             let snapshot = Snapshot {
                 accounts: &accounts,
                 accounts_referenced: &mut accounts_referenced,
+                validator_info_addrs: &self.validator_info_addrs,
                 rpc_client: &self.rpc_client,
                 sent_transaction: &mut sent_transaction,
             };
@@ -523,6 +566,23 @@ impl SnapshotClient {
                     return Ok(result);
                 }
                 Err(SnapshotError::OtherError(err)) => return Err(err),
+                Err(SnapshotError::MissingValidatorIdentity(identity_addr)) => {
+                    // We tried to access the validator info config account for
+                    // a validator identity that we don't know the info config
+                    // account for, so we need to reload those. After we do,
+                    // confirm that the validator identity is there, otherwise
+                    // we would get stuck in an infinite loop.
+                    self.validator_info_addrs =
+                        crate::validator_info_utils::get_validator_info_accounts(
+                            &mut self.rpc_client,
+                        )?;
+
+                    if !self.validator_info_addrs.contains_key(&identity_addr) {
+                        return Err(Box::new(MissingValidatorInfoError {
+                            validator_identity: identity_addr,
+                        }));
+                    }
+                }
                 Err(SnapshotError::MissingAccount) => {
                     if sent_transaction {
                         // `f` tried to access an account that was not in the

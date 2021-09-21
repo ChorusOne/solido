@@ -140,9 +140,25 @@ impl AsPrettyError for MissingAccountError {
     }
 }
 
+/// We expected to read validator info for the given account, but it does not exist.
+pub struct MissingValidatorInfoError {
+    pub validator_identity: Pubkey,
+}
+
+impl AsPrettyError for MissingValidatorInfoError {
+    fn print_pretty(&self) {
+        print_red("Missing validator info error:\n");
+        println!(
+            "We tried to get the validator info for the validator with identity \
+            account {}, but no validator info exists for this identity.",
+            self.validator_identity
+        );
+    }
+}
+
 pub struct SerializationError {
     pub context: String,
-    pub cause: Error,
+    pub cause: Option<Error>,
     pub address: Pubkey,
 }
 
@@ -154,7 +170,10 @@ impl AsPrettyError for SerializationError {
         print_key("Address:");
         println!("{}", self.address);
         print_key("Cause:");
-        self.cause.print_pretty();
+        match &self.cause {
+            Some(cause) => cause.print_pretty(),
+            None => println!("unspecified"),
+        }
     }
 }
 
@@ -384,6 +403,13 @@ impl AsPrettyError for bincode::ErrorKind {
     }
 }
 
+impl AsPrettyError for serde_json::Error {
+    fn print_pretty(&self) {
+        print_red("Json (de)serialization error:");
+        println!(" {:?}", self);
+    }
+}
+
 impl AsPrettyError for PubkeyError {
     fn print_pretty(&self) {
         print_red("Solana public key error:");
@@ -533,5 +559,11 @@ impl From<std::io::Error> for Error {
 impl From<Box<bincode::ErrorKind>> for Error {
     fn from(err: Box<bincode::ErrorKind>) -> Error {
         Box::new(*err)
+    }
+}
+
+impl From<serde_json::Error> for Error {
+    fn from(err: serde_json::Error) -> Error {
+        Box::new(err)
     }
 }

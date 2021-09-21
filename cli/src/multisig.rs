@@ -821,6 +821,9 @@ fn show_transaction(
         match try_parse_solido_instruction(config, &instr) {
             Ok(instr) => instr,
             Err(SnapshotError::MissingAccount) => return Err(SnapshotError::MissingAccount),
+            Err(SnapshotError::MissingValidatorIdentity(addr)) => {
+                return Err(SnapshotError::MissingValidatorIdentity(addr))
+            }
             Err(SnapshotError::OtherError(err)) => {
                 println!("Warning: Failed to parse Solido instruction.");
                 err.print_pretty();
@@ -831,6 +834,9 @@ fn show_transaction(
         match try_parse_token_instruction(config, &instr) {
             Ok(instr) => instr,
             Err(SnapshotError::MissingAccount) => return Err(SnapshotError::MissingAccount),
+            Err(SnapshotError::MissingValidatorIdentity(addr)) => {
+                return Err(SnapshotError::MissingValidatorIdentity(addr))
+            }
             Err(SnapshotError::OtherError(err)) => {
                 println!("Warning: Failed to parse Token instruction.");
                 err.print_pretty();
