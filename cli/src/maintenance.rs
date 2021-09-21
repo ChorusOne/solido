@@ -14,7 +14,12 @@ use lido::token;
 use lido::REWARDS_WITHDRAW_AUTHORITY;
 use serde::Serialize;
 use solana_program::program_pack::Pack;
-use solana_program::{clock::Clock, pubkey::Pubkey, rent::Rent, stake_history::StakeHistory};
+use solana_program::{
+    clock::{Clock, Slot},
+    pubkey::Pubkey,
+    rent::Rent,
+    stake_history::StakeHistory,
+};
 use solana_sdk::account::ReadableAccount;
 use solana_sdk::fee_calculator::DEFAULT_TARGET_LAMPORTS_PER_SIGNATURE;
 use solana_sdk::{account::Account, instruction::Instruction};
@@ -948,6 +953,7 @@ impl SolidoState {
 
         Ok(())
     }
+
     fn get_stake_authority(&self) -> Pubkey {
         let (stake_authority, _bump_seed_authority) = lido::find_authority_program_address(
             &self.solido_program_id,
@@ -974,6 +980,103 @@ impl SolidoState {
             MINT_AUTHORITY,
         );
         mint_authority
+    }
+
+    /// The number of slots between the start of a duty slice and the start of
+    /// the next duty slice, see [`get_current_maintainer_duty`].
+    const MAINTAINER_DUTY_SLICE_LENGTH: Slot = 100;
+
+    /// The number of slots before the start of the duty slice where no maintainer
+    /// is on duty, see [`get_current_maintainer_duty`].
+    const MAINTAINER_DUTY_PAUSE_LENGTH: Slot = 10;
+
+    /// Return the maintainer who is currently on "maintainer duty".
+    ///
+    /// The maintenance tasks need to be executed by somebody. Every task
+    /// preferably needs to be executed by a single maintainer. For most
+    /// operations, the on-chain program either guarantees that in case of
+    /// racing transactions, only one succeeds, or the operation is idempotent.
+    /// But for some operations (like unstake) we don't have this protection
+    /// yet, and besides, it is wasteful for all maintainers to create the same
+    /// transaction and have all but one of them fail.
+    ///
+    /// The solution to this is to introduce _maintainer duty_. We divide time
+    /// into slices based on slot number, and every maintainer will only perform
+    /// maintenance during their assigned slice. This assumes that the maintainers
+    /// all cooperate and run this version of the maintainer software, but the
+    /// worst thing that will happen if they don't is that some transactions may
+    /// get submitted by multiple maintainers. All maintainers can agree about
+    /// who is on duty, because this is a pure function of the current Solido
+    /// state and clock sysvar.
+    ///
+    /// One decision to make, is the duration of the duty slice.
+    ///
+    /// * Shorter cycles mean more risk of races (because a maintainer can
+    ///   create a transaction just before the end of its duty, and it may not
+    ///   yet have executed at the start of the next maintainer's duty, so the
+    ///   next maintainer performs the same operation). To mitigate this, we
+    ///   can leave a small gap between duty slices.
+    /// * Larger slices avoid races, but increase the latency when the
+    ///   maintainer that's on duty is offline.
+    ///
+    /// As an middle ground between those two, we take 100 slots, which at a
+    /// block time of 550ms is a little under a minute per maintainer. If only
+    /// one maintainer is offline, this means maintenance operations get delayed
+    /// by at most ~55s.
+    pub fn get_current_maintainer_duty(&self) -> Option<Pubkey> {
+        if self.solido.maintainers.entries.is_empty() {
+            return None;
+        }
+
+        let duty_slice = self.clock.slot / Self::MAINTAINER_DUTY_SLICE_LENGTH;
+        let slot_in_duty_slice = self.clock.slot % Self::MAINTAINER_DUTY_SLICE_LENGTH;
+
+        // In the last few slots of the slice, nobody is on duty, to minimize
+        // races at the duty slice boundary.
+        if slot_in_duty_slice
+            >= Self::MAINTAINER_DUTY_SLICE_LENGTH - Self::MAINTAINER_DUTY_PAUSE_LENGTH
+        {
+            return None;
+        }
+
+        let maintainer_index = duty_slice % self.solido.maintainers.len() as u64;
+        Some(self.solido.maintainers.entries[maintainer_index as usize].pubkey)
+    }
+
+    /// Return the slot at which the given maintainer's next duty slice starts.
+    ///
+    /// If the maintainer is currently on duty, this returns the start of its
+    /// next duty slice, not the start of the current duty slice.
+    ///
+    /// See also [`get_current_maintainer_duty`].
+    pub fn get_next_maintainer_duty_slot(&self, maintainer: &Pubkey) -> Option<Slot> {
+        if self.solido.maintainers.entries.is_empty() {
+            return None;
+        }
+
+        // Compute the start of the current "cycle", where in every cycle, every
+        // maintainer has a single duty slice.
+        let cycle_length =
+            self.solido.maintainers.entries.len() as u64 * Self::MAINTAINER_DUTY_SLICE_LENGTH;
+        let current_cycle_start_slot = (self.clock.slot / cycle_length) * cycle_length;
+
+        // Compute the start of our slice within the current cycle.
+        let self_index = self
+            .solido
+            .maintainers
+            .entries
+            .iter()
+            .position(|m| m.pubkey == *maintainer)? as u64;
+        let self_slice_start_slot =
+            current_cycle_start_slot + self_index * Self::MAINTAINER_DUTY_SLICE_LENGTH;
+
+        if self_slice_start_slot <= self.clock.slot {
+            // It might be that we already had our duty in the current cycle.
+            // In that case, the next duty is in the next cycle.
+            Some(self_slice_start_slot + cycle_length)
+        } else {
+            Some(self_slice_start_slot)
+        }
     }
 }
 
@@ -1181,5 +1284,84 @@ mod test {
                 stake_account: stake_account_1.0,
             }
         );
+    }
+
+    #[test]
+    fn next_maintainer_duty_slot_agrees_with_current_duty() {
+        for num_maintainers in 1..10 {
+            let mut state = new_empty_solido();
+            state.solido.maintainers.maximum_entries = num_maintainers;
+            for _ in 0..num_maintainers {
+                state
+                    .solido
+                    .maintainers
+                    .add(Pubkey::new_unique(), ())
+                    .unwrap();
+            }
+
+            let maintainer_keys: Vec<Pubkey> = state
+                .solido
+                .maintainers
+                .entries
+                .iter()
+                .map(|p| p.pubkey)
+                .collect();
+
+            // Check the next slot in forward order but also reverse order. With
+            // forward order, the duty start slots all fall in the same cycle,
+            // so by iterating backwards, we also test the other branch.
+            let mut maintainers = Vec::new();
+            maintainers.extend(maintainer_keys.iter().rev());
+            maintainers.extend(maintainer_keys.iter());
+
+            // Don't start at slot 0, to avoid wrapping below.
+            state.clock.slot = SolidoState::MAINTAINER_DUTY_SLICE_LENGTH;
+
+            for maintainer in &maintainers {
+                let start_slot = state
+                    .get_next_maintainer_duty_slot(maintainer)
+                    .expect("The maintainer is part of the set, it should have a next duty.");
+                for slot in start_slot - SolidoState::MAINTAINER_DUTY_PAUSE_LENGTH..start_slot {
+                    state.clock.slot = slot;
+                    assert_eq!(
+                        state.get_current_maintainer_duty(),
+                        None,
+                        "In slot {}, during the pause before slot {}, no maintainer has duty.",
+                        slot,
+                        start_slot
+                    );
+                }
+                for slot in start_slot
+                    ..start_slot + SolidoState::MAINTAINER_DUTY_SLICE_LENGTH
+                        - SolidoState::MAINTAINER_DUTY_PAUSE_LENGTH
+                {
+                    state.clock.slot = slot;
+                    assert_eq!(
+                        state.get_current_maintainer_duty(),
+                        Some(*maintainer),
+                        "Maintainer should have duty in slot {} (slice starting at slot {}).",
+                        slot,
+                        start_slot
+                    );
+                }
+            }
+
+            let not_maintainer = Pubkey::new_unique();
+            assert_eq!(state.get_next_maintainer_duty_slot(&not_maintainer), None);
+        }
+    }
+
+    #[test]
+    fn next_maintainer_duty_returns_slot_greater_than_current_slot() {
+        let mut state = new_empty_solido();
+        let maintainer = Pubkey::new_unique();
+        state.solido.maintainers.maximum_entries = 1;
+        state.solido.maintainers.add(maintainer, ()).unwrap();
+
+        for _ in 0..10 {
+            let next_slot = state.get_next_maintainer_duty_slot(&maintainer).unwrap();
+            assert!(next_slot > state.clock.slot);
+            state.clock.slot = next_slot;
+        }
     }
 }

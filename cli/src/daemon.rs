@@ -16,6 +16,7 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use rand::{rngs::ThreadRng, Rng};
+use solana_sdk::clock::{Clock, Slot};
 use tiny_http::{Request, Response, Server};
 
 use crate::config::RunMaintainerOpts;
@@ -167,6 +168,14 @@ fn run_maintenance_iteration(
 ) -> MaintenanceResult {
     let result = config.with_snapshot(|mut config| {
         let state = SolidoState::new(&mut config, opts.solido_program_id(), opts.solido_address())?;
+
+        // If it's not our maintainer duty at this time, then don't try to
+        // perform maintenance; a different maintainer should be doing it
+        // right now.
+        if state.get_current_maintainer_duty() != Some(config.signer.pubkey()) {
+            return Ok(MaintenanceResult::OkIdle(state));
+        }
+
         match try_perform_maintenance(&mut config, &state) {
             Ok(None) => Ok(MaintenanceResult::OkIdle(state)),
             Ok(Some(output)) => Ok(MaintenanceResult::OkMaintenance(state, output)),
@@ -179,6 +188,56 @@ fn run_maintenance_iteration(
     match result {
         Err(err) => MaintenanceResult::ErrSnapshot(err),
         Ok(result) => result,
+    }
+}
+
+/// Helper to estimate block times based on observed slot values of the clock sysvar.
+///
+/// We keep a number of observations, and from that we compute the average block time.
+struct BlockTimeEstimator {
+    /// Observed values of the slot in the clock sysvar, and the instant at which we observed them.
+    observations: Vec<(Instant, Slot)>,
+}
+
+impl BlockTimeEstimator {
+    const NUM_OBSERVATIONS: usize = 10;
+
+    pub fn new() -> Self {
+        Self {
+            observations: Vec::with_capacity(Self::NUM_OBSERVATIONS),
+        }
+    }
+
+    pub fn observe_clock(&mut self, at: Instant, clock: &Clock) {
+        if self.observations.len() == Self::NUM_OBSERVATIONS {
+            self.observations.remove(0);
+        }
+        self.observations.push((at, clock.slot));
+    }
+
+    pub fn get_most_recent_slot(&self) -> Option<Slot> {
+        Some(self.observations.last()?.1)
+    }
+
+    pub fn get_average_block_time(&self) -> Option<Duration> {
+        let (t0, slot0) = self.observations.first()?;
+        let (t1, slot1) = self.observations.last()?;
+        let slots_elapsed = slot1.saturating_sub(*slot0);
+        let time_elapsed = t1.saturating_duration_since(*t0);
+        match slots_elapsed {
+            0 => None,
+            _ => Some(Duration::from_secs_f32(
+                time_elapsed.as_secs_f32() / slots_elapsed as f32,
+            )),
+        }
+    }
+
+    /// Return how long after the most recently observed clock we expect the given slot to occur.
+    pub fn estimate_time_until_slot(&self, target_slot: Slot) -> Option<Duration> {
+        let (_, slot) = self.observations.last()?;
+        let time_per_slot = self.get_average_block_time()?;
+        let slots_left = target_slot.saturating_sub(*slot) as u32;
+        Some(time_per_slot * slots_left)
     }
 }
 
@@ -202,6 +261,9 @@ struct Daemon<'a, 'b> {
 
     /// The instant after we successfully queried the on-chain state for the last time.
     last_read_success: Instant,
+
+    /// Block time estimator used to tweak sleep times so we wake up for maintainer duty.
+    block_time_estimator: BlockTimeEstimator,
 
     /// Metrics counters to track status.
     metrics: MaintenanceMetrics,
@@ -229,15 +291,21 @@ impl<'a, 'b> Daemon<'a, 'b> {
             opts,
             rng: rand::thread_rng(),
             last_read_success: Instant::now(),
+            block_time_estimator: BlockTimeEstimator::new(),
             metrics,
             snapshot_mutex: Arc::new(Mutex::new(None)),
         }
     }
 
     /// Publish a new snapshot that from now on will be served by the http server.
+    ///
+    /// This also updates the block time estimator, if applicable.
     fn publish_snapshot(&mut self, solido: Option<SolidoState>) {
-        if solido.is_some() {
-            self.last_read_success = Instant::now();
+        let now = Instant::now();
+
+        if let Some(solido) = solido.as_ref() {
+            self.last_read_success = now;
+            self.block_time_estimator.observe_clock(now, &solido.clock);
         }
 
         let snapshot = Snapshot {
@@ -268,11 +336,58 @@ impl<'a, 'b> Daemon<'a, 'b> {
     }
 
     /// Sleep either for the configured poll interval, or until it is our maintainer duty.
-    ///
-    /// TODO(ruuda): Implement the sleeping until maintainer duty part.
     fn sleep_until_next_iteration(&mut self) {
-        let sleep_time = Duration::from_secs(*self.opts.max_poll_interval_seconds());
-        println!("Sleeping {:?} until next iteration ...", sleep_time);
+        let maintainer = self.config.signer.pubkey();
+        let poll_interval = Duration::from_secs(*self.opts.max_poll_interval_seconds());
+
+        // Find out when our next maintainer duty slice starts (if any), and
+        // estimate how long it will take (after the previous snapshot publish,
+        // but this method should be called right after) until then.
+        let is_on_duty_and_next_duty_slot = self
+            .snapshot_mutex
+            .lock()
+            .unwrap()
+            .as_ref()
+            .and_then(|snapshot| snapshot.solido.as_ref())
+            .map(|solido| {
+                (
+                    solido.get_current_maintainer_duty() == Some(maintainer),
+                    solido.get_next_maintainer_duty_slot(&maintainer),
+                )
+            });
+
+        let next_duty_slot = is_on_duty_and_next_duty_slot.and_then(|(_, slot)| slot);
+
+        let sleep_time = next_duty_slot
+            .and_then(|slot| self.block_time_estimator.estimate_time_until_slot(slot))
+            .unwrap_or(poll_interval)
+            .min(poll_interval);
+
+        fn fmt_option<T: std::fmt::Debug>(opt_value: Option<T>) -> String {
+            opt_value
+                .map(|x| format!("{:?}", x))
+                .unwrap_or_else(|| "n/a".to_string())
+        }
+
+        fn fmt_option_duration(opt_value: Option<Duration>) -> String {
+            opt_value
+                .map(|x| format!("{:.3}s", x.as_secs_f32()))
+                .unwrap_or_else(|| "n/a".to_string())
+        }
+
+        println!(
+            "{}Sleeping until next iteration. Slot: {}, next duty slot: {}, block time: {}, sleep time: {}",
+            match is_on_duty_and_next_duty_slot {
+                Some((true, _)) => "ON-DUTY  ",
+                Some((false, _)) => "OFF-DUTY ",
+                None => "",
+            },
+            fmt_option(self.block_time_estimator.get_most_recent_slot()),
+            fmt_option(next_duty_slot),
+            fmt_option_duration(self.block_time_estimator.get_average_block_time()),
+            fmt_option_duration(Some(sleep_time)),
+        );
+
         std::thread::sleep(sleep_time);
     }
 
@@ -399,4 +514,81 @@ pub fn main(config: &mut SnapshotClientConfig, opts: &RunMaintainerOpts) {
     let daemon = Daemon::new(config, opts);
     let _http_threads = start_http_server(opts, daemon.snapshot_mutex.clone());
     daemon.run();
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn block_time_estimator_computes_block_time_from_two_or_more_observations() {
+        let t0 = Instant::now();
+        let mut estimator = BlockTimeEstimator::new();
+
+        assert_eq!(
+            estimator.get_average_block_time(),
+            None,
+            "With no observations, we can't estimate."
+        );
+
+        let mut clock = Clock::default();
+
+        clock.slot = 100;
+        estimator.observe_clock(t0, &clock);
+        assert_eq!(
+            estimator.get_average_block_time(),
+            None,
+            "With one observation, we can't estimate."
+        );
+
+        // Between t0 and t1, we produce 5 blocks in 10 seconds, so 2s per block.
+        let t1 = t0 + Duration::from_secs(10);
+        clock.slot = 105;
+        estimator.observe_clock(t1, &clock);
+        assert_eq!(
+            estimator.get_average_block_time(),
+            Some(Duration::from_secs(2))
+        );
+
+        // Between t0 and t2, we produce 20 blocks in 20 seconds, so 1s per block.
+        let t2 = t0 + Duration::from_secs(20);
+        clock.slot = 120;
+        estimator.observe_clock(t2, &clock);
+        assert_eq!(
+            estimator.get_average_block_time(),
+            Some(Duration::from_secs(1))
+        );
+
+        // After we add more observations than the max we store, we should find
+        // the average block time of these last observations.
+        for i in 150..200 {
+            clock.slot = i;
+            estimator.observe_clock(t0 + Duration::from_secs(i * 3), &clock);
+        }
+        assert_eq!(
+            estimator.get_average_block_time(),
+            Some(Duration::from_secs(3))
+        );
+    }
+
+    #[test]
+    fn block_time_estimator_estimates_time_until_given_slot() {
+        let t0 = Instant::now();
+        let mut estimator = BlockTimeEstimator::new();
+
+        let mut clock = Clock::default();
+        clock.slot = 100;
+        estimator.observe_clock(t0, &clock);
+        clock.slot = 200;
+        estimator.observe_clock(t0 + Duration::from_secs(100), &clock);
+
+        assert_eq!(
+            estimator.estimate_time_until_slot(210),
+            Some(Duration::from_secs(10))
+        );
+        assert_eq!(
+            estimator.estimate_time_until_slot(190),
+            Some(Duration::from_secs(0))
+        );
+    }
 }
