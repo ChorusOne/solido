@@ -35,7 +35,8 @@ use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::Signature;
 use solana_sdk::sysvar::stake_history::StakeHistory;
 use solana_sdk::sysvar::{
-    self, clock::Clock, recent_blockhashes::RecentBlockhashes, rent::Rent, Sysvar,
+    self, clock::Clock, epoch_schedule::EpochSchedule, recent_blockhashes::RecentBlockhashes,
+    rent::Rent, Sysvar,
 };
 use solana_sdk::transaction::Transaction;
 
@@ -215,6 +216,11 @@ impl<'a> Snapshot<'a> {
     /// Read `sysvar::clock`.
     pub fn get_clock(&mut self) -> Result<Clock> {
         self.get_bincode(&sysvar::clock::id())
+    }
+
+    /// Read `sysvar::epoch_schedule`.
+    pub fn get_epoch_schedule(&mut self) -> Result<EpochSchedule> {
+        self.get_bincode(&sysvar::epoch_schedule::id())
     }
 
     /// Read `sysvar::stake_history`.

@@ -16,6 +16,7 @@ use serde::Serialize;
 use solana_program::program_pack::Pack;
 use solana_program::{
     clock::{Clock, Slot},
+    epoch_schedule::EpochSchedule,
     pubkey::Pubkey,
     rent::Rent,
     stake_history::StakeHistory,
@@ -283,6 +284,7 @@ pub struct SolidoState {
     pub reserve_account: Account,
     pub rent: Rent,
     pub clock: Clock,
+    pub epoch_schedule: EpochSchedule,
 
     /// Public key of the maintainer executing the maintenance.
     /// Must be a member of `solido.maintainers`.
@@ -359,6 +361,7 @@ impl SolidoState {
 
         let rent = config.client.get_rent()?;
         let clock = config.client.get_clock()?;
+        let epoch_schedule = config.client.get_epoch_schedule()?;
         let stake_history = config.client.get_stake_history()?;
 
         let mut validator_stake_accounts = Vec::new();
@@ -429,6 +432,7 @@ impl SolidoState {
             st_sol_mint,
             rent,
             clock,
+            epoch_schedule,
             maintainer_address,
         })
     }
@@ -843,6 +847,37 @@ impl SolidoState {
                 help: "Solana slot that we read the Solido details from.",
                 type_: "gauge",
                 metrics: vec![Metric::new(self.clock.slot).at(self.produced_at)],
+            },
+        )?;
+        write_metric(
+            out,
+            &MetricFamily {
+                name: "solido_solana_epoch",
+                help: "Solana epoch that the slot at solido_solana_block_height falls in.",
+                type_: "gauge",
+                metrics: vec![Metric::new(self.clock.epoch).at(self.produced_at)],
+            },
+        )?;
+        write_metric(
+            out,
+            &MetricFamily {
+                name: "solido_solana_epoch_start_slot",
+                help: "Slot number of the first slot of the current Solana epoch.",
+                type_: "gauge",
+                metrics: vec![Metric::new(
+                    self.epoch_schedule
+                        .get_first_slot_in_epoch(self.clock.epoch),
+                )
+                .at(self.produced_at)],
+            },
+        )?;
+        write_metric(
+            out,
+            &MetricFamily {
+                name: "solido_solana_slots_per_epoch",
+                help: "Number of slots in the current Solana epoch.",
+                type_: "gauge",
+                metrics: vec![Metric::new(self.epoch_schedule.slots_per_epoch).at(self.produced_at)],
             },
         )?;
 
