@@ -366,13 +366,13 @@ impl<'a, 'b> Daemon<'a, 'b> {
         fn fmt_option<T: std::fmt::Debug>(opt_value: Option<T>) -> String {
             opt_value
                 .map(|x| format!("{:?}", x))
-                .unwrap_or("n/a".to_string())
+                .unwrap_or_else(|| "n/a".to_string())
         }
 
         fn fmt_option_duration(opt_value: Option<Duration>) -> String {
             opt_value
                 .map(|x| format!("{:.3}s", x.as_secs_f32()))
-                .unwrap_or("n/a".to_string())
+                .unwrap_or_else(|| "n/a".to_string())
         }
 
         println!(
