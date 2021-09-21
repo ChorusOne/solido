@@ -356,7 +356,6 @@ impl<'a, 'b> Daemon<'a, 'b> {
                 )
             });
 
-        let is_on_duty = is_on_duty_and_next_duty_slot.map(|(on_duty, _)| on_duty);
         let next_duty_slot = is_on_duty_and_next_duty_slot.and_then(|(_, slot)| slot);
 
         let sleep_time = next_duty_slot
@@ -378,9 +377,9 @@ impl<'a, 'b> Daemon<'a, 'b> {
 
         println!(
             "{}Sleeping until next iteration. Slot: {}, next duty slot: {}, block time: {}, sleep time: {}",
-            match is_on_duty {
-                Some(true) => "ON-DUTY  ",
-                Some(false) => "OFF-DUTY ",
+            match is_on_duty_and_next_duty_slot {
+                Some((true, _)) => "ON-DUTY  ",
+                Some((false, _)) => "OFF-DUTY ",
                 None => "",
             },
             fmt_option(self.block_time_estimator.get_most_recent_slot()),
