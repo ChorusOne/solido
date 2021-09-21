@@ -890,6 +890,22 @@ impl SolidoState {
 
         // Get the maximum that can be unstaked from the stake account.
         let amount = unstake_amounts[validator_index].min(stake_account.1.balance.total());
+
+        let expected_balance = (validator.entry.effective_stake_balance() - amount)
+            .expect("amount is always <= balance");
+        let amount = if expected_balance > MINIMUM_STAKE_ACCOUNT_BALANCE {
+            Some(amount)
+        } else {
+            let min_amount = (validator.entry.effective_stake_balance()
+                - MINIMUM_STAKE_ACCOUNT_BALANCE)
+                .expect("Validator should always have the minimum amount.");
+            if min_amount == Lamports(0) {
+                None
+            } else {
+                Some(min_amount)
+            }
+        }?;
+
         let (unstake_account, instruction) =
             self.get_unstake_instruction(validator, stake_account, amount);
         let task = MaintenanceOutput::UnstakeFromActiveValidator(Unstake {
@@ -1345,8 +1361,8 @@ pub fn try_perform_maintenance(
         .or_else(|| state.try_collect_validator_fee())
         // Same for updating the validator balance.
         .or_else(|| state.try_withdraw_inactive_stake())
-        .or_else(|| state.try_unstake_from_active_validators())
         .or_else(|| state.try_stake_deposit())
+        .or_else(|| state.try_unstake_from_active_validators())
         .or_else(|| state.try_claim_validator_fee())
         .or_else(|| state.try_remove_validator());
 
