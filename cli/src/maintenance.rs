@@ -285,6 +285,7 @@ pub struct SolidoState {
     pub rent: Rent,
     pub clock: Clock,
     pub epoch_schedule: EpochSchedule,
+    pub stake_history: StakeHistory,
 
     /// Public key of the maintainer executing the maintenance.
     /// Must be a member of `solido.maintainers`.
@@ -433,6 +434,7 @@ impl SolidoState {
             rent,
             clock,
             epoch_schedule,
+            stake_history,
             maintainer_address,
         })
     }
@@ -880,6 +882,33 @@ impl SolidoState {
                 metrics: vec![Metric::new(self.epoch_schedule.slots_per_epoch).at(self.produced_at)],
             },
         )?;
+
+        // https://docs.solana.com/developing/runtime-facilities/sysvars#stakehistory says that the
+        // stake history sysvar is updated at the start of every epoch. If you try to query it for
+        // the current epoch, it returns None. So unfortunately we can only get the state of the
+        // previous epoch. If the total amount staked changes slowly, we can still used it to
+        // roughly estimate Solido's share of the stake.
+        if let Some(entry) = self.stake_history.get(&(self.clock.epoch - 1)) {
+            write_metric(
+                out,
+                &MetricFamily {
+                    name: "solido_solana_stake_sol",
+                    help: "Amount of SOL staked for the *previous* epoch, across the entire Solana network.",
+                    type_: "gauge",
+                    metrics: vec![
+                        Metric::new_sol(Lamports(entry.activating))
+                            .at(self.produced_at)
+                            .with_label("status", "activating".to_string()),
+                        Metric::new_sol(Lamports(entry.effective))
+                            .at(self.produced_at)
+                            .with_label("status", "active".to_string()),
+                        Metric::new_sol(Lamports(entry.deactivating))
+                            .at(self.produced_at)
+                            .with_label("status", "deactivating".to_string()),
+                    ],
+                },
+            )?;
+        }
 
         // Include the maintainer balance, so maintainers can alert on it getting too low.
         write_metric(
