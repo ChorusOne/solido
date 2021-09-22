@@ -346,6 +346,26 @@ fn get_account_balance_except_rent(rent: &Rent, account: &Account) -> Lamports {
         .expect("Shouldn't happen. The account balance should be at least its rent-exempt balance.")
 }
 
+/// Given a public validator name, return one suitable for use in metrics.
+fn sanitize_validator_name(name: &str) -> String {
+    // Lido policy is that validator names should start with "Lido / ", so that
+    // adds no information, strip it here to leave more space for graphs in
+    // dashboards, and not waste so much space on the redundant part of the name.
+    match name.strip_prefix("Lido / ") {
+        // I don't want distracting emojis in my Grafana dashboards, so remove
+        // code points in the Supplementary Multilingual Plane and beyond. This
+        // strips emojis and dingbats while leaving letters and punctuation of
+        // all contemporary languages.
+        Some(suffix) => suffix
+            .chars()
+            .filter(|&ch| ch < '\u{10000}')
+            .collect::<String>()
+            .trim()
+            .to_string(),
+        None => format!("INVALID: {}", name),
+    }
+}
+
 impl SolidoState {
     // Set the minimum withdraw from stake accounts and validator's vote
     // accounts, the cost of validating signatures seems to dominate the
@@ -984,12 +1004,7 @@ impl SolidoState {
             let annotator = MetricAnnotator {
                 produced_at: self.produced_at,
                 vote_account: validator.pubkey.to_string(),
-                name: match info.name.strip_prefix("Lido / ") {
-                    Some(stripped_name) => stripped_name.to_string(),
-                    None => info.name.to_string(),
-                },
-                // All names should start with "Lido / ", remove this prefix to make
-                // dashboards a bit more compact.
+                name: sanitize_validator_name(&info.name),
                 keybase_username: info
                     .keybase_username
                     .as_ref()
