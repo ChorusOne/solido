@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 use bincode;
 use serde;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use solana_account_decoder::validator_info;
 use solana_client::rpc_client::RpcClient;
 use solana_config_program::ConfigKeys;
@@ -17,10 +17,12 @@ use crate::error::{Error, SerializationError};
 type Result<T> = std::result::Result<T, Error>;
 
 /// Validator metadata stored in a config account managed by the config program.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct ValidatorInfo {
     pub name: String,
 
+    // Rename the field because this is how Solana stores it, it needs to have
+    // this name to be able to deserialize.
     #[serde(rename = "keybaseUsername")]
     pub keybase_username: Option<String>,
     // Other keys that can be present in the json object are "details" and

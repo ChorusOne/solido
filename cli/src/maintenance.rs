@@ -372,12 +372,7 @@ impl SolidoState {
         let mut validator_vote_accounts = Vec::new();
         for validator in solido.validators.entries.iter() {
             let vote_account = config.client.get_account(&validator.pubkey)?;
-            let vote_state = VoteState::deserialize(vote_account.data()).map_err(|_| {
-                MaintenanceError::new(format!(
-                    "Failed to deserialize vote account at {}.",
-                    validator.pubkey
-                ))
-            })?;
+            let vote_state = config.client.get_vote_account(&validator.pubkey)?;
             let identity_account = config.client.get_account(&vote_state.node_pubkey)?;
             validator_vote_accounts.push(vote_state);
             validator_vote_account_balances

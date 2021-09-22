@@ -30,7 +30,7 @@ use solana_client::client_error::{ClientError, ClientErrorKind};
 use solana_client::rpc_client::RpcClient;
 use solana_client::rpc_config::RpcSendTransactionConfig;
 use solana_client::rpc_request::RpcError;
-use solana_sdk::account::Account;
+use solana_sdk::account::{Account, ReadableAccount};
 use solana_sdk::borsh::try_from_slice_unchecked;
 use solana_sdk::commitment_config::CommitmentLevel;
 use solana_sdk::program_pack::{IsInitialized, Pack};
@@ -42,6 +42,7 @@ use solana_sdk::sysvar::{
     rent::Rent, Sysvar,
 };
 use solana_sdk::transaction::Transaction;
+use solana_vote_program::vote_state::VoteState;
 
 use lido::state::Lido;
 use lido::token::Lamports;
@@ -258,6 +259,21 @@ impl<'a> Snapshot<'a> {
         let blockhashes = self.get_recent_blockhashes()?;
         // The blockhashes are ordered from most recent to least recent.
         Ok(blockhashes[0].blockhash)
+    }
+
+    /// Read and parse the vote account at the given address.
+    pub fn get_vote_account(&mut self, address: &Pubkey) -> Result<VoteState> {
+        let vote_account = self.get_account(address)?;
+        let vote_state = VoteState::deserialize(vote_account.data()).map_err(|err| {
+            let wrapped_err = SerializationError {
+                context: "While deserializing vote account.".to_string(),
+                cause: Some(err.into()),
+                address: *address,
+            };
+            let result: Error = Box::new(wrapped_err);
+            result
+        })?;
+        Ok(vote_state)
     }
 
     /// Return the minimum rent-exempt balance for an account with `data_len` bytes of data.

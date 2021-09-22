@@ -538,6 +538,14 @@ impl From<ProgramError> for Error {
     }
 }
 
+impl From<InstructionError> for Error {
+    fn from(err: InstructionError) -> Error {
+        // We already have a pretty printer for TransactionError,
+        // abuse it a bit by printing instruction errors as transaction errors.
+        Box::new(TransactionError::InstructionError(0, err))
+    }
+}
+
 impl From<TransactionError> for Error {
     fn from(err: TransactionError) -> Error {
         Box::new(err)
