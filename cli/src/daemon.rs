@@ -17,7 +17,7 @@ use std::time::{Duration, Instant};
 
 use rand::{rngs::ThreadRng, Rng};
 use solana_sdk::clock::{Clock, Slot};
-use tiny_http::{Request, Response, Server};
+use tiny_http::{Header, Request, Response, Server};
 
 use crate::config::RunMaintainerOpts;
 use crate::error::{AsPrettyError, Error};
@@ -465,7 +465,16 @@ fn serve_request(request: Request, snapshot_mutex: &SnapshotMutex) -> Result<(),
     }
 
     if is_ok {
-        request.respond(Response::from_data(out))
+        // text/plain with version=0.0.4 is what Prometheus expects as the content type,
+        // see also https://prometheus.io/docs/instrumenting/exposition_formats/.
+        // We add the charset so you can view the metrics in a browser too when it
+        // contains non-ascii bytes.
+        let content_type = Header::from_bytes(
+            &b"Content-Type"[..],
+            &b"text/plain; version=0.0.4; charset=UTF-8"[..],
+        )
+        .expect("Static header value, does not fail at runtime.");
+        request.respond(Response::from_data(out).with_header(content_type))
     } else {
         request.respond(Response::from_string("error").with_status_code(500))
     }
