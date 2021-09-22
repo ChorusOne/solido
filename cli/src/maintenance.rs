@@ -1330,6 +1330,8 @@ mod test {
             reserve_account: Account::default(),
             rent: Rent::default(),
             clock: Clock::default(),
+            epoch_schedule: EpochSchedule::default(),
+            stake_history: StakeHistory::default(),
             maintainer_address: Pubkey::new_unique(),
         };
 
