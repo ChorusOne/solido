@@ -446,6 +446,17 @@ impl fmt::Display for ShowSolidoOutput {
         )?;
         writeln!(
             f,
+            "  Total amount withdrawn:   {}, valued at {} when it was withdrawn",
+            self.solido.metrics.withdraw_amount.total_st_sol_amount,
+            self.solido.metrics.withdraw_amount.total_sol_amount,
+        )?;
+        writeln!(
+            f,
+            "  Number of withdrawals:    {}",
+            self.solido.metrics.withdraw_amount.count,
+        )?;
+        writeln!(
+            f,
             "  Total deposited:          {}",
             self.solido.metrics.deposit_amount.total
         )?;
