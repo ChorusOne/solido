@@ -257,7 +257,7 @@ pub fn write_solido_metrics_as_prometheus<W: io::Write>(
         out,
         &MetricFamily {
             name: "solido_withdraw_count_total",
-            help: "Total number of withdrawals done by users.",
+            help: "Total number of withdrawals made by users.",
             type_: "counter",
             metrics: vec![Metric::new(metrics.withdraw_amount.count).at(at)],
         },
