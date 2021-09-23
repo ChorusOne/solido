@@ -325,8 +325,10 @@ fn main() {
         get_signer_from_key(opts.keypair.unwrap())
     };
 
+    // We use finalized here to be sure that we never observe rollbacks. In particular,
+    // this ensures that the maintenance daemon never observes vote credits going down.
     let rpc_client =
-        RpcClient::new_with_commitment(opts.cluster.unwrap(), CommitmentConfig::confirmed());
+        RpcClient::new_with_commitment(opts.cluster.unwrap(), CommitmentConfig::finalized());
     let snapshot_client = SnapshotClient::new(rpc_client);
 
     let output_mode = opts.output_mode.unwrap();
