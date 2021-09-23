@@ -16,6 +16,7 @@ use serde::Serialize;
 use solana_program::program_pack::Pack;
 use solana_program::{
     clock::{Clock, Slot},
+    epoch_schedule::EpochSchedule,
     pubkey::Pubkey,
     rent::Rent,
     stake_history::StakeHistory,
@@ -283,6 +284,8 @@ pub struct SolidoState {
     pub reserve_account: Account,
     pub rent: Rent,
     pub clock: Clock,
+    pub epoch_schedule: EpochSchedule,
+    pub stake_history: StakeHistory,
 
     /// Public key of the maintainer executing the maintenance.
     /// Must be a member of `solido.maintainers`.
@@ -359,6 +362,7 @@ impl SolidoState {
 
         let rent = config.client.get_rent()?;
         let clock = config.client.get_clock()?;
+        let epoch_schedule = config.client.get_epoch_schedule()?;
         let stake_history = config.client.get_stake_history()?;
 
         let mut validator_stake_accounts = Vec::new();
@@ -429,6 +433,8 @@ impl SolidoState {
             st_sol_mint,
             rent,
             clock,
+            epoch_schedule,
+            stake_history,
             maintainer_address,
         })
     }
@@ -845,6 +851,64 @@ impl SolidoState {
                 metrics: vec![Metric::new(self.clock.slot).at(self.produced_at)],
             },
         )?;
+        write_metric(
+            out,
+            &MetricFamily {
+                name: "solido_solana_epoch",
+                help: "Solana epoch that the slot at solido_solana_block_height falls in.",
+                type_: "gauge",
+                metrics: vec![Metric::new(self.clock.epoch).at(self.produced_at)],
+            },
+        )?;
+        write_metric(
+            out,
+            &MetricFamily {
+                name: "solido_solana_epoch_start_slot",
+                help: "Slot number of the first slot of the current Solana epoch.",
+                type_: "gauge",
+                metrics: vec![Metric::new(
+                    self.epoch_schedule
+                        .get_first_slot_in_epoch(self.clock.epoch),
+                )
+                .at(self.produced_at)],
+            },
+        )?;
+        write_metric(
+            out,
+            &MetricFamily {
+                name: "solido_solana_slots_per_epoch",
+                help: "Number of slots in the current Solana epoch.",
+                type_: "gauge",
+                metrics: vec![Metric::new(self.epoch_schedule.slots_per_epoch).at(self.produced_at)],
+            },
+        )?;
+
+        // https://docs.solana.com/developing/runtime-facilities/sysvars#stakehistory says that the
+        // stake history sysvar is updated at the start of every epoch. If you try to query it for
+        // the current epoch, it returns None. So unfortunately we can only get the state of the
+        // previous epoch. If the total amount staked changes slowly, we can still used it to
+        // roughly estimate Solido's share of the stake.
+        if let Some(entry) = self.stake_history.get(&(self.clock.epoch - 1)) {
+            write_metric(
+                out,
+                &MetricFamily {
+                    name: "solido_solana_stake_sol",
+                    help: "Amount of SOL staked for the *previous* epoch, across the entire Solana network.",
+                    type_: "gauge",
+                    metrics: vec![
+                        Metric::new_sol(Lamports(entry.activating))
+                            .at(self.produced_at)
+                            .with_label("status", "activating".to_string()),
+                        Metric::new_sol(Lamports(entry.effective))
+                            .at(self.produced_at)
+                            .with_label("status", "active".to_string()),
+                        Metric::new_sol(Lamports(entry.deactivating))
+                            .at(self.produced_at)
+                            .with_label("status", "deactivating".to_string()),
+                    ],
+                },
+            )?;
+        }
 
         // Include the maintainer balance, so maintainers can alert on it getting too low.
         write_metric(
@@ -1266,6 +1330,8 @@ mod test {
             reserve_account: Account::default(),
             rent: Rent::default(),
             clock: Clock::default(),
+            epoch_schedule: EpochSchedule::default(),
+            stake_history: StakeHistory::default(),
             maintainer_address: Pubkey::new_unique(),
         };
 
