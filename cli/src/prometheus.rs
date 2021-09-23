@@ -259,9 +259,7 @@ pub fn write_solido_metrics_as_prometheus<W: io::Write>(
             name: "solido_withdraw_count_total",
             help: "Total number of withdrawals done by users.",
             type_: "counter",
-            metrics: vec![
-                Metric::new(metrics.withdraw_amount.count).at(at)
-            ],
+            metrics: vec![Metric::new(metrics.withdraw_amount.count).at(at)],
         },
     )?;
     write_metric(
@@ -270,9 +268,7 @@ pub fn write_solido_metrics_as_prometheus<W: io::Write>(
             name: "solido_withdraw_amount_sol_total",
             help: "Total amount of SOL that we returned to users for withdrawals.",
             type_: "counter",
-            metrics: vec![
-                Metric::new_sol(metrics.withdraw_amount.total_sol_amount).at(at)
-            ],
+            metrics: vec![Metric::new_sol(metrics.withdraw_amount.total_sol_amount).at(at)],
         },
     )?;
     write_metric(
@@ -281,9 +277,7 @@ pub fn write_solido_metrics_as_prometheus<W: io::Write>(
             name: "solido_withdraw_amount_st_sol_total",
             help: "Total amount of stSOL that users returned to us for withdrawals.",
             type_: "counter",
-            metrics: vec![
-                Metric::new_st_sol(metrics.withdraw_amount.total_st_sol_amount).at(at)
-            ],
+            metrics: vec![Metric::new_st_sol(metrics.withdraw_amount.total_st_sol_amount).at(at)],
         },
     )?;
 
