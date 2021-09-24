@@ -3,8 +3,6 @@
 
 use std::collections::{HashMap, HashSet};
 
-use bincode;
-use serde;
 use serde::{Deserialize, Serialize};
 use solana_account_decoder::validator_info;
 use solana_client::rpc_client::RpcClient;
@@ -101,22 +99,21 @@ pub fn get_validator_info_accounts(rpc_client: &mut RpcClient) -> Result<HashMap
     let mut bad_identities = HashSet::new();
 
     for (config_addr, account) in &all_config_accounts {
-        match deserialize_validator_info(*config_addr, &account.data) {
-            Ok((validator_identity, _info)) => {
-                // Record the config address for this validator, but ignore the
-                // other metadata. We will re-read this later in an snapshot, so
-                // we can read it atomically together with other accounts.
-                let old_config_addr = mapping.insert(validator_identity, *config_addr);
-                if old_config_addr.is_some() {
-                    bad_identities.insert(validator_identity);
-                }
+        if let Ok((validator_identity, _info)) =
+            deserialize_validator_info(*config_addr, &account.data)
+        {
+            // Record the config address for this validator, but ignore the
+            // other metadata. We will re-read this later in an snapshot, so
+            // we can read it atomically together with other accounts.
+            let old_config_addr = mapping.insert(validator_identity, *config_addr);
+            if old_config_addr.is_some() {
+                bad_identities.insert(validator_identity);
             }
-            Err(_) => {
-                // We ignore errors here: not all config accounts need to contain
-                // validator info, so if we fail to deserialize the config account,
-                // that is not fatal, it just means this is not an account that
-                // we are interested in.
-            }
+        } else {
+            // We ignore errors here: not all config accounts need to contain
+            // validator info, so if we fail to deserialize the config account,
+            // that is not fatal, it just means this is not an account that
+            // we are interested in.
         }
     }
 
