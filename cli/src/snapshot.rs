@@ -290,7 +290,10 @@ impl<'a> Snapshot<'a> {
         };
         let config_account = self.get_account(config_addr)?;
         let (info_identity, validator_info) =
-            crate::validator_info_utils::deserialize_validator_info(*config_addr, config_account)?;
+            crate::validator_info_utils::deserialize_validator_info(
+                *config_addr,
+                config_account.data(),
+            )?;
         if info_identity == *validator_identity {
             Ok(validator_info)
         } else {

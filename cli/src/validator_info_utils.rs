@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2021 Chorus One AG
 // SPDX-License-Identifier: GPL-3.0
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use bincode;
 use serde;
@@ -9,7 +9,6 @@ use serde::{Deserialize, Serialize};
 use solana_account_decoder::validator_info;
 use solana_client::rpc_client::RpcClient;
 use solana_config_program::ConfigKeys;
-use solana_sdk::account::Account;
 use solana_sdk::pubkey::Pubkey;
 
 use crate::error::{Error, SerializationError};
@@ -17,7 +16,7 @@ use crate::error::{Error, SerializationError};
 type Result<T> = std::result::Result<T, Error>;
 
 /// Validator metadata stored in a config account managed by the config program.
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Eq, PartialEq)]
 pub struct ValidatorInfo {
     pub name: String,
 
@@ -39,9 +38,9 @@ pub struct ValidatorInfo {
 /// [`get_validator_info_accounts`] for that.
 pub fn deserialize_validator_info(
     config_address: Pubkey,
-    account: &Account,
+    account_data: &[u8],
 ) -> Result<(Pubkey, ValidatorInfo)> {
-    let key_list: ConfigKeys = bincode::deserialize(&account.data)?;
+    let key_list: ConfigKeys = bincode::deserialize(account_data)?;
 
     // I don't know the meaning of the boolean here, but this is what `solana validator-info get`
     // uses to check if a config account contains validator info.
@@ -54,9 +53,17 @@ pub fn deserialize_validator_info(
         return Err(Box::new(err));
     }
 
-    // The validator identity pubkey lives at index 1. The meaning of the
-    // boolean is unclear.
-    let (validator_identity, _) = key_list.keys[1];
+    // The validator identity pubkey lives at index 1.
+    let (validator_identity, identity_signed_config) = key_list.keys[1];
+
+    if !identity_signed_config {
+        let err = SerializationError {
+            context: "Config account is not signed by validator identity.".to_string(),
+            cause: None,
+            address: config_address,
+        };
+        return Err(Box::new(err));
+    }
 
     // A config account stores a list of (pubkey, bool) pairs, followed by json
     // data. To figure out where the json data starts, we need to know the size
@@ -65,7 +72,7 @@ pub fn deserialize_validator_info(
     let key_list_len = bincode::serialized_size(&key_list)
         .expect("We deserialized it, therefore it must be serializable.")
         as usize;
-    let json_data: String = bincode::deserialize(&account.data[key_list_len..])?;
+    let json_data: String = bincode::deserialize(&account_data[key_list_len..])?;
     let validator_info: ValidatorInfo = serde_json::from_str(&json_data)?;
 
     Ok((validator_identity, validator_info))
@@ -86,13 +93,23 @@ pub fn get_validator_info_accounts(rpc_client: &mut RpcClient) -> Result<HashMap
     let all_config_accounts = rpc_client.get_program_accounts(&config_program::id())?;
     let mut mapping = HashMap::new();
 
+    // Due to the structure of validator info (config accounts pointing to identity
+    // accounts), it is possible for multiple config accounts to describe the same
+    // validator. This is invalid, if it happens, we wouldn't know which config
+    // account is the right one, so instead of making an arbitrary decision, we
+    // ignore all validator infos for that identity.
+    let mut bad_identities = HashSet::new();
+
     for (config_addr, account) in &all_config_accounts {
-        match deserialize_validator_info(*config_addr, account) {
+        match deserialize_validator_info(*config_addr, &account.data) {
             Ok((validator_identity, _info)) => {
                 // Record the config address for this validator, but ignore the
                 // other metadata. We will re-read this later in an snapshot, so
                 // we can read it atomically together with other accounts.
-                mapping.insert(validator_identity, *config_addr);
+                let old_config_addr = mapping.insert(validator_identity, *config_addr);
+                if old_config_addr.is_some() {
+                    bad_identities.insert(validator_identity);
+                }
             }
             Err(_) => {
                 // We ignore errors here: not all config accounts need to contain
@@ -103,5 +120,45 @@ pub fn get_validator_info_accounts(rpc_client: &mut RpcClient) -> Result<HashMap
         }
     }
 
+    for bad_identity in &bad_identities {
+        mapping.remove(bad_identity);
+    }
+
     Ok(mapping)
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use std::str::FromStr;
+
+    #[test]
+    fn test_deserialize_requires_signature() {
+        // Here's a config account where the second address is not a signer.
+        // We should fail to deserialize it.
+        let invalid_config_account = b"\x02\x07Q\x97\x01tH\xf2\xac]\xc2<\x9e\xbcz\
+        \xc7\x8c\n\'%z\xc6\x14E\x8d\xe0\xa4\xf1o\x80\x00\x00\x00\x00\x86\xadf\x8a\
+        \x17\xd5\x90\x82a\x92=\xacV\xe8N\x88\xf0\xc2\x9a\xee\xea\xb0\xba\xc2\x19\
+        \x83\x80\xecq\xc6\\\xeb\x00B\x00\x00\x00\x00\x00\x00\x00{\"name\":\"AAAAA\
+        AAAAAAAAAAAA\",\"keybaseUsername\":\"aaaaaaaaaaaaaaaaa\"}\x00\x00\x00\x00\x00";
+
+        let result = deserialize_validator_info(Pubkey::new_unique(), invalid_config_account);
+        assert!(result.is_err());
+
+        // Flip the "signed" byte to make the config account valid.
+        let mut valid_config_account: Vec<u8> = invalid_config_account[..].into();
+        valid_config_account[66] = 0x01;
+
+        let result = deserialize_validator_info(Pubkey::new_unique(), &valid_config_account);
+        assert_eq!(
+            result.ok(),
+            Some((
+                Pubkey::from_str("A4izJ2gATP6n5P9wXuarbn871beydWZ6mGisfhv8KYd8").unwrap(),
+                ValidatorInfo {
+                    name: "AAAAAAAAAAAAAAAAA".to_string(),
+                    keybase_username: Some("aaaaaaaaaaaaaaaaa".to_string()),
+                },
+            )),
+        )
+    }
 }
