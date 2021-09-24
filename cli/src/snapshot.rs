@@ -293,10 +293,12 @@ impl<'a> Snapshot<'a> {
             //     Transaction simulation failed: Blockhash not found
             //
             // To avoid this, preflight the transaction against the latest
-            // confirmed state, which is more recent than the latest finalized
-            // state.
+            // known state, which is more recent than the latest finalized
+            // state. We want to preflight against the most recent state anyway,
+            // to be more confident that the transaction does not fail when we
+            // execute it for real.
             RpcSendTransactionConfig {
-                preflight_commitment: Some(CommitmentLevel::Confirmed),
+                preflight_commitment: Some(CommitmentLevel::Processed),
                 ..RpcSendTransactionConfig::default()
             },
         )?;
@@ -340,7 +342,7 @@ impl<'a> Snapshot<'a> {
             transaction,
             // See also the comment in `send_and_confirm_transaction`.
             RpcSendTransactionConfig {
-                preflight_commitment: Some(CommitmentLevel::Confirmed),
+                preflight_commitment: Some(CommitmentLevel::Processed),
                 ..RpcSendTransactionConfig::default()
             },
         )?;
