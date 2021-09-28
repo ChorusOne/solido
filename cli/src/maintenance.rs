@@ -11,6 +11,7 @@ use itertools::izip;
 
 use lido::processor::StakeType;
 use lido::token;
+use lido::token::Rational;
 use lido::REWARDS_WITHDRAW_AUTHORITY;
 use serde::Serialize;
 use solana_program::program_pack::Pack;
@@ -123,24 +124,26 @@ pub struct Unstake {
     amount: Lamports,
 }
 
-fn print_unstake(f: &mut fmt::Formatter, unstake: &Unstake) -> fmt::Result {
-    writeln!(
-        f,
-        "  Validator vote account: {}",
-        unstake.validator_vote_account
-    )?;
-    writeln!(
-        f,
-        "  Stake account:               {}, seed: {}",
-        unstake.from_stake_account, unstake.from_stake_seed
-    )?;
-    writeln!(
-        f,
-        "  Unstake account:             {}, seed: {}",
-        unstake.to_unstake_account, unstake.to_unstake_seed
-    )?;
-    writeln!(f, "  Amount:              {}", unstake.amount)?;
-    Ok(())
+impl fmt::Display for Unstake {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(
+            f,
+            "  Validator vote account: {}",
+            self.validator_vote_account
+        )?;
+        writeln!(
+            f,
+            "  Stake account:               {}, seed: {}",
+            self.from_stake_account, self.from_stake_seed
+        )?;
+        writeln!(
+            f,
+            "  Unstake account:             {}, seed: {}",
+            self.to_unstake_account, self.to_unstake_seed
+        )?;
+        writeln!(f, "  Amount:              {}", self.amount)?;
+        Ok(())
+    }
 }
 
 impl fmt::Display for MaintenanceOutput {
@@ -219,12 +222,10 @@ impl fmt::Display for MaintenanceOutput {
                 )?;
             }
             MaintenanceOutput::UnstakeFromInactiveValidator(unstake) => {
-                writeln!(f, "Unstake from inactive validator")?;
-                print_unstake(f, unstake)?;
+                writeln!(f, "Unstake from inactive validator\n{}", unstake)?;
             }
             MaintenanceOutput::UnstakeFromActiveValidator(unstake) => {
-                writeln!(f, "Unstake from active validator")?;
-                print_unstake(f, unstake)?;
+                writeln!(f, "Unstake from active validator\n{}", unstake)?;
             }
             MaintenanceOutput::RemoveValidator {
                 validator_vote_account,
@@ -358,8 +359,10 @@ impl SolidoState {
     const MINIMUM_WITHDRAW_AMOUNT: Lamports = Lamports(DEFAULT_TARGET_LAMPORTS_PER_SIGNATURE * 100);
 
     // Threshold that will trigger unstake on validators.
-    // Expressed as a percentage between 0-100.
-    const UNBALANCE_THRESHOLD: u64 = 10;
+    const UNBALANCE_THRESHOLD: Rational = Rational {
+        numerator: 1,
+        denominator: 10,
+    };
     /// Read the state from the on-chain data.
     pub fn new(
         config: &mut SnapshotConfig,
@@ -874,37 +877,32 @@ impl SolidoState {
 
         // Get the target for each validator. Undelegated Lamports can be
         // sent when staking with validators.
-        let targets = lido::balance::get_target_balance(Lamports(0), &self.solido.validators)
-            .expect("Failed to compute target balance.");
-        let unstake_amounts =
-            lido::balance::get_unstake_to_rebalance(&self.solido.validators, &targets);
+        let targets = lido::balance::get_target_balance(
+            self.get_effective_reserve(),
+            &self.solido.validators,
+        )
+        .expect("Failed to compute target balance.");
 
-        let validator_index = lido::balance::get_unstake_validator_index(
+        let (validator_index, unstake_amount) = lido::balance::get_unstake_validator_index(
             &self.solido.validators,
             &targets,
-            &unstake_amounts,
             SolidoState::UNBALANCE_THRESHOLD,
         )?;
         let validator = &self.solido.validators.entries[validator_index];
         let stake_account = &self.validator_stake_accounts[validator_index][0];
 
-        // Get the maximum that can be unstaked from the stake account.
-        let amount = unstake_amounts[validator_index].min(stake_account.1.balance.total());
-
-        let expected_balance = (validator.entry.effective_stake_balance() - amount)
-            .expect("amount is always <= balance");
-        let amount = if expected_balance > MINIMUM_STAKE_ACCOUNT_BALANCE {
-            Some(amount)
-        } else {
-            let min_amount = (validator.entry.effective_stake_balance()
-                - MINIMUM_STAKE_ACCOUNT_BALANCE)
-                .expect("Validator should always have the minimum amount.");
-            if min_amount == Lamports(0) {
-                None
-            } else {
-                Some(min_amount)
-            }
-        }?;
+        let maximum_unstake = (validator.entry.effective_stake_balance()
+            - MINIMUM_STAKE_ACCOUNT_BALANCE)
+            .expect("Validator should always have the minimum amount.");
+        // Get the maximum that can be unstaked from the stake account.  The
+        // minimum amongst the value to be unstaked, how much is in the stake
+        // account and the maximum that can be unstaked from the validator.
+        let amount = unstake_amount
+            .min(stake_account.1.balance.total())
+            .min(maximum_unstake);
+        if amount == Lamports(0) {
+            return None;
+        }
 
         let (unstake_account, instruction) =
             self.get_unstake_instruction(validator, stake_account, amount);

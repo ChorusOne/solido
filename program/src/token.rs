@@ -22,10 +22,17 @@ use std::{
     ops::{Add, Div, Mul, Sub},
 };
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 pub struct Rational {
     pub numerator: u64,
     pub denominator: u64,
+}
+
+impl PartialOrd for Rational {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        (self.numerator as f64 / self.denominator as f64)
+            .partial_cmp(&(other.numerator as f64 / other.denominator as f64))
+    }
 }
 
 /// Error returned when a calculation in a token type overflows, underflows, or divides by zero.

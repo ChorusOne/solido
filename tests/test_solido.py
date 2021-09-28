@@ -30,7 +30,7 @@ from util import (
     spl_token,
 )
 
-from typing import Any, NamedTuple, Tuple
+from typing import Any, Dict, NamedTuple, Tuple
 
 # We start by generating an account that we will need later. We put the tests
 # keys in a directory where we can .gitignore them, so they don't litter the
@@ -232,7 +232,9 @@ class Validator(NamedTuple):
     fee_account: str
 
 
-def add_validator(keypath_account: str, keypath_vote: str) -> Tuple[Validator, Any]:
+def add_validator(
+    keypath_account: str, keypath_vote: str
+) -> Tuple[Validator, Dict[str, Any]]:
     print('\nAdding a validator ...')
     account = create_test_account(f'tests/.keys/{keypath_account}.json')
     vote_account = create_vote_account(
@@ -525,6 +527,7 @@ transaction_status = multisig(
 )
 approve_and_execute(transaction_address, test_addrs[0])
 
+# Should unstake 1/2 (1.5 - 0.0005/2 Sol) of the validator's balance.
 result = solido(
     'perform-maintenance',
     '--solido-address',
@@ -534,6 +537,10 @@ result = solido(
     keypair_path=maintainer.keypair_path,
 )
 
+# V0:       3
+# V1:       0
+# Reserve:  0.0005
+
 del result['UnstakeFromActiveValidator']['from_stake_account']
 del result['UnstakeFromActiveValidator']['to_unstake_account']
 expected_result = {
@@ -541,7 +548,7 @@ expected_result = {
         'validator_vote_account': validator.vote_account.pubkey,
         'from_stake_seed': 0,
         'to_unstake_seed': 0,
-        'amount': 1500000000,
+        'amount': 1_499_750_000,  # 1.5 Sol - 0.0005 / 2
     }
 }
 assert result == expected_result, f'\nExpected: {expected_result}\nActual:   {result}'
@@ -565,9 +572,14 @@ expected_result = {
     'WithdrawInactiveStake': {
         'validator_vote_account': validator.vote_account.pubkey,
         'expected_difference_stake_lamports': 100_000_000,  # We donated 0.1 SOL.
-        'unstake_withdrawn_to_reserve_lamports': 1_500_000_000,  # Half was unstaked for the newcomming validator.
+        'unstake_withdrawn_to_reserve_lamports': 1_499_750_000,  # Amount that was unstaked for the newcomming validator.
     }
 }
+
+# V0:       1.500250000
+# V1:       0 Sol
+# Reserve:  1.600250000 (1.500250000 + 0.1)
+
 assert result == expected_result, f'\nExpected: {expected_result}\nActual:   {result}'
 
 print('> Performed WithdrawInactiveStake as expected.')
@@ -577,6 +589,10 @@ print('\nDonating 1.0 SOL to reserve, then running maintenance ...')
 reserve_account: str = solido_instance['reserve_account']
 solana('transfer', '--allow-unfunded-recipient', reserve_account, '1.0')
 print(f'> Funded reserve {reserve_account} with 1.0 SOL')
+
+# V0:       1.500250000
+# V1:       0 Sol
+# Reserve:  2.600250000 (1.500250000 + 0.1 + 1)
 
 print('\nRunning maintenance ...')
 
@@ -593,12 +609,13 @@ del result['StakeDeposit']['stake_account']
 expected_result = {
     'StakeDeposit': {
         'validator_vote_account': validator_1.vote_account.pubkey,
-        'amount_lamports': 2_050_250_000,
+        'amount_lamports': 2_050_250_000,  # (1.500250000 + 2.600250000) / 2
     }
 }
 assert result == expected_result, f'\nExpected: {expected_result}\nActual:   {result}'
 print('> Deposited to the second validator, as expected.')
 
+print('\nRunning maintenance (should be no-op) ...')
 result = solido(
     'perform-maintenance',
     '--solido-address',
@@ -607,37 +624,9 @@ result = solido(
     solido_program_id,
     keypair_path=maintainer.keypair_path,
 )
-del result['UnstakeFromActiveValidator']['from_stake_account']
-del result['UnstakeFromActiveValidator']['to_unstake_account']
-expected_result = {
-    'UnstakeFromActiveValidator': {
-        'validator_vote_account': validator_1.vote_account.pubkey,
-        'from_stake_seed': 0,
-        'to_unstake_seed': 0,
-        'amount': 275_125_000,
-    }
-}
-assert result == expected_result, f'\nExpected: {expected_result}\nActual:   {result}'
-print('> Unstaked from second validator, as expected.')
 
-
-result = solido(
-    'perform-maintenance',
-    '--solido-address',
-    solido_address,
-    '--solido-program-id',
-    solido_program_id,
-    keypair_path=maintainer.keypair_path,
-)
-expected_result = {
-    'WithdrawInactiveStake': {
-        'validator_vote_account': validator_1.vote_account.pubkey,
-        'expected_difference_stake_lamports': 0,
-        'unstake_withdrawn_to_reserve_lamports': 275_125_000,
-    }
-}
-assert result == expected_result, f'\nExpected: {expected_result}\nActual:   {result}'
-print('> Withdrew inactive stake from second validator to the reserve, as expected.')
+assert result is None, f'Huh, perform-maintenance performed {result}'
+print('> There was nothing to do, as expected.')
 
 print(f'\nDeactivating validator {validator.vote_account.pubkey} ...')
 transaction_result = solido(
@@ -700,7 +689,7 @@ expected_result = {
         'validator_vote_account': validator.vote_account.pubkey,
         'from_stake_seed': 0,
         'to_unstake_seed': 1,
-        'amount': 1_500_000_000,
+        'amount': 1_500_250_000,
     }
 }
 assert result == expected_result, f'\nExpected: {expected_result}\nActual:   {result}'
@@ -731,7 +720,7 @@ expected_result = {
     'WithdrawInactiveStake': {
         'validator_vote_account': validator.vote_account.pubkey,
         'expected_difference_stake_lamports': 0,
-        'unstake_withdrawn_to_reserve_lamports': 1_500_000_000,
+        'unstake_withdrawn_to_reserve_lamports': 1_500_250_000,
     }
 }
 assert result == expected_result, f'\nExpected: {expected_result}\nActual:   {result}'

@@ -102,33 +102,12 @@ pub fn get_target_balance(
     Ok(target_balance)
 }
 
-/// Get the amount that should be unstaked from each validator.
-pub fn get_unstake_to_rebalance(
-    validators: &Validators,
-    target_balance: &[Lamports],
-) -> Vec<Lamports> {
-    let mut unstake_to_rebalance = Vec::new();
-    for (validator, target) in validators.entries.iter().zip(target_balance) {
-        let unstake_amount = validator
-            .entry
-            .effective_stake_balance()
-            .0
-            .saturating_sub(target.0);
-        unstake_to_rebalance.push(Lamports(unstake_amount));
-    }
-    unstake_to_rebalance
-}
-
-/// Get the index for the minimum amount. Panics if the threshold is > 100.
+/// Get the index for the minimum amount.
 pub fn get_unstake_validator_index(
     validators: &Validators,
     target_balance: &[Lamports],
-    unstake_amounts: &[Lamports],
-    threshold: u64,
-) -> Option<usize> {
-    if threshold > 100 {
-        panic!("Threshold should be <= 100, it's {}", threshold);
-    }
+    threshold: Rational,
+) -> Option<(usize, Lamports)> {
     // Check if we need to rebalance because a validator is too far away from
     // its target.
     let needs_unstake =
@@ -143,29 +122,44 @@ pub fn get_unstake_validator_index(
                 if target == &Lamports(0) {
                     return false;
                 }
-                (target_difference * 100) / target.0 >= threshold
+                Rational {
+                    numerator: target_difference,
+                    denominator: validator.entry.effective_stake_balance().0,
+                } >= threshold
             });
 
-    validators
+    let (idx, validator) = validators
         .entries
         .iter()
         .enumerate()
-        .zip(unstake_amounts.iter())
-        .find_map(|((idx, validator), unstake_amount)| {
-            if validator.entry.effective_stake_balance() == Lamports(0) {
-                None
-            } else if ((unstake_amount.0 * 100) / validator.entry.effective_stake_balance().0
-                >= threshold)
-                || (unstake_amount > &Lamports(0) && needs_unstake)
-            {
-                // If validator needs to be unstaked because if falls above the
-                // threshold or there's a validator in need of Lamports to be
-                // unstaked.
-                Some(idx)
-            } else {
-                None
-            }
-        })
+        .max_by(|(i, x), (j, y)| {
+            let target_x = x
+                .entry
+                .effective_stake_balance()
+                .0
+                .saturating_sub(target_balance[*i].0);
+            let target_y = y
+                .entry
+                .effective_stake_balance()
+                .0
+                .saturating_sub(target_balance[*j].0);
+            target_x.cmp(&target_y)
+        })?;
+
+    let amount = validator
+        .entry
+        .effective_stake_balance()
+        .0
+        .saturating_sub(target_balance[idx].0);
+    let ratio = Rational {
+        numerator: amount,
+        denominator: validator.entry.effective_stake_balance().0,
+    };
+    if ratio >= threshold || needs_unstake {
+        Some((idx, Lamports(amount)))
+    } else {
+        None
+    }
 }
 
 /// Given a list of validators and their target balance, return the index of the
@@ -393,14 +387,24 @@ mod test {
 
         let targets = get_target_balance(Lamports(0), &validators).unwrap();
 
-        let unstake_amounts = get_unstake_to_rebalance(&validators, &targets);
-        assert_eq!(unstake_amounts, [Lamports(0), Lamports(4), Lamports(0)]);
-        let minimum_unstake =
-            get_unstake_validator_index(&validators, &targets, &unstake_amounts, 10);
-        assert_eq!(minimum_unstake, Some(1));
-        let minimum_unstake =
-            get_unstake_validator_index(&validators, &targets, &unstake_amounts, 25);
-        assert_eq!(minimum_unstake, Some(1));
+        let minimum_unstake = get_unstake_validator_index(
+            &validators,
+            &targets,
+            Rational {
+                numerator: 1,
+                denominator: 4,
+            },
+        );
+        assert_eq!(minimum_unstake, Some((1, Lamports(4))));
+        let minimum_unstake = get_unstake_validator_index(
+            &validators,
+            &targets,
+            Rational {
+                numerator: 1,
+                denominator: 5,
+            },
+        );
+        assert_eq!(minimum_unstake, Some((1, Lamports(4))));
     }
 
     #[test]
@@ -412,27 +416,36 @@ mod test {
 
         let targets = get_target_balance(Lamports(0), &validators).unwrap();
 
-        let unstake_amounts = get_unstake_to_rebalance(&validators, &targets);
         // Test below the threshold.
-        let minimum_unstake =
-            get_unstake_validator_index(&validators, &targets, &unstake_amounts, 26);
+        let minimum_unstake = get_unstake_validator_index(
+            &validators,
+            &targets,
+            Rational {
+                numerator: 1,
+                denominator: 3,
+            },
+        );
         assert_eq!(minimum_unstake, None);
     }
 
     #[test]
     fn get_unstake_from_active_validator_because_another_needs_stake() {
         let mut validators = Validators::new_fill_default(3);
-        validators.entries[0].entry.stake_accounts_balance = Lamports(15);
+        validators.entries[0].entry.stake_accounts_balance = Lamports(17);
         validators.entries[1].entry.stake_accounts_balance = Lamports(15);
         validators.entries[2].entry.stake_accounts_balance = Lamports(0);
 
         let targets = get_target_balance(Lamports(0), &validators).unwrap();
 
-        let unstake_amounts = get_unstake_to_rebalance(&validators, &targets);
-        assert_eq!(unstake_amounts, [Lamports(5), Lamports(5), Lamports(0)]);
         // Test get the unstake index even if the validator is not below the threshold but some other is.
-        let minimum_unstake =
-            get_unstake_validator_index(&validators, &targets, &unstake_amounts, 100);
-        assert_eq!(minimum_unstake, Some(0))
+        let minimum_unstake = get_unstake_validator_index(
+            &validators,
+            &targets,
+            Rational {
+                numerator: 1,
+                denominator: 1,
+            },
+        );
+        assert_eq!(minimum_unstake, Some((0, Lamports(6))))
     }
 }
