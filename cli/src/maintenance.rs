@@ -1041,12 +1041,10 @@ impl SolidoState {
             out,
             &MetricFamily {
                 name: "solido_validator_vote_credits_total",
-                help: "Vote credits in the validator's vote account.",
-                // This is a counter due to the way vote credits work in Solana.
-                // The credits only ever go up, they don't reset when a new epoch
-                // starts. Older vote accounts (that have been voting continuously)
-                // will have more vote credits.
-                type_: "counter",
+                help: "Vote credits in the validator's vote account. \
+                       On-chain this value can only increase, but decreases in the observed value can \
+                       happen due to reorgs.",
+                type_: "gauge",
                 metrics: vote_credits_metrics,
             },
         )?;

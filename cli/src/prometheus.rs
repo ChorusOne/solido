@@ -184,8 +184,10 @@ pub fn write_solido_metrics_as_prometheus<W: io::Write>(
         out,
         &MetricFamily {
             name: "solido_fee_treasury_sol_total",
-            help: "Total fees paid to the treasury, in SOL value before conversion to stSOL.",
-            type_: "counter",
+            help: "Total fees paid to the treasury, in SOL value before conversion to stSOL. \
+                   On-chain this value can only increase, but decreases in the observed value can \
+                   happen due to reorgs.",
+            type_: "gauge",
             metrics: vec![Metric::new_sol(metrics.fee_treasury_sol_total).at(at)],
         },
     )?;
@@ -193,8 +195,10 @@ pub fn write_solido_metrics_as_prometheus<W: io::Write>(
         out,
         &MetricFamily {
             name: "solido_fee_treasury_st_sol_total",
-            help: "Total fees paid to the treasury.",
-            type_: "counter",
+            help: "Total fees paid to the treasury. \
+                   On-chain this value can only increase, but decreases in the observed value can \
+                   happen due to reorgs.",
+            type_: "gauge",
             metrics: vec![Metric::new_st_sol(metrics.fee_treasury_st_sol_total).at(at)],
         },
     )?;
@@ -202,8 +206,10 @@ pub fn write_solido_metrics_as_prometheus<W: io::Write>(
         out,
         &MetricFamily {
             name: "solido_fee_validation_sol_total",
-            help: "Total validation fees paid to validators (excluding commission they took), in SOL value before conversion to stSOL.",
-            type_: "counter",
+            help: "Total validation fees paid to validators (excluding commission they took), \
+                   in SOL value before conversion to stSOL. On-chain this value can only increase, \
+                   but decreases in the observed value can happen due to reorgs.",
+            type_: "gauge",
             metrics: vec![Metric::new_sol(metrics.fee_validation_sol_total).at(at)],
         },
     )?;
@@ -211,8 +217,10 @@ pub fn write_solido_metrics_as_prometheus<W: io::Write>(
         out,
         &MetricFamily {
             name: "solido_fee_validation_st_sol_total",
-            help: "Total validation fees paid to validators as stSOL (excluding commission they took).",
-            type_: "counter",
+            help: "Total validation fees paid to validators as stSOL (excluding commission they took). \
+                   On-chain this value can only increase, but decreases in the observed value can \
+                   happen due to reorgs.",
+            type_: "gauge",
             metrics: vec![Metric::new_st_sol(metrics.fee_validation_st_sol_total).at(at)],
         },
     )?;
@@ -220,8 +228,10 @@ pub fn write_solido_metrics_as_prometheus<W: io::Write>(
         out,
         &MetricFamily {
             name: "solido_fee_developer_sol_total",
-            help: "Total fees paid to the developer, in SOL value before conversion to stSOL.",
-            type_: "counter",
+            help: "Total fees paid to the developer, in SOL value before conversion to stSOL. \
+                   On-chain this value can only increase, but decreases in the observed value can \
+                   happen due to reorgs.",
+            type_: "gauge",
             metrics: vec![Metric::new_sol(metrics.fee_developer_sol_total).at(at)],
         },
     )?;
@@ -229,8 +239,10 @@ pub fn write_solido_metrics_as_prometheus<W: io::Write>(
         out,
         &MetricFamily {
             name: "solido_fee_developer_st_sol_total",
-            help: "Total fees paid to the developer.",
-            type_: "counter",
+            help: "Total fees paid to the developer. \
+                   On-chain this value can only increase, but decreases in the observed value can \
+                   happen due to reorgs.",
+            type_: "gauge",
             metrics: vec![Metric::new_st_sol(metrics.fee_developer_st_sol_total).at(at)],
         },
     )?;
@@ -238,8 +250,10 @@ pub fn write_solido_metrics_as_prometheus<W: io::Write>(
         out,
         &MetricFamily {
             name: "solido_st_sol_appreciation_sol_total",
-            help: "Total SOL that went to benefit stSOL holders, i.e. rewards gained by users.",
-            type_: "counter",
+            help: "Total SOL that went to benefit stSOL holders, i.e. rewards gained by users. \
+                   On-chain this value can only increase, but decreases in the observed value can \
+                   happen due to reorgs.",
+            type_: "gauge",
             metrics: vec![Metric::new_sol(metrics.st_sol_appreciation_sol_total).at(at)],
         },
     )?;
