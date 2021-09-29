@@ -891,16 +891,16 @@ impl SolidoState {
         let validator = &self.solido.validators.entries[validator_index];
         let stake_account = &self.validator_stake_accounts[validator_index][0];
 
-        let maximum_unstake = (validator.entry.effective_stake_balance()
-            - MINIMUM_STAKE_ACCOUNT_BALANCE)
-            .expect("Validator should always have the minimum amount.");
+        let maximum_unstake = (stake_account.1.balance.total() - MINIMUM_STAKE_ACCOUNT_BALANCE)
+            .expect("Stake account should always have the minimum amount.");
         // Get the maximum that can be unstaked from the stake account.  The
-        // minimum amongst the value to be unstaked, how much is in the stake
-        // account and the maximum that can be unstaked from the validator.
-        let amount = unstake_amount
-            .min(stake_account.1.balance.total())
-            .min(maximum_unstake);
-        if amount == Lamports(0) {
+        // minimum amongst the value to be unstaked, and the maximum that can be
+        // unstaked from the validator.
+        let amount = unstake_amount.min(maximum_unstake);
+
+        // If the amount unstaked would leave a stake account with less than
+        // `MINIMUM_STAKE_ACCOUNT_BALANCE` we shouldn't unstake it.
+        if amount < MINIMUM_STAKE_ACCOUNT_BALANCE {
             return None;
         }
 

@@ -30,8 +30,13 @@ pub struct Rational {
 
 impl PartialOrd for Rational {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        (self.numerator as f64 / self.denominator as f64)
-            .partial_cmp(&(other.numerator as f64 / other.denominator as f64))
+        if self.denominator == 0 || other.denominator == 0 {
+            None
+        } else {
+            let x = self.numerator as u128 * other.denominator as u128;
+            let y = other.numerator as u128 * self.denominator as u128;
+            Some(x.cmp(&y))
+        }
     }
 }
 
@@ -263,5 +268,37 @@ pub mod test {
 
         // Invalid character.
         assert!(Lamports::from_str("lol, sol").is_err());
+    }
+
+    #[test]
+    fn test_rational_cmp() {
+        // Construct x and y such that x < y.
+        let x = Rational {
+            numerator: 1 << 53,
+            denominator: 1,
+        };
+        let y = Rational {
+            numerator: x.numerator + 1,
+            denominator: x.denominator,
+        };
+        assert_eq!(x.partial_cmp(&y), Some(std::cmp::Ordering::Less));
+    }
+
+    #[test]
+    fn test_division_by_zero_cmp() {
+        let x = Rational {
+            numerator: 1,
+            denominator: 0,
+        };
+        let y = Rational {
+            numerator: x.numerator,
+            denominator: x.denominator + 1,
+        };
+        assert_eq!(x.partial_cmp(&y), None);
+        let y = Rational {
+            numerator: x.numerator,
+            denominator: x.denominator,
+        };
+        assert_eq!(x.partial_cmp(&y), None);
     }
 }

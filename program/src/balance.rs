@@ -102,7 +102,11 @@ pub fn get_target_balance(
     Ok(target_balance)
 }
 
-/// Get the index for the minimum amount.
+/// Get the index of the validator to unstake from, if we need to unstake at all.
+
+/// If any validator is more than threshold away from its target, this function
+/// will try to unstake, and return the index of the validator where unstaking
+/// will have the largest impact.
 pub fn get_unstake_validator_index(
     validators: &Validators,
     target_balance: &[Lamports],
@@ -124,7 +128,7 @@ pub fn get_unstake_validator_index(
                 }
                 Rational {
                     numerator: target_difference,
-                    denominator: validator.entry.effective_stake_balance().0,
+                    denominator: target.0,
                 } >= threshold
             });
 
@@ -132,18 +136,11 @@ pub fn get_unstake_validator_index(
         .entries
         .iter()
         .enumerate()
-        .max_by(|(i, x), (j, y)| {
-            let target_x = x
-                .entry
+        .max_by_key(|(idx, val)| {
+            val.entry
                 .effective_stake_balance()
                 .0
-                .saturating_sub(target_balance[*i].0);
-            let target_y = y
-                .entry
-                .effective_stake_balance()
-                .0
-                .saturating_sub(target_balance[*j].0);
-            target_x.cmp(&target_y)
+                .saturating_sub(target_balance[*idx].0)
         })?;
 
     let amount = validator
@@ -153,7 +150,7 @@ pub fn get_unstake_validator_index(
         .saturating_sub(target_balance[idx].0);
     let ratio = Rational {
         numerator: amount,
-        denominator: validator.entry.effective_stake_balance().0,
+        denominator: target_balance[idx].0,
     };
     if ratio >= threshold || needs_unstake {
         Some((idx, Lamports(amount)))
@@ -422,7 +419,7 @@ mod test {
             &targets,
             Rational {
                 numerator: 1,
-                denominator: 3,
+                denominator: 2,
             },
         );
         assert_eq!(minimum_unstake, None);
