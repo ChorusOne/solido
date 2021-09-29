@@ -286,17 +286,12 @@ impl<'a> Snapshot<'a> {
         *self.sent_transaction = true;
         let signature = self.rpc_client.send_transaction_with_config(
             transaction,
-            // We use commitment level "finalized" for our client, but when we
-            // try to preflight a transaction with the most recent finalized
-            // block hash, we get an error:
-            //
-            //     Transaction simulation failed: Blockhash not found
-            //
-            // To avoid this, preflight the transaction against the latest
-            // known state, which is more recent than the latest finalized
-            // state. We want to preflight against the most recent state anyway,
-            // to be more confident that the transaction does not fail when we
-            // execute it for real.
+            // We want to preflight transactions against the most recent known
+            // state, even if that state has not been confirmed yet. If we
+            // preflight against an older state, it can happen that some
+            // transaction executed after that state, and the preflight succeeds,
+            // but the real execution fails. Using a more recent state for
+            // preflighting reduces this risk.
             RpcSendTransactionConfig {
                 preflight_commitment: Some(CommitmentLevel::Processed),
                 ..RpcSendTransactionConfig::default()

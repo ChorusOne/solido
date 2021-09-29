@@ -97,7 +97,7 @@ def solana(*args: str) -> str:
     """
     Run 'solana' against network.
     """
-    return run('solana', '--url', get_network(), '--commitment', 'finalized', *args)
+    return run('solana', '--url', get_network(), '--commitment', 'confirmed', *args)
 
 
 def spl_token(*args: str) -> str:

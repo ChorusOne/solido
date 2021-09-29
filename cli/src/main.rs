@@ -325,10 +325,16 @@ fn main() {
         get_signer_from_key(opts.keypair.unwrap())
     };
 
-    // We use finalized here to be sure that we never observe rollbacks. In particular,
-    // this ensures that the maintenance daemon never observes vote credits going down.
+    // Use commitment level "confirmed" as a middle ground between getting a recent
+    // state, and not having to wait for a long time for transactions to be confirmed.
+    // This means that we can sometimes read states that do not get finalized, when
+    // there is a reorg. We considered using "finalized" commitment level to avoid
+    // this, but then we have to wait 32 slots after every transaction, and on top
+    // of that we base transactions on old states, which increases the likelihood
+    // of them failing when executed. So we go back to "confirmed" after all. See
+    // also https://github.com/ChorusOne/solido/pull/437.
     let rpc_client =
-        RpcClient::new_with_commitment(opts.cluster.unwrap(), CommitmentConfig::finalized());
+        RpcClient::new_with_commitment(opts.cluster.unwrap(), CommitmentConfig::confirmed());
     let snapshot_client = SnapshotClient::new(rpc_client);
 
     let output_mode = opts.output_mode.unwrap();
