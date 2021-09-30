@@ -190,6 +190,16 @@ def create_vote_account(
         '--commission',
         '100',
     )
+    # Publish validator info for this new validator, because `show-solido`
+    # requires validator info to be present.
+    name = f'Validator for {vote_key_fname}'
+    solana(
+        'validator-info',
+        'publish',
+        '--keypair',
+        validator_key_fname,
+        name,
+    )
     return test_account
 
 
