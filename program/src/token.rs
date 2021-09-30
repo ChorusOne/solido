@@ -282,6 +282,22 @@ pub mod test {
             denominator: x.denominator,
         };
         assert_eq!(x.partial_cmp(&y), Some(std::cmp::Ordering::Less));
+        assert_eq!(y.partial_cmp(&x), Some(std::cmp::Ordering::Greater));
+    }
+
+    #[test]
+    fn test_equal_cmp() {
+        // Construct x and y such that x < y.
+        let x = Rational {
+            numerator: 1,
+            denominator: 1,
+        };
+        let y = Rational {
+            numerator: 1,
+            denominator: 1,
+        };
+        assert_eq!(x.partial_cmp(&y), Some(std::cmp::Ordering::Equal));
+        assert_eq!(y.partial_cmp(&x), Some(std::cmp::Ordering::Equal));
     }
 
     #[test]
@@ -295,10 +311,12 @@ pub mod test {
             denominator: x.denominator + 1,
         };
         assert_eq!(x.partial_cmp(&y), None);
+        assert_eq!(y.partial_cmp(&x), None);
         let y = Rational {
             numerator: x.numerator,
             denominator: x.denominator,
         };
         assert_eq!(x.partial_cmp(&y), None);
+        assert_eq!(y.partial_cmp(&x), None);
     }
 }

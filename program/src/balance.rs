@@ -394,7 +394,7 @@ mod test {
                 denominator: 4,
             },
         );
-        assert_eq!(minimum_unstake, Some((&validators.entries[1], Lamports(4))));
+        assert_eq!(minimum_unstake, Some((1, Lamports(4))));
         let minimum_unstake = get_unstake_validator_index(
             &validators,
             &targets,
@@ -403,7 +403,7 @@ mod test {
                 denominator: 5,
             },
         );
-        assert_eq!(minimum_unstake, Some((&validators.entries[1], Lamports(4))));
+        assert_eq!(minimum_unstake, Some((1, Lamports(4))));
     }
 
     #[test]
@@ -445,6 +445,6 @@ mod test {
                 denominator: 1,
             },
         );
-        assert_eq!(minimum_unstake, Some((&validators.entries[0], Lamports(6))))
+        assert_eq!(minimum_unstake, Some((0, Lamports(6))))
     }
 }
