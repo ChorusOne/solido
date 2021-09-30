@@ -3618,6 +3618,7 @@ dependencies = [
  "solana-clap-utils",
  "solana-cli-config",
  "solana-client",
+ "solana-config-program",
  "solana-logger",
  "solana-program",
  "solana-remote-wallet",

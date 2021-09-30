@@ -41,6 +41,7 @@ use lido::{
 
 use crate::error::MaintenanceError;
 use crate::snapshot::Result;
+use crate::validator_info_utils::ValidatorInfo;
 use crate::{config::PerformMaintenanceOpts, SnapshotConfig};
 
 /// A brief description of the maintenance performed. Not relevant functionally,
@@ -273,6 +274,10 @@ pub struct SolidoState {
     /// votes).
     pub validator_identity_account_balances: Vec<Lamports>,
 
+    /// For each validator, in the same order as in `solido.validators`, holds
+    /// the validator info (name and Keybase username).
+    pub validator_infos: Vec<ValidatorInfo>,
+
     /// For each maintainer, in the same order as in `solido.maintainers`, holds
     /// the number of Lamports in the maintainer's account.
     pub maintainer_balances: Vec<Lamports>,
@@ -341,6 +346,26 @@ fn get_account_balance_except_rent(rent: &Rent, account: &Account) -> Lamports {
         .expect("Shouldn't happen. The account balance should be at least its rent-exempt balance.")
 }
 
+/// Given a public validator name, return one suitable for use in metrics.
+fn sanitize_validator_name(name: &str) -> String {
+    // Lido policy is that validator names should start with "Lido / ", so that
+    // adds no information, strip it here to leave more space for graphs in
+    // dashboards, and not waste so much space on the redundant part of the name.
+    match name.strip_prefix("Lido / ") {
+        // I don't want distracting emojis in my Grafana dashboards, so remove
+        // code points in the Supplementary Multilingual Plane and beyond. This
+        // strips emojis and dingbats while leaving letters and punctuation of
+        // all contemporary languages.
+        Some(suffix) => suffix
+            .chars()
+            .filter(|&ch| ch < '\u{10000}')
+            .collect::<String>()
+            .trim()
+            .to_string(),
+        None => format!("INVALID: {}", name),
+    }
+}
+
 impl SolidoState {
     // Set the minimum withdraw from stake accounts and validator's vote
     // accounts, the cost of validating signatures seems to dominate the
@@ -370,20 +395,18 @@ impl SolidoState {
         let mut validator_vote_account_balances = Vec::new();
         let mut validator_identity_account_balances = Vec::new();
         let mut validator_vote_accounts = Vec::new();
+        let mut validator_infos = Vec::new();
         for validator in solido.validators.entries.iter() {
             let vote_account = config.client.get_account(&validator.pubkey)?;
-            let vote_state = VoteState::deserialize(vote_account.data()).map_err(|_| {
-                MaintenanceError::new(format!(
-                    "Failed to deserialize vote account at {}.",
-                    validator.pubkey
-                ))
-            })?;
+            let vote_state = config.client.get_vote_account(&validator.pubkey)?;
+            let validator_info = config.client.get_validator_info(&vote_state.node_pubkey)?;
             let identity_account = config.client.get_account(&vote_state.node_pubkey)?;
             validator_vote_accounts.push(vote_state);
             validator_vote_account_balances
                 .push(get_account_balance_except_rent(&rent, vote_account));
             validator_identity_account_balances
                 .push(get_account_balance_except_rent(&rent, identity_account));
+            validator_infos.push(validator_info);
 
             validator_stake_accounts.push(get_validator_stake_accounts(
                 config,
@@ -427,6 +450,7 @@ impl SolidoState {
             validator_vote_account_balances,
             validator_vote_accounts,
             validator_identity_account_balances,
+            validator_infos,
             maintainer_balances,
             reserve_address,
             reserve_account: reserve_account.clone(),
@@ -946,7 +970,7 @@ impl SolidoState {
         // fees.
         let mut unclaimed_fees = StLamports(0);
 
-        for (((validator, stake_accounts), vote_account), identity_account_balance) in self
+        for ((((validator, stake_accounts), vote_account), identity_account_balance), info) in self
             .solido
             .validators
             .entries
@@ -954,16 +978,49 @@ impl SolidoState {
             .zip(self.validator_stake_accounts.iter())
             .zip(self.validator_vote_accounts.iter())
             .zip(self.validator_identity_account_balances.iter())
+            .zip(self.validator_infos.iter())
         {
+            // Helper struct to add the right labels to our metrics. Ideally we
+            // would do this in a closure, but it's not possible to add the required
+            // lifetime annotations that way, so we manually define the closure
+            // struct here.
+            struct MetricAnnotator {
+                produced_at: SystemTime,
+                vote_account: String,
+                name: String,
+                keybase_username: String,
+            }
+
+            impl MetricAnnotator {
+                fn add_labels<'a>(&self, metric: Metric<'a>) -> Metric<'a> {
+                    metric
+                        .at(self.produced_at)
+                        .with_label("vote_account", self.vote_account.clone())
+                        .with_label("validator_name", self.name.clone())
+                        .with_label("validator_keybase", self.keybase_username.clone())
+                }
+            }
+
+            let annotator = MetricAnnotator {
+                produced_at: self.produced_at,
+                vote_account: validator.pubkey.to_string(),
+                name: sanitize_validator_name(&info.name),
+                keybase_username: info
+                    .keybase_username
+                    .as_ref()
+                    .expect("All Lido validators should have a Keybase username set.")
+                    .to_string(),
+            };
+
             let stake_balance: StakeBalance = stake_accounts
                 .iter()
                 .map(|(_addr, stake_account)| stake_account.balance)
                 .sum();
+
             let metric = |amount: Lamports, status: &'static str| {
-                Metric::new_sol(amount)
-                    .at(self.produced_at)
+                annotator
+                    .add_labels(Metric::new_sol(amount))
                     .with_label("status", status.to_string())
-                    .with_label("vote_account", validator.pubkey.to_string())
             };
             balance_sol_metrics.push(metric(stake_balance.inactive, "inactive"));
             balance_sol_metrics.push(metric(stake_balance.activating, "activating"));
@@ -973,26 +1030,14 @@ impl SolidoState {
             unclaimed_fees = (unclaimed_fees + validator.entry.fee_credit)
                 .expect("There shouldn't be so many fees to cause stSOL overflow.");
 
-            last_voted_slot_metrics.push(
-                Metric::new(vote_account.last_timestamp.slot)
-                    .at(self.produced_at)
-                    .with_label("vote_account", validator.pubkey.to_string()),
-            );
+            last_voted_slot_metrics
+                .push(annotator.add_labels(Metric::new(vote_account.last_timestamp.slot)));
             last_voted_timestamp_metrics.push(
-                Metric::new(vote_account.last_timestamp.timestamp as u64)
-                    .at(self.produced_at)
-                    .with_label("vote_account", validator.pubkey.to_string()),
+                annotator.add_labels(Metric::new(vote_account.last_timestamp.timestamp as u64)),
             );
-            identity_account_balance_metrics.push(
-                Metric::new_sol(*identity_account_balance)
-                    .at(self.produced_at)
-                    .with_label("vote_account", validator.pubkey.to_string()),
-            );
-            vote_credits_metrics.push(
-                Metric::new(vote_account.credits())
-                    .at(self.produced_at)
-                    .with_label("vote_account", validator.pubkey.to_string()),
-            );
+            identity_account_balance_metrics
+                .push(annotator.add_labels(Metric::new_sol(*identity_account_balance)));
+            vote_credits_metrics.push(annotator.add_labels(Metric::new(vote_account.credits())));
         }
 
         write_metric(
@@ -1322,6 +1367,7 @@ mod test {
             validator_vote_account_balances: vec![],
             validator_vote_accounts: vec![],
             validator_identity_account_balances: vec![],
+            validator_infos: vec![],
             maintainer_balances: vec![],
             st_sol_mint: Mint::default(),
             reserve_address: Pubkey::new_unique(),

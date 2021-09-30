@@ -33,6 +33,7 @@ use crate::{
     multisig::{get_multisig_program_address, propose_instruction, ProposeInstructionOutput},
     snapshot::Result,
     spl_token_utils::{push_create_spl_token_account, push_create_spl_token_mint},
+    validator_info_utils::ValidatorInfo,
     SnapshotClientConfig, SnapshotConfig,
 };
 
@@ -344,6 +345,12 @@ pub struct ShowSolidoOutput {
 
     #[serde(serialize_with = "serialize_b58")]
     pub rewards_withdraw_authority: Pubkey,
+
+    /// Identity account address for all validators in the same order as `solido.validators`.
+    pub validator_identities: Vec<Pubkey>,
+
+    /// Contains validator info in the same order as `solido.validators`.
+    pub validator_infos: Vec<ValidatorInfo>,
 }
 
 impl fmt::Display for ShowSolidoOutput {
@@ -482,18 +489,36 @@ impl fmt::Display for ShowSolidoOutput {
             self.solido.validators.len(),
             self.solido.validators.maximum_entries
         )?;
-        for pe in &self.solido.validators.entries {
+        for ((pe, identity), info) in self
+            .solido
+            .validators
+            .entries
+            .iter()
+            .zip(&self.validator_identities)
+            .zip(&self.validator_infos)
+        {
             writeln!(
                 f,
                 "\n  - \
+                Name:                      {}\n    \
+                Keybase username:          {}\n    \
                 Vote account:              {}\n    \
+                Identity account:          {}\n    \
                 Fee address:               {}\n    \
+                Active:                    {}\n    \
                 Unclaimed fee:             {}\n    \
                 Stake in all accounts:     {}\n    \
                 Stake in stake accounts:   {}\n    \
                 Stake in unstake accounts: {}",
+                info.name,
+                match &info.keybase_username {
+                    Some(username) => &username[..],
+                    None => "not set",
+                },
                 pe.pubkey,
+                identity,
                 pe.entry.fee_address,
+                pe.entry.active,
                 pe.entry.fee_credit,
                 pe.entry.stake_accounts_balance,
                 pe.entry.effective_stake_balance(),
@@ -565,10 +590,21 @@ pub fn command_show_solido(
     let rewards_withdraw_authority =
         lido.get_rewards_withdraw_authority(opts.solido_program_id(), opts.solido_address())?;
 
+    let mut validator_identities = Vec::new();
+    let mut validator_infos = Vec::new();
+    for validator in lido.validators.entries.iter() {
+        let vote_state = config.client.get_vote_account(&validator.pubkey)?;
+        validator_identities.push(vote_state.node_pubkey);
+        let info = config.client.get_validator_info(&vote_state.node_pubkey)?;
+        validator_infos.push(info);
+    }
+
     Ok(ShowSolidoOutput {
         solido_program_id: *opts.solido_program_id(),
         solido_address: *opts.solido_address(),
         solido: lido,
+        validator_identities,
+        validator_infos,
         reserve_account,
         stake_authority,
         mint_authority,
