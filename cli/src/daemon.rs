@@ -107,6 +107,8 @@ impl MaintenanceMetrics {
                         .with_label("operation", "UnstakeFromInactiveValidator".to_string()),
                     Metric::new(self.transactions_remove_validator)
                         .with_label("operation", "RemoveValidator".to_string()),
+                    Metric::new(self.transactions_unstake_from_active_validator)
+                        .with_label("operation", "UnstakeFromActiveValidator".to_string()),
                 ],
             },
         )?;

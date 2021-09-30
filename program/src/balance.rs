@@ -132,25 +132,27 @@ pub fn get_unstake_validator_index(
                 } >= threshold
             });
 
-    let (idx, validator) = validators
+    let ((idx, validator), target) = validators
         .entries
         .iter()
         .enumerate()
-        .max_by_key(|(idx, val)| {
-            val.entry
+        .zip(target_balance)
+        .max_by_key(|((_idx, validator), target)| {
+            validator
+                .entry
                 .effective_stake_balance()
                 .0
-                .saturating_sub(target_balance[*idx].0)
+                .saturating_sub(target.0)
         })?;
 
     let amount = validator
         .entry
         .effective_stake_balance()
         .0
-        .saturating_sub(target_balance[idx].0);
+        .saturating_sub(target.0);
     let ratio = Rational {
         numerator: amount,
-        denominator: target_balance[idx].0,
+        denominator: target.0,
     };
     if ratio >= threshold || needs_unstake {
         Some((idx, Lamports(amount)))
@@ -392,7 +394,7 @@ mod test {
                 denominator: 4,
             },
         );
-        assert_eq!(minimum_unstake, Some((1, Lamports(4))));
+        assert_eq!(minimum_unstake, Some((&validators.entries[1], Lamports(4))));
         let minimum_unstake = get_unstake_validator_index(
             &validators,
             &targets,
@@ -401,7 +403,7 @@ mod test {
                 denominator: 5,
             },
         );
-        assert_eq!(minimum_unstake, Some((1, Lamports(4))));
+        assert_eq!(minimum_unstake, Some((&validators.entries[1], Lamports(4))));
     }
 
     #[test]
@@ -443,6 +445,6 @@ mod test {
                 denominator: 1,
             },
         );
-        assert_eq!(minimum_unstake, Some((0, Lamports(6))))
+        assert_eq!(minimum_unstake, Some((&validators.entries[0], Lamports(6))))
     }
 }
