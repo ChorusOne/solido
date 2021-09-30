@@ -23,13 +23,16 @@
 //! rare, and when they do happen, they shouldn’t happen repeatedly.
 
 use std::collections::{HashMap, HashSet};
+use std::time::Duration;
 
 use anchor_lang::AccountDeserialize;
 use solana_client::client_error::{ClientError, ClientErrorKind};
 use solana_client::rpc_client::RpcClient;
+use solana_client::rpc_config::RpcSendTransactionConfig;
 use solana_client::rpc_request::RpcError;
 use solana_sdk::account::Account;
 use solana_sdk::borsh::try_from_slice_unchecked;
+use solana_sdk::commitment_config::CommitmentLevel;
 use solana_sdk::program_pack::{IsInitialized, Pack};
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::Signature;
@@ -281,7 +284,43 @@ impl<'a> Snapshot<'a> {
         transaction: &Transaction,
     ) -> solana_client::client_error::Result<Signature> {
         *self.sent_transaction = true;
-        self.rpc_client.send_and_confirm_transaction(transaction)
+        let signature = self.rpc_client.send_transaction_with_config(
+            transaction,
+            // We want to preflight transactions against the most recent known
+            // state, even if that state has not been confirmed yet. If we
+            // preflight against an older state, it can happen that some
+            // transaction executed after that state, and the preflight succeeds,
+            // but the real execution fails. Using a more recent state for
+            // preflighting reduces this risk.
+            RpcSendTransactionConfig {
+                preflight_commitment: Some(CommitmentLevel::Processed),
+                ..RpcSendTransactionConfig::default()
+            },
+        )?;
+
+        // Beware of the Solana footgun: `confirm_transaction` is something
+        // completely different from `confirm_transaction_with_spinner`. The
+        // former returns a boolean that indicates whether the transaction is
+        // confirmed, the latter waits until the transaction is confirmed (and
+        // prints the spinner). So here we have to wait manually.
+        for _ in 0..32 {
+            let is_confirmed = self.rpc_client.confirm_transaction(&signature)?;
+            if is_confirmed {
+                return Ok(signature);
+            }
+            // Blocks are finalized after there are 32 blocks on top, so with a
+            // block time of 550ms, waiting 32 seconds should be plenty to wait
+            // for confirmation.
+            std::thread::sleep(Duration::from_secs(1));
+        }
+
+        // RpcError::ForUser is also what `confirm_transaction_with_spinner`
+        // returns if it fails to confirm within a certain time.
+        return Err(RpcError::ForUser(format!(
+            "Failed to confirm transaction {} within 32 seconds.",
+            signature,
+        ))
+        .into());
     }
 
     /// Send a transaction, show a spinner on stdout.
@@ -294,8 +333,20 @@ impl<'a> Snapshot<'a> {
         transaction: &Transaction,
     ) -> solana_client::client_error::Result<Signature> {
         *self.sent_transaction = true;
-        self.rpc_client
-            .send_and_confirm_transaction_with_spinner(transaction)
+        let signature = self.rpc_client.send_transaction_with_config(
+            transaction,
+            // See also the comment in `send_and_confirm_transaction`.
+            RpcSendTransactionConfig {
+                preflight_commitment: Some(CommitmentLevel::Processed),
+                ..RpcSendTransactionConfig::default()
+            },
+        )?;
+        self.rpc_client.confirm_transaction_with_spinner(
+            &signature,
+            &transaction.message.recent_blockhash,
+            self.rpc_client.commitment(),
+        )?;
+        Ok(signature)
     }
 }
 
