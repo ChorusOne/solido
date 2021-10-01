@@ -11,6 +11,7 @@ use itertools::izip;
 
 use lido::processor::StakeType;
 use lido::token;
+use lido::token::Rational;
 use lido::REWARDS_WITHDRAW_AUTHORITY;
 use serde::Serialize;
 use solana_program::program_pack::Pack;
@@ -103,21 +104,47 @@ pub enum MaintenanceOutput {
         to_stake_seed: u64,
     },
 
-    UnstakeFromInactiveValidator {
-        #[serde(serialize_with = "serialize_b58")]
-        validator_vote_account: Pubkey,
-        #[serde(serialize_with = "serialize_b58")]
-        from_stake_account: Pubkey,
-        #[serde(serialize_with = "serialize_b58")]
-        to_unstake_account: Pubkey,
-        from_stake_seed: u64,
-        to_unstake_seed: u64,
-        amount: Lamports,
-    },
+    UnstakeFromInactiveValidator(Unstake),
     RemoveValidator {
         #[serde(serialize_with = "serialize_b58")]
         validator_vote_account: Pubkey,
     },
+    UnstakeFromActiveValidator(Unstake),
+}
+
+#[derive(Debug, Eq, PartialEq, Serialize)]
+pub struct Unstake {
+    #[serde(serialize_with = "serialize_b58")]
+    validator_vote_account: Pubkey,
+    #[serde(serialize_with = "serialize_b58")]
+    from_stake_account: Pubkey,
+    #[serde(serialize_with = "serialize_b58")]
+    to_unstake_account: Pubkey,
+    from_stake_seed: u64,
+    to_unstake_seed: u64,
+    amount: Lamports,
+}
+
+impl fmt::Display for Unstake {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(
+            f,
+            "  Validator vote account: {}",
+            self.validator_vote_account
+        )?;
+        writeln!(
+            f,
+            "  Stake account:               {}, seed: {}",
+            self.from_stake_account, self.from_stake_seed
+        )?;
+        writeln!(
+            f,
+            "  Unstake account:             {}, seed: {}",
+            self.to_unstake_account, self.to_unstake_seed
+        )?;
+        writeln!(f, "  Amount:              {}", self.amount)?;
+        Ok(())
+    }
 }
 
 impl fmt::Display for MaintenanceOutput {
@@ -195,27 +222,11 @@ impl fmt::Display for MaintenanceOutput {
                     to_stake, to_stake_seed
                 )?;
             }
-            MaintenanceOutput::UnstakeFromInactiveValidator {
-                validator_vote_account,
-                from_stake_account,
-                to_unstake_account,
-                from_stake_seed,
-                to_unstake_seed,
-                amount,
-            } => {
-                writeln!(f, "Unstake from inactive validator")?;
-                writeln!(f, "  Validator vote account: {}", validator_vote_account)?;
-                writeln!(
-                    f,
-                    "  Stake account:               {}, seed: {}",
-                    from_stake_account, from_stake_seed
-                )?;
-                writeln!(
-                    f,
-                    "  Unstake account:             {}, seed: {}",
-                    to_unstake_account, to_unstake_seed
-                )?;
-                writeln!(f, "  Amount:              {}", amount)?;
+            MaintenanceOutput::UnstakeFromInactiveValidator(unstake) => {
+                writeln!(f, "Unstake from inactive validator\n{}", unstake)?;
+            }
+            MaintenanceOutput::UnstakeFromActiveValidator(unstake) => {
+                writeln!(f, "Unstake from active validator\n{}", unstake)?;
             }
             MaintenanceOutput::RemoveValidator {
                 validator_vote_account,
@@ -371,6 +382,12 @@ impl SolidoState {
     // accounts, the cost of validating signatures seems to dominate the
     // transaction cost.
     const MINIMUM_WITHDRAW_AMOUNT: Lamports = Lamports(DEFAULT_TARGET_LAMPORTS_PER_SIGNATURE * 100);
+
+    // Threshold that will trigger unstake on validators.
+    const UNBALANCE_THRESHOLD: Rational = Rational {
+        numerator: 1,
+        denominator: 10,
+    };
     /// Read the state from the on-chain data.
     pub fn new(
         config: &mut SnapshotConfig,
@@ -555,6 +572,38 @@ impl SolidoState {
         Some((instruction, task))
     }
 
+    /// Returns a tuple with the unstake account address and the instruction to
+    /// unstake `amount` from it.
+    pub fn get_unstake_instruction(
+        &self,
+        validator: &PubkeyAndEntry<Validator>,
+        stake_account: &(Pubkey, StakeAccount),
+        amount: Lamports,
+    ) -> (Pubkey, Instruction) {
+        let (validator_unstake_account, _) = validator.find_stake_account_address(
+            &self.solido_program_id,
+            &self.solido_address,
+            validator.entry.unstake_seeds.end,
+            StakeType::Unstake,
+        );
+        let (stake_account_address, _) = stake_account;
+        (
+            validator_unstake_account,
+            lido::instruction::unstake(
+                &self.solido_program_id,
+                &lido::instruction::UnstakeAccountsMeta {
+                    lido: self.solido_address,
+                    maintainer: self.maintainer_address,
+                    validator_vote_account: validator.pubkey,
+                    source_stake_account: *stake_account_address,
+                    destination_unstake_account: validator_unstake_account,
+                    stake_authority: self.get_stake_authority(),
+                },
+                amount,
+            ),
+        )
+    }
+
     /// If there is a validator being deactivated, try to unstake its funds.
     pub fn try_unstake_from_inactive_validator(&self) -> Option<(Instruction, MaintenanceOutput)> {
         for (validator, stake_accounts) in self
@@ -579,37 +628,22 @@ impl SolidoState {
             if stake_accounts.first().is_none() {
                 continue;
             }
-            let (validator_unstake_account, _) = validator.find_stake_account_address(
-                &self.solido_program_id,
-                &self.solido_address,
-                validator.entry.unstake_seeds.end,
-                StakeType::Unstake,
-            );
             let (stake_account_address, stake_account_balance) = stake_accounts[0];
-            let task = MaintenanceOutput::UnstakeFromInactiveValidator {
+            let (unstake_account, unstake_instruction) = self.get_unstake_instruction(
+                validator,
+                &stake_accounts[0],
+                stake_account_balance.balance.total(),
+            );
+            let task = MaintenanceOutput::UnstakeFromInactiveValidator(Unstake {
                 validator_vote_account: validator.pubkey,
                 from_stake_account: stake_account_address,
-                to_unstake_account: validator_unstake_account,
+                to_unstake_account: unstake_account,
                 from_stake_seed: validator.entry.stake_seeds.begin,
                 to_unstake_seed: validator.entry.unstake_seeds.end,
                 amount: stake_account_balance.balance.total(),
-            };
+            });
 
-            return Some((
-                lido::instruction::unstake(
-                    &self.solido_program_id,
-                    &lido::instruction::UnstakeAccountsMeta {
-                        lido: self.solido_address,
-                        maintainer: self.maintainer_address,
-                        validator_vote_account: validator.pubkey,
-                        source_stake_account: stake_account_address,
-                        destination_unstake_account: validator_unstake_account,
-                        stake_authority: self.get_stake_authority(),
-                    },
-                    stake_account_balance.balance.total(),
-                ),
-                task,
-            ));
+            return Some((unstake_instruction, task));
         }
         None
     }
@@ -858,6 +892,53 @@ impl SolidoState {
         }
 
         None
+    }
+
+    /// Unstake from active validators in order to rebalance validators.
+    pub fn try_unstake_from_active_validators(&self) -> Option<(Instruction, MaintenanceOutput)> {
+        // Return None if there's no active validator to unstake from.
+        self.solido.validators.iter_active().next()?;
+
+        // Get the target for each validator. Undelegated Lamports can be
+        // sent when staking with validators.
+        let targets = lido::balance::get_target_balance(
+            self.get_effective_reserve(),
+            &self.solido.validators,
+        )
+        .expect("Failed to compute target balance.");
+
+        let (validator_index, unstake_amount) = lido::balance::get_unstake_validator_index(
+            &self.solido.validators,
+            &targets,
+            SolidoState::UNBALANCE_THRESHOLD,
+        )?;
+        let validator = &self.solido.validators.entries[validator_index];
+        let stake_account = &self.validator_stake_accounts[validator_index][0];
+
+        let maximum_unstake = (stake_account.1.balance.total() - MINIMUM_STAKE_ACCOUNT_BALANCE)
+            .expect("Stake account should always have the minimum amount.");
+        // Get the maximum that can be unstaked from the stake account.  The
+        // minimum amongst the value to be unstaked, and the maximum that can be
+        // unstaked from the validator.
+        let amount = unstake_amount.min(maximum_unstake);
+
+        // If the amount unstaked would leave a stake account with less than
+        // `MINIMUM_STAKE_ACCOUNT_BALANCE` we shouldn't unstake it.
+        if amount < MINIMUM_STAKE_ACCOUNT_BALANCE {
+            return None;
+        }
+
+        let (unstake_account, instruction) =
+            self.get_unstake_instruction(validator, stake_account, amount);
+        let task = MaintenanceOutput::UnstakeFromActiveValidator(Unstake {
+            validator_vote_account: validator.pubkey,
+            from_stake_account: stake_account.0,
+            to_unstake_account: unstake_account,
+            from_stake_seed: validator.entry.stake_seeds.begin,
+            to_unstake_seed: validator.entry.unstake_seeds.end,
+            amount,
+        });
+        Some((instruction, task))
     }
 
     /// Write metrics about the current Solido instance in Prometheus format.
@@ -1322,6 +1403,7 @@ pub fn try_perform_maintenance(
         // Same for updating the validator balance.
         .or_else(|| state.try_withdraw_inactive_stake())
         .or_else(|| state.try_stake_deposit())
+        .or_else(|| state.try_unstake_from_active_validators())
         .or_else(|| state.try_claim_validator_fee())
         .or_else(|| state.try_remove_validator());
 

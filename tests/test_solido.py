@@ -30,6 +30,8 @@ from util import (
     spl_token,
 )
 
+from typing import Any, Dict, NamedTuple, Tuple
+
 # We start by generating an account that we will need later. We put the tests
 # keys in a directory where we can .gitignore them, so they don't litter the
 # working directory so much.
@@ -211,46 +213,68 @@ assert solido_instance['solido']['reward_distribution'] == {
     'st_sol_appreciation': 90,
 }
 
-print('\nAdding a validator ...')
 validator_fee_account_owner = create_test_account(
     'tests/.keys/validator-token-account-key.json'
 )
+
 print(f'> Validator token account owner: {validator_fee_account_owner}')
 
-validator = create_test_account('tests/.keys/validator-account-key.json')
-
-validator_vote_account = create_vote_account(
-    'tests/.keys/validator-vote-account-key.json',
-    validator.keypair_path,
-    solido_instance['rewards_withdraw_authority'],
-)
-print(f'> Creating validator vote account {validator_vote_account}')
-
-print(f'> Creating validator token account with owner {validator_fee_account_owner}')
-
 # Create SPL token
-validator_fee_account = create_spl_token_account(
-    'tests/.keys/validator-token-account-key.json', st_sol_mint_account
+fee_account = create_spl_token_account(
+    f'tests/.keys/validator-token-account-key.json', st_sol_mint_account
 )
-print(f'> Validator stSol token account: {validator_fee_account}')
+print(f'> Validator stSol token account: {fee_account}')
+
+
+class Validator(NamedTuple):
+    account: TestAccount
+    vote_account: TestAccount
+    fee_account: str
+
+
+def add_validator(
+    keypath_account: str, keypath_vote: str
+) -> Tuple[Validator, Dict[str, Any]]:
+    print('\nAdding a validator ...')
+    account = create_test_account(f'tests/.keys/{keypath_account}.json')
+    vote_account = create_vote_account(
+        f'tests/.keys/{keypath_vote}.json',
+        account.keypair_path,
+        solido_instance['rewards_withdraw_authority'],
+    )
+    print(f'> Creating validator vote account {vote_account}')
+    print(
+        f'> Creating validator token account with owner {validator_fee_account_owner}'
+    )
+
+    validator = Validator(
+        account=account, vote_account=vote_account, fee_account=fee_account
+    )
+
+    transaction_result = solido(
+        'add-validator',
+        '--multisig-program-id',
+        multisig_program_id,
+        '--solido-program-id',
+        solido_program_id,
+        '--solido-address',
+        solido_address,
+        '--validator-vote-account',
+        vote_account.pubkey,
+        '--validator-fee-account',
+        fee_account,
+        '--multisig-address',
+        multisig_instance,
+        keypair_path=test_addrs[1].keypair_path,
+    )
+    return (validator, transaction_result)
+
 
 print('> Call function to add validator')
-transaction_result = solido(
-    'add-validator',
-    '--multisig-program-id',
-    multisig_program_id,
-    '--solido-program-id',
-    solido_program_id,
-    '--solido-address',
-    solido_address,
-    '--validator-vote-account',
-    validator_vote_account.pubkey,
-    '--validator-fee-account',
-    validator_fee_account,
-    '--multisig-address',
-    multisig_instance,
-    keypair_path=test_addrs[1].keypair_path,
+(validator, transaction_result) = add_validator(
+    'validator-account-key', 'validator-vote-account-key'
 )
+
 transaction_address = transaction_result['transaction_address']
 transaction_status = multisig(
     'show-transaction',
@@ -298,10 +322,10 @@ solido_instance = solido(
 )
 
 assert solido_instance['solido']['validators']['entries'][0] == {
-    'pubkey': validator_vote_account.pubkey,
+    'pubkey': validator.vote_account.pubkey,
     'entry': {
         'fee_credit': 0,
-        'fee_address': validator_fee_account,
+        'fee_address': validator.fee_account,
         'stake_seeds': {
             'begin': 0,
             'end': 0,
@@ -442,7 +466,7 @@ def deposit(lamports: int, expect_created_token_account: bool = False) -> None:
     )
 
 
-deposit(lamports=1_000_000_000, expect_created_token_account=True)
+deposit(lamports=3_000_000_000, expect_created_token_account=True)
 
 print('\nRunning maintenance ...')
 result = solido(
@@ -455,8 +479,8 @@ result = solido(
 )
 expected_result = {
     'StakeDeposit': {
-        'validator_vote_account': validator_vote_account.pubkey,
-        'amount_lamports': int(1.0e9),
+        'validator_vote_account': validator.vote_account.pubkey,
+        'amount_lamports': int(3.0e9),
     }
 }
 stake_account_address = result['StakeDeposit']['stake_account']
@@ -464,7 +488,7 @@ del result['StakeDeposit'][
     'stake_account'
 ]  # This one we can't easily predict, don't compare it.
 assert result == expected_result, f'\nExpected: {expected_result}\nActual:   {result}'
-print(f'> Staked deposit with {validator_vote_account}.')
+print(f'> Staked deposit with {validator.vote_account}.')
 
 print(
     '\nSimulating 0.0005 SOL deposit (too little to stake), then running maintenance ...'
@@ -484,6 +508,50 @@ result = solido(
 assert result is None, f'Huh, perform-maintenance performed {result}'
 print('> There was nothing to do, as expected.')
 
+# Adding another validator
+print('\nAdd another validator')
+(validator_1, transaction_result) = add_validator(
+    'validator-account-key-1',
+    'validator-vote-account-key-1',
+)
+
+transaction_address = transaction_result['transaction_address']
+transaction_status = multisig(
+    'show-transaction',
+    '--multisig-program-id',
+    multisig_program_id,
+    '--solido-program-id',
+    solido_program_id,
+    '--transaction-address',
+    transaction_address,
+)
+approve_and_execute(transaction_address, test_addrs[0])
+
+# Should unstake 1/2 (1.5 - 0.0005/2 Sol) of the validator's balance.
+result = solido(
+    'perform-maintenance',
+    '--solido-address',
+    solido_address,
+    '--solido-program-id',
+    solido_program_id,
+    keypair_path=maintainer.keypair_path,
+)
+
+# V0:       3
+# V1:       0
+# Reserve:  0.0005
+
+del result['UnstakeFromActiveValidator']['from_stake_account']
+del result['UnstakeFromActiveValidator']['to_unstake_account']
+expected_result = {
+    'UnstakeFromActiveValidator': {
+        'validator_vote_account': validator.vote_account.pubkey,
+        'from_stake_seed': 0,
+        'to_unstake_seed': 0,
+        'amount': 1_499_750_000,  # 1.5 Sol - 0.0005 / 2
+    }
+}
+assert result == expected_result, f'\nExpected: {expected_result}\nActual:   {result}'
 
 # By donating to the stake account, we trigger maintenance to run WithdrawInactiveStake.
 print(
@@ -500,11 +568,19 @@ result = solido(
     keypair_path=maintainer.keypair_path,
 )
 assert 'WithdrawInactiveStake' in result
-assert result['WithdrawInactiveStake'] == {
-    'validator_vote_account': validator_vote_account.pubkey,
-    'expected_difference_stake_lamports': 100_000_000,  # We donated 0.1 SOL.
-    'unstake_withdrawn_to_reserve_lamports': 0,  # Nothing was unstaked.
+expected_result = {
+    'WithdrawInactiveStake': {
+        'validator_vote_account': validator.vote_account.pubkey,
+        'expected_difference_stake_lamports': 100_000_000,  # We donated 0.1 SOL.
+        'unstake_withdrawn_to_reserve_lamports': 1_499_750_000,  # Amount that was unstaked for the newcomming validator.
+    }
 }
+
+# V0:       1.500250000
+# V1:       0 Sol
+# Reserve:  1.600250000 (1.500250000 + 0.1)
+
+assert result == expected_result, f'\nExpected: {expected_result}\nActual:   {result}'
 
 print('> Performed WithdrawInactiveStake as expected.')
 
@@ -514,7 +590,12 @@ reserve_account: str = solido_instance['reserve_account']
 solana('transfer', '--allow-unfunded-recipient', reserve_account, '1.0')
 print(f'> Funded reserve {reserve_account} with 1.0 SOL')
 
+# V0:       1.500250000
+# V1:       0 Sol
+# Reserve:  2.600250000 (1.500250000 + 0.1 + 1)
+
 print('\nRunning maintenance ...')
+
 result = solido(
     'perform-maintenance',
     '--solido-address',
@@ -523,16 +604,31 @@ result = solido(
     solido_program_id,
     keypair_path=maintainer.keypair_path,
 )
+
+del result['StakeDeposit']['stake_account']
 expected_result = {
     'StakeDeposit': {
-        'validator_vote_account': validator_vote_account.pubkey,
-        # We have 1.0 SOL from the true deposit, and 1.0 donated.
-        'amount_lamports': int(2.0e9),
+        'validator_vote_account': validator_1.vote_account.pubkey,
+        'amount_lamports': 2_050_250_000,  # (1.500250000 + 2.600250000) / 2
     }
 }
-print('> Staked as expected.')
+assert result == expected_result, f'\nExpected: {expected_result}\nActual:   {result}'
+print('> Deposited to the second validator, as expected.')
 
-print(f'\nDeactivating validator {validator_vote_account.pubkey} ...')
+print('\nRunning maintenance (should be no-op) ...')
+result = solido(
+    'perform-maintenance',
+    '--solido-address',
+    solido_address,
+    '--solido-program-id',
+    solido_program_id,
+    keypair_path=maintainer.keypair_path,
+)
+
+assert result is None, f'Huh, perform-maintenance performed {result}'
+print('> There was nothing to do, as expected.')
+
+print(f'\nDeactivating validator {validator.vote_account.pubkey} ...')
 transaction_result = solido(
     'deactivate-validator',
     '--multisig-program-id',
@@ -544,7 +640,7 @@ transaction_result = solido(
     '--solido-address',
     solido_address,
     '--validator-vote-account',
-    validator_vote_account.pubkey,
+    validator.vote_account.pubkey,
     keypair_path=test_addrs[0].keypair_path,
 )
 transaction_address = transaction_result['transaction_address']
@@ -590,10 +686,10 @@ del result['UnstakeFromInactiveValidator']['from_stake_account']
 del result['UnstakeFromInactiveValidator']['to_unstake_account']
 expected_result = {
     'UnstakeFromInactiveValidator': {
-        'validator_vote_account': validator_vote_account.pubkey,
+        'validator_vote_account': validator.vote_account.pubkey,
         'from_stake_seed': 0,
-        'to_unstake_seed': 0,
-        'amount': 2100500000,
+        'to_unstake_seed': 1,
+        'amount': 1_500_250_000,
     }
 }
 assert result == expected_result, f'\nExpected: {expected_result}\nActual:   {result}'
@@ -608,7 +704,8 @@ solido_instance = solido(
 # Should have bumped the validator's `stake_seeds` and `unstake_seeds`.
 val = solido_instance['solido']['validators']['entries'][0]['entry']
 assert val['stake_seeds'] == {'begin': 1, 'end': 1}
-assert val['unstake_seeds'] == {'begin': 0, 'end': 1}
+assert val['unstake_seeds'] == {'begin': 1, 'end': 2}
+
 
 print('\nRunning maintenance (should withdraw from validator\'s unstake account) ...')
 result = solido(
@@ -621,12 +718,29 @@ result = solido(
 )
 expected_result = {
     'WithdrawInactiveStake': {
-        'validator_vote_account': validator_vote_account.pubkey,
+        'validator_vote_account': validator.vote_account.pubkey,
         'expected_difference_stake_lamports': 0,
-        'unstake_withdrawn_to_reserve_lamports': 2100500000,
+        'unstake_withdrawn_to_reserve_lamports': 1_500_250_000,
     }
 }
 assert result == expected_result, f'\nExpected: {expected_result}\nActual:   {result}'
+
+print('\nRunning maintenance (should stake deposit to the second validator) ...')
+result = solido(
+    'perform-maintenance',
+    '--solido-address',
+    solido_address,
+    '--solido-program-id',
+    solido_program_id,
+    keypair_path=maintainer.keypair_path,
+)
+del result['StakeDeposit']['stake_account']
+expected_result = {
+    'StakeDeposit': {
+        'validator_vote_account': validator_1.vote_account.pubkey,
+        'amount_lamports': 4100500000,
+    }
+}
 
 print('\nRunning maintenance (should remove the validator) ...')
 result = solido(
@@ -639,7 +753,7 @@ result = solido(
 )
 expected_result = {
     'RemoveValidator': {
-        'validator_vote_account': validator_vote_account.pubkey,
+        'validator_vote_account': validator.vote_account.pubkey,
     }
 }
 assert result == expected_result, f'\nExpected: {expected_result}\nActual:   {result}'
@@ -653,5 +767,5 @@ solido_instance = solido(
 )
 number_validators = len(solido_instance['solido']['validators']['entries'])
 assert (
-    number_validators == 0
+    number_validators == 1
 ), f'\nExpected no validators\nGot: {number_validators} validators'
