@@ -10,7 +10,12 @@ New features:
  * Maintainers now have “maintainer duty” at different non-overlapping times, to
    reduce the probability of maintainers racing to perform the same update.
 
- * `solido run-maintainer` now exposes many more metrics:
+ * It is now possible to run `solido run-maintainer` even if `--keypair` is not
+   a member of the maintainer set. In this mode, `solido run-maintainer` will
+   never submit maintenance transactions, but it can still be used to export
+   metrics to Prometheus.
+
+ * `solido run-maintainer` now exposes more metrics:
 
    * `solido_maintainer_balance_sol` is now included for all maintainers, not
      just the one that the instance is running as.
@@ -25,9 +30,9 @@ New features:
    * `solido_solana_slots_per_epoch`
    * `solido_solana_stake_sol`
 
- * `solido show-solido` now prints validator names and other metadata, no longer
-   just the vote account address. The new validator metrics in `/metrics` also
-   include validator names.
+ * `solido show-solido` now prints validator names and other metadata, in
+   addition to the vote account address. The new validator metrics in `/metrics`
+   also include validator names.
 
 Bugfixes:
 
