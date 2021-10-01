@@ -1,12 +1,53 @@
 # Changelog
 
+## v1.1.0 (unreleased)
+
+There are no changes to the on-chain program in this release, only to the
+`solido` CLI program. The on-chain program remains unchanged since v1.0.0.
+
+New features:
+
+ * Maintainers now have “maintainer duty” at different non-overlapping times, to
+   reduce the probability of maintainers racing to perform the same update.
+
+ * `solido run-maintainer` now exposes many more metrics:
+
+   * `solido_maintainer_balance_sol` is now included for all maintainers, not
+     just the one that the instance is running as.
+   * `solido_withdraw_count_total`. We recorded this in the on-chain state
+     already, but we never exposed the counter until now.
+   * `solido_validator_last_voted_slot`
+   * `solido_validator_last_voted_timestamp`
+   * `solido_validator_identity_account_balance_sol`
+   * `solido_validator_vote_credits_total`
+   * `solido_solana_epoch`
+   * `solido_solana_epoch_start_slot`
+   * `solido_solana_slots_per_epoch`
+   * `solido_solana_stake_sol`
+
+ * `solido show-solido` now prints validator names and other metadata, no longer
+   just the vote account address. The new validator metrics in `/metrics` also
+   include validator names.
+
+Bugfixes:
+
+ * Previously, if `solido run-maintainer` failed to execute a maintenance
+   transaction, metrics of the on-chain state would not be available even if
+   they were fetched successfully. Now those metrics can be served even if a
+   transaction fails.
+ * The maintainer now waits for transactions to be confirmed before continuing,
+   and preflights transactions against the lastest known state (even if
+   unconfirmed).
+
 ## v1.0.2
 
 Released 2021-09-10.
 
 Bugfixes:
 
- * Fix to the maintainer logic so that it chooses the active validator that has the least amount of stake for the stake deposit, instead of that which is farthest from the target.
+ * Fix to the maintainer logic so that it chooses the active validator that has
+   the least amount of stake for the stake deposit, instead of that which is
+   farthest from the target.
 
 ## v1.0.1
 
