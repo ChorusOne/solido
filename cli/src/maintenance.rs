@@ -306,6 +306,11 @@ pub struct SolidoState {
     /// Public key of the maintainer executing the maintenance.
     /// Must be a member of `solido.maintainers`.
     pub maintainer_address: Pubkey,
+
+    /// If set to true, stake and unstake instructions are issued whenever
+    /// possible, otherwise the instructions are issued only close to the end of
+    /// epoch.
+    pub stake_unstake_any_time: bool,
 }
 
 fn get_validator_stake_accounts(
@@ -388,11 +393,21 @@ impl SolidoState {
         numerator: 1,
         denominator: 10,
     };
+
+    /// Threshold for when to consider the end of an epoch.
+    /// E.g. if set to 1/20, the end of epoch would be considered if the system
+    /// is past 95% of the epoch's time.
+    const END_OF_EPOCH_THRESHOLD: Rational = Rational {
+        numerator: 1,
+        denominator: 20,
+    };
+
     /// Read the state from the on-chain data.
     pub fn new(
         config: &mut SnapshotConfig,
         solido_program_id: &Pubkey,
         solido_address: &Pubkey,
+        stake_unstake_any_time: bool,
     ) -> Result<SolidoState> {
         let solido = config.client.get_solido(solido_address)?;
 
@@ -477,6 +492,7 @@ impl SolidoState {
             epoch_schedule,
             stake_history,
             maintainer_address,
+            stake_unstake_any_time,
         })
     }
 
@@ -492,6 +508,7 @@ impl SolidoState {
 
     /// If there is a deposit that can be staked, return the instructions to do so.
     pub fn try_stake_deposit(&self) -> Option<(Instruction, MaintenanceOutput)> {
+        self.should_perform_maintenance_at_end_of_epoch()?;
         // We can only stake if there is an active validator. If there is none,
         // this will short-circuit and return None.
         self.solido.validators.iter_active().next()?;
@@ -606,6 +623,7 @@ impl SolidoState {
 
     /// If there is a validator being deactivated, try to unstake its funds.
     pub fn try_unstake_from_inactive_validator(&self) -> Option<(Instruction, MaintenanceOutput)> {
+        self.should_perform_maintenance_at_end_of_epoch()?;
         for (validator, stake_accounts) in self
             .solido
             .validators
@@ -896,6 +914,7 @@ impl SolidoState {
 
     /// Unstake from active validators in order to rebalance validators.
     pub fn try_unstake_from_active_validators(&self) -> Option<(Instruction, MaintenanceOutput)> {
+        self.should_perform_maintenance_at_end_of_epoch()?;
         // Return None if there's no active validator to unstake from.
         self.solido.validators.iter_active().next()?;
 
@@ -1356,6 +1375,37 @@ impl SolidoState {
             Some(self_slice_start_slot)
         }
     }
+
+    /// Return None if we observe we moved past `1 -
+    /// SolidoState::END_OF_EPOCH_THRESHOLD`%. Return Some(()) if the above
+    /// condition fails or `self.stake_unstake_any_time` is set to
+    /// `true`.
+    pub fn should_perform_maintenance_at_end_of_epoch(&self) -> Option<()> {
+        if self.stake_unstake_any_time {
+            return Some(());
+        }
+        // Get the slot that the current epoch started.
+        let slots_epoch_begin = self.epoch_schedule.slots_per_epoch * self.clock.epoch;
+        let slot_past_epoch = self.clock.slot.checked_sub(slots_epoch_begin).expect(
+            "Current slot is less than the beginning of the epoch's slot. This shouldn't happen.",
+        );
+        let ratio = Rational {
+            numerator: self
+                .epoch_schedule
+                .slots_per_epoch
+                .checked_sub(slot_past_epoch)
+                .expect(
+                    "Number of slots since the beginning of the epoch should be \
+                    always smaller than the number of slots in an epoch",
+                ),
+            denominator: self.epoch_schedule.slots_per_epoch,
+        };
+        if ratio > SolidoState::END_OF_EPOCH_THRESHOLD {
+            Some(())
+        } else {
+            None
+        }
+    }
 }
 
 pub fn try_perform_maintenance(
@@ -1428,7 +1478,12 @@ pub fn run_perform_maintenance(
     config: &mut SnapshotConfig,
     opts: &PerformMaintenanceOpts,
 ) -> Result<Option<MaintenanceOutput>> {
-    let state = SolidoState::new(config, opts.solido_program_id(), opts.solido_address())?;
+    let state = SolidoState::new(
+        config,
+        opts.solido_program_id(),
+        opts.solido_address(),
+        *opts.stake_unstake_any_time(),
+    )?;
     try_perform_maintenance(config, &state)
 }
 
@@ -1459,6 +1514,7 @@ mod test {
             epoch_schedule: EpochSchedule::default(),
             stake_history: StakeHistory::default(),
             maintainer_address: Pubkey::new_unique(),
+            stake_unstake_any_time: true,
         };
 
         // The reserve should be rent-exempt.
@@ -1647,5 +1703,37 @@ mod test {
             assert!(next_slot > state.clock.slot);
             state.clock.slot = next_slot;
         }
+    }
+
+    #[test]
+    fn test_below_epoch_threshold() {
+        let mut state = new_empty_solido();
+        state.stake_unstake_any_time = false;
+        state.clock.slot = 9194;
+        state.epoch_schedule.slots_per_epoch = 100;
+        state.clock.epoch = 91;
+        assert_eq!(state.should_perform_maintenance_at_end_of_epoch(), Some(()));
+    }
+
+    #[test]
+    fn test_above_equal_epoch_threshold() {
+        let mut state = new_empty_solido();
+        state.stake_unstake_any_time = false;
+        state.clock.slot = 9195;
+        state.epoch_schedule.slots_per_epoch = 100;
+        state.clock.epoch = 91;
+        assert_eq!(state.should_perform_maintenance_at_end_of_epoch(), None);
+        state.clock.slot = 9199;
+        assert_eq!(state.should_perform_maintenance_at_end_of_epoch(), None);
+    }
+
+    #[test]
+    fn test_respect_stake_unstake_at_end_of_epoch_flag() {
+        let mut state = new_empty_solido();
+        state.stake_unstake_any_time = true;
+        state.clock.slot = 9199;
+        state.epoch_schedule.slots_per_epoch = 100;
+        state.clock.epoch = 91;
+        assert_eq!(state.should_perform_maintenance_at_end_of_epoch(), Some(()));
     }
 }

@@ -421,15 +421,22 @@ approve_and_execute(transaction_address, test_addrs[0])
 
 current_epoch = int(solana('epoch'))
 
+
+def perform_maintenance() -> Any:
+    return solido(
+        'perform-maintenance',
+        '--solido-address',
+        solido_address,
+        '--solido-program-id',
+        solido_program_id,
+        '--stake-unstake-any-time',
+        'true',
+        keypair_path=maintainer.keypair_path,
+    )
+
+
 print('\nRunning maintenance (should be no-op if epoch is unchanged) ...')
-result = solido(
-    'perform-maintenance',
-    '--solido-address',
-    solido_address,
-    '--solido-program-id',
-    solido_program_id,
-    keypair_path=maintainer.keypair_path,
-)
+result = perform_maintenance()
 if solido_instance['solido']['exchange_rate']['computed_in_epoch'] == current_epoch:
     assert result is None, f'Huh, perform-maintenance performed {result}'
     print('> There was nothing to do, as expected.')
@@ -469,14 +476,7 @@ def deposit(lamports: int, expect_created_token_account: bool = False) -> None:
 deposit(lamports=3_000_000_000, expect_created_token_account=True)
 
 print('\nRunning maintenance ...')
-result = solido(
-    'perform-maintenance',
-    '--solido-address',
-    solido_address,
-    '--solido-program-id',
-    solido_program_id,
-    keypair_path=maintainer.keypair_path,
-)
+result = perform_maintenance()
 expected_result = {
     'StakeDeposit': {
         'validator_vote_account': validator.vote_account.pubkey,
@@ -497,14 +497,7 @@ deposit(lamports=500_000)
 
 # 0.0005 SOL is not enough to make a stake account, so even though the reserve
 # is not empty, we can't stake what's in the reserve.
-result = solido(
-    'perform-maintenance',
-    '--solido-address',
-    solido_address,
-    '--solido-program-id',
-    solido_program_id,
-    keypair_path=maintainer.keypair_path,
-)
+result = perform_maintenance()
 assert result is None, f'Huh, perform-maintenance performed {result}'
 print('> There was nothing to do, as expected.')
 
@@ -528,14 +521,7 @@ transaction_status = multisig(
 approve_and_execute(transaction_address, test_addrs[0])
 
 # Should unstake 1/2 (1.5 - 0.0005/2 Sol) of the validator's balance.
-result = solido(
-    'perform-maintenance',
-    '--solido-address',
-    solido_address,
-    '--solido-program-id',
-    solido_program_id,
-    keypair_path=maintainer.keypair_path,
-)
+result = perform_maintenance()
 
 # V0:       3
 # V1:       0
@@ -559,14 +545,7 @@ print(
 )
 solana('transfer', stake_account_address, '0.1')
 
-result = solido(
-    'perform-maintenance',
-    '--solido-address',
-    solido_address,
-    '--solido-program-id',
-    solido_program_id,
-    keypair_path=maintainer.keypair_path,
-)
+result = perform_maintenance()
 assert 'WithdrawInactiveStake' in result
 expected_result = {
     'WithdrawInactiveStake': {
@@ -596,14 +575,7 @@ print(f'> Funded reserve {reserve_account} with 1.0 SOL')
 
 print('\nRunning maintenance ...')
 
-result = solido(
-    'perform-maintenance',
-    '--solido-address',
-    solido_address,
-    '--solido-program-id',
-    solido_program_id,
-    keypair_path=maintainer.keypair_path,
-)
+result = perform_maintenance()
 
 del result['StakeDeposit']['stake_account']
 expected_result = {
@@ -616,14 +588,7 @@ assert result == expected_result, f'\nExpected: {expected_result}\nActual:   {re
 print('> Deposited to the second validator, as expected.')
 
 print('\nRunning maintenance (should be no-op) ...')
-result = solido(
-    'perform-maintenance',
-    '--solido-address',
-    solido_address,
-    '--solido-program-id',
-    solido_program_id,
-    keypair_path=maintainer.keypair_path,
-)
+result = perform_maintenance()
 
 assert result is None, f'Huh, perform-maintenance performed {result}'
 print('> There was nothing to do, as expected.')
@@ -673,14 +638,7 @@ assert not solido_instance['solido']['validators']['entries'][0]['entry'][
 print('> Validator is inactive as expected.')
 
 print('\nRunning maintenance (should unstake from inactive validator) ...')
-result = solido(
-    'perform-maintenance',
-    '--solido-address',
-    solido_address,
-    '--solido-program-id',
-    solido_program_id,
-    keypair_path=maintainer.keypair_path,
-)
+result = perform_maintenance()
 
 del result['UnstakeFromInactiveValidator']['from_stake_account']
 del result['UnstakeFromInactiveValidator']['to_unstake_account']
@@ -708,14 +666,7 @@ assert val['unstake_seeds'] == {'begin': 1, 'end': 2}
 
 
 print('\nRunning maintenance (should withdraw from validator\'s unstake account) ...')
-result = solido(
-    'perform-maintenance',
-    '--solido-address',
-    solido_address,
-    '--solido-program-id',
-    solido_program_id,
-    keypair_path=maintainer.keypair_path,
-)
+result = perform_maintenance()
 expected_result = {
     'WithdrawInactiveStake': {
         'validator_vote_account': validator.vote_account.pubkey,
@@ -726,14 +677,7 @@ expected_result = {
 assert result == expected_result, f'\nExpected: {expected_result}\nActual:   {result}'
 
 print('\nRunning maintenance (should stake deposit to the second validator) ...')
-result = solido(
-    'perform-maintenance',
-    '--solido-address',
-    solido_address,
-    '--solido-program-id',
-    solido_program_id,
-    keypair_path=maintainer.keypair_path,
-)
+result = perform_maintenance()
 del result['StakeDeposit']['stake_account']
 expected_result = {
     'StakeDeposit': {
@@ -743,14 +687,7 @@ expected_result = {
 }
 
 print('\nRunning maintenance (should remove the validator) ...')
-result = solido(
-    'perform-maintenance',
-    '--solido-address',
-    solido_address,
-    '--solido-program-id',
-    solido_program_id,
-    keypair_path=maintainer.keypair_path,
-)
+result = perform_maintenance()
 expected_result = {
     'RemoveValidator': {
         'validator_vote_account': validator.vote_account.pubkey,

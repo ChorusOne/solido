@@ -175,7 +175,12 @@ fn run_maintenance_iteration(
     opts: &RunMaintainerOpts,
 ) -> MaintenanceResult {
     let result = config.with_snapshot(|mut config| {
-        let state = SolidoState::new(&mut config, opts.solido_program_id(), opts.solido_address())?;
+        let state = SolidoState::new(
+            &mut config,
+            opts.solido_program_id(),
+            opts.solido_address(),
+            *opts.stake_unstake_any_time(),
+        )?;
 
         // If it's not our maintainer duty at this time, then don't try to
         // perform maintenance; a different maintainer should be doing it

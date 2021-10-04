@@ -454,6 +454,12 @@ cli_opt_struct! {
         /// claim fees.
         #[clap(long)]
         validator_vote_account : Pubkey => Pubkey::default(),
+
+        /// Try to do stake and unstake operations any time if set to true,
+        /// otherwise will try to stake/unstake only at the end of the epoch.
+        /// Defaults to false.
+        #[clap(long, value_name = "true/false")]
+        stake_unstake_any_time: bool => false,
     }
 }
 
@@ -640,6 +646,12 @@ cli_opt_struct! {
         /// Maximum time to wait in seconds after there was no maintenance to perform, before checking again. Defaults to 30s
         #[clap(long)]
         max_poll_interval_seconds: u64 => 30,
+
+        /// Try to do stake and unstake operations any time if set to true,
+        /// otherwise will try to stake/unstake only at the end of the epoch.
+        /// Defaults to false.
+        #[clap(long, value_name = "true/false")]
+        stake_unstake_any_time: bool => false,
     }
 }
 
