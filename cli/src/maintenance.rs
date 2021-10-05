@@ -397,10 +397,10 @@ impl SolidoState {
     };
 
     /// Threshold for when to consider the end of an epoch.
-    /// E.g. if set to 1/20, the end of epoch would be considered if the system
+    /// E.g. if set to 19/20, the end of epoch would be considered if the system
     /// is past 95% of the epoch's time.
     const END_OF_EPOCH_THRESHOLD: Rational = Rational {
-        numerator: 1,
+        numerator: 19,
         denominator: 20,
     };
 
@@ -1399,10 +1399,7 @@ impl SolidoState {
         "Current slot is less than the beginning of the epoch's slot. This shouldn't happen.",
     );
                 let ratio = Rational {
-                    numerator: slots_per_epoch.checked_sub(slot_past_epoch).expect(
-                        "Number of slots since the beginning of the epoch should be \
-                always smaller than the number of slots in an epoch",
-                    ),
+                    numerator: slot_past_epoch,
                     denominator: slots_per_epoch,
                 };
                 if ratio > SolidoState::END_OF_EPOCH_THRESHOLD {
@@ -1713,13 +1710,30 @@ mod test {
     }
 
     #[test]
-    fn test_above_epoch_threshold() {
+    fn test_below_epoch_threshold() {
         let mut state = new_empty_solido();
         state.stake_time = StakeTime::OnlyNearEpochEnd;
         // Epoch 1 starts at slot 32 and ends at slot 63
         // At slot 33 is at 1.5% of epoch.
         state.clock.slot = 33;
         state.clock.epoch = 1;
+        assert_eq!(state.confirm_should_stake_unstake_in_current_slot(), None);
+    }
+
+    #[test]
+    fn test_above_epoch_threshold() {
+        let mut state = new_empty_solido();
+        state.stake_time = StakeTime::OnlyNearEpochEnd;
+        // Epoch 1 starts at slot 32 and ends at slot 63
+        // At slot 32 + 62 is at 96.8% of epoch.
+        state.clock.slot = 32 + 62;
+        state.clock.epoch = 1;
+        assert_eq!(
+            state.confirm_should_stake_unstake_in_current_slot(),
+            Some(())
+        );
+        // At slot 32 + 61 is at 95.3% of epoch.
+        state.clock.slot = 32 + 61;
         assert_eq!(
             state.confirm_should_stake_unstake_in_current_slot(),
             Some(())
@@ -1727,24 +1741,10 @@ mod test {
     }
 
     #[test]
-    fn test_below_equal_epoch_threshold() {
-        let mut state = new_empty_solido();
-        state.stake_time = StakeTime::OnlyNearEpochEnd;
-        // Epoch 1 starts at slot 32 and ends at slot 63
-        // At slot 32 + 62 is at 96.8% of epoch.
-        state.clock.slot = 32 + 62;
-        state.clock.epoch = 1;
-        assert_eq!(state.confirm_should_stake_unstake_in_current_slot(), None);
-        // At slot 32 + 61 is at 95.3% of epoch.
-        state.clock.slot = 32 + 61;
-        assert_eq!(state.confirm_should_stake_unstake_in_current_slot(), None);
-    }
-
-    #[test]
     fn test_respect_stake_unstake_at_end_of_epoch_flag() {
         let mut state = new_empty_solido();
         state.stake_time = StakeTime::Anytime;
-        state.clock.slot = 32 + 61;
+        state.clock.slot = 32;
         state.clock.epoch = 1;
         assert_eq!(
             state.confirm_should_stake_unstake_in_current_slot(),
