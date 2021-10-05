@@ -623,7 +623,6 @@ impl SolidoState {
 
     /// If there is a validator being deactivated, try to unstake its funds.
     pub fn try_unstake_from_inactive_validator(&self) -> Option<(Instruction, MaintenanceOutput)> {
-        self.should_perform_maintenance_at_end_of_epoch()?;
         for (validator, stake_accounts) in self
             .solido
             .validators
