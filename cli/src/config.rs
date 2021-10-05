@@ -455,11 +455,12 @@ cli_opt_struct! {
         #[clap(long)]
         validator_vote_account : Pubkey => Pubkey::default(),
 
-        /// Try to do stake and unstake operations any time if set to true,
-        /// otherwise will try to stake/unstake only at the end of the epoch.
-        /// Defaults to false.
-        #[clap(long, value_name = "true/false")]
-        stake_unstake_any_time: bool => false,
+        /// Try to do stake and unstake operations any time if set to
+        /// `StakeTime::Anytime`. If set to `StakeTime::OnlyNearEpochEnd`, will
+        /// try to stake/unstake only at the end of the epoch. Defaults to
+        /// `StakeTime::OnlyNearEpochEnd`.
+        #[clap(long, value_name = "anytime/only-near-epoch-end")]
+        stake_time: StakeTime => StakeTime::OnlyNearEpochEnd,
     }
 }
 
@@ -626,6 +627,24 @@ cli_opt_struct! {
     }
 }
 
+#[derive(Copy, Clone, Debug)]
+pub enum StakeTime {
+    Anytime,
+    OnlyNearEpochEnd,
+}
+
+impl FromStr for StakeTime {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<StakeTime, &'static str> {
+        match s {
+            "anytime" => Ok(StakeTime::Anytime),
+            "only-near-epoch-end" => Ok(StakeTime::OnlyNearEpochEnd),
+            _ => Err("Invalid stake time mode, expected 'anytime' or 'only-near-epoch-end'."),
+        }
+    }
+}
+
 cli_opt_struct! {
     RunMaintainerOpts {
         /// Address of the Solido program.
@@ -647,11 +666,12 @@ cli_opt_struct! {
         #[clap(long)]
         max_poll_interval_seconds: u64 => 30,
 
-        /// Try to do stake and unstake operations any time if set to true,
-        /// otherwise will try to stake/unstake only at the end of the epoch.
-        /// Defaults to false.
-        #[clap(long, value_name = "true/false")]
-        stake_unstake_any_time: bool => false,
+        /// Try to do stake and unstake operations any time if set to
+        /// `StakeTime::Anytime`. If set to `StakeTime::OnlyNearEpochEnd`, will
+        /// try to stake/unstake only at the end of the epoch. Defaults to
+        /// `StakeTime::OnlyNearEpochEnd`.
+        #[clap(long, value_name = "anytime/only-near-epoch-end")]
+        stake_time: StakeTime => StakeTime::OnlyNearEpochEnd,
     }
 }
 

@@ -179,7 +179,7 @@ fn run_maintenance_iteration(
             &mut config,
             opts.solido_program_id(),
             opts.solido_address(),
-            *opts.stake_unstake_any_time(),
+            *opts.stake_time(),
         )?;
 
         // If it's not our maintainer duty at this time, then don't try to
