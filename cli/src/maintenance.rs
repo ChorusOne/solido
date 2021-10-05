@@ -1741,7 +1741,7 @@ mod test {
     }
 
     #[test]
-    fn test_respect_stake_unstake_at_end_of_epoch_flag() {
+    fn test_respect_stake_time_config() {
         let mut state = new_empty_solido();
         state.stake_time = StakeTime::Anytime;
         state.clock.slot = 32;
