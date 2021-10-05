@@ -429,8 +429,8 @@ def perform_maintenance() -> Any:
         solido_address,
         '--solido-program-id',
         solido_program_id,
-        '--stake-unstake-any-time',
-        'true',
+        '--stake-time',
+        'anytime',
         keypair_path=maintainer.keypair_path,
     )
 
