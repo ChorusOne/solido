@@ -1387,19 +1387,21 @@ impl SolidoState {
         let slots_epoch_begin = self
             .epoch_schedule
             .get_first_slot_in_epoch(self.clock.epoch);
+        let next_epoch_begin = self
+            .epoch_schedule
+            .get_first_slot_in_epoch(self.clock.epoch + 1);
+        let slots_per_epoch = next_epoch_begin
+            .checked_sub(slots_epoch_begin)
+            .expect("Next epoch's slot should be always greater than previous.");
         let slot_past_epoch = self.clock.slot.checked_sub(slots_epoch_begin).expect(
             "Current slot is less than the beginning of the epoch's slot. This shouldn't happen.",
         );
         let ratio = Rational {
-            numerator: self
-                .epoch_schedule
-                .slots_per_epoch
-                .checked_sub(slot_past_epoch)
-                .expect(
-                    "Number of slots since the beginning of the epoch should be \
+            numerator: slots_per_epoch.checked_sub(slot_past_epoch).expect(
+                "Number of slots since the beginning of the epoch should be \
                     always smaller than the number of slots in an epoch",
-                ),
-            denominator: self.epoch_schedule.slots_per_epoch,
+            ),
+            denominator: slots_per_epoch,
         };
         if ratio > SolidoState::END_OF_EPOCH_THRESHOLD {
             Some(())
@@ -1710,9 +1712,9 @@ mod test {
     fn test_below_epoch_threshold() {
         let mut state = new_empty_solido();
         state.stake_unstake_any_time = false;
-        state.clock.slot = 9194;
-        state.epoch_schedule.slots_per_epoch = 100;
-        state.clock.epoch = 91;
+        // Epoch 1 starts at slot 32 and ends at slot 63
+        state.clock.slot = 33;
+        state.clock.epoch = 1;
         assert_eq!(
             state.confirm_should_stake_unstake_in_current_slot(),
             Some(())
@@ -1723,11 +1725,13 @@ mod test {
     fn test_above_equal_epoch_threshold() {
         let mut state = new_empty_solido();
         state.stake_unstake_any_time = false;
-        state.clock.slot = 9195;
-        state.epoch_schedule.slots_per_epoch = 100;
-        state.clock.epoch = 91;
+        // Epoch 1 starts at slot 32 and ends at slot 63
+        // At slot 32 + 62 is at 96.8%
+        state.clock.slot = 32 + 62;
+        state.clock.epoch = 1;
         assert_eq!(state.confirm_should_stake_unstake_in_current_slot(), None);
-        state.clock.slot = 9199;
+        // At slot 32 + 61 is at 95.3%
+        state.clock.slot = 32 + 61;
         assert_eq!(state.confirm_should_stake_unstake_in_current_slot(), None);
     }
 
@@ -1735,9 +1739,8 @@ mod test {
     fn test_respect_stake_unstake_at_end_of_epoch_flag() {
         let mut state = new_empty_solido();
         state.stake_unstake_any_time = true;
-        state.clock.slot = 9199;
-        state.epoch_schedule.slots_per_epoch = 100;
-        state.clock.epoch = 91;
+        state.clock.slot = 32 + 61;
+        state.clock.epoch = 1;
         assert_eq!(
             state.confirm_should_stake_unstake_in_current_slot(),
             Some(())
