@@ -508,7 +508,7 @@ impl SolidoState {
 
     /// If there is a deposit that can be staked, return the instructions to do so.
     pub fn try_stake_deposit(&self) -> Option<(Instruction, MaintenanceOutput)> {
-        self.should_perform_maintenance_at_end_of_epoch()?;
+        self.confirm_should_stake_unstake_in_current_slot()?;
         // We can only stake if there is an active validator. If there is none,
         // this will short-circuit and return None.
         self.solido.validators.iter_active().next()?;
@@ -913,7 +913,7 @@ impl SolidoState {
 
     /// Unstake from active validators in order to rebalance validators.
     pub fn try_unstake_from_active_validators(&self) -> Option<(Instruction, MaintenanceOutput)> {
-        self.should_perform_maintenance_at_end_of_epoch()?;
+        self.confirm_should_stake_unstake_in_current_slot()?;
         // Return None if there's no active validator to unstake from.
         self.solido.validators.iter_active().next()?;
 
@@ -1379,7 +1379,7 @@ impl SolidoState {
     /// SolidoState::END_OF_EPOCH_THRESHOLD`%. Return Some(()) if the above
     /// condition fails or `self.stake_unstake_any_time` is set to
     /// `true`.
-    pub fn should_perform_maintenance_at_end_of_epoch(&self) -> Option<()> {
+    pub fn confirm_should_stake_unstake_in_current_slot(&self) -> Option<()> {
         if self.stake_unstake_any_time {
             return Some(());
         }
@@ -1711,7 +1711,10 @@ mod test {
         state.clock.slot = 9194;
         state.epoch_schedule.slots_per_epoch = 100;
         state.clock.epoch = 91;
-        assert_eq!(state.should_perform_maintenance_at_end_of_epoch(), Some(()));
+        assert_eq!(
+            state.confirm_should_stake_unstake_in_current_slot(),
+            Some(())
+        );
     }
 
     #[test]
@@ -1721,9 +1724,9 @@ mod test {
         state.clock.slot = 9195;
         state.epoch_schedule.slots_per_epoch = 100;
         state.clock.epoch = 91;
-        assert_eq!(state.should_perform_maintenance_at_end_of_epoch(), None);
+        assert_eq!(state.confirm_should_stake_unstake_in_current_slot(), None);
         state.clock.slot = 9199;
-        assert_eq!(state.should_perform_maintenance_at_end_of_epoch(), None);
+        assert_eq!(state.confirm_should_stake_unstake_in_current_slot(), None);
     }
 
     #[test]
@@ -1733,6 +1736,9 @@ mod test {
         state.clock.slot = 9199;
         state.epoch_schedule.slots_per_epoch = 100;
         state.clock.epoch = 91;
-        assert_eq!(state.should_perform_maintenance_at_end_of_epoch(), Some(()));
+        assert_eq!(
+            state.confirm_should_stake_unstake_in_current_slot(),
+            Some(())
+        );
     }
 }
