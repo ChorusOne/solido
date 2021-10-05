@@ -1384,7 +1384,9 @@ impl SolidoState {
             return Some(());
         }
         // Get the slot that the current epoch started.
-        let slots_epoch_begin = self.epoch_schedule.slots_per_epoch * self.clock.epoch;
+        let slots_epoch_begin = self
+            .epoch_schedule
+            .get_first_slot_in_epoch(self.clock.epoch);
         let slot_past_epoch = self.clock.slot.checked_sub(slots_epoch_begin).expect(
             "Current slot is less than the beginning of the epoch's slot. This shouldn't happen.",
         );
