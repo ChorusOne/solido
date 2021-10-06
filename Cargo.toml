@@ -3,6 +3,7 @@ members = [
     "cli",
     "multisig/programs/multisig",
     "program",
+    "anchor"
 ]
 
 # Ensure that we don't leave half a program running if something in a thread panics.

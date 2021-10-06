@@ -49,6 +49,7 @@ pub type Result<T> = std::result::Result<T, ArithmeticError>;
 /// Generate a token type that wraps the minimal unit of the token, it’s
 /// “Lamport”. The symbol is for 10<sup>9</sup> of its minimal units and is
 /// only used for `Debug` and `Display` printing.
+#[macro_export]
 macro_rules! impl_token {
     ($TokenLamports:ident, $symbol:expr) => {
         #[derive(
