@@ -10,6 +10,14 @@ New features:
  * Maintainers now have “maintainer duty” at different non-overlapping times, to
    reduce the probability of maintainers racing to perform the same update.
 
+ * Active rebalancing: the maintainer can now unstake from validators, which
+   helps to restore the stake balance quickly if new deposits alone are
+   insufficient. This is especially useful after onboarding new validators.
+
+ * The maintainer now waits until the last 5% of the epoch, before it performs
+   staking and unstaking operations. This reduces maintenance fees, and can
+   achieve a more uniform stake balance.
+
  * It is now possible to run `solido run-maintainer` even if `--keypair` is not
    a member of the maintainer set. In this mode, `solido run-maintainer` will
    never submit maintenance transactions, but it can still be used to export
@@ -34,6 +42,9 @@ New features:
    addition to the vote account address. The new validator metrics in `/metrics`
    also include validator names.
 
+ * `solido multisig show-transaction` now prints a diff for `ChangeMultisig`
+   transactions.
+
 Bugfixes:
 
  * Previously, if `solido run-maintainer` failed to execute a maintenance
@@ -43,6 +54,8 @@ Bugfixes:
  * The maintainer now waits for transactions to be confirmed before continuing,
    and preflights transactions against the lastest known state (even if
    unconfirmed).
+ * `solido multisig show-transaction` can now parse and display `ChangeMultisig`
+   transactions again. This had been broken since v0.5.0.
 
 ## v1.0.2
 
