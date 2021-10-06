@@ -358,8 +358,14 @@ assert result['signers']['Current']['signers'] == [
 ]
 assert result['parsed_instruction'] == {
     'MultisigChange': {
-        'threshold': 2,
-        'owners': [
+        'old_threshold': 2,
+        'new_threshold': 2,
+        'old_owners': [
+            addr1.pubkey,
+            addr2.pubkey,
+            addr3.pubkey,
+        ],
+        'new_owners': [
             addr1.pubkey,
             addr2.pubkey,
         ]

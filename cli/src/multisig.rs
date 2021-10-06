@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0
 
 use std::fmt;
+use std::collections::HashSet;
 
 use anchor_lang::prelude::{AccountMeta, ToAccountMetas};
 use anchor_lang::{Discriminator, InstructionData};
@@ -368,10 +369,15 @@ enum ParsedInstruction {
         spill_address: Pubkey,
     },
     MultisigChange {
-        threshold: u64,
+        old_threshold: u64,
 
         #[serde(serialize_with = "serialize_b58_slice")]
-        owners: Vec<Pubkey>,
+        old_owners: Vec<Pubkey>,
+
+        new_threshold: u64,
+
+        #[serde(serialize_with = "serialize_b58_slice")]
+        new_owners: Vec<Pubkey>,
     },
     SolidoInstruction(SolidoInstruction),
     TokenInstruction(TokenInstruction),
@@ -529,21 +535,12 @@ impl fmt::Display for ShowTransactionOutput {
                 writeln!(f, "    Buffer with new program: {}", buffer_address)?;
                 writeln!(f, "    Spill address:           {}", spill_address)?;
             }
-            ParsedInstruction::MultisigChange { threshold, owners } => {
+            ParsedInstruction::MultisigChange { old_threshold, old_owners, new_threshold, new_owners } => {
                 writeln!(
                     f,
                     "  This is a serum_multisig::set_owners_and_change_threshold instruction."
                 )?;
-                writeln!(
-                    f,
-                    "    New threshold: {} out of {}",
-                    threshold,
-                    owners.len()
-                )?;
-                writeln!(f, "    New owners:")?;
-                for owner_pubkey in owners {
-                    writeln!(f, "      {}", owner_pubkey)?;
-                }
+                print_diff_multisig(f, *old_threshold, *new_threshold, old_owners, new_owners)?;
             }
             ParsedInstruction::SolidoInstruction(solido_instruction) => {
                 write!(f, "  This is a Solido instruction. ")?;
@@ -708,6 +705,7 @@ fn print_changed_reward_distribution(
     )?;
     Ok(())
 }
+
 fn print_changed_recipients(
     f: &mut fmt::Formatter,
     current_solido: &Lido,
@@ -738,6 +736,45 @@ fn changed_addr(
         writeln!(f, "   {}: {}", param_name, new_addr)?;
     } else {
         writeln!(f, "   {}: {} -> {}", param_name, new_addr, current_addr,)?;
+    }
+    Ok(())
+}
+
+fn print_diff_multisig(
+    f: &mut fmt::Formatter,
+    old_threshold: u64,
+    new_threshold: u64,
+    old_owners: &[Pubkey],
+    new_owners: &[Pubkey],
+) -> fmt::Result {
+    if (old_threshold, old_owners.len()) == (new_threshold, new_owners.len()) {
+        writeln!(f,
+            "    Threshold (unchanged): {} of {}",
+            new_threshold, new_owners.len(),
+        )?;
+    } else {
+        writeln!(f,
+            "    Threshold (changed): {} of {} -> {} of {}",
+            old_threshold, old_owners.len(),
+            new_threshold, new_owners.len(),
+        )?;
+    }
+    let old_owners_set: HashSet<_> = old_owners.iter().collect();
+    let new_owners_set: HashSet<_> = new_owners.iter().collect();
+    if old_owners_set == new_owners_set {
+        writeln!(f, "    Owners (unchanged):")?;
+    } else {
+        writeln!(f, "    Owners (changed):")?;
+    }
+
+    for owner in old_owners_set.intersection(&new_owners_set) {
+        writeln!(f, "        {}", owner)?;
+    }
+    for removed_owner in old_owners_set.difference(&new_owners_set) {
+        writeln!(f, "      - {}", removed_owner)?;
+    }
+    for added_owner in new_owners_set.difference(&old_owners_set) {
+        writeln!(f, "      + {}", added_owner)?;
     }
     Ok(())
 }
@@ -810,8 +847,10 @@ fn show_transaction(
             multisig_instruction::SetOwnersAndChangeThreshold::try_from_slice(&instr.data[8..])
         {
             ParsedInstruction::MultisigChange {
-                threshold: instr.threshold,
-                owners: instr.owners,
+                old_threshold: multisig.threshold,
+                old_owners: multisig.owners,
+                new_threshold: instr.threshold,
+                new_owners: instr.owners,
             }
         } else {
             ParsedInstruction::Unrecognized
