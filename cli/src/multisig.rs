@@ -804,7 +804,7 @@ fn show_transaction(
     // hard-code the tag here (it is stable as long as the namespace and
     // function name do not change).
     else if instr.program_id == *multisig_program_id
-        && instr.data[..8] == [122, 49, 168, 177, 231, 28, 167, 204]
+        && instr.data[..8] == [55, 144, 74, 245, 249, 230, 14, 53]
     {
         if let Ok(instr) =
             multisig_instruction::SetOwnersAndChangeThreshold::try_from_slice(&instr.data[8..])
