@@ -7,6 +7,19 @@ Released 2021-10-06.
 There are no changes to the on-chain program in this release, only to the
 `solido` CLI program. The on-chain program remains unchanged since v1.0.0.
 
+**Compatibility**:
+
+ * If you run `solido run-maintainer` and connect to a custom RPC endpoint with
+   `--cluster`, you need to ensure that your RPC node has [account
+   indexing][indexing] enabled for the config program. This can be done by
+   adding
+
+       --account-index program-id --account-index-include-key Config1111111111111111111111111111111111111
+
+   to the `solana-validator` command line. This option is needed for the new
+   validator name metrics. Without account indexing, the `getProgramAccounts`
+   RPC call will likely time out.
+
 New features:
 
  * Maintainers now have “maintainer duty” at different non-overlapping times, to
@@ -58,6 +71,8 @@ Bugfixes:
    unconfirmed).
  * `solido multisig show-transaction` can now parse and display `ChangeMultisig`
    transactions again. This had been broken since v0.5.0.
+
+[indexing]: https://docs.solana.com/running-validator/validator-start#account-indexing
 
 ## v1.0.2
 
