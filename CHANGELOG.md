@@ -1,12 +1,71 @@
 # Changelog
 
+## v1.1.0 (unreleased)
+
+There are no changes to the on-chain program in this release, only to the
+`solido` CLI program. The on-chain program remains unchanged since v1.0.0.
+
+New features:
+
+ * Maintainers now have “maintainer duty” at different non-overlapping times, to
+   reduce the probability of maintainers racing to perform the same update.
+
+ * Active rebalancing: the maintainer can now unstake from validators, which
+   helps to restore the stake balance quickly if new deposits alone are
+   insufficient. This is especially useful after onboarding new validators.
+
+ * The maintainer now waits until the last 5% of the epoch, before it performs
+   staking and unstaking operations. This reduces maintenance fees, and can
+   achieve a more uniform stake balance.
+
+ * It is now possible to run `solido run-maintainer` even if `--keypair` is not
+   a member of the maintainer set. In this mode, `solido run-maintainer` will
+   never submit maintenance transactions, but it can still be used to export
+   metrics to Prometheus.
+
+ * `solido run-maintainer` now exposes more metrics:
+
+   * `solido_maintainer_balance_sol` is now included for all maintainers, not
+     just the one that the instance is running as.
+   * `solido_withdraw_count_total`. We recorded this in the on-chain state
+     already, but we never exposed the counter until now.
+   * `solido_validator_last_voted_slot`
+   * `solido_validator_last_voted_timestamp`
+   * `solido_validator_identity_account_balance_sol`
+   * `solido_validator_vote_credits_total`
+   * `solido_solana_epoch`
+   * `solido_solana_epoch_start_slot`
+   * `solido_solana_slots_per_epoch`
+   * `solido_solana_stake_sol`
+
+ * `solido show-solido` now prints validator names and other metadata, in
+   addition to the vote account address. The new validator metrics in `/metrics`
+   also include validator names.
+
+ * `solido multisig show-transaction` now prints a diff for `ChangeMultisig`
+   transactions.
+
+Bugfixes:
+
+ * Previously, if `solido run-maintainer` failed to execute a maintenance
+   transaction, metrics of the on-chain state would not be available even if
+   they were fetched successfully. Now those metrics can be served even if a
+   transaction fails.
+ * The maintainer now waits for transactions to be confirmed before continuing,
+   and preflights transactions against the lastest known state (even if
+   unconfirmed).
+ * `solido multisig show-transaction` can now parse and display `ChangeMultisig`
+   transactions again. This had been broken since v0.5.0.
+
 ## v1.0.2
 
 Released 2021-09-10.
 
 Bugfixes:
 
- * Fix to the maintainer logic so that it chooses the active validator that has the least amount of stake for the stake deposit, instead of that which is farthest from the target.
+ * Fix to the maintainer logic so that it chooses the active validator that has
+   the least amount of stake for the stake deposit, instead of that which is
+   farthest from the target.
 
 ## v1.0.1
 
