@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2021 Chorus One AG
 // SPDX-License-Identifier: GPL-3.0
 
-use std::fmt;
 use std::collections::HashSet;
+use std::fmt;
 
 use anchor_lang::prelude::{AccountMeta, ToAccountMetas};
 use anchor_lang::{Discriminator, InstructionData};
@@ -535,7 +535,12 @@ impl fmt::Display for ShowTransactionOutput {
                 writeln!(f, "    Buffer with new program: {}", buffer_address)?;
                 writeln!(f, "    Spill address:           {}", spill_address)?;
             }
-            ParsedInstruction::MultisigChange { old_threshold, old_owners, new_threshold, new_owners } => {
+            ParsedInstruction::MultisigChange {
+                old_threshold,
+                old_owners,
+                new_threshold,
+                new_owners,
+            } => {
                 writeln!(
                     f,
                     "  This is a serum_multisig::set_owners_and_change_threshold instruction."
@@ -748,15 +753,20 @@ fn print_diff_multisig(
     new_owners: &[Pubkey],
 ) -> fmt::Result {
     if (old_threshold, old_owners.len()) == (new_threshold, new_owners.len()) {
-        writeln!(f,
+        writeln!(
+            f,
             "    Threshold (unchanged): {} of {}",
-            new_threshold, new_owners.len(),
+            new_threshold,
+            new_owners.len(),
         )?;
     } else {
-        writeln!(f,
+        writeln!(
+            f,
             "    Threshold (changed): {} of {} -> {} of {}",
-            old_threshold, old_owners.len(),
-            new_threshold, new_owners.len(),
+            old_threshold,
+            old_owners.len(),
+            new_threshold,
+            new_owners.len(),
         )?;
     }
     let old_owners_set: HashSet<_> = old_owners.iter().collect();
