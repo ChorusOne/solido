@@ -1,6 +1,8 @@
 # Changelog
 
-## v1.1.0 (unreleased)
+## v1.1.0
+
+Released 2021-10-06.
 
 There are no changes to the on-chain program in this release, only to the
 `solido` CLI program. The on-chain program remains unchanged since v1.0.0.
