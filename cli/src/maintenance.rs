@@ -40,6 +40,7 @@ use lido::{
     MINIMUM_STAKE_ACCOUNT_BALANCE, STAKE_AUTHORITY,
 };
 
+use crate::config::StakeTime;
 use crate::error::MaintenanceError;
 use crate::snapshot::Result;
 use crate::validator_info_utils::ValidatorInfo;
@@ -306,6 +307,12 @@ pub struct SolidoState {
     /// Public key of the maintainer executing the maintenance.
     /// Must be a member of `solido.maintainers`.
     pub maintainer_address: Pubkey,
+
+    /// When to unstake/stake.
+    /// If set to StakeTime::Anytime, stake and unstake instructions are issued
+    /// whenever possible. If set to StakeTime::OnlyNearEpochEnd the
+    /// instructions are issued only close to the end of epoch.
+    pub stake_time: StakeTime,
 }
 
 fn get_validator_stake_accounts(
@@ -388,11 +395,21 @@ impl SolidoState {
         numerator: 1,
         denominator: 10,
     };
+
+    /// Threshold for when to consider the end of an epoch.
+    /// E.g. if set to 19/20, the end of epoch would be considered if the system
+    /// is past 95% of the epoch's time.
+    const END_OF_EPOCH_THRESHOLD: Rational = Rational {
+        numerator: 19,
+        denominator: 20,
+    };
+
     /// Read the state from the on-chain data.
     pub fn new(
         config: &mut SnapshotConfig,
         solido_program_id: &Pubkey,
         solido_address: &Pubkey,
+        stake_time: StakeTime,
     ) -> Result<SolidoState> {
         let solido = config.client.get_solido(solido_address)?;
 
@@ -477,6 +494,7 @@ impl SolidoState {
             epoch_schedule,
             stake_history,
             maintainer_address,
+            stake_time,
         })
     }
 
@@ -492,6 +510,7 @@ impl SolidoState {
 
     /// If there is a deposit that can be staked, return the instructions to do so.
     pub fn try_stake_deposit(&self) -> Option<(Instruction, MaintenanceOutput)> {
+        self.confirm_should_stake_unstake_in_current_slot()?;
         // We can only stake if there is an active validator. If there is none,
         // this will short-circuit and return None.
         self.solido.validators.iter_active().next()?;
@@ -896,6 +915,7 @@ impl SolidoState {
 
     /// Unstake from active validators in order to rebalance validators.
     pub fn try_unstake_from_active_validators(&self) -> Option<(Instruction, MaintenanceOutput)> {
+        self.confirm_should_stake_unstake_in_current_slot()?;
         // Return None if there's no active validator to unstake from.
         self.solido.validators.iter_active().next()?;
 
@@ -1356,6 +1376,40 @@ impl SolidoState {
             Some(self_slice_start_slot)
         }
     }
+
+    /// Return None if we observe we moved past `1 -
+    /// SolidoState::END_OF_EPOCH_THRESHOLD`%. Return Some(()) if the above
+    /// condition fails or `self.stake_unstake_any_time` is set to
+    /// `true`.
+    pub fn confirm_should_stake_unstake_in_current_slot(&self) -> Option<()> {
+        match self.stake_time {
+            StakeTime::Anytime => Some(()),
+            StakeTime::OnlyNearEpochEnd => {
+                // Get the slot that the current epoch started.
+                let slots_epoch_begin = self
+                    .epoch_schedule
+                    .get_first_slot_in_epoch(self.clock.epoch);
+                let next_epoch_begin = self
+                    .epoch_schedule
+                    .get_first_slot_in_epoch(self.clock.epoch + 1);
+                let slots_per_epoch = next_epoch_begin
+                    .checked_sub(slots_epoch_begin)
+                    .expect("Next epoch's slot should be always greater than previous.");
+                let slot_past_epoch = self.clock.slot.checked_sub(slots_epoch_begin).expect(
+        "Current slot is less than the beginning of the epoch's slot. This shouldn't happen.",
+    );
+                let ratio = Rational {
+                    numerator: slot_past_epoch,
+                    denominator: slots_per_epoch,
+                };
+                if ratio > SolidoState::END_OF_EPOCH_THRESHOLD {
+                    Some(())
+                } else {
+                    None
+                }
+            }
+        }
+    }
 }
 
 pub fn try_perform_maintenance(
@@ -1428,7 +1482,12 @@ pub fn run_perform_maintenance(
     config: &mut SnapshotConfig,
     opts: &PerformMaintenanceOpts,
 ) -> Result<Option<MaintenanceOutput>> {
-    let state = SolidoState::new(config, opts.solido_program_id(), opts.solido_address())?;
+    let state = SolidoState::new(
+        config,
+        opts.solido_program_id(),
+        opts.solido_address(),
+        *opts.stake_time(),
+    )?;
     try_perform_maintenance(config, &state)
 }
 
@@ -1459,6 +1518,7 @@ mod test {
             epoch_schedule: EpochSchedule::default(),
             stake_history: StakeHistory::default(),
             maintainer_address: Pubkey::new_unique(),
+            stake_time: StakeTime::Anytime,
         };
 
         // The reserve should be rent-exempt.
@@ -1647,5 +1707,48 @@ mod test {
             assert!(next_slot > state.clock.slot);
             state.clock.slot = next_slot;
         }
+    }
+
+    #[test]
+    fn test_below_epoch_threshold() {
+        let mut state = new_empty_solido();
+        state.stake_time = StakeTime::OnlyNearEpochEnd;
+        // Epoch 1 starts at slot 32 and ends at slot 63
+        // At slot 33 is at 1.5% of epoch.
+        state.clock.slot = 33;
+        state.clock.epoch = 1;
+        assert_eq!(state.confirm_should_stake_unstake_in_current_slot(), None);
+    }
+
+    #[test]
+    fn test_above_epoch_threshold() {
+        let mut state = new_empty_solido();
+        state.stake_time = StakeTime::OnlyNearEpochEnd;
+        // Epoch 1 starts at slot 32 and ends at slot 63
+        // At slot 32 + 62 is at 96.8% of epoch.
+        state.clock.slot = 32 + 62;
+        state.clock.epoch = 1;
+        assert_eq!(
+            state.confirm_should_stake_unstake_in_current_slot(),
+            Some(())
+        );
+        // At slot 32 + 61 is at 95.3% of epoch.
+        state.clock.slot = 32 + 61;
+        assert_eq!(
+            state.confirm_should_stake_unstake_in_current_slot(),
+            Some(())
+        );
+    }
+
+    #[test]
+    fn test_respect_stake_time_config() {
+        let mut state = new_empty_solido();
+        state.stake_time = StakeTime::Anytime;
+        state.clock.slot = 32;
+        state.clock.epoch = 1;
+        assert_eq!(
+            state.confirm_should_stake_unstake_in_current_slot(),
+            Some(())
+        );
     }
 }
