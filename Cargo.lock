@@ -201,6 +201,7 @@ dependencies = [
  "lido",
  "serde",
  "solana-program",
+ "spl-token",
 ]
 
 [[package]]
