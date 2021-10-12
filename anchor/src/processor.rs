@@ -48,5 +48,6 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
         AnchorInstruction::Initialize => process_initialize(program_id, accounts),
         AnchorInstruction::Deposit { amount } => process_deposit(program_id, accounts, amount),
         AnchorInstruction::Withdraw { amount } => todo!(),
+        AnchorInstruction::ClaimRewards => todo!(),
     }
 }

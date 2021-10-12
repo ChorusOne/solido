@@ -31,6 +31,9 @@ pub enum AnchorInstruction {
         #[allow(dead_code)] // but it's not
         amount: StLamports,
     },
+
+    /// Claim rewards on Terra.
+    ClaimRewards,
 }
 
 impl AnchorInstruction {
