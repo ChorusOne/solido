@@ -96,13 +96,13 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
+        pub user_authority {
+            is_signer: true,
+            is_writable: false,
+        },
         pub to_reserve_account {
             is_signer: false,
             is_writable: true,
-        },
-        pub reserve_authority {
-            is_signer: true,
-            is_writable: false,
         },
         const spl_token = spl_token::id(),
     }

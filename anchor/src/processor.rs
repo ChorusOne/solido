@@ -69,14 +69,14 @@ fn process_deposit(
             &spl_token::id(),
             accounts.from_account.key,
             accounts.to_reserve_account.key,
-            accounts.reserve_authority.key,
+            accounts.user_authority.key,
             &[],
             amount.0,
         )?,
         &[
             accounts.from_account.clone(),
             accounts.to_reserve_account.clone(),
-            accounts.reserve_authority.clone(),
+            accounts.user_authority.clone(),
             accounts.spl_token.clone(),
         ],
     )?;
