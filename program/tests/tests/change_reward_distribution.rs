@@ -86,7 +86,7 @@ async fn test_change_reward_distribution_wrong_minter() {
             },
         )
         .await;
-    assert_solido_error!(result, LidoError::InvalidFeeRecipient);
+    assert_solido_error!(result, LidoError::InvalidMint);
 
     let result = context
         .try_change_reward_distribution(
