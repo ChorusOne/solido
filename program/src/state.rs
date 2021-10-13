@@ -287,7 +287,7 @@ impl Lido {
                 self.st_sol_mint,
                 token_account.mint,
             );
-            return Err(LidoError::InvalidFeeRecipient.into());
+            return Err(LidoError::InvalidMint.into());
         }
         Ok(())
     }
