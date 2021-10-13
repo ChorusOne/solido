@@ -1,4 +1,4 @@
-use crate::{token::BLamports, ANCHOR_MINT_AUTHORITY};
+use crate::{error::AnchorError, token::BLamports, ANCHOR_MINT_AUTHORITY};
 use lido::error::LidoError;
 use solana_program::{
     account_info::AccountInfo, borsh::try_from_slice_unchecked, entrypoint::ProgramResult, msg,
@@ -34,9 +34,19 @@ pub fn _mint_b_sol_to<'a>(
     recipient: &AccountInfo<'a>,
     amount: BLamports,
 ) -> ProgramResult {
-    let solido_address_bytes = anchor_address.to_bytes();
+    if &anchor.bsol_mint != b_sol_mint.key {
+        msg!(
+            "Expected to find our bSOL mint ({}), but got {} instead.",
+            anchor.bsol_mint,
+            b_sol_mint.key
+        );
+        return Err(AnchorError::InvalidBSolAccount.into());
+    }
+    anchor.check_is_b_sol_account(recipient)?;
+
+    let anchor_address_bytes = anchor_address.to_bytes();
     let authority_signature_seeds = [
-        &solido_address_bytes[..],
+        &anchor_address_bytes[..],
         ANCHOR_MINT_AUTHORITY,
         &[anchor.mint_authority_bump_seed],
     ];

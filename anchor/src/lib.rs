@@ -5,6 +5,7 @@ use solana_program::pubkey::Pubkey;
 
 #[cfg(not(feature = "no-entrypoint"))]
 pub mod entrypoint;
+mod error;
 mod instruction;
 mod logic;
 pub mod processor;

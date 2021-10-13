@@ -1,14 +1,23 @@
 use borsh::BorshDeserialize;
-use lido::{error::LidoError, token::StLamports};
+use lido::{
+    error::LidoError,
+    state::Lido,
+    token::{Lamports, StLamports},
+};
 use solana_program::{
-    account_info::AccountInfo, entrypoint::ProgramResult, msg, program::invoke,
-    program_error::ProgramError, pubkey::Pubkey,
+    account_info::AccountInfo,
+    entrypoint::ProgramResult,
+    msg,
+    program::{invoke, invoke_signed},
+    program_error::ProgramError,
+    pubkey::Pubkey,
 };
 
 use crate::{
     instruction::{AnchorInstruction, DepositAccountsInfo, InitializeAccountsInfo},
-    logic::deserialize_anchor,
-    state::{Anchor, ExchangeRate},
+    logic::{deserialize_anchor, mint_b_sol_to},
+    state::Anchor,
+    token::BLamports,
     ANCHOR_MINT_AUTHORITY, ANCHOR_RESERVE_AUTHORITY,
 };
 
@@ -33,7 +42,6 @@ fn process_initialize(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> Prog
         reserve_authority: reserve_authority,
         mint_authority_bump_seed: mint_bump_seed,
         reserve_authority_bump_seed: reserve_authority_bump_seed,
-        exchange_rate: ExchangeRate::default(),
     };
 
     // TODO: Check the mint program, similar to `lido::logic::check_mint`.
@@ -79,6 +87,22 @@ fn process_deposit(
             accounts.user_authority.clone(),
             accounts.spl_token.clone(),
         ],
+    )?;
+
+    let lido = Lido::deserialize_lido(program_id, accounts.lido)?;
+
+    // Use Lido's exchange rate (`st_sol_supply / sol_balance`) to compute the
+    // amount of BLamports to send.
+    let amount = BLamports(lido.exchange_rate.exchange_sol(Lamports(amount.0))?.0);
+
+    mint_b_sol_to(
+        &anchor,
+        &accounts.anchor.key,
+        accounts.spl_token,
+        accounts.b_sol_mint,
+        accounts.b_sol_mint_authority,
+        accounts.b_sol_user_account,
+        amount,
     )?;
 
     Ok(())

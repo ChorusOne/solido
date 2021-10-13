@@ -1,4 +1,4 @@
-use crate::token::BLamports;
+use crate::{error::AnchorError, token::BLamports};
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use lido::{
     error::LidoError,
@@ -7,66 +7,9 @@ use lido::{
 };
 use serde::Serialize;
 use solana_program::{
-    account_info::AccountInfo, clock::Epoch, entrypoint::ProgramResult, msg, pubkey::Pubkey,
+    account_info::AccountInfo, clock::Epoch, entrypoint::ProgramResult, msg, program_pack::Pack,
+    pubkey::Pubkey,
 };
-
-// Copied from lido::state
-#[repr(C)]
-#[derive(
-    Clone, Debug, Default, BorshDeserialize, BorshSerialize, BorshSchema, Eq, PartialEq, Serialize,
-)]
-pub struct ExchangeRate {
-    /// The epoch in which we last called `UpdateExchangeRate`.
-    pub computed_in_epoch: Epoch,
-
-    /// The amount of stSOL that existed at that time.
-    pub b_sol_supply: BLamports,
-
-    /// The amount of BSOL we managed at that time, according to our internal
-    /// bookkeeping, so excluding the validation rewards paid at the start of
-    /// epoch `computed_in_epoch`.
-    pub st_sol_balance: StLamports,
-}
-
-impl ExchangeRate {
-    /// Convert StLamports to BLamports.
-    pub fn exchange_st_sol(&self, amount: StLamports) -> lido::token::Result<BLamports> {
-        // The exchange rate starts out at 1:1, if there are no deposits yet.
-        // If we minted stSOL but there is no SOL, then also assume a 1:1 rate.
-        if self.b_sol_supply == BLamports(0) || self.st_sol_balance == StLamports(0) {
-            return Ok(BLamports(amount.0));
-        }
-
-        let rate = Rational {
-            numerator: self.b_sol_supply.0,
-            denominator: self.st_sol_balance.0,
-        };
-
-        // The result is in StLamports, because the type system considers Rational
-        // dimensionless, but in this case `rate` has dimensions stSOL/SOL, so
-        // we need to re-wrap the result in the right type.
-        (amount * rate).map(|x| BLamports(x.0))
-    }
-
-    /// Convert BLamports to StLamports.
-    pub fn exchange_b_sol(&self, amount: BLamports) -> Result<StLamports, LidoError> {
-        // If there is no stSOL in existence, it cannot be exchanged.
-        if self.b_sol_supply == BLamports(0) {
-            msg!("Cannot exchange bSOL for stSOL, because no bSOL has been minted.");
-            return Err(LidoError::InvalidAmount);
-        }
-
-        let rate = Rational {
-            numerator: self.st_sol_balance.0,
-            denominator: self.b_sol_supply.0,
-        };
-
-        // The result is in BLamports, because the type system considers Rational
-        // dimensionless, but in this case `rate` has dimensions SOL/stSOL, so
-        // we need to re-wrap the result in the right type.
-        Ok((amount * rate).map(|x| StLamports(x.0))?)
-    }
-}
 
 #[repr(C)]
 #[derive(
@@ -89,9 +32,6 @@ pub struct Anchor {
     #[serde(serialize_with = "serialize_b58")]
     pub lido: Pubkey,
 
-    /// Exchange rate to use when depositing/withdrawing.
-    pub exchange_rate: ExchangeRate,
-
     /// Bump seeds for signing messages on behalf of the authority.
     pub mint_authority_bump_seed: u8,
     pub reserve_authority_bump_seed: u8,
@@ -104,6 +44,39 @@ impl Anchor {
         // that wasn't its owner, double check that the name passed to
         // ProgramTest matches the name of the crate.
         BorshSerialize::serialize(self, &mut *account.data.borrow_mut())?;
+        Ok(())
+    }
+
+    pub fn check_is_b_sol_account(&self, token_account_info: &AccountInfo) -> ProgramResult {
+        if token_account_info.owner != &spl_token::id() {
+            msg!(
+                "Expected SPL token account to be owned by {}, but it's owned by {} instead.",
+                spl_token::id(),
+                token_account_info.owner
+            );
+            return Err(AnchorError::InvalidBSolAccountOwner.into());
+        }
+        let token_account =
+            match spl_token::state::Account::unpack_from_slice(&token_account_info.data.borrow()) {
+                Ok(account) => account,
+                Err(..) => {
+                    msg!(
+                        "Expected an SPL token account at {}.",
+                        token_account_info.key
+                    );
+                    return Err(AnchorError::InvalidBSolAccount.into());
+                }
+            };
+
+        if token_account.mint != self.bsol_mint {
+            msg!(
+                "Expected mint of {} to be our bSOL mint ({}), but found {}.",
+                token_account_info.key,
+                self.bsol_mint,
+                token_account.mint,
+            );
+            return Err(AnchorError::InvalidBSolMint.into());
+        }
         Ok(())
     }
 }

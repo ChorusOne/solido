@@ -8,6 +8,7 @@ use solana_program::{account_info::AccountInfo, entrypoint::ProgramResult, msg, 
 
 use crate::logic::check_rent_exempt;
 use crate::processor::StakeType;
+use crate::state::Lido;
 use crate::vote_state::PartialVoteState;
 use crate::{
     error::LidoError,
@@ -15,7 +16,7 @@ use crate::{
         AddMaintainerInfo, AddValidatorInfo, ChangeRewardDistributionInfo, ClaimValidatorFeeInfo,
         DeactivateValidatorInfo, MergeStakeInfo, RemoveMaintainerInfo, RemoveValidatorInfo,
     },
-    logic::{deserialize_lido, mint_st_sol_to},
+    logic::mint_st_sol_to,
     state::{RewardDistribution, Validator},
     token::StLamports,
     STAKE_AUTHORITY,
@@ -27,7 +28,7 @@ pub fn process_change_reward_distribution(
     accounts_raw: &[AccountInfo],
 ) -> ProgramResult {
     let accounts = ChangeRewardDistributionInfo::try_from_slice(accounts_raw)?;
-    let mut lido = deserialize_lido(program_id, accounts.lido)?;
+    let mut lido = Lido::deserialize_lido(program_id, accounts.lido)?;
     lido.check_manager(accounts.manager)?;
 
     lido.check_is_st_sol_account(accounts.treasury_account)?;
@@ -42,7 +43,7 @@ pub fn process_change_reward_distribution(
 
 pub fn process_add_validator(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> ProgramResult {
     let accounts = AddValidatorInfo::try_from_slice(accounts_raw)?;
-    let mut lido = deserialize_lido(program_id, accounts.lido)?;
+    let mut lido = Lido::deserialize_lido(program_id, accounts.lido)?;
     let rent = &Rent::from_account_info(accounts.sysvar_rent)?;
     lido.check_manager(accounts.manager)?;
     lido.check_is_st_sol_account(accounts.validator_fee_st_sol_account)?;
@@ -81,7 +82,7 @@ pub fn process_remove_validator(
     accounts_raw: &[AccountInfo],
 ) -> ProgramResult {
     let accounts = RemoveValidatorInfo::try_from_slice(accounts_raw)?;
-    let mut lido = deserialize_lido(program_id, accounts.lido)?;
+    let mut lido = Lido::deserialize_lido(program_id, accounts.lido)?;
 
     let removed_validator = lido
         .validators
@@ -104,7 +105,7 @@ pub fn process_deactivate_validator(
     accounts_raw: &[AccountInfo],
 ) -> ProgramResult {
     let accounts = DeactivateValidatorInfo::try_from_slice(accounts_raw)?;
-    let mut lido = deserialize_lido(program_id, accounts.lido)?;
+    let mut lido = Lido::deserialize_lido(program_id, accounts.lido)?;
     lido.check_manager(accounts.manager)?;
 
     let validator = lido
@@ -122,7 +123,7 @@ pub fn process_claim_validator_fee(
     accounts_raw: &[AccountInfo],
 ) -> ProgramResult {
     let accounts = ClaimValidatorFeeInfo::try_from_slice(accounts_raw)?;
-    let mut lido = deserialize_lido(program_id, accounts.lido)?;
+    let mut lido = Lido::deserialize_lido(program_id, accounts.lido)?;
 
     let pubkey_entry = lido
         .validators
@@ -149,7 +150,7 @@ pub fn process_claim_validator_fee(
 /// Adds a maintainer to the list of maintainers
 pub fn process_add_maintainer(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> ProgramResult {
     let accounts = AddMaintainerInfo::try_from_slice(accounts_raw)?;
-    let mut lido = deserialize_lido(program_id, accounts.lido)?;
+    let mut lido = Lido::deserialize_lido(program_id, accounts.lido)?;
     lido.check_manager(accounts.manager)?;
 
     lido.maintainers.add(*accounts.maintainer.key, ())?;
@@ -163,7 +164,7 @@ pub fn process_remove_maintainer(
     accounts_raw: &[AccountInfo],
 ) -> ProgramResult {
     let accounts = RemoveMaintainerInfo::try_from_slice(accounts_raw)?;
-    let mut lido = deserialize_lido(program_id, accounts.lido)?;
+    let mut lido = Lido::deserialize_lido(program_id, accounts.lido)?;
     lido.check_manager(accounts.manager)?;
 
     lido.maintainers.remove(accounts.maintainer.key)?;
@@ -190,7 +191,7 @@ pub fn _process_change_validator_fee_account(
 /// All fully active stake accounts precede the activating stake accounts.
 pub fn process_merge_stake(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> ProgramResult {
     let accounts = MergeStakeInfo::try_from_slice(accounts_raw)?;
-    let mut lido = deserialize_lido(program_id, accounts.lido)?;
+    let mut lido = Lido::deserialize_lido(program_id, accounts.lido)?;
 
     let mut validator = lido
         .validators

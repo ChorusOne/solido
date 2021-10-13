@@ -512,19 +512,6 @@ pub fn split_stake_account(
     Ok(())
 }
 
-pub fn deserialize_lido(program_id: &Pubkey, lido: &AccountInfo) -> Result<Lido, ProgramError> {
-    if lido.owner != program_id {
-        msg!(
-            "Lido state is owned by {}, but should be owned by the Lido program ({}).",
-            lido.owner,
-            program_id
-        );
-        return Err(LidoError::InvalidOwner.into());
-    }
-    let lido = try_from_slice_unchecked::<Lido>(&lido.data.borrow())?;
-    Ok(lido)
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
