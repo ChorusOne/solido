@@ -96,25 +96,30 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
+        // Owner of `from_account` SPL token account.
+        // Must sign the transaction in order to move tokens.
         pub user_authority {
             is_signer: true,
             is_writable: false,
         },
+        // Needs to be writable to update the account's state.
         pub to_reserve_account {
             is_signer: false,
             is_writable: true,
         },
+        // User account that will receive the bSOL tokens, needs to be writable
+        // to update the account's state.
         pub b_sol_user_account {
             is_signer: false,
             is_writable: true,
         },
         pub b_sol_mint {
             is_signer: false,
-            is_writable: true,
+            is_writable: false,
         },
         pub b_sol_mint_authority {
             is_signer: false,
-            is_writable: true,
+            is_writable: false,
         },
         const spl_token = spl_token::id(),
     }
