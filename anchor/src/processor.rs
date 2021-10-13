@@ -1,20 +1,11 @@
 use borsh::BorshDeserialize;
 use lido::{
-    error::LidoError,
     state::Lido,
     token::{Lamports, StLamports},
 };
 use solana_program::{
-    account_info::AccountInfo,
-    entrypoint::ProgramResult,
-    msg,
-    program::{invoke, invoke_signed},
-    program_error::ProgramError,
-    program_pack::Pack,
-    pubkey::Pubkey,
-    rent::Rent,
-    system_instruction,
-    sysvar::Sysvar,
+    account_info::AccountInfo, entrypoint::ProgramResult, msg, program::invoke,
+    program_error::ProgramError, pubkey::Pubkey, rent::Rent, sysvar::Sysvar,
 };
 
 use crate::{
@@ -97,6 +88,8 @@ fn process_deposit(
         accounts.anchor.key,
         accounts.to_reserve_account.key,
     )?;
+    // Check if the mint account is the same as the one stored in Anchor.
+    anchor.check_mint(accounts.b_sol_mint.key)?;
 
     // Transfer `amount` StLamports to the reserve.
     invoke(

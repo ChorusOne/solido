@@ -102,4 +102,16 @@ impl Anchor {
         }
         Ok(())
     }
+
+    pub fn check_mint(&self, provided_mint: &Pubkey) -> ProgramResult {
+        if &self.bsol_mint != provided_mint {
+            msg!(
+                "Invalid mint account, expected {}, but found {}.",
+                self.bsol_mint,
+                provided_mint,
+            );
+            return Err(AnchorError::InvalidBSolMint.into());
+        }
+        Ok(())
+    }
 }
