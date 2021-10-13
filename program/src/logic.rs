@@ -6,9 +6,9 @@ use solana_program::program_option::COption;
 use solana_program::program_pack::Pack;
 use solana_program::stake::state::StakeAuthorize;
 use solana_program::{
-    account_info::AccountInfo, borsh::try_from_slice_unchecked, msg, program::invoke,
-    program::invoke_signed, program_error::ProgramError, pubkey::Pubkey, rent::Rent,
-    stake as stake_program, system_instruction,
+    account_info::AccountInfo, msg, program::invoke, program::invoke_signed,
+    program_error::ProgramError, pubkey::Pubkey, rent::Rent, stake as stake_program,
+    system_instruction,
 };
 
 use crate::processor::StakeType;
