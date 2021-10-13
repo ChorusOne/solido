@@ -1,4 +1,4 @@
-use crate::{error::AnchorError, token::BLamports};
+use crate::{error::AnchorError, token::BLamports, ANCHOR_RESERVE_ACCOUNT};
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use lido::{
     error::LidoError,
@@ -20,10 +20,6 @@ pub struct Anchor {
     #[serde(serialize_with = "serialize_b58")]
     pub bsol_mint: Pubkey,
 
-    /// Reserve account, will hold stSOL.
-    #[serde(serialize_with = "serialize_b58")]
-    pub reserve_account: Pubkey,
-
     /// Reserve authority for `reserve_account`.
     #[serde(serialize_with = "serialize_b58")]
     pub reserve_authority: Pubkey,
@@ -35,6 +31,7 @@ pub struct Anchor {
     /// Bump seeds for signing messages on behalf of the authority.
     pub mint_authority_bump_seed: u8,
     pub reserve_authority_bump_seed: u8,
+    pub reserve_account_bump_seed: u8,
 }
 
 impl Anchor {
@@ -76,6 +73,32 @@ impl Anchor {
                 token_account.mint,
             );
             return Err(AnchorError::InvalidBSolMint.into());
+        }
+        Ok(())
+    }
+
+    pub fn check_reserve_account(
+        &self,
+        program_id: &Pubkey,
+        anchor_state: &Pubkey,
+        provided_reserve: &Pubkey,
+    ) -> ProgramResult {
+        let reserve_account = Pubkey::create_program_address(
+            &[
+                &anchor_state.to_bytes(),
+                ANCHOR_RESERVE_ACCOUNT,
+                &[self.reserve_account_bump_seed],
+            ],
+            program_id,
+        )?;
+
+        if &reserve_account != provided_reserve {
+            msg!(
+                "Invalid reserve account, expected {}, but found {}.",
+                reserve_account,
+                provided_reserve,
+            );
+            return Err(AnchorError::InvalidReserveAccount.into());
         }
         Ok(())
     }

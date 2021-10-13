@@ -1,11 +1,19 @@
 use crate::{error::AnchorError, token::BLamports, ANCHOR_MINT_AUTHORITY};
-use lido::error::LidoError;
+use lido::{error::LidoError, state::Lido};
 use solana_program::{
-    account_info::AccountInfo, borsh::try_from_slice_unchecked, entrypoint::ProgramResult, msg,
-    program::invoke_signed, program_error::ProgramError, program_pack::Pack, pubkey::Pubkey,
+    account_info::AccountInfo,
+    borsh::try_from_slice_unchecked,
+    entrypoint::ProgramResult,
+    msg,
+    program::{invoke, invoke_signed},
+    program_error::ProgramError,
+    program_pack::Pack,
+    pubkey::Pubkey,
+    rent::Rent,
+    system_instruction,
 };
 
-use crate::state::Anchor;
+use crate::{instruction::InitializeAccountsInfo, state::Anchor};
 
 pub fn deserialize_anchor(
     program_id: &Pubkey,
@@ -44,9 +52,8 @@ pub fn _mint_b_sol_to<'a>(
     }
     anchor.check_is_b_sol_account(recipient)?;
 
-    let anchor_address_bytes = anchor_address.to_bytes();
     let authority_signature_seeds = [
-        &anchor_address_bytes[..],
+        &anchor_address.to_bytes(),
         ANCHOR_MINT_AUTHORITY,
         &[anchor.mint_authority_bump_seed],
     ];
@@ -73,5 +80,64 @@ pub fn _mint_b_sol_to<'a>(
             spl_token_program.clone(),
         ],
         &signers,
+    )
+}
+
+pub fn create_reserve_account(
+    seeds: &[&[&[u8]]],
+    accounts: &InitializeAccountsInfo,
+    rent: &Rent,
+) -> ProgramResult {
+    // `system_instruction::create_account` performs the same three steps as we
+    // do below, but it additionally has a check to prevent creating an account
+    // that has a nonzero balance, which we omit here.
+    invoke_signed(
+        &system_instruction::allocate(
+            accounts.reserve_account.key,
+            spl_token::state::Account::LEN as u64,
+        ),
+        &[
+            accounts.reserve_account.clone(),
+            accounts.system_program.clone(),
+        ],
+        seeds,
+    )?;
+    invoke_signed(
+        &system_instruction::assign(accounts.reserve_account.key, &spl_token::id()),
+        &[
+            accounts.reserve_account.clone(),
+            accounts.system_program.clone(),
+        ],
+        seeds,
+    )?;
+    invoke_signed(
+        &system_instruction::transfer(
+            accounts.signer.key,
+            accounts.reserve_account.key,
+            rent.minimum_balance(spl_token::state::Account::LEN),
+        ),
+        &[
+            accounts.signer.clone(),
+            accounts.reserve_account.clone(),
+            accounts.system_program.clone(),
+        ],
+        seeds,
+    )?;
+    let lido = Lido::deserialize_lido(accounts.lido_program.key, accounts.lido)?;
+
+    // Initialize the reserve account.
+    invoke(
+        &spl_token::instruction::initialize_account(
+            &spl_token::id(),
+            accounts.reserve_account.key,
+            &lido.st_sol_mint,
+            accounts.reserve_authority.key,
+        )?,
+        &[
+            accounts.reserve_account.clone(),
+            accounts.st_sol_mint.clone(),
+            accounts.reserve_authority.clone(),
+            accounts.sysvar_rent.clone(),
+        ],
     )
 }

@@ -17,6 +17,9 @@ pub enum AnchorError {
 
     /// The provided mint is invalid.
     InvalidBSolMint = 2,
+
+    /// The provided reserve is invalid.
+    InvalidReserveAccount = 3,
 }
 
 // Just reuse the generated Debug impl for Display. It shows the variant names.

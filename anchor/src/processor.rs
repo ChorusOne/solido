@@ -10,19 +10,25 @@ use solana_program::{
     msg,
     program::{invoke, invoke_signed},
     program_error::ProgramError,
+    program_pack::Pack,
     pubkey::Pubkey,
+    rent::Rent,
+    system_instruction,
+    sysvar::Sysvar,
 };
 
 use crate::{
+    error::AnchorError,
     instruction::{AnchorInstruction, DepositAccountsInfo, InitializeAccountsInfo},
-    logic::{deserialize_anchor, mint_b_sol_to},
+    logic::{create_reserve_account, deserialize_anchor, mint_b_sol_to},
     state::Anchor,
     token::BLamports,
-    ANCHOR_MINT_AUTHORITY, ANCHOR_RESERVE_AUTHORITY,
+    ANCHOR_MINT_AUTHORITY, ANCHOR_RESERVE_ACCOUNT, ANCHOR_RESERVE_AUTHORITY,
 };
 
 fn process_initialize(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> ProgramResult {
     let accounts = InitializeAccountsInfo::try_from_slice(accounts_raw)?;
+    let rent = Rent::from_account_info(accounts.sysvar_rent)?;
 
     let (_mint_authority, mint_bump_seed) = Pubkey::find_program_address(
         &[&accounts.anchor.key.to_bytes(), ANCHOR_MINT_AUTHORITY],
@@ -35,13 +41,34 @@ fn process_initialize(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> Prog
         program_id,
     );
 
+    let (reserve_account, reserve_account_bump_seed) = Pubkey::find_program_address(
+        &[&accounts.anchor.key.to_bytes(), ANCHOR_RESERVE_ACCOUNT],
+        program_id,
+    );
+    if &reserve_account != accounts.reserve_account.key {
+        msg!(
+            "Invalid reserve account, expected {}, but found {}.",
+            reserve_account,
+            accounts.reserve_account.key,
+        );
+        return Err(AnchorError::InvalidReserveAccount.into());
+    }
+
+    let reserve_account_seeds = [
+        &accounts.anchor.key.to_bytes(),
+        ANCHOR_RESERVE_ACCOUNT,
+        &[reserve_account_bump_seed],
+    ];
+    // Create and initialize the reserve account.
+    create_reserve_account(&[&reserve_account_seeds], &accounts, &rent)?;
+
     let anchor = Anchor {
         bsol_mint: *accounts.b_sol_mint.key,
         lido: *accounts.lido.key,
-        reserve_account: *accounts.reserve_account.key,
         reserve_authority: reserve_authority,
         mint_authority_bump_seed: mint_bump_seed,
-        reserve_authority_bump_seed: reserve_authority_bump_seed,
+        reserve_authority_bump_seed,
+        reserve_account_bump_seed,
     };
 
     // TODO: Check the mint program, similar to `lido::logic::check_mint`.
@@ -62,14 +89,14 @@ fn process_deposit(
     }
 
     let anchor = deserialize_anchor(program_id, accounts.anchor)?;
-    if &anchor.reserve_account != accounts.to_reserve_account.key {
-        msg!(
-            "Reserve account mismatch: expected {}, provided {}.",
-            anchor.reserve_account,
-            accounts.to_reserve_account.key
-        );
-        return Err(LidoError::InvalidReserveAccount.into());
-    }
+
+    // Check if the reserve account is the same as the one derived by the Anchor
+    // program.
+    anchor.check_reserve_account(
+        program_id,
+        accounts.anchor.key,
+        accounts.to_reserve_account.key,
+    )?;
 
     // Transfer `amount` StLamports to the reserve.
     invoke(
@@ -89,10 +116,10 @@ fn process_deposit(
         ],
     )?;
 
-    let lido = Lido::deserialize_lido(program_id, accounts.lido)?;
+    let lido = Lido::deserialize_lido(accounts.lido_program.key, accounts.lido)?;
 
     // Use Lido's exchange rate (`st_sol_supply / sol_balance`) to compute the
-    // amount of BLamports to send.
+    // amount of BLamports to mint.
     let amount = BLamports(lido.exchange_rate.exchange_sol(Lamports(amount.0))?.0);
 
     mint_b_sol_to(
@@ -103,9 +130,7 @@ fn process_deposit(
         accounts.b_sol_mint_authority,
         accounts.b_sol_user_account,
         amount,
-    )?;
-
-    Ok(())
+    )
 }
 
 /// Processes [Instruction](enum.Instruction.html).

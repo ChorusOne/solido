@@ -22,3 +22,6 @@ pub fn find_instance_address(anker_program_id: &Pubkey, solido_instance: &Pubkey
 }
 /// Anchor's authority that will control the reserve account.
 pub const ANCHOR_RESERVE_AUTHORITY: &[u8] = b"reserve_authority";
+
+/// Anchor's reserve account. Holds StSOL.
+pub const ANCHOR_RESERVE_ACCOUNT: &[u8] = b"reserve_authority";

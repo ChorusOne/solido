@@ -8,7 +8,7 @@ use solana_program::{
     instruction::{AccountMeta, Instruction},
     program_error::ProgramError,
     pubkey::Pubkey,
-    sysvar,
+    system_program, sysvar,
 };
 
 use lido::{accounts_struct, accounts_struct_meta, error::LidoError, token::StLamports};
@@ -52,11 +52,23 @@ impl AnchorInstruction {
 
 accounts_struct! {
     InitializeAccountsMeta, InitializeAccountsInfo {
+        pub signer {
+            is_signer: true,
+            is_writable: false,
+        },
         pub anchor {
             is_signer: false,
             is_writable: true,
         },
         pub lido {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub lido_program {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub st_sol_mint {
             is_signer: false,
             is_writable: false,
         },
@@ -68,7 +80,12 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
+        pub reserve_authority {
+            is_signer: false,
+            is_writable: false,
+        },
         const sysvar_rent = sysvar::rent::id(),
+        const system_program = system_program::id(),
         const spl_token = spl_token::id(),
     }
 }
@@ -89,6 +106,10 @@ accounts_struct! {
             is_writable: false,
         },
         pub lido {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub lido_program {
             is_signer: false,
             is_writable: false,
         },
