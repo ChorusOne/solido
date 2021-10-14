@@ -79,15 +79,13 @@ fn process_deposit(
         return Err(ProgramError::InvalidArgument);
     }
 
-    let anchor = deserialize_anchor(program_id, accounts.anchor)?;
-
-    // Check if the reserve account is the same as the one derived by the Anchor
-    // program.
-    anchor.check_reserve_account(
+    let anchor = deserialize_anchor(
         program_id,
-        accounts.anchor.key,
+        accounts.anchor,
+        accounts.lido.key,
         accounts.to_reserve_account.key,
     )?;
+
     // Check if the mint account is the same as the one stored in Anchor.
     anchor.check_mint(accounts.b_sol_mint.key)?;
 

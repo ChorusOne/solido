@@ -15,20 +15,27 @@ use solana_program::{
 
 use crate::{instruction::InitializeAccountsInfo, state::Anchor};
 
+/// Deserialize the Anchor state.
+/// Checks if the Lido instance is the same as the one stored in Anchor.
+/// Checks if the Reserve account is the same as the one stored in Anchor.
 pub fn deserialize_anchor(
     program_id: &Pubkey,
-    anchor: &AccountInfo,
+    anchor_account: &AccountInfo,
+    lido: &Pubkey,
+    reserve_account: &Pubkey,
 ) -> Result<Anchor, ProgramError> {
-    if anchor.owner != program_id {
+    if anchor_account.owner != program_id {
         msg!(
-            "Lido state is owned by {}, but should be owned by the Lido program ({}).",
-            anchor.owner,
+            "Anchor state is owned by {}, but should be owned by the Anchor program ({}).",
+            anchor_account.owner,
             program_id
         );
         return Err(LidoError::InvalidOwner.into());
     }
-    let lido = try_from_slice_unchecked::<Anchor>(&anchor.data.borrow())?;
-    Ok(lido)
+    let anchor = try_from_slice_unchecked::<Anchor>(&anchor_account.data.borrow())?;
+    anchor.check_lido(lido)?;
+    anchor.check_reserve_account(program_id, anchor_account.key, reserve_account)?;
+    Ok(anchor)
 }
 
 /// Mint the given amount of bSOL and put it in the recipient's account.

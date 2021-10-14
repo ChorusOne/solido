@@ -20,6 +20,9 @@ pub enum AnchorError {
 
     /// The provided reserve is invalid.
     InvalidReserveAccount = 3,
+
+    /// The provided Lido state is different from the stored one.
+    WrongLidoInstance = 4,
 }
 
 // Just reuse the generated Debug impl for Display. It shows the variant names.

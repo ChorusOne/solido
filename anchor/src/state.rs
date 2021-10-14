@@ -114,4 +114,16 @@ impl Anchor {
         }
         Ok(())
     }
+
+    pub fn check_lido(&self, provided_lido: &Pubkey) -> ProgramResult {
+        if &self.lido != provided_lido {
+            msg!(
+                "Invalid Lido account, expected {}, but found {}.",
+                self.lido,
+                provided_lido,
+            );
+            return Err(AnchorError::WrongLidoInstance.into());
+        }
+        Ok(())
+    }
 }
