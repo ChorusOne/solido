@@ -245,11 +245,8 @@ impl Context {
         // program. If it does not, then it will still partially work, but we get
         // weird errors about resizing accounts.
         let program_crate_name = "lido";
-        let program_test = ProgramTest::new(
-            program_crate_name,
-            id(),
-            processor!(lido::processor::process),
-        );
+        let mut program_test = ProgramTest::default();
+        program_test.add_program(program_crate_name, id(), processor!(lido::processor::process));
 
         let mut result = Self {
             context: program_test.start_with_context().await,
