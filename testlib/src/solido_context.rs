@@ -241,12 +241,20 @@ impl Context {
             &id(),
         );
 
-        // Note: this name *must* match the name of the crate that contains the
-        // program. If it does not, then it will still partially work, but we get
-        // weird errors about resizing accounts.
-        let program_crate_name = "lido";
         let mut program_test = ProgramTest::default();
-        program_test.add_program(program_crate_name, id(), processor!(lido::processor::process));
+        // Note: the program name *must* match the name of the .so file that contains
+        // the program. If it does not, then it will still partially work, but we get
+        // weird errors about resizing accounts.
+        program_test.add_program(
+            "lido",
+            crate::solido_context::id(),
+            processor!(lido::processor::process),
+        );
+        program_test.add_program(
+            "anchor_integration",
+            crate::anchor_context::id(),
+            processor!(anchor_integration::processor::process),
+        );
 
         let mut result = Self {
             context: program_test.start_with_context().await,

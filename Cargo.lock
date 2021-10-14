@@ -3840,6 +3840,7 @@ dependencies = [
 name = "testlib"
 version = "1.1.0"
 dependencies = [
+ "anchor_integration",
  "borsh",
  "lido",
  "num-derive",

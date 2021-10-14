@@ -5,9 +5,9 @@
 pub mod entrypoint;
 mod instruction;
 mod logic;
-mod processor;
-mod state;
-mod token;
+pub mod processor;
+pub mod state;
+pub mod token;
 
 /// Mint authority, mints StSol.
 pub const ANCHOR_MINT_AUTHORITY: &[u8] = b"mint_authority";
