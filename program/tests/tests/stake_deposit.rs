@@ -1,10 +1,8 @@
 // SPDX-FileCopyrightText: 2021 Chorus One AG
 // SPDX-License-Identifier: GPL-3.0
 
-#![cfg(feature = "test-bpf")]
-
-use crate::context::{id, Context, StakeDeposit};
-use crate::{assert_error_code, assert_solido_error};
+use testlib::solido_context::{id, Context, StakeDeposit};
+use testlib::{assert_error_code, assert_solido_error};
 
 use lido::error::LidoError;
 use lido::processor::StakeType;

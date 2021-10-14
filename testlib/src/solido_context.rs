@@ -3,9 +3,6 @@
 
 //! Holds a test context, which makes it easier to test with a Solido instance set up.
 
-use lido::account_map::PubkeyAndEntry;
-use lido::processor::StakeType;
-use lido::stake_account::StakeAccount;
 use num_traits::cast::FromPrimitive;
 use rand::prelude::StdRng;
 use rand::SeedableRng;
@@ -30,6 +27,9 @@ use solana_sdk::transport::TransportError;
 use solana_vote_program::vote_instruction;
 use solana_vote_program::vote_state::{VoteInit, VoteState};
 
+use lido::account_map::PubkeyAndEntry;
+use lido::processor::StakeType;
+use lido::stake_account::StakeAccount;
 use lido::token::{Lamports, StLamports};
 use lido::{
     error::LidoError, instruction, RESERVE_ACCOUNT, REWARDS_WITHDRAW_AUTHORITY, STAKE_AUTHORITY,
@@ -66,7 +66,7 @@ fn test_deterministic_key() {
     assert_eq!(kp1.to_bytes(), expected_result);
 }
 
-// This id is only used throughout these tests.
+// Program id for the Solido program. Only used for tests.
 solana_program::declare_id!("3kEkdGe68DuTKg6FhVrLPZ3Wm8EcUPCPjhCeu8WrGDoc");
 
 pub struct Context {

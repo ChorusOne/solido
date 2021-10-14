@@ -1,15 +1,13 @@
 // SPDX-FileCopyrightText: 2021 Chorus One AG
 // SPDX-License-Identifier: GPL-3.0
 
-#![cfg(feature = "test-bpf")]
-
 //! This test confirms the limits of our system.
 //!
 //! If the tests in here start to fail, we probably need to update the test
 //! expectations; there is no "right" answer, but we would like to know what
 //! how many accounts Solido can handle.
 
-use crate::context::{Context, StakeDeposit};
+use testlib::solido_context::{Context, StakeDeposit};
 
 use lido::token::Lamports;
 

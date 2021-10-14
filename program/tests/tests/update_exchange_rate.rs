@@ -1,12 +1,10 @@
 // SPDX-FileCopyrightText: 2021 Chorus One AG
 // SPDX-License-Identifier: GPL-3.0
 
-#![cfg(feature = "test-bpf")]
-
 use solana_program_test::tokio;
 
-use crate::assert_solido_error;
-use crate::context::Context;
+use testlib::assert_solido_error;
+use testlib::solido_context::Context;
 
 use lido::error::LidoError;
 use lido::state::ExchangeRate;

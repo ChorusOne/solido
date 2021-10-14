@@ -3,8 +3,9 @@
 
 #![cfg(feature = "test-bpf")]
 
-use crate::assert_solido_error;
-use crate::context::{Context, StakeDeposit};
+use testlib::assert_solido_error;
+use testlib::solido_context::{self, Context, StakeDeposit};
+
 use lido::processor::StakeType;
 use lido::MINIMUM_STAKE_ACCOUNT_BALANCE;
 use lido::{error::LidoError, token::Lamports};
@@ -186,7 +187,7 @@ async fn test_unstake_from_inactive_validator() {
         "The full balance should be in unstake accounts after unstaking both."
     );
     let (stake_account, _) = validator.find_stake_account_address(
-        &crate::context::id(),
+        &solido_context::id(),
         &context.solido.pubkey(),
         validator.entry.stake_seeds.begin,
         StakeType::Stake,
@@ -203,7 +204,7 @@ async fn test_unstake_with_funded_destination_stake() {
     let mut context = new_unstake_context(&[STAKE_AMOUNT]).await;
     let validator = &context.get_solido().await.validators.entries[0];
     let (unstake_address, _) = validator.find_stake_account_address(
-        &crate::context::id(),
+        &solido_context::id(),
         &context.solido.pubkey(),
         0,
         StakeType::Unstake,

@@ -1,10 +1,9 @@
 // SPDX-FileCopyrightText: 2021 Chorus One AG
 // SPDX-License-Identifier: GPL-3.0
 
-#![cfg(feature = "test-bpf")]
+use testlib::assert_solido_error;
+use testlib::solido_context::{self, get_account_info, Context, StakeDeposit};
 
-use crate::assert_solido_error;
-use crate::context::{get_account_info, Context, StakeDeposit};
 use lido::processor::StakeType;
 use lido::{error::LidoError, token::Lamports};
 use solana_program_test::tokio;
@@ -152,7 +151,7 @@ async fn test_merge_with_donated_stake() {
     let (mut context, _stake_account_pubkeys) = Context::new_with_two_stake_accounts().await;
     let validator = &context.get_solido().await.validators.entries[0];
     let (from_stake_account, _) = validator.find_stake_account_address(
-        &crate::context::id(),
+        &solido_context::id(),
         &context.solido.pubkey(),
         0,
         StakeType::Stake,

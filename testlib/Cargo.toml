@@ -1,0 +1,21 @@
+[package]
+authors = ["Chorus One <techops@chorus.one>"]
+license = "GPL-3.0"
+edition = "2018"
+name = "testlib"
+version = "1.1.0"
+
+[dependencies]
+borsh = "0.9.1"
+lido = { path = "../program" }
+num-derive = "0.3"
+num-traits = "0.2"
+rand = "0.7.3"
+serde = "1.0.121"
+serde_derive = "1.0.103"
+solana-program = "1.7.8"
+solana-program-test = "1.7.8"
+solana-sdk = "1.7.8"
+solana-vote-program = "1.7.8"
+spl-memo = "3.0.1"
+spl-token = { version = "3.1.1", features = ["no-entrypoint"] }
