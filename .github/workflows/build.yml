@@ -71,6 +71,7 @@ jobs:
     - name: Run unit tests
       run: |
         cargo test --manifest-path program/Cargo.toml
+        cargo test --manifest-path anchor/Cargo.toml
         cargo test --manifest-path cli/Cargo.toml
 
     - name: Build on-chain BPF programs
@@ -88,6 +89,7 @@ jobs:
         # But only run the tests for Solido itself, the SPL tests are already
         # executed upstream.
         cargo test-bpf --manifest-path program/Cargo.toml
+        cargo test-bpf --manifest-path anchor/Cargo.toml
 
     - name: Build CLI client
       run: cargo build --bin solido
@@ -158,6 +160,7 @@ jobs:
     - name: Run Clippy
       run: |
         cargo clippy --manifest-path program/Cargo.toml -- --deny warnings
+        cargo clippy --manifest-path anchor/Cargo.toml -- --deny warnings
         cargo clippy --manifest-path cli/Cargo.toml -- --deny warnings
 
     - name: Typecheck Python
