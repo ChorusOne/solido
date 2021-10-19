@@ -426,8 +426,8 @@ impl Context {
         mint.pubkey()
     }
 
-    /// Create a new SPL token account holding stSOL, return its address.
-    pub async fn create_st_sol_account(&mut self, owner: Pubkey) -> Pubkey {
+    /// Create a new SPL token account, return its address.
+    pub async fn create_spl_token_account(&mut self, mint: Pubkey, owner: Pubkey) -> Pubkey {
         let rent = self.context.banks_client.get_rent().await.unwrap();
         let account_rent = rent.minimum_balance(spl_token::state::Account::LEN);
         let account = self.deterministic_keypair.new_keypair();
@@ -447,7 +447,7 @@ impl Context {
                 spl_token::instruction::initialize_account(
                     &spl_token::id(),
                     &account.pubkey(),
-                    &self.st_sol_mint,
+                    &mint,
                     &owner,
                 )
                 .unwrap(),
@@ -458,6 +458,11 @@ impl Context {
         .expect("Failed to create token account.");
 
         account.pubkey()
+    }
+
+    /// Create a new SPL token account holding stSOL, return its address.
+    pub async fn create_st_sol_account(&mut self, owner: Pubkey) -> Pubkey {
+        self.create_spl_token_account(self.st_sol_mint, owner).await
     }
 
     /// Create an initialized but undelegated stake account (outside of Solido).
