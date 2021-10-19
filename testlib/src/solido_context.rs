@@ -252,7 +252,7 @@ impl Context {
         );
         program_test.add_program(
             "anchor_integration",
-            crate::anchor_context::id(),
+            crate::anker_context::id(),
             processor!(anchor_integration::processor::process),
         );
 
