@@ -7,10 +7,10 @@ use testlib::anker_context::Context;
 
 #[tokio::test]
 async fn test_successful_deposit() {
-    let mut _context = Context::new().await;
+    let mut context = Context::new().await;
 
-    let _amount = Lamports(1_000_000_000);
-    // let (_owner, _recipient) = context.deposit(amount).await;
+    let amount = Lamports(1_000_000_000);
+    let (_owner, _recipient) = context.deposit(amount).await;
 
     // TODO(#449, ruuda): Finish deposit test.
 }

@@ -52,9 +52,9 @@ impl AnchorInstruction {
 
 accounts_struct! {
     InitializeAccountsMeta, InitializeAccountsInfo {
-        pub signer {
+        pub fund_rent_from {
             is_signer: true,
-            is_writable: false,
+            is_writable: true,
         },
         pub anchor {
             is_signer: false,

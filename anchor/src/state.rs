@@ -6,6 +6,9 @@ use solana_program::{
     account_info::AccountInfo, entrypoint::ProgramResult, msg, program_pack::Pack, pubkey::Pubkey,
 };
 
+/// Size of the serialized [`Anchor`] struct, in bytes.
+pub const ANKER_LEN: usize = 99;
+
 #[repr(C)]
 #[derive(
     Clone, Debug, Default, BorshDeserialize, BorshSerialize, BorshSchema, Eq, PartialEq, Serialize,
@@ -120,5 +123,18 @@ impl Anchor {
             return Err(AnchorError::WrongLidoInstance.into());
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_anker_len() {
+        let instance = Anchor::default();
+        let mut writer = Vec::new();
+        BorshSerialize::serialize(&instance, &mut writer).unwrap();
+        assert_eq!(writer.len(), ANKER_LEN);
     }
 }

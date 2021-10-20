@@ -118,12 +118,12 @@ pub fn create_reserve_account(
     )?;
     invoke_signed(
         &system_instruction::transfer(
-            accounts.signer.key,
+            accounts.fund_rent_from.key,
             accounts.reserve_account.key,
             rent.minimum_balance(spl_token::state::Account::LEN),
         ),
         &[
-            accounts.signer.clone(),
+            accounts.fund_rent_from.clone(),
             accounts.reserve_account.clone(),
             accounts.system_program.clone(),
         ],
