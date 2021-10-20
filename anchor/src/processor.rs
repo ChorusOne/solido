@@ -56,7 +56,7 @@ fn process_initialize(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> Prog
     let anchor = Anchor {
         bsol_mint: *accounts.b_sol_mint.key,
         lido: *accounts.lido.key,
-        reserve_authority: reserve_authority,
+        reserve_authority,
         mint_authority_bump_seed: mint_bump_seed,
         reserve_authority_bump_seed,
         reserve_account_bump_seed,
@@ -115,7 +115,7 @@ fn process_deposit(
 
     mint_b_sol_to(
         &anchor,
-        &accounts.anchor.key,
+        accounts.anchor.key,
         accounts.spl_token,
         accounts.b_sol_mint,
         accounts.b_sol_mint_authority,

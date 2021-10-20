@@ -1,6 +1,5 @@
 use std::fmt::Formatter;
 
-use lido::token::ArithmeticError;
 use num_derive::FromPrimitive;
 use solana_program::{decode_error::DecodeError, program_error::ProgramError};
 

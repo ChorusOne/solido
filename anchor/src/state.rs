@@ -1,14 +1,9 @@
-use crate::{error::AnchorError, token::BLamports, ANCHOR_RESERVE_ACCOUNT};
+use crate::{error::AnchorError, ANCHOR_RESERVE_ACCOUNT};
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use lido::{
-    error::LidoError,
-    token::{Rational, StLamports},
-    util::serialize_b58,
-};
+use lido::util::serialize_b58;
 use serde::Serialize;
 use solana_program::{
-    account_info::AccountInfo, clock::Epoch, entrypoint::ProgramResult, msg, program_pack::Pack,
-    pubkey::Pubkey,
+    account_info::AccountInfo, entrypoint::ProgramResult, msg, program_pack::Pack, pubkey::Pubkey,
 };
 
 #[repr(C)]

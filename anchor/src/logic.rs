@@ -39,8 +39,7 @@ pub fn deserialize_anchor(
 }
 
 /// Mint the given amount of bSOL and put it in the recipient's account.
-// TODO(#449): Remove underscore once this method is used.
-pub fn _mint_b_sol_to<'a>(
+pub fn mint_b_sol_to<'a>(
     anchor: &Anchor,
     anchor_address: &Pubkey,
     spl_token_program: &AccountInfo<'a>,
