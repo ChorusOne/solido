@@ -1,16 +1,16 @@
 // SPDX-FileCopyrightText: 2021 Chorus One AG
 // SPDX-License-Identifier: GPL-3.0
 
-use testlib::anker_context::Context;
-use testlib::assert_solido_error;
-
-use anchor_integration::token::BLamports;
 use lido::token::Lamports;
+use solana_program_test::tokio;
+use testlib::anker_context::Context;
 
 #[tokio::test]
 async fn test_successful_deposit() {
-    let mut context = Context::new();
-    let (_owner, _recipient) = context.deposit(TEST_DEPOSIT_AMOUNT).await;
+    let mut _context = Context::new().await;
+
+    let _amount = Lamports(1_000_000_000);
+    // let (_owner, _recipient) = context.deposit(amount).await;
 
     // TODO(ruuda): Finish deposit test.
 }

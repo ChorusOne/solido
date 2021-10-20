@@ -126,7 +126,7 @@ pub async fn send_transaction(
     // See also https://github.com/solana-labs/solana/issues/18201. To work
     // around this, instead of changing the block hash, add a memo instruction
     // with a nonce to every transaction, to make the transactions distinct.
-    let memo = spl_memo::build_memo(&format!("nonce={}", *nonce).as_bytes(), &[]);
+    let memo = spl_memo::build_memo(format!("nonce={}", *nonce).as_bytes(), &[]);
     instructions_mut.push(memo);
     *nonce += 1;
 
