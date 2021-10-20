@@ -1,11 +1,9 @@
 // SPDX-FileCopyrightText: 2021 Chorus One AG
 // SPDX-License-Identifier: GPL-3.0
 
-#![cfg(feature = "test-bpf")]
-
-use crate::context::{Context, StakeDeposit};
 use lido::token::Lamports;
 use solana_program_test::tokio;
+use testlib::solido_context::{Context, StakeDeposit};
 
 #[tokio::test]
 async fn test_withdraw_inactive_stake() {

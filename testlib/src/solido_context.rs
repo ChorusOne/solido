@@ -3,9 +3,6 @@
 
 //! Holds a test context, which makes it easier to test with a Solido instance set up.
 
-use lido::account_map::PubkeyAndEntry;
-use lido::processor::StakeType;
-use lido::stake_account::StakeAccount;
 use num_traits::cast::FromPrimitive;
 use rand::prelude::StdRng;
 use rand::SeedableRng;
@@ -30,6 +27,9 @@ use solana_sdk::transport::TransportError;
 use solana_vote_program::vote_instruction;
 use solana_vote_program::vote_state::{VoteInit, VoteState};
 
+use lido::account_map::PubkeyAndEntry;
+use lido::processor::StakeType;
+use lido::stake_account::StakeAccount;
 use lido::token::{Lamports, StLamports};
 use lido::{
     error::LidoError, instruction, RESERVE_ACCOUNT, REWARDS_WITHDRAW_AUTHORITY, STAKE_AUTHORITY,
@@ -66,7 +66,7 @@ fn test_deterministic_key() {
     assert_eq!(kp1.to_bytes(), expected_result);
 }
 
-// This id is only used throughout these tests.
+// Program id for the Solido program. Only used for tests.
 solana_program::declare_id!("3kEkdGe68DuTKg6FhVrLPZ3Wm8EcUPCPjhCeu8WrGDoc");
 
 pub struct Context {
@@ -126,7 +126,7 @@ pub async fn send_transaction(
     // See also https://github.com/solana-labs/solana/issues/18201. To work
     // around this, instead of changing the block hash, add a memo instruction
     // with a nonce to every transaction, to make the transactions distinct.
-    let memo = spl_memo::build_memo(&format!("nonce={}", *nonce).as_bytes(), &[]);
+    let memo = spl_memo::build_memo(format!("nonce={}", *nonce).as_bytes(), &[]);
     instructions_mut.push(memo);
     *nonce += 1;
 
@@ -175,21 +175,19 @@ pub async fn send_transaction(
 
     // If the transaction failed, try to be helpful by converting the error code
     // back to a message if possible.
-    match result {
-        Err(TransportError::TransactionError(TransactionError::InstructionError(
-            _,
-            InstructionError::Custom(error_code),
-        ))) => {
-            println!("Transaction failed with InstructionError::Custom.");
-            match LidoError::from_u32(error_code) {
-                Some(err) => println!(
-                    "If this error originated from Solido, it was this variant: {:?}",
-                    err
-                ),
-                None => println!("This error is not a known Solido error."),
-            }
+    if let Err(TransportError::TransactionError(TransactionError::InstructionError(
+        _,
+        InstructionError::Custom(error_code),
+    ))) = result
+    {
+        println!("Transaction failed with InstructionError::Custom.");
+        match LidoError::from_u32(error_code) {
+            Some(err) => println!(
+                "If this error originated from Solido, it was this variant: {:?}",
+                err
+            ),
+            None => println!("This error is not a known Solido error."),
         }
-        _ => {}
     }
 
     result
@@ -241,14 +239,19 @@ impl Context {
             &id(),
         );
 
-        // Note: this name *must* match the name of the crate that contains the
-        // program. If it does not, then it will still partially work, but we get
+        let mut program_test = ProgramTest::default();
+        // Note: the program name *must* match the name of the .so file that contains
+        // the program. If it does not, then it will still partially work, but we get
         // weird errors about resizing accounts.
-        let program_crate_name = "lido";
-        let program_test = ProgramTest::new(
-            program_crate_name,
-            id(),
+        program_test.add_program(
+            "lido",
+            crate::solido_context::id(),
             processor!(lido::processor::process),
+        );
+        program_test.add_program(
+            "anchor_integration",
+            crate::anker_context::id(),
+            processor!(anchor_integration::processor::process),
         );
 
         let mut result = Self {
@@ -266,7 +269,7 @@ impl Context {
             stake_authority,
             mint_authority,
             withdraw_authority,
-            deterministic_keypair: deterministic_keypair,
+            deterministic_keypair,
         };
 
         result.st_sol_mint = result.create_mint(result.mint_authority).await;
@@ -421,8 +424,8 @@ impl Context {
         mint.pubkey()
     }
 
-    /// Create a new SPL token account holding stSOL, return its address.
-    pub async fn create_st_sol_account(&mut self, owner: Pubkey) -> Pubkey {
+    /// Create a new SPL token account, return its address.
+    pub async fn create_spl_token_account(&mut self, mint: Pubkey, owner: Pubkey) -> Pubkey {
         let rent = self.context.banks_client.get_rent().await.unwrap();
         let account_rent = rent.minimum_balance(spl_token::state::Account::LEN);
         let account = self.deterministic_keypair.new_keypair();
@@ -442,7 +445,7 @@ impl Context {
                 spl_token::instruction::initialize_account(
                     &spl_token::id(),
                     &account.pubkey(),
-                    &self.st_sol_mint,
+                    &mint,
                     &owner,
                 )
                 .unwrap(),
@@ -453,6 +456,11 @@ impl Context {
         .expect("Failed to create token account.");
 
         account.pubkey()
+    }
+
+    /// Create a new SPL token account holding stSOL, return its address.
+    pub async fn create_st_sol_account(&mut self, owner: Pubkey) -> Pubkey {
+        self.create_spl_token_account(self.st_sol_mint, owner).await
     }
 
     /// Create an initialized but undelegated stake account (outside of Solido).
@@ -675,7 +683,7 @@ impl Context {
                 &lido::instruction::AddMaintainerMeta {
                     lido: self.solido.pubkey(),
                     manager: self.manager.pubkey(),
-                    maintainer: maintainer,
+                    maintainer,
                 },
             )],
             vec![&self.manager],
@@ -701,7 +709,7 @@ impl Context {
                 &lido::instruction::RemoveMaintainerMeta {
                     lido: self.solido.pubkey(),
                     manager: self.manager.pubkey(),
-                    maintainer: maintainer,
+                    maintainer,
                 },
             )],
             vec![&self.manager],
@@ -804,7 +812,7 @@ impl Context {
                 &instruction::DepositAccountsMeta {
                     lido: self.solido.pubkey(),
                     user: user.pubkey(),
-                    recipient: recipient,
+                    recipient,
                     st_sol_mint: self.st_sol_mint,
                     reserve_account: self.reserve_address,
                     mint_authority: self.mint_authority,
@@ -1175,7 +1183,7 @@ impl Context {
                 &id(),
                 &instruction::CollectValidatorFeeMeta {
                     lido: self.solido.pubkey(),
-                    validator_vote_account: validator_vote_account,
+                    validator_vote_account,
                     st_sol_mint: self.st_sol_mint,
                     mint_authority: self.mint_authority,
                     treasury_st_sol_account: self.treasury_st_sol_account,
