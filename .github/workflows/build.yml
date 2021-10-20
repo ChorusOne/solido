@@ -159,9 +159,10 @@ jobs:
 
     - name: Run Clippy
       run: |
-        cargo clippy --manifest-path program/Cargo.toml -- --deny warnings
         cargo clippy --manifest-path anchor/Cargo.toml -- --deny warnings
         cargo clippy --manifest-path cli/Cargo.toml -- --deny warnings
+        cargo clippy --manifest-path program/Cargo.toml -- --deny warnings
+        cargo clippy --manifest-path testlib/Cargo.toml -- --deny warnings
 
     - name: Typecheck Python
       run: |

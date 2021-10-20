@@ -3,25 +3,21 @@
 
 //! Test context for testing the Anchor integration.
 
-use solana_program::system_instruction;
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::{Keypair, Signer};
 use solana_sdk::transport;
 
-use anchor_integration;
-use anchor_integration::token::BLamports;
 use lido::token::Lamports;
 use lido::token::StLamports;
 
 use crate::solido_context;
-use crate::solido_context::send_transaction;
 
 // Program id for the Anchor integration program. Only used for tests.
 solana_program::declare_id!("AnchwRMMkz4t63Rr8P6m7mx6qBHetm8yZ4xbeoDSAeQZ");
 
 pub struct Context {
     solido_context: solido_context::Context,
-    anker: Pubkey,
+    _anker: Pubkey,
     b_sol_mint: Pubkey,
 }
 
@@ -33,7 +29,8 @@ impl Context {
 
         Context {
             solido_context,
-            anker,
+            // TODO: Make this field used.
+            _anker: anker,
             // TODO: Initialize mint properly.
             b_sol_mint: Pubkey::new_unique(),
         }

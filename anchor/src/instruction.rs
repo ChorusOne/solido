@@ -1,3 +1,6 @@
+// TODO: Remove this once Anker functions are all complete.
+#![allow(dead_code)]
+
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 
 use solana_program::{

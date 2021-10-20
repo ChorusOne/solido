@@ -175,21 +175,19 @@ pub async fn send_transaction(
 
     // If the transaction failed, try to be helpful by converting the error code
     // back to a message if possible.
-    match result {
-        Err(TransportError::TransactionError(TransactionError::InstructionError(
-            _,
-            InstructionError::Custom(error_code),
-        ))) => {
-            println!("Transaction failed with InstructionError::Custom.");
-            match LidoError::from_u32(error_code) {
-                Some(err) => println!(
-                    "If this error originated from Solido, it was this variant: {:?}",
-                    err
-                ),
-                None => println!("This error is not a known Solido error."),
-            }
+    if let Err(TransportError::TransactionError(TransactionError::InstructionError(
+        _,
+        InstructionError::Custom(error_code),
+    ))) = result
+    {
+        println!("Transaction failed with InstructionError::Custom.");
+        match LidoError::from_u32(error_code) {
+            Some(err) => println!(
+                "If this error originated from Solido, it was this variant: {:?}",
+                err
+            ),
+            None => println!("This error is not a known Solido error."),
         }
-        _ => {}
     }
 
     result
@@ -271,7 +269,7 @@ impl Context {
             stake_authority,
             mint_authority,
             withdraw_authority,
-            deterministic_keypair: deterministic_keypair,
+            deterministic_keypair,
         };
 
         result.st_sol_mint = result.create_mint(result.mint_authority).await;
@@ -685,7 +683,7 @@ impl Context {
                 &lido::instruction::AddMaintainerMeta {
                     lido: self.solido.pubkey(),
                     manager: self.manager.pubkey(),
-                    maintainer: maintainer,
+                    maintainer,
                 },
             )],
             vec![&self.manager],
@@ -711,7 +709,7 @@ impl Context {
                 &lido::instruction::RemoveMaintainerMeta {
                     lido: self.solido.pubkey(),
                     manager: self.manager.pubkey(),
-                    maintainer: maintainer,
+                    maintainer,
                 },
             )],
             vec![&self.manager],
@@ -814,7 +812,7 @@ impl Context {
                 &instruction::DepositAccountsMeta {
                     lido: self.solido.pubkey(),
                     user: user.pubkey(),
-                    recipient: recipient,
+                    recipient,
                     st_sol_mint: self.st_sol_mint,
                     reserve_account: self.reserve_address,
                     mint_authority: self.mint_authority,
@@ -1185,7 +1183,7 @@ impl Context {
                 &id(),
                 &instruction::CollectValidatorFeeMeta {
                     lido: self.solido.pubkey(),
-                    validator_vote_account: validator_vote_account,
+                    validator_vote_account,
                     st_sol_mint: self.st_sol_mint,
                     mint_authority: self.mint_authority,
                     treasury_st_sol_account: self.treasury_st_sol_account,

@@ -12,7 +12,7 @@ use crate::{
 fn process_initialize(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> ProgramResult {
     let accounts = InitializeAccountsInfo::try_from_slice(accounts_raw)?;
 
-    let (mint_authority, mint_bump_seed) = Pubkey::find_program_address(
+    let (_mint_authority, mint_bump_seed) = Pubkey::find_program_address(
         &[&accounts.anchor.key.to_bytes(), ANCHOR_MINT_AUTHORITY],
         program_id,
     );
@@ -33,10 +33,10 @@ fn process_initialize(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> Prog
 fn process_deposit(
     program_id: &Pubkey,
     accounts_raw: &[AccountInfo],
-    amount: StLamports,
+    _amount: StLamports,
 ) -> ProgramResult {
     let accounts = DepositAccountsInfo::try_from_slice(accounts_raw)?;
-    let anchor = deserialize_anchor(program_id, accounts.anchor)?;
+    let _anchor = deserialize_anchor(program_id, accounts.anchor)?;
 
     Ok(())
 }
@@ -47,7 +47,7 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
     match instruction {
         AnchorInstruction::Initialize => process_initialize(program_id, accounts),
         AnchorInstruction::Deposit { amount } => process_deposit(program_id, accounts, amount),
-        AnchorInstruction::Withdraw { amount } => todo!(),
+        AnchorInstruction::Withdraw { amount } => todo!("{}", amount),
         AnchorInstruction::ClaimRewards => todo!(),
     }
 }
