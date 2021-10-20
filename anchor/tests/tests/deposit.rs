@@ -12,5 +12,5 @@ async fn test_successful_deposit() {
     let _amount = Lamports(1_000_000_000);
     // let (_owner, _recipient) = context.deposit(amount).await;
 
-    // TODO(ruuda): Finish deposit test.
+    // TODO(#449, ruuda): Finish deposit test.
 }
