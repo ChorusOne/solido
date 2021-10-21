@@ -13,8 +13,8 @@ use anchor_integration::token::BLamports;
 use lido::token::Lamports;
 use lido::token::StLamports;
 
-use crate::solido_context;
 use crate::solido_context::send_transaction;
+use crate::solido_context::{self, StakeDeposit};
 
 // Program id for the Anchor integration program. Only used for tests.
 solana_program::declare_id!("AnchwRMMkz4t63Rr8P6m7mx6qBHetm8yZ4xbeoDSAeQZ");
@@ -26,6 +26,8 @@ pub struct Context {
     pub b_sol_mint_authority: Pubkey,
     pub reserve: Pubkey,
 }
+
+const INITIAL_DEPOSIT: Lamports = Lamports(1_000_000_000);
 
 impl Context {
     pub async fn new() -> Context {
@@ -62,8 +64,8 @@ impl Context {
         .await
         .expect("Failed to initialize Anker instance.");
 
-        solido_context.deposit(Lamports(1_000_000_000)).await;
-        solido_context.advance_to_normal_epoch(1);
+        solido_context.deposit(INITIAL_DEPOSIT).await;
+        solido_context.advance_to_normal_epoch(0);
         solido_context.update_exchange_rate().await;
 
         Context {
@@ -73,6 +75,17 @@ impl Context {
             b_sol_mint_authority,
             reserve,
         }
+    }
+
+    pub async fn new_different_exchange_rate() -> Context {
+        let mut context = Context::new().await;
+        context
+            .solido_context
+            .fund(context.solido_context.reserve_address, INITIAL_DEPOSIT)
+            .await;
+        context.solido_context.advance_to_normal_epoch(1);
+        context.solido_context.update_exchange_rate().await;
+        context
     }
 
     /// Create a new SPL token account holding bSOL, return its address.
