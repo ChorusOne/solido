@@ -111,7 +111,8 @@ fn process_deposit(
 
     // Use Lido's exchange rate (`st_sol_supply / sol_balance`) to compute the
     // amount of BLamports to mint.
-    let amount = BLamports(lido.exchange_rate.exchange_sol(Lamports(amount.0))?.0);
+    let sol_value = lido.exchange_rate.exchange_st_sol(amount)?;
+    let b_sol_amount = BLamports(sol_value.0);
 
     mint_b_sol_to(
         &anchor,
@@ -120,7 +121,7 @@ fn process_deposit(
         accounts.b_sol_mint,
         accounts.b_sol_mint_authority,
         accounts.b_sol_user_account,
-        amount,
+        b_sol_amount,
     )
 }
 

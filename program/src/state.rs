@@ -244,6 +244,7 @@ impl Lido {
         let lido = try_from_slice_unchecked::<Lido>(&lido.data.borrow())?;
         Ok(lido)
     }
+
     /// Calculates the total size of Lido given two variables: `max_validators`
     /// and `max_maintainers`, the maximum number of maintainers and validators,
     /// respectively. It creates default structures for both and sum its sizes
