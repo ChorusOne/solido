@@ -106,7 +106,7 @@ fn process_deposit(
 
     let lido = Lido::deserialize_lido(accounts.lido_program.key, accounts.lido)?;
 
-    // Use Lido's exchange rate (`st_sol_supply / sol_balance`) to compute the
+    // Use Lido's exchange rate (`sol_balance / sol_supply`) to compute the
     // amount of BLamports to mint.
     let sol_value = lido.exchange_rate.exchange_st_sol(amount)?;
     let b_sol_amount = BLamports(sol_value.0);
