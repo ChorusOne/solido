@@ -14,7 +14,7 @@ use lido::token::Lamports;
 use lido::token::StLamports;
 
 use crate::solido_context::send_transaction;
-use crate::solido_context::{self, StakeDeposit};
+use crate::solido_context::{self};
 
 // Program id for the Anchor integration program. Only used for tests.
 solana_program::declare_id!("AnchwRMMkz4t63Rr8P6m7mx6qBHetm8yZ4xbeoDSAeQZ");
