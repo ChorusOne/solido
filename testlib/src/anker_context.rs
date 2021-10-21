@@ -125,7 +125,6 @@ impl Context {
         // fail, it should fail when calling Anker, not Solido.
         let (user, st_sol_account) = self.solido_context.deposit(amount).await;
         let balance = self.solido_context.get_st_sol_balance(st_sol_account).await;
-        println!("BALANCE {}", balance);
         let b_sol_account = self
             .try_deposit_st_sol(&user, st_sol_account, balance)
             .await?;
