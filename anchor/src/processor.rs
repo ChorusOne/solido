@@ -167,7 +167,15 @@ fn process_deposit(
         accounts.b_sol_mint_authority,
         accounts.b_sol_user_account,
         b_sol_amount,
-    )
+    )?;
+
+    msg!(
+        "Anker: Deposited {}, minted {} in return.",
+        amount,
+        b_sol_amount,
+    );
+
+    Ok(())
 }
 
 /// Processes [Instruction](enum.Instruction.html).

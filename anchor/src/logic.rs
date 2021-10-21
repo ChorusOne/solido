@@ -1,15 +1,8 @@
 use crate::{error::AnchorError, token::BLamports, ANCHOR_MINT_AUTHORITY};
-use lido::{error::LidoError, state::Lido, token::Lamports};
+use lido::{error::LidoError, token::Lamports};
 use solana_program::{
-    account_info::AccountInfo,
-    borsh::try_from_slice_unchecked,
-    entrypoint::ProgramResult,
-    msg,
-    program::{invoke, invoke_signed},
-    program_error::ProgramError,
-    program_pack::Pack,
-    pubkey::Pubkey,
-    rent::Rent,
+    account_info::AccountInfo, borsh::try_from_slice_unchecked, entrypoint::ProgramResult, msg,
+    program::invoke_signed, program_error::ProgramError, pubkey::Pubkey, rent::Rent,
     system_instruction,
 };
 

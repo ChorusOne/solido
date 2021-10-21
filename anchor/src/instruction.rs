@@ -105,17 +105,20 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
+        // For reading the stSOL/SOL exchange rate.
         pub lido {
             is_signer: false,
             is_writable: false,
         },
+        // TODO(#449): Store this in the Anker instance instead, we never actually
+        // access the Lido program address for a deposit, only the instance.
         pub lido_program {
             is_signer: false,
             is_writable: false,
         },
         pub from_account {
             is_signer: false,
-            is_writable: false,
+            is_writable: true, // We will reduce its balance.
         },
         // Owner of `from_account` SPL token account.
         // Must sign the transaction in order to move tokens.
@@ -123,10 +126,9 @@ accounts_struct! {
             is_signer: true,
             is_writable: false,
         },
-        // Needs to be writable to update the account's state.
         pub to_reserve_account {
             is_signer: false,
-            is_writable: true,
+            is_writable: true, // Needs to be writable to update the account's state.
         },
         // User account that will receive the bSOL tokens, needs to be writable
         // to update the account's state.
@@ -136,7 +138,7 @@ accounts_struct! {
         },
         pub b_sol_mint {
             is_signer: false,
-            is_writable: false,
+            is_writable: true, // Minting changes the supply, which is stored in the mint.
         },
         pub b_sol_mint_authority {
             is_signer: false,
