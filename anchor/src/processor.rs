@@ -1,7 +1,14 @@
 use borsh::BorshDeserialize;
 use solana_program::{
-    account_info::AccountInfo, entrypoint::ProgramResult, msg, program::{invoke, invoke_signed},
-    program_error::ProgramError, pubkey::Pubkey, rent::Rent, system_instruction,
+    account_info::AccountInfo,
+    entrypoint::ProgramResult,
+    msg,
+    program::{invoke, invoke_signed},
+    program_error::ProgramError,
+    program_pack::Pack,
+    pubkey::Pubkey,
+    rent::Rent,
+    system_instruction,
     sysvar::Sysvar,
 };
 
@@ -10,17 +17,23 @@ use lido::{
     token::StLamports,
 };
 
-use crate::{ANCHOR_RESERVE_ACCOUNT, error::AnchorError, find_instance_address, find_mint_authority, find_reserve_account, find_reserve_authority, instruction::{AnchorInstruction, DepositAccountsInfo, InitializeAccountsInfo}, logic::{create_reserve_account, deserialize_anchor, mint_b_sol_to}, state::Anchor, token::BLamports};
+use crate::logic::{create_account, initialize_reserve_account};
 use crate::state::ANKER_LEN;
+use crate::{
+    error::AnchorError,
+    find_instance_address, find_mint_authority, find_reserve_account, find_reserve_authority,
+    instruction::{AnchorInstruction, DepositAccountsInfo, InitializeAccountsInfo},
+    logic::{deserialize_anchor, mint_b_sol_to},
+    state::Anchor,
+    token::BLamports,
+    ANCHOR_RESERVE_ACCOUNT,
+};
 
 fn process_initialize(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> ProgramResult {
     let accounts = InitializeAccountsInfo::try_from_slice(accounts_raw)?;
     let rent = Rent::from_account_info(accounts.sysvar_rent)?;
 
-    let (anker_address, anker_bump_seed) = find_instance_address(
-        program_id,
-        accounts.lido.key,
-    );
+    let (anker_address, anker_bump_seed) = find_instance_address(program_id, accounts.lido.key);
 
     if anker_address != *accounts.anchor.key {
         msg!(
@@ -32,11 +45,24 @@ fn process_initialize(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> Prog
         panic!();
     }
 
+    let solido = Lido::deserialize_lido(accounts.lido_program.key, accounts.lido)?;
+    if solido.st_sol_mint != *accounts.st_sol_mint.key {
+        msg!(
+            "Expected stSOL mint to be Soldido's mint {}, but got {}.",
+            solido.st_sol_mint,
+            accounts.st_sol_mint.key,
+        );
+        // TODO: Return a proper error.
+        panic!();
+    }
+
     let (_mint_authority, mint_bump_seed) = find_mint_authority(program_id, &anker_address);
     // TODO: Check mint authority.
 
-    let (reserve_authority, reserve_authority_bump_seed) = find_reserve_authority(program_id, &anker_address);
-    let (reserve_account, reserve_account_bump_seed) = find_reserve_account(program_id, &anker_address);
+    let (reserve_authority, reserve_authority_bump_seed) =
+        find_reserve_authority(program_id, &anker_address);
+    let (reserve_account, reserve_account_bump_seed) =
+        find_reserve_account(program_id, &anker_address);
     if &reserve_account != accounts.reserve_account.key {
         msg!(
             "Invalid reserve account, expected {}, but found {}.",
@@ -46,31 +72,31 @@ fn process_initialize(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> Prog
         return Err(AnchorError::InvalidReserveAccount.into());
     }
 
-    let anker_rent_lamports = rent.minimum_balance(ANKER_LEN);
-    let instr_create = system_instruction::create_account(
-        accounts.fund_rent_from.key,
-        &anker_address,
-        anker_rent_lamports,
-        ANKER_LEN as u64,
+    let anker_seeds = [accounts.lido.key.as_ref(), &[anker_bump_seed]];
+    create_account(
         program_id,
-    );
-    let anker_seeds = [
-        accounts.lido.key.as_ref(),
-        &[anker_bump_seed],
-    ];
-    invoke_signed(
-        &instr_create,
-        &[accounts.fund_rent_from.clone(), accounts.anchor.clone(), accounts.system_program.clone()],
-        &[&anker_seeds],
+        &accounts,
+        accounts.anchor,
+        &rent,
+        ANKER_LEN,
+        &anker_seeds,
     )?;
 
+    // Create and initialize an stSOL SPL token account for the reserve.
     let reserve_account_seeds = [
-        &anker_address.as_ref(),
+        anker_address.as_ref(),
         ANCHOR_RESERVE_ACCOUNT,
         &[reserve_account_bump_seed],
     ];
-    // Create and initialize the reserve account.
-    create_reserve_account(&[&reserve_account_seeds], &accounts, &rent)?;
+    create_account(
+        &spl_token::ID,
+        &accounts,
+        accounts.reserve_account,
+        &rent,
+        spl_token::state::Account::LEN,
+        &reserve_account_seeds,
+    )?;
+    initialize_reserve_account(&accounts, &reserve_account_seeds)?;
 
     let anchor = Anchor {
         bsol_mint: *accounts.b_sol_mint.key,

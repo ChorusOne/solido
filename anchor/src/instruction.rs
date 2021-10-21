@@ -54,11 +54,11 @@ accounts_struct! {
     InitializeAccountsMeta, InitializeAccountsInfo {
         pub fund_rent_from {
             is_signer: true,
-            is_writable: true,
+            is_writable: true, // It pays for the rent of the new accounts.
         },
         pub anchor {
             is_signer: false,
-            is_writable: true,
+            is_writable: true, // Writable because we need to initialize it.
         },
         pub lido {
             is_signer: false,
@@ -78,7 +78,7 @@ accounts_struct! {
         },
         pub reserve_account {
             is_signer: false,
-            is_writable: false,
+            is_writable: true, // Writable because we need to initialize it.
         },
         pub reserve_authority {
             is_signer: false,

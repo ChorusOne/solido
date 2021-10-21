@@ -7,9 +7,9 @@ use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::{Keypair, Signer};
 use solana_sdk::transport;
 
+use anchor_integration::instruction;
 use lido::token::Lamports;
 use lido::token::StLamports;
-use anchor_integration::instruction;
 
 use crate::solido_context;
 use crate::solido_context::send_transaction;
@@ -42,32 +42,30 @@ impl Context {
         send_transaction(
             &mut solido_context.context,
             &mut solido_context.nonce,
-            &[
-                instruction::initialize(
-                    &id(),
-                    &instruction::InitializeAccountsMeta {
-                        fund_rent_from: payer,
-                        anchor: anker,
-                        lido: solido_context.solido.pubkey(),
-                        lido_program: solido_context::id(),
-                        st_sol_mint: solido_context.st_sol_mint,
-                        b_sol_mint,
-                        reserve_account: reserve,
-                        reserve_authority,
-                    },
-                ),
-            ],
-            vec![]
+            &[instruction::initialize(
+                &id(),
+                &instruction::InitializeAccountsMeta {
+                    fund_rent_from: payer,
+                    anchor: anker,
+                    lido: solido_context.solido.pubkey(),
+                    lido_program: solido_context::id(),
+                    st_sol_mint: solido_context.st_sol_mint,
+                    b_sol_mint,
+                    reserve_account: reserve,
+                    reserve_authority,
+                },
+            )],
+            vec![],
         )
-            .await
-            .expect("Failed to initialize Anker instance.");
+        .await
+        .expect("Failed to initialize Anker instance.");
 
         Context {
             solido_context,
             anker,
             b_sol_mint,
             b_sol_mint_authority,
-            reserve
+            reserve,
         }
     }
 
@@ -109,7 +107,7 @@ impl Context {
             )],
             vec![&user],
         )
-            .await?;
+        .await?;
 
         Ok(recipient)
     }

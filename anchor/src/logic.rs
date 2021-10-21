@@ -1,5 +1,5 @@
 use crate::{error::AnchorError, token::BLamports, ANCHOR_MINT_AUTHORITY};
-use lido::{error::LidoError, state::Lido};
+use lido::{error::LidoError, state::Lido, token::Lamports};
 use solana_program::{
     account_info::AccountInfo,
     borsh::try_from_slice_unchecked,
@@ -89,54 +89,49 @@ pub fn mint_b_sol_to<'a>(
     )
 }
 
-pub fn create_reserve_account(
-    seeds: &[&[&[u8]]],
-    accounts: &InitializeAccountsInfo,
-    rent: &Rent,
+pub fn create_account<'a, 'b>(
+    owner: &Pubkey,
+    accounts: &InitializeAccountsInfo<'a, 'b>,
+    new_account: &'a AccountInfo<'b>,
+    sysvar_rent: &Rent,
+    data_len: usize,
+    seeds: &[&[u8]],
 ) -> ProgramResult {
-    // `system_instruction::create_account` performs the same three steps as we
-    // do below, but it additionally has a check to prevent creating an account
-    // that has a nonzero balance, which we omit here.
+    let rent_lamports = sysvar_rent.minimum_balance(data_len);
+    let instr_create = system_instruction::create_account(
+        accounts.fund_rent_from.key,
+        new_account.key,
+        rent_lamports,
+        data_len as u64,
+        owner,
+    );
+    msg!(
+        "Creating account at {}, funded with {} from {}.",
+        new_account.key,
+        Lamports(rent_lamports),
+        accounts.fund_rent_from.key,
+    );
     invoke_signed(
-        &system_instruction::allocate(
-            accounts.reserve_account.key,
-            spl_token::state::Account::LEN as u64,
-        ),
-        &[
-            accounts.reserve_account.clone(),
-            accounts.system_program.clone(),
-        ],
-        seeds,
-    )?;
-    invoke_signed(
-        &system_instruction::assign(accounts.reserve_account.key, &spl_token::id()),
-        &[
-            accounts.reserve_account.clone(),
-            accounts.system_program.clone(),
-        ],
-        seeds,
-    )?;
-    invoke_signed(
-        &system_instruction::transfer(
-            accounts.fund_rent_from.key,
-            accounts.reserve_account.key,
-            rent.minimum_balance(spl_token::state::Account::LEN),
-        ),
+        &instr_create,
         &[
             accounts.fund_rent_from.clone(),
-            accounts.reserve_account.clone(),
+            new_account.clone(),
             accounts.system_program.clone(),
         ],
-        seeds,
-    )?;
-    let lido = Lido::deserialize_lido(accounts.lido_program.key, accounts.lido)?;
+        &[seeds],
+    )
+}
 
+pub fn initialize_reserve_account(
+    accounts: &InitializeAccountsInfo,
+    seeds: &[&[u8]],
+) -> ProgramResult {
     // Initialize the reserve account.
-    invoke(
+    invoke_signed(
         &spl_token::instruction::initialize_account(
             &spl_token::id(),
             accounts.reserve_account.key,
-            &lido.st_sol_mint,
+            accounts.st_sol_mint.key,
             accounts.reserve_authority.key,
         )?,
         &[
@@ -145,5 +140,6 @@ pub fn create_reserve_account(
             accounts.reserve_authority.clone(),
             accounts.sysvar_rent.clone(),
         ],
+        &[seeds],
     )
 }
