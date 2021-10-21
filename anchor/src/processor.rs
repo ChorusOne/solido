@@ -1,8 +1,5 @@
 use borsh::BorshDeserialize;
-use lido::{
-    state::Lido,
-    token::{Lamports, StLamports},
-};
+use lido::{state::Lido, token::StLamports};
 use solana_program::{
     account_info::AccountInfo, entrypoint::ProgramResult, msg, program::invoke,
     program_error::ProgramError, pubkey::Pubkey, rent::Rent, sysvar::Sysvar,
