@@ -3,11 +3,13 @@
 
 //! Test context for testing the Anchor integration.
 
+use solana_program::program_pack::Pack;
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::{Keypair, Signer};
 use solana_sdk::transport;
 
 use anchor_integration::instruction;
+use anchor_integration::token::BLamports;
 use lido::token::Lamports;
 use lido::token::StLamports;
 
@@ -18,11 +20,11 @@ use crate::solido_context::send_transaction;
 solana_program::declare_id!("AnchwRMMkz4t63Rr8P6m7mx6qBHetm8yZ4xbeoDSAeQZ");
 
 pub struct Context {
-    solido_context: solido_context::Context,
-    anker: Pubkey,
-    b_sol_mint: Pubkey,
-    b_sol_mint_authority: Pubkey,
-    reserve: Pubkey,
+    pub solido_context: solido_context::Context,
+    pub anker: Pubkey,
+    pub b_sol_mint: Pubkey,
+    pub b_sol_mint_authority: Pubkey,
+    pub reserve: Pubkey,
 }
 
 impl Context {
@@ -138,5 +140,15 @@ impl Context {
         self.try_deposit(amount)
             .await
             .expect("Failed to call Deposit on Anker instance.")
+    }
+
+    /// Get the bSOL balance from an SPL token account.
+    pub async fn get_st_sol_balance(&mut self, address: Pubkey) -> BLamports {
+        let token_account = self.solido_context.get_account(address).await;
+        let account_info: spl_token::state::Account =
+            spl_token::state::Account::unpack_from_slice(token_account.data.as_slice()).unwrap();
+
+        assert_eq!(account_info.mint, self.b_sol_mint);
+        BLamports(account_info.amount)
     }
 }
