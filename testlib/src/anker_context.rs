@@ -60,6 +60,10 @@ impl Context {
         .await
         .expect("Failed to initialize Anker instance.");
 
+        solido_context.deposit(Lamports(1_000_000_000)).await;
+        solido_context.advance_to_normal_epoch(1);
+        solido_context.update_exchange_rate().await;
+
         Context {
             solido_context,
             anker,
@@ -121,6 +125,7 @@ impl Context {
         // fail, it should fail when calling Anker, not Solido.
         let (user, st_sol_account) = self.solido_context.deposit(amount).await;
         let balance = self.solido_context.get_st_sol_balance(st_sol_account).await;
+        println!("BALANCE {}", balance);
         let b_sol_account = self
             .try_deposit_st_sol(&user, st_sol_account, balance)
             .await?;
