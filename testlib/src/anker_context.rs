@@ -37,7 +37,7 @@ impl Context {
 
         let b_sol_mint = solido_context.create_mint(b_sol_mint_authority).await;
 
-        let payer = solido_context.context.payer.pubkey().clone();
+        let payer = solido_context.context.payer.pubkey();
 
         send_transaction(
             &mut solido_context.context,
@@ -105,7 +105,7 @@ impl Context {
                 },
                 amount,
             )],
-            vec![&user],
+            vec![user],
         )
         .await?;
 

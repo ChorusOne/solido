@@ -12,10 +12,7 @@ use solana_program::{
     sysvar::Sysvar,
 };
 
-use lido::{
-    state::Lido,
-    token::StLamports,
-};
+use lido::{state::Lido, token::StLamports};
 
 use crate::logic::{create_account, initialize_reserve_account};
 use crate::state::ANKER_LEN;
