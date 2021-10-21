@@ -160,3 +160,39 @@ pub fn deposit(
         data: data.to_vec(),
     }
 }
+
+accounts_struct! {
+    ClaimRewardsAccountsMeta, ClaimRewardsAccountsInfo {
+        pub anchor {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub lido {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub lido_program {
+            is_signer: false,
+            is_writable: false,
+        },
+        // Needs to be writable so we can sell stSOL.
+        pub reserve_account {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub b_sol_mint {
+            is_signer: false,
+            is_writable: false,
+        },
+        const spl_token = spl_token::id(),
+    }
+}
+
+pub fn claim_rewards(program_id: &Pubkey, accounts: &ClaimRewardsAccountsMeta) -> Instruction {
+    let data = AnchorInstruction::ClaimRewards;
+    Instruction {
+        program_id: *program_id,
+        accounts: accounts.to_vec(),
+        data: data.to_vec(),
+    }
+}

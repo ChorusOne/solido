@@ -1,4 +1,5 @@
 use borsh::BorshDeserialize;
+use lido::token::Lamports;
 use solana_program::{
     account_info::AccountInfo, entrypoint::ProgramResult, msg, program::invoke,
     program_error::ProgramError, program_pack::Pack, pubkey::Pubkey, rent::Rent, sysvar::Sysvar,
@@ -11,7 +12,9 @@ use crate::state::ANKER_LEN;
 use crate::{
     error::AnchorError,
     find_instance_address, find_mint_authority, find_reserve_account, find_reserve_authority,
-    instruction::{AnchorInstruction, DepositAccountsInfo, InitializeAccountsInfo},
+    instruction::{
+        AnchorInstruction, ClaimRewardsAccountsInfo, DepositAccountsInfo, InitializeAccountsInfo,
+    },
     logic::{deserialize_anchor, mint_b_sol_to},
     state::Anchor,
     token::BLamports,
@@ -167,6 +170,35 @@ fn process_deposit(
     Ok(())
 }
 
+/// Claim Anker rewards
+fn process_claim_rewards(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> ProgramResult {
+    let accounts = ClaimRewardsAccountsInfo::try_from_slice(accounts_raw)?;
+    let anchor = deserialize_anchor(
+        program_id,
+        accounts.anchor,
+        accounts.lido.key,
+        accounts.reserve_account.key,
+    )?;
+    anchor.check_mint(accounts.b_sol_mint.key)?;
+    let lido = Lido::deserialize_lido(accounts.lido_program.key, accounts.lido)?;
+
+    let token_mint_state =
+        spl_token::state::Mint::unpack_from_slice(&accounts.b_sol_mint.data.borrow())?;
+    let b_sol_supply = token_mint_state.supply;
+
+    let st_sol_reserve_state =
+        spl_token::state::Account::unpack_from_slice(&accounts.reserve_account.data.borrow())?;
+    let reserve_st_sol = StLamports(st_sol_reserve_state.amount);
+
+    // Get StLamports corresponding to the amount of b_sol minted.
+    let st_sol_amount = lido.exchange_rate.exchange_sol(Lamports(b_sol_supply))?;
+
+    // If `reserve_st_sol` < `st_sol_amount` something went wrong, and we abort the transaction.
+    let rewards = (reserve_st_sol - st_sol_amount)?;
+
+    Ok(())
+}
+
 /// Processes [Instruction](enum.Instruction.html).
 pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> ProgramResult {
     let instruction = AnchorInstruction::try_from_slice(input)?;
@@ -174,6 +206,6 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
         AnchorInstruction::Initialize => process_initialize(program_id, accounts),
         AnchorInstruction::Deposit { amount } => process_deposit(program_id, accounts, amount),
         AnchorInstruction::Withdraw { amount } => todo!("{}", amount),
-        AnchorInstruction::ClaimRewards => todo!(),
+        AnchorInstruction::ClaimRewards => process_claim_rewards(program_id, accounts),
     }
 }
