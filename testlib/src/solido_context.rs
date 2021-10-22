@@ -67,7 +67,7 @@ fn test_deterministic_key() {
 }
 
 // Program id for the Solido program. Only used for tests.
-solana_program::declare_id!("3kEkdGe68DuTKg6FhVrLPZ3Wm8EcUPCPjhCeu8WrGDoc");
+solana_program::declare_id!("So1ido1111111111111111111111111111111111111");
 
 pub struct Context {
     pub deterministic_keypair: DeterministicKeypairGen,
