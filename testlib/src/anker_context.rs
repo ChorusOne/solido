@@ -49,7 +49,7 @@ impl Context {
                 &id(),
                 &instruction::InitializeAccountsMeta {
                     fund_rent_from: payer,
-                    anker: anker,
+                    anker,
                     solido: solido_context.solido.pubkey(),
                     solido_program: solido_context::id(),
                     st_sol_mint: solido_context.st_sol_mint,
