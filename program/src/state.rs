@@ -8,7 +8,7 @@ use std::ops::Range;
 use serde::Serialize;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use solana_program::borsh::get_instance_packed_len;
+use solana_program::borsh::{get_instance_packed_len, try_from_slice_unchecked};
 use solana_program::clock::Clock;
 use solana_program::{
     account_info::AccountInfo, clock::Epoch, entrypoint::ProgramResult, msg,
@@ -232,6 +232,19 @@ pub struct Lido {
 }
 
 impl Lido {
+    pub fn deserialize_lido(program_id: &Pubkey, lido: &AccountInfo) -> Result<Lido, ProgramError> {
+        if lido.owner != program_id {
+            msg!(
+                "Lido state is owned by {}, but should be owned by the Lido program ({}).",
+                lido.owner,
+                program_id
+            );
+            return Err(LidoError::InvalidOwner.into());
+        }
+        let lido = try_from_slice_unchecked::<Lido>(&lido.data.borrow())?;
+        Ok(lido)
+    }
+
     /// Calculates the total size of Lido given two variables: `max_validators`
     /// and `max_maintainers`, the maximum number of maintainers and validators,
     /// respectively. It creates default structures for both and sum its sizes

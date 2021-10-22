@@ -8,7 +8,7 @@ use solana_program::{
     instruction::{AccountMeta, Instruction},
     program_error::ProgramError,
     pubkey::Pubkey,
-    sysvar,
+    system_program, sysvar,
 };
 
 use lido::{accounts_struct, accounts_struct_meta, error::LidoError, token::StLamports};
@@ -52,11 +52,23 @@ impl AnchorInstruction {
 
 accounts_struct! {
     InitializeAccountsMeta, InitializeAccountsInfo {
+        pub fund_rent_from {
+            is_signer: true,
+            is_writable: true, // It pays for the rent of the new accounts.
+        },
         pub anchor {
             is_signer: false,
-            is_writable: true,
+            is_writable: true, // Writable because we need to initialize it.
         },
         pub lido {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub lido_program {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub st_sol_mint {
             is_signer: false,
             is_writable: false,
         },
@@ -64,7 +76,16 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
+        pub reserve_account {
+            is_signer: false,
+            is_writable: true, // Writable because we need to initialize it.
+        },
+        pub reserve_authority {
+            is_signer: false,
+            is_writable: false,
+        },
         const sysvar_rent = sysvar::rent::id(),
+        const system_program = system_program::id(),
         const spl_token = spl_token::id(),
     }
 }
@@ -82,12 +103,48 @@ accounts_struct! {
     DepositAccountsMeta, DepositAccountsInfo {
         pub anchor {
             is_signer: false,
-            is_writable: true,
+            is_writable: false,
         },
+        // For reading the stSOL/SOL exchange rate.
         pub lido {
             is_signer: false,
             is_writable: false,
         },
+        // TODO(#449): Store this in the Anker instance instead, we never actually
+        // access the Lido program address for a deposit, only the instance.
+        pub lido_program {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub from_account {
+            is_signer: false,
+            is_writable: true, // We will reduce its balance.
+        },
+        // Owner of `from_account` SPL token account.
+        // Must sign the transaction in order to move tokens.
+        pub user_authority {
+            is_signer: true,
+            is_writable: false,
+        },
+        pub to_reserve_account {
+            is_signer: false,
+            is_writable: true, // Needs to be writable to update the account's state.
+        },
+        // User account that will receive the bSOL tokens, needs to be writable
+        // to update the account's state.
+        pub b_sol_user_account {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub b_sol_mint {
+            is_signer: false,
+            is_writable: true, // Minting changes the supply, which is stored in the mint.
+        },
+        pub b_sol_mint_authority {
+            is_signer: false,
+            is_writable: false,
+        },
+        const spl_token = spl_token::id(),
     }
 }
 

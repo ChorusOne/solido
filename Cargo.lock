@@ -199,6 +199,8 @@ version = "0.0.1"
 dependencies = [
  "borsh",
  "lido",
+ "num-derive",
+ "num-traits",
  "serde",
  "solana-program",
  "solana-program-test",
