@@ -249,9 +249,9 @@ impl Context {
             processor!(lido::processor::process),
         );
         program_test.add_program(
-            "anchor_integration",
+            "anker",
             crate::anker_context::id(),
-            processor!(anchor_integration::processor::process),
+            processor!(anker::processor::process),
         );
 
         let mut result = Self {

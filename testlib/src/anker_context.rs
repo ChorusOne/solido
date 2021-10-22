@@ -8,8 +8,8 @@ use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::{Keypair, Signer};
 use solana_sdk::transport;
 
-use anchor_integration::instruction;
-use anchor_integration::token::BLamports;
+use anker::instruction;
+use anker::token::BLamports;
 use lido::token::Lamports;
 use lido::token::StLamports;
 
@@ -33,11 +33,11 @@ impl Context {
     pub async fn new() -> Context {
         let mut solido_context = solido_context::Context::new_with_maintainer().await;
         let (anker, _seed) =
-            anchor_integration::find_instance_address(&id(), &solido_context.solido.pubkey());
+            anker::find_instance_address(&id(), &solido_context.solido.pubkey());
 
-        let (reserve, _seed) = anchor_integration::find_reserve_account(&id(), &anker);
-        let (reserve_authority, _seed) = anchor_integration::find_reserve_authority(&id(), &anker);
-        let (b_sol_mint_authority, _seed) = anchor_integration::find_mint_authority(&id(), &anker);
+        let (reserve, _seed) = anker::find_reserve_account(&id(), &anker);
+        let (reserve_authority, _seed) = anker::find_reserve_authority(&id(), &anker);
+        let (b_sol_mint_authority, _seed) = anker::find_mint_authority(&id(), &anker);
 
         let b_sol_mint = solido_context.create_mint(b_sol_mint_authority).await;
 
