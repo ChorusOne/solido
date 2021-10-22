@@ -1,7 +1,9 @@
-use crate::{error::AnkerError, ANKER_RESERVE_ACCOUNT, ANKER_RESERVE_AUTHORITY, ANKER_MINT_AUTHORITY};
+use crate::{
+    error::AnkerError, ANKER_MINT_AUTHORITY, ANKER_RESERVE_ACCOUNT, ANKER_RESERVE_AUTHORITY,
+};
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use lido::util::serialize_b58;
 use lido::state::Lido;
+use lido::util::serialize_b58;
 use serde::Serialize;
 use solana_program::{
     account_info::AccountInfo, entrypoint::ProgramResult, msg, program_pack::Pack, pubkey::Pubkey,
@@ -51,14 +53,16 @@ impl Anker {
     }
 
     /// Confirm that the account address is the derived address where Anker instance should live.
-    pub fn check_self_address(&self, anker_program_id: &Pubkey, account_info: &AccountInfo) -> ProgramResult {
+    pub fn check_self_address(
+        &self,
+        anker_program_id: &Pubkey,
+        account_info: &AccountInfo,
+    ) -> ProgramResult {
         let address = Pubkey::create_program_address(
-            &[
-                self.solido.as_ref(),
-                &[self.self_bump_seed],
-            ],
+            &[self.solido.as_ref(), &[self.self_bump_seed]],
             anker_program_id,
-        ).expect("Depends only on Anker-controlled values, should not fail.");
+        )
+        .expect("Depends only on Anker-controlled values, should not fail.");
 
         if *account_info.key != address {
             msg!(
@@ -73,15 +77,20 @@ impl Anker {
     }
 
     /// Confirm that the derived account address matches the `account_info` adddress.
-    fn check_derived_account_address(&self, name: &'static str, seed: &'static [u8], bump_seed: u8, anker_program_id: &Pubkey, anker_instance: &Pubkey, account_info: &AccountInfo) -> ProgramResult {
+    fn check_derived_account_address(
+        &self,
+        name: &'static str,
+        seed: &'static [u8],
+        bump_seed: u8,
+        anker_program_id: &Pubkey,
+        anker_instance: &Pubkey,
+        account_info: &AccountInfo,
+    ) -> ProgramResult {
         let address = Pubkey::create_program_address(
-            &[
-                anker_instance.as_ref(),
-                seed,
-                &[bump_seed],
-            ],
+            &[anker_instance.as_ref(), seed, &[bump_seed]],
             anker_program_id,
-        ).expect("Depends only on Anker-controlled values, should not fail.");
+        )
+        .expect("Depends only on Anker-controlled values, should not fail.");
 
         if *account_info.key != address {
             msg!(
@@ -98,7 +107,12 @@ impl Anker {
     /// Confirm that the provided reserve account is the one that belongs to this instance.
     ///
     /// This does not check that the reserve is an stSOL account.
-    pub fn check_reserve_address(&self, anker_program_id: &Pubkey, anker_instance: &Pubkey, reserve_account_info: &AccountInfo) -> ProgramResult {
+    pub fn check_reserve_address(
+        &self,
+        anker_program_id: &Pubkey,
+        anker_instance: &Pubkey,
+        reserve_account_info: &AccountInfo,
+    ) -> ProgramResult {
         self.check_derived_account_address(
             "the reserve account",
             ANKER_RESERVE_ACCOUNT,
@@ -110,7 +124,12 @@ impl Anker {
     }
 
     /// Confirm that the provided reserve authority is the one that belongs to this instance.
-    pub fn check_reserve_authority(&self, anker_program_id: &Pubkey, anker_instance: &Pubkey, reserve_authority_info: &AccountInfo) -> ProgramResult {
+    pub fn check_reserve_authority(
+        &self,
+        anker_program_id: &Pubkey,
+        anker_instance: &Pubkey,
+        reserve_authority_info: &AccountInfo,
+    ) -> ProgramResult {
         self.check_derived_account_address(
             "the reserve authority",
             ANKER_RESERVE_AUTHORITY,
@@ -122,7 +141,12 @@ impl Anker {
     }
 
     /// Confirm that the provided bSOL mint authority is the one that belongs to this instance.
-    pub fn check_mint_authority(&self, anker_program_id: &Pubkey, anker_instance: &Pubkey, mint_authority_info: &AccountInfo) -> ProgramResult {
+    pub fn check_mint_authority(
+        &self,
+        anker_program_id: &Pubkey,
+        anker_instance: &Pubkey,
+        mint_authority_info: &AccountInfo,
+    ) -> ProgramResult {
         self.check_derived_account_address(
             "the bSOL mint authority",
             ANKER_MINT_AUTHORITY,
@@ -197,20 +221,16 @@ impl Anker {
 
     /// Confirm that the account is an SPL token account that holds bSOL.
     pub fn check_is_b_sol_account(&self, token_account_info: &AccountInfo) -> ProgramResult {
-        Anker::check_is_spl_token_account(
-            "our bSOL",
-            &self.b_sol_mint,
-            token_account_info,
-        )
+        Anker::check_is_spl_token_account("our bSOL", &self.b_sol_mint, token_account_info)
     }
 
     /// Confirm that the account is an SPL token account that holds stSOL.
-    pub fn check_is_st_sol_account(&self, solido: &Lido, token_account_info: &AccountInfo) -> ProgramResult {
-        Anker::check_is_spl_token_account(
-            "Solido's stSOL",
-            &solido.st_sol_mint,
-            token_account_info,
-        )
+    pub fn check_is_st_sol_account(
+        &self,
+        solido: &Lido,
+        token_account_info: &AccountInfo,
+    ) -> ProgramResult {
+        Anker::check_is_spl_token_account("Solido's stSOL", &solido.st_sol_mint, token_account_info)
     }
 }
 

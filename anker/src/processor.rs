@@ -111,7 +111,11 @@ fn process_deposit(
 
     // Check if the mint account is the same as the one stored in Anker.
     anker.check_mint(accounts.b_sol_mint)?;
-    anker.check_mint_authority(program_id, accounts.anker.key, accounts.b_sol_mint_authority)?;
+    anker.check_mint_authority(
+        program_id,
+        accounts.anker.key,
+        accounts.b_sol_mint_authority,
+    )?;
 
     // Transfer `amount` StLamports to the reserve.
     invoke(

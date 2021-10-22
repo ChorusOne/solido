@@ -1,5 +1,5 @@
 use crate::{error::AnkerError, token::BLamports, ANKER_MINT_AUTHORITY};
-use lido::{token::Lamports, state::Lido};
+use lido::{state::Lido, token::Lamports};
 use solana_program::{
     account_info::AccountInfo, borsh::try_from_slice_unchecked, entrypoint::ProgramResult, msg,
     program::invoke_signed, program_error::ProgramError, pubkey::Pubkey, rent::Rent,
@@ -58,10 +58,7 @@ pub fn deserialize_anker(
         return Err(AnkerError::InvalidSolidoInstance.into());
     }
 
-    let solido = Lido::deserialize_lido(
-        &anker.solido_program_id,
-        solido_account,
-    )?;
+    let solido = Lido::deserialize_lido(&anker.solido_program_id, solido_account)?;
 
     anker.check_reserve_address(anker_program_id, anker_account.key, reserve_account)?;
     anker.check_is_st_sol_account(&solido, reserve_account)?;
