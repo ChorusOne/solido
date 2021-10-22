@@ -15,7 +15,7 @@ use lido::{accounts_struct, accounts_struct_meta, error::LidoError, token::StLam
 
 #[repr(C)]
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
-pub enum AnchorInstruction {
+pub enum AnkerInstruction {
     Initialize,
 
     /// Deposit a given amount of StSOL, gets bSOL in return.
@@ -39,7 +39,7 @@ pub enum AnchorInstruction {
     ClaimRewards,
 }
 
-impl AnchorInstruction {
+impl AnkerInstruction {
     pub fn to_vec(&self) -> Vec<u8> {
         // `BorshSerialize::try_to_vec` returns a Result, because it uses
         // `Borsh::serialize`, which takes an arbitrary writer, and which can
@@ -56,15 +56,15 @@ accounts_struct! {
             is_signer: true,
             is_writable: true, // It pays for the rent of the new accounts.
         },
-        pub anchor {
+        pub anker {
             is_signer: false,
             is_writable: true, // Writable because we need to initialize it.
         },
-        pub lido {
+        pub solido {
             is_signer: false,
             is_writable: false,
         },
-        pub lido_program {
+        pub solido_program {
             is_signer: false,
             is_writable: false,
         },
@@ -91,7 +91,7 @@ accounts_struct! {
 }
 
 pub fn initialize(program_id: &Pubkey, accounts: &InitializeAccountsMeta) -> Instruction {
-    let data = AnchorInstruction::Initialize;
+    let data = AnkerInstruction::Initialize;
     Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
@@ -101,18 +101,18 @@ pub fn initialize(program_id: &Pubkey, accounts: &InitializeAccountsMeta) -> Ins
 
 accounts_struct! {
     DepositAccountsMeta, DepositAccountsInfo {
-        pub anchor {
+        pub anker {
             is_signer: false,
             is_writable: false,
         },
         // For reading the stSOL/SOL exchange rate.
-        pub lido {
+        pub solido {
             is_signer: false,
             is_writable: false,
         },
         // TODO(#449): Store this in the Anker instance instead, we never actually
         // access the Lido program address for a deposit, only the instance.
-        pub lido_program {
+        pub solido_program {
             is_signer: false,
             is_writable: false,
         },
@@ -153,7 +153,7 @@ pub fn deposit(
     accounts: &DepositAccountsMeta,
     amount: StLamports,
 ) -> Instruction {
-    let data = AnchorInstruction::Deposit { amount };
+    let data = AnkerInstruction::Deposit { amount };
     Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),

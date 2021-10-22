@@ -1,4 +1,4 @@
-use crate::{error::AnchorError, ANCHOR_RESERVE_ACCOUNT};
+use crate::{error::AnkerError, ANKER_RESERVE_ACCOUNT};
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use lido::util::serialize_b58;
 use serde::Serialize;
@@ -6,14 +6,14 @@ use solana_program::{
     account_info::AccountInfo, entrypoint::ProgramResult, msg, program_pack::Pack, pubkey::Pubkey,
 };
 
-/// Size of the serialized [`Anchor`] struct, in bytes.
+/// Size of the serialized [`Anker`] struct, in bytes.
 pub const ANKER_LEN: usize = 99;
 
 #[repr(C)]
 #[derive(
     Clone, Debug, Default, BorshDeserialize, BorshSerialize, BorshSchema, Eq, PartialEq, Serialize,
 )]
-pub struct Anchor {
+pub struct Anker {
     /// The SPL Token mint address for bSOL.
     #[serde(serialize_with = "serialize_b58")]
     pub bsol_mint: Pubkey,
@@ -32,7 +32,7 @@ pub struct Anchor {
     pub reserve_account_bump_seed: u8,
 }
 
-impl Anchor {
+impl Anker {
     pub fn save(&self, account: &AccountInfo) -> ProgramResult {
         // NOTE: If you ended up here because the tests are failing because the
         // runtime complained that an account's size was modified by a program
@@ -49,7 +49,7 @@ impl Anchor {
                 spl_token::id(),
                 token_account_info.owner
             );
-            return Err(AnchorError::InvalidBSolAccountOwner.into());
+            return Err(AnkerError::InvalidBSolAccountOwner.into());
         }
         let token_account =
             match spl_token::state::Account::unpack_from_slice(&token_account_info.data.borrow()) {
@@ -59,7 +59,7 @@ impl Anchor {
                         "Expected an SPL token account at {}.",
                         token_account_info.key
                     );
-                    return Err(AnchorError::InvalidBSolAccount.into());
+                    return Err(AnkerError::InvalidBSolAccount.into());
                 }
             };
 
@@ -70,7 +70,7 @@ impl Anchor {
                 self.bsol_mint,
                 token_account.mint,
             );
-            return Err(AnchorError::InvalidBSolMint.into());
+            return Err(AnkerError::InvalidBSolMint.into());
         }
         Ok(())
     }
@@ -78,13 +78,13 @@ impl Anchor {
     pub fn check_reserve_account(
         &self,
         program_id: &Pubkey,
-        anchor_state: &Pubkey,
+        anker_state: &Pubkey,
         provided_reserve: &Pubkey,
     ) -> ProgramResult {
         let reserve_account = Pubkey::create_program_address(
             &[
-                &anchor_state.to_bytes(),
-                ANCHOR_RESERVE_ACCOUNT,
+                &anker_state.to_bytes(),
+                ANKER_RESERVE_ACCOUNT,
                 &[self.reserve_account_bump_seed],
             ],
             program_id,
@@ -96,7 +96,7 @@ impl Anchor {
                 reserve_account,
                 provided_reserve,
             );
-            return Err(AnchorError::InvalidReserveAccount.into());
+            return Err(AnkerError::InvalidReserveAccount.into());
         }
         Ok(())
     }
@@ -108,7 +108,7 @@ impl Anchor {
                 self.bsol_mint,
                 provided_mint,
             );
-            return Err(AnchorError::InvalidBSolMint.into());
+            return Err(AnkerError::InvalidBSolMint.into());
         }
         Ok(())
     }
@@ -120,7 +120,7 @@ impl Anchor {
                 self.lido,
                 provided_lido,
             );
-            return Err(AnchorError::WrongLidoInstance.into());
+            return Err(AnkerError::WrongLidoInstance.into());
         }
         Ok(())
     }
@@ -132,7 +132,7 @@ mod test {
 
     #[test]
     fn test_anker_len() {
-        let instance = Anchor::default();
+        let instance = Anker::default();
         let mut writer = Vec::new();
         BorshSerialize::serialize(&instance, &mut writer).unwrap();
         assert_eq!(writer.len(), ANKER_LEN);

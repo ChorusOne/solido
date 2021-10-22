@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2021 Chorus One AG
 // SPDX-License-Identifier: GPL-3.0
 
-//! Test context for testing the Anchor integration.
+//! Test context for testing Anker, the Anchor Protocol integration.
 
 use solana_program::program_pack::Pack;
 use solana_sdk::pubkey::Pubkey;
@@ -16,8 +16,8 @@ use lido::token::StLamports;
 use crate::solido_context::send_transaction;
 use crate::solido_context::{self};
 
-// Program id for the Anchor integration program. Only used for tests.
-solana_program::declare_id!("AnchwRMMkz4t63Rr8P6m7mx6qBHetm8yZ4xbeoDSAeQZ");
+// Program id for the Anker program. Only used for tests.
+solana_program::declare_id!("Anker111111111111111111111111111111111111111");
 
 pub struct Context {
     pub solido_context: solido_context::Context,
@@ -32,8 +32,7 @@ const INITIAL_DEPOSIT: Lamports = Lamports(1_000_000_000);
 impl Context {
     pub async fn new() -> Context {
         let mut solido_context = solido_context::Context::new_with_maintainer().await;
-        let (anker, _seed) =
-            anker::find_instance_address(&id(), &solido_context.solido.pubkey());
+        let (anker, _seed) = anker::find_instance_address(&id(), &solido_context.solido.pubkey());
 
         let (reserve, _seed) = anker::find_reserve_account(&id(), &anker);
         let (reserve_authority, _seed) = anker::find_reserve_authority(&id(), &anker);
@@ -50,9 +49,9 @@ impl Context {
                 &id(),
                 &instruction::InitializeAccountsMeta {
                     fund_rent_from: payer,
-                    anchor: anker,
-                    lido: solido_context.solido.pubkey(),
-                    lido_program: solido_context::id(),
+                    anker: anker,
+                    solido: solido_context.solido.pubkey(),
+                    solido_program: solido_context::id(),
                     st_sol_mint: solido_context.st_sol_mint,
                     b_sol_mint,
                     reserve_account: reserve,
@@ -112,9 +111,9 @@ impl Context {
             &[instruction::deposit(
                 &id(),
                 &instruction::DepositAccountsMeta {
-                    anchor: self.anker,
-                    lido: self.solido_context.solido.pubkey(),
-                    lido_program: solido_context::id(),
+                    anker: self.anker,
+                    solido: self.solido_context.solido.pubkey(),
+                    solido_program: solido_context::id(),
                     from_account: from_st_sol,
                     user_authority: user.pubkey(),
                     to_reserve_account: self.reserve,

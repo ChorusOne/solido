@@ -9,32 +9,32 @@ use lido::{state::Lido, token::StLamports};
 use crate::logic::{create_account, initialize_reserve_account};
 use crate::state::ANKER_LEN;
 use crate::{
-    error::AnchorError,
+    error::AnkerError,
     find_instance_address, find_mint_authority, find_reserve_account, find_reserve_authority,
-    instruction::{AnchorInstruction, DepositAccountsInfo, InitializeAccountsInfo},
-    logic::{deserialize_anchor, mint_b_sol_to},
-    state::Anchor,
+    instruction::{AnkerInstruction, DepositAccountsInfo, InitializeAccountsInfo},
+    logic::{deserialize_anker, mint_b_sol_to},
+    state::Anker,
     token::BLamports,
-    ANCHOR_RESERVE_ACCOUNT,
+    ANKER_RESERVE_ACCOUNT,
 };
 
 fn process_initialize(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> ProgramResult {
     let accounts = InitializeAccountsInfo::try_from_slice(accounts_raw)?;
     let rent = Rent::from_account_info(accounts.sysvar_rent)?;
 
-    let (anker_address, anker_bump_seed) = find_instance_address(program_id, accounts.lido.key);
+    let (anker_address, anker_bump_seed) = find_instance_address(program_id, accounts.solido.key);
 
-    if anker_address != *accounts.anchor.key {
+    if anker_address != *accounts.anker.key {
         msg!(
             "Expected to initialize instance at {}, but {} was provided.",
             anker_address,
-            accounts.anchor.key,
+            accounts.anker.key,
         );
         // TODO: Return a proper error.
         panic!();
     }
 
-    let solido = Lido::deserialize_lido(accounts.lido_program.key, accounts.lido)?;
+    let solido = Lido::deserialize_lido(accounts.solido_program.key, accounts.solido)?;
     if solido.st_sol_mint != *accounts.st_sol_mint.key {
         msg!(
             "Expected stSOL mint to be Soldido's mint {}, but got {}.",
@@ -58,14 +58,14 @@ fn process_initialize(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> Prog
             reserve_account,
             accounts.reserve_account.key,
         );
-        return Err(AnchorError::InvalidReserveAccount.into());
+        return Err(AnkerError::InvalidReserveAccount.into());
     }
 
-    let anker_seeds = [accounts.lido.key.as_ref(), &[anker_bump_seed]];
+    let anker_seeds = [accounts.solido.key.as_ref(), &[anker_bump_seed]];
     create_account(
         program_id,
         &accounts,
-        accounts.anchor,
+        accounts.anker,
         &rent,
         ANKER_LEN,
         &anker_seeds,
@@ -74,7 +74,7 @@ fn process_initialize(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> Prog
     // Create and initialize an stSOL SPL token account for the reserve.
     let reserve_account_seeds = [
         anker_address.as_ref(),
-        ANCHOR_RESERVE_ACCOUNT,
+        ANKER_RESERVE_ACCOUNT,
         &[reserve_account_bump_seed],
     ];
     create_account(
@@ -87,9 +87,9 @@ fn process_initialize(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> Prog
     )?;
     initialize_reserve_account(&accounts, &reserve_account_seeds)?;
 
-    let anchor = Anchor {
+    let anker = Anker {
         bsol_mint: *accounts.b_sol_mint.key,
-        lido: *accounts.lido.key,
+        lido: *accounts.solido.key,
         reserve_authority,
         mint_authority_bump_seed: mint_bump_seed,
         reserve_authority_bump_seed,
@@ -98,7 +98,7 @@ fn process_initialize(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> Prog
 
     // TODO: Check the mint program, similar to `lido::logic::check_mint`.
 
-    anchor.save(accounts.anchor)
+    anker.save(accounts.anker)
 }
 
 /// Deposit an amount of StLamports and get bSol in return.
@@ -113,15 +113,15 @@ fn process_deposit(
         return Err(ProgramError::InvalidArgument);
     }
 
-    let anchor = deserialize_anchor(
+    let anker = deserialize_anker(
         program_id,
-        accounts.anchor,
-        accounts.lido.key,
+        accounts.anker,
+        accounts.solido.key,
         accounts.to_reserve_account.key,
     )?;
 
-    // Check if the mint account is the same as the one stored in Anchor.
-    anchor.check_mint(accounts.b_sol_mint.key)?;
+    // Check if the mint account is the same as the one stored in Anker.
+    anker.check_mint(accounts.b_sol_mint.key)?;
 
     // Transfer `amount` StLamports to the reserve.
     invoke(
@@ -141,16 +141,16 @@ fn process_deposit(
         ],
     )?;
 
-    let lido = Lido::deserialize_lido(accounts.lido_program.key, accounts.lido)?;
+    let solido = Lido::deserialize_lido(accounts.solido_program.key, accounts.solido)?;
 
     // Use Lido's exchange rate (`sol_balance / sol_supply`) to compute the
     // amount of BLamports to mint.
-    let sol_value = lido.exchange_rate.exchange_st_sol(amount)?;
+    let sol_value = solido.exchange_rate.exchange_st_sol(amount)?;
     let b_sol_amount = BLamports(sol_value.0);
 
     mint_b_sol_to(
-        &anchor,
-        accounts.anchor.key,
+        &anker,
+        accounts.anker.key,
         accounts.spl_token,
         accounts.b_sol_mint,
         accounts.b_sol_mint_authority,
@@ -169,11 +169,11 @@ fn process_deposit(
 
 /// Processes [Instruction](enum.Instruction.html).
 pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> ProgramResult {
-    let instruction = AnchorInstruction::try_from_slice(input)?;
+    let instruction = AnkerInstruction::try_from_slice(input)?;
     match instruction {
-        AnchorInstruction::Initialize => process_initialize(program_id, accounts),
-        AnchorInstruction::Deposit { amount } => process_deposit(program_id, accounts, amount),
-        AnchorInstruction::Withdraw { amount } => todo!("{}", amount),
-        AnchorInstruction::ClaimRewards => todo!(),
+        AnkerInstruction::Initialize => process_initialize(program_id, accounts),
+        AnkerInstruction::Deposit { amount } => process_deposit(program_id, accounts, amount),
+        AnkerInstruction::Withdraw { amount } => todo!("{}", amount),
+        AnkerInstruction::ClaimRewards => todo!(),
     }
 }
