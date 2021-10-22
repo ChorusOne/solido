@@ -1,5 +1,5 @@
 use crate::{error::AnkerError, token::BLamports, ANKER_MINT_AUTHORITY};
-use lido::{error::LidoError, token::Lamports};
+use lido::{token::Lamports, state::Lido};
 use solana_program::{
     account_info::AccountInfo, borsh::try_from_slice_unchecked, entrypoint::ProgramResult, msg,
     program::invoke_signed, program_error::ProgramError, pubkey::Pubkey, rent::Rent,
@@ -8,27 +8,65 @@ use solana_program::{
 
 use crate::{instruction::InitializeAccountsInfo, state::Anker};
 
-/// Deserialize the Anker state.
-/// Checks if the Lido instance is the same as the one stored in Anker.
-/// Checks if the Reserve account is the same as the one stored in Anker.
+/// Deserialize the Solido and Anker state.
+///
+/// Check the following things for consistency:
+/// * The Solido state should be owned by the Solido program stored in Anker.
+/// * The Solido state should live at the address stored in Anker.
+/// * The reserve should live at the address derived from Anker.
+/// * The reserve should be valid stSOL account.
+///
+/// The following things are not checked, because these accounts are not always
+/// needed:
+/// * The mint address should match the address stored in Anker.
+/// * The mint authority should match the address derived from Anker.
+/// * The reserve authority should match the address derived from Anker.
 pub fn deserialize_anker(
-    program_id: &Pubkey,
+    anker_program_id: &Pubkey,
     anker_account: &AccountInfo,
-    lido: &Pubkey,
-    reserve_account: &Pubkey,
-) -> Result<Anker, ProgramError> {
-    if anker_account.owner != program_id {
+    solido_account: &AccountInfo,
+    reserve_account: &AccountInfo,
+) -> Result<(Lido, Anker), ProgramError> {
+    if anker_account.owner != anker_program_id {
         msg!(
             "Anker state is owned by {}, but should be owned by the Anker program ({}).",
             anker_account.owner,
-            program_id
+            anker_program_id
         );
-        return Err(LidoError::InvalidOwner.into());
+        return Err(AnkerError::InvalidOwner.into());
     }
+
     let anker = try_from_slice_unchecked::<Anker>(&anker_account.data.borrow())?;
-    anker.check_lido(lido)?;
-    anker.check_reserve_account(program_id, anker_account.key, reserve_account)?;
-    Ok(anker)
+
+    anker.check_self_address(anker_program_id, anker_account)?;
+
+    if *solido_account.owner != anker.solido_program_id {
+        msg!(
+            "Anker state is associated with Solido program at {}, but Solido state is owned by {}.",
+            anker.solido_program_id,
+            solido_account.owner,
+        );
+        return Err(AnkerError::InvalidOwner.into());
+    }
+
+    if *solido_account.key != anker.solido {
+        msg!(
+            "Anker state is associated with Solido instance at {}, but found {}.",
+            anker.solido,
+            solido_account.owner,
+        );
+        return Err(AnkerError::InvalidSolidoInstance.into());
+    }
+
+    let solido = Lido::deserialize_lido(
+        &anker.solido_program_id,
+        solido_account,
+    )?;
+
+    anker.check_reserve_address(anker_program_id, anker_account.key, reserve_account)?;
+    anker.check_is_st_sol_account(&solido, reserve_account)?;
+
+    Ok((solido, anker))
 }
 
 /// Mint the given amount of bSOL and put it in the recipient's account.
@@ -41,14 +79,6 @@ pub fn mint_b_sol_to<'a>(
     recipient: &AccountInfo<'a>,
     amount: BLamports,
 ) -> ProgramResult {
-    if &anker.bsol_mint != b_sol_mint.key {
-        msg!(
-            "Expected to find our bSOL mint ({}), but got {} instead.",
-            anker.bsol_mint,
-            b_sol_mint.key
-        );
-        return Err(AnkerError::InvalidBSolAccount.into());
-    }
     anker.check_is_b_sol_account(recipient)?;
 
     let authority_signature_seeds = [
