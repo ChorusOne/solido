@@ -17,7 +17,7 @@ async fn test_successful_deposit() {
         .solido_context
         .get_st_sol_balance(context.reserve)
         .await;
-    let recipient_balance = context.get_st_sol_balance(recipient).await;
+    let recipient_balance = context.get_b_sol_balance(recipient).await;
 
     // The context starts Solido with 1:1 exchange rate.
     assert_eq!(reserve_balance, TEST_DEPOSIT_AMOUNT);
@@ -32,7 +32,7 @@ async fn test_successful_deposit_different_exchange_rate() {
         .solido_context
         .get_st_sol_balance(context.reserve)
         .await;
-    let recipient_balance = context.get_st_sol_balance(recipient).await;
+    let recipient_balance = context.get_b_sol_balance(recipient).await;
 
     // The exchange rate is now 1:2.
     assert_eq!(reserve_balance, StLamports(500_000_000));

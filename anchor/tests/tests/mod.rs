@@ -3,4 +3,5 @@
 
 #![cfg(feature = "test-bpf")]
 
+pub mod claim_rewards;
 pub mod deposit;
