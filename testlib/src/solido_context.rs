@@ -625,7 +625,7 @@ impl Context {
                 &account.pubkey(),
                 lamports,
                 size as u64,
-                &owner,
+                owner,
             )],
             vec![&account],
         )

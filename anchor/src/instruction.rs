@@ -36,7 +36,9 @@ pub enum AnchorInstruction {
     },
 
     /// Claim rewards on Terra.
-    ClaimRewards,
+    ClaimRewards {
+        nonce: u8,
+    },
 }
 
 impl AnchorInstruction {
@@ -81,6 +83,15 @@ accounts_struct! {
             is_writable: true, // Writable because we need to initialize it.
         },
         pub reserve_authority {
+            is_signer: false,
+            is_writable: false,
+        },
+        // Instance of the token swap data used for trading StSOL for UST.
+        pub token_swap_instance {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub rewards_destination {
             is_signer: false,
             is_writable: false,
         },
@@ -184,12 +195,64 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
+
+        // Accounts for token swap
+        pub token_swap_instance {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub st_sol_token {
+            is_signer: false,
+            is_writable: true, // Needed to swap tokens.
+        },
+        pub ust_token {
+            is_signer: false,
+            is_writable: true, // Needed to swap tokens.
+        },
+        pub pool_mint {
+            is_signer: false,
+            is_writable: true, // Needed to swap tokens.
+        },
+        pub st_sol_mint {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub ust_mint {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub pool_fee_account {
+            is_signer: false,
+            is_writable: true, // Needed to swap tokens.
+        },
+        pub token_pool_authority {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub reserve_authority {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub st_sol_reserve {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub rewards_destination {
+            is_signer: false,
+            is_writable: true, // Needed to swap tokens.
+        },
+
         const spl_token = spl_token::id(),
+        const spl_token_swap = spl_token_swap::id(),
     }
 }
 
-pub fn claim_rewards(program_id: &Pubkey, accounts: &ClaimRewardsAccountsMeta) -> Instruction {
-    let data = AnchorInstruction::ClaimRewards;
+pub fn claim_rewards(
+    program_id: &Pubkey,
+    accounts: &ClaimRewardsAccountsMeta,
+    nonce: u8,
+) -> Instruction {
+    let data = AnchorInstruction::ClaimRewards { nonce };
     Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),

@@ -1,13 +1,16 @@
+use crate::instruction::ClaimRewardsAccountsInfo;
 use crate::{error::AnchorError, ANCHOR_RESERVE_ACCOUNT};
+use crate::{find_reserve_account, find_reserve_authority, ANCHOR_RESERVE_AUTHORITY};
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use lido::util::serialize_b58;
+use lido::{token::StLamports, util::serialize_b58};
 use serde::Serialize;
+use solana_program::program::invoke_signed;
 use solana_program::{
     account_info::AccountInfo, entrypoint::ProgramResult, msg, program_pack::Pack, pubkey::Pubkey,
 };
 
 /// Size of the serialized [`Anchor`] struct, in bytes.
-pub const ANKER_LEN: usize = 99;
+pub const ANKER_LEN: usize = 163;
 
 #[repr(C)]
 #[derive(
@@ -25,6 +28,14 @@ pub struct Anchor {
     /// The associated LIDO state address.
     #[serde(serialize_with = "serialize_b58")]
     pub lido: Pubkey,
+
+    /// Token swap data. Used to swap stSOL for UST.
+    #[serde(serialize_with = "serialize_b58")]
+    pub token_swap_instance: Pubkey,
+
+    /// Destination of the rewards, paid in UST.
+    #[serde(serialize_with = "serialize_b58")]
+    pub rewards_destination: Pubkey,
 
     /// Bump seeds for signing messages on behalf of the authority.
     pub mint_authority_bump_seed: u8,
@@ -123,6 +134,62 @@ impl Anchor {
             return Err(AnchorError::WrongLidoInstance.into());
         }
         Ok(())
+    }
+
+    pub fn swap_st_sol_for_ust_tokens(
+        &self,
+        program_id: &Pubkey,
+        amount: StLamports,
+        accounts: &ClaimRewardsAccountsInfo,
+    ) -> ProgramResult {
+        let (token_pool_authority, _) = Pubkey::find_program_address(
+            &[&accounts.token_swap_instance.key.to_bytes()[..]],
+            &spl_token_swap::id(),
+        );
+        let (st_sol_reserve, _bump_seed) =
+            find_reserve_account(program_id, &accounts.token_swap_instance.key);
+
+        let (reserve_authority, _bump_seed) =
+            find_reserve_authority(program_id, &accounts.token_swap_instance.key);
+        let swap_instruction = spl_token_swap::instruction::swap(
+            accounts.spl_token_swap.key,
+            accounts.spl_token.key,
+            &accounts.token_swap_instance.key,
+            &token_pool_authority,
+            &reserve_authority,
+            &st_sol_reserve,
+            &accounts.st_sol_token.key,
+            &accounts.ust_token.key,
+            &self.rewards_destination,
+            &accounts.pool_mint.key,
+            &accounts.pool_fee_account.key,
+            None,
+            spl_token_swap::instruction::Swap {
+                amount_in: amount.0,
+                minimum_amount_out: u64::MAX,
+            },
+        )?;
+        invoke_signed(
+            &swap_instruction,
+            &[
+                accounts.token_swap_instance.clone(),
+                accounts.token_pool_authority.clone(),
+                accounts.reserve_authority.clone(),
+                accounts.st_sol_reserve.clone(),
+                accounts.st_sol_token.clone(),
+                accounts.ust_token.clone(),
+                accounts.rewards_destination.clone(),
+                accounts.pool_mint.clone(),
+                accounts.pool_fee_account.clone(),
+                accounts.spl_token.clone(),
+                accounts.spl_token_swap.clone(),
+            ],
+            &[&[
+                &accounts.anchor.key.to_bytes(),
+                ANCHOR_RESERVE_AUTHORITY,
+                &[self.reserve_authority_bump_seed],
+            ]],
+        )
     }
 }
 

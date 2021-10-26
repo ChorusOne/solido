@@ -7,7 +7,7 @@ use solana_program::{
 
 use lido::{state::Lido, token::StLamports};
 
-use crate::logic::{create_account, initialize_reserve_account};
+use crate::logic::{check_token_swap, create_account, initialize_reserve_account};
 use crate::state::ANKER_LEN;
 use crate::{
     error::AnchorError,
@@ -94,6 +94,8 @@ fn process_initialize(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> Prog
         bsol_mint: *accounts.b_sol_mint.key,
         lido: *accounts.lido.key,
         reserve_authority,
+        token_swap_instance: *accounts.token_swap_instance.key,
+        rewards_destination: *accounts.rewards_destination.key,
         mint_authority_bump_seed: mint_bump_seed,
         reserve_authority_bump_seed,
         reserve_account_bump_seed,
@@ -171,7 +173,11 @@ fn process_deposit(
 }
 
 /// Claim Anker rewards
-fn process_claim_rewards(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> ProgramResult {
+fn process_claim_rewards(
+    program_id: &Pubkey,
+    accounts_raw: &[AccountInfo],
+    nonce: u8,
+) -> ProgramResult {
     let accounts = ClaimRewardsAccountsInfo::try_from_slice(accounts_raw)?;
     let anchor = deserialize_anchor(
         program_id,
@@ -194,7 +200,10 @@ fn process_claim_rewards(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> P
     let st_sol_amount = lido.exchange_rate.exchange_sol(Lamports(b_sol_supply))?;
 
     // If `reserve_st_sol` < `st_sol_amount` something went wrong, and we abort the transaction.
+    // FIXME: If stSOL got slashed, this might fail, see #453.
     let rewards = (reserve_st_sol - st_sol_amount)?;
+
+    check_token_swap(&anchor, &accounts, nonce)?;
 
     Ok(())
 }
@@ -206,6 +215,8 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
         AnchorInstruction::Initialize => process_initialize(program_id, accounts),
         AnchorInstruction::Deposit { amount } => process_deposit(program_id, accounts, amount),
         AnchorInstruction::Withdraw { amount } => todo!("{}", amount),
-        AnchorInstruction::ClaimRewards => process_claim_rewards(program_id, accounts),
+        AnchorInstruction::ClaimRewards { nonce } => {
+            process_claim_rewards(program_id, accounts, nonce)
+        }
     }
 }

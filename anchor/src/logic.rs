@@ -1,12 +1,19 @@
 use crate::{error::AnchorError, token::BLamports, ANCHOR_MINT_AUTHORITY};
-use lido::{error::LidoError, token::Lamports};
+use lido::{
+    error::LidoError,
+    token::{Lamports, StLamports},
+};
 use solana_program::{
     account_info::AccountInfo, borsh::try_from_slice_unchecked, entrypoint::ProgramResult, msg,
-    program::invoke_signed, program_error::ProgramError, pubkey::Pubkey, rent::Rent,
-    system_instruction,
+    program::invoke_signed, program_error::ProgramError, program_pack::Pack, pubkey::Pubkey,
+    rent::Rent, system_instruction,
 };
+use spl_token_swap::instruction::Swap;
 
-use crate::{instruction::InitializeAccountsInfo, state::Anchor};
+use crate::{
+    instruction::{ClaimRewardsAccountsInfo, InitializeAccountsInfo},
+    state::Anchor,
+};
 
 /// Deserialize the Anchor state.
 /// Checks if the Lido instance is the same as the one stored in Anchor.
@@ -135,4 +142,92 @@ pub fn initialize_reserve_account(
         ],
         &[seeds],
     )
+}
+
+/// Check the if the token swap program is the same as the one stored in the
+/// instance.
+///
+/// Checks all the associated accounts.
+pub fn check_token_swap(
+    anker: &Anchor,
+    accounts: &ClaimRewardsAccountsInfo,
+    nonce: u8,
+) -> ProgramResult {
+    if &anker.token_swap_instance != accounts.token_swap_instance.key {
+        msg!(
+            "Invalid Token Swap instance, expected {}, found {}",
+            anker.token_swap_instance,
+            accounts.token_swap_instance.key
+        );
+        return Err(AnchorError::WrongSPLTokenSwap.into());
+    }
+    let token_swap =
+        spl_token_swap::state::SwapV1::unpack(&accounts.token_swap_instance.data.borrow())?;
+
+    if token_swap.nonce != nonce {
+        msg!(
+            "Token Swap nonce different from what is stored in the instance, expected {}, found {}",
+            token_swap.nonce,
+            nonce
+        );
+        return Err(AnchorError::WrongSPLTokenSwapParameters.into());
+    }
+    if &token_swap.token_a != accounts.st_sol_token.key {
+        msg!(
+            "Token Swap StSol token is different from what is stored in the instance, expected {}, found {}",
+            token_swap.token_a,
+            accounts.st_sol_token.key
+        );
+        return Err(AnchorError::WrongSPLTokenSwapParameters.into());
+    }
+    if &token_swap.token_b != accounts.ust_token.key {
+        msg!(
+            "Token Swap UST token is different from what is stored in the instance, expected {}, found {}",
+            token_swap.token_b,
+            accounts.ust_token.key
+        );
+        return Err(AnchorError::WrongSPLTokenSwapParameters.into());
+    }
+    if &token_swap.pool_mint != accounts.pool_mint.key {
+        msg!(
+            "Token Swap mint is different from what is stored in the instance, expected {}, found {}",
+            token_swap.pool_mint,
+            accounts.pool_mint.key
+        );
+        return Err(AnchorError::WrongSPLTokenSwapParameters.into());
+    }
+    if &token_swap.pool_mint != accounts.pool_mint.key {
+        msg!(
+            "Token Swap mint is different from what is stored in the instance, expected {}, found {}",
+            token_swap.pool_mint,
+            accounts.pool_mint.key
+        );
+        return Err(AnchorError::WrongSPLTokenSwapParameters.into());
+    }
+    if &token_swap.token_a_mint != accounts.st_sol_mint.key {
+        msg!(
+            "Token Swap StSol mint is different from what is stored in the instance, expected {}, found {}",
+            token_swap.token_a_mint,
+            accounts.st_sol_mint.key
+        );
+        return Err(AnchorError::WrongSPLTokenSwapParameters.into());
+    }
+    if &token_swap.token_b_mint != accounts.ust_mint.key {
+        msg!(
+            "Token Swap UST mint is different from what is stored in the instance, expected {}, found {}",
+            token_swap.token_b_mint,
+            accounts.ust_mint.key
+        );
+        return Err(AnchorError::WrongSPLTokenSwapParameters.into());
+    }
+    if &token_swap.pool_fee_account != accounts.pool_fee_account.key {
+        msg!(
+            "Token Swap fee account is different from what is stored in the instance, expected {}, found {}",
+            token_swap.pool_fee_account,
+            accounts.pool_fee_account.key
+        );
+        return Err(AnchorError::WrongSPLTokenSwapParameters.into());
+    }
+
+    Ok(())
 }
