@@ -170,14 +170,25 @@ impl Context {
     }
 
     pub async fn initialize_token_pool(&mut self) {
-        let swap_account = self.solido_context.deterministic_keypair.new_keypair();
+        let admin = self.solido_context.deterministic_keypair.new_keypair();
+
+        // When packing the SwapV1 structure, it's called with `SwapV1::pack(swap_info, &mut dst[1..])`.
+        // But the program also wants the the size of the data to be `spl_token_swap::state::SwapV1::LEN`.
+        // That is why we add the `+1` 🤷 .
+        let swap_account = self
+            .solido_context
+            .create_account(
+                &spl_token_swap::id(),
+                spl_token_swap::state::SwapV1::LEN + 1,
+            )
+            .await;
 
         let (authority_pubkey, authority_bump_seed) = Pubkey::find_program_address(
             &[&swap_account.pubkey().to_bytes()[..]],
             &spl_token_swap::id(),
         );
 
-        let admin = self.solido_context.deterministic_keypair.new_keypair();
+        // Pool token and fee account owner.
 
         let pool_mint_account = self.solido_context.create_mint(authority_pubkey).await;
         let pool_token_account = self
@@ -189,17 +200,23 @@ impl Context {
             .create_spl_token_account(pool_mint_account, admin.pubkey())
             .await;
 
-        let st_sol_account = self
-            .solido_context
-            .create_spl_token_account(self.solido_context.st_sol_mint, authority_pubkey)
-            .await;
         let b_sol_account = self
             .solido_context
             .create_spl_token_account(self.b_sol_mint, authority_pubkey)
             .await;
+        let st_sol_account = self
+            .solido_context
+            .create_spl_token_account(self.solido_context.st_sol_mint, authority_pubkey)
+            .await;
 
-        let (kp_bsol, _) = self.deposit(Lamports(1_000_000_000)).await;
-        let (kp_stsol, _) = self.solido_context.deposit(Lamports(1_000_000_000)).await;
+        let (kp_bsol, token_bsol) = self.deposit(Lamports(1_000_000_000)).await;
+        let (kp_stsol, token_st_sol) = self.solido_context.deposit(Lamports(1_000_000_000)).await;
+        self.solido_context
+            .transfer_spl_token(&token_bsol, &b_sol_account, &kp_bsol, 1_000_000_000)
+            .await;
+        self.solido_context
+            .transfer_spl_token(&token_st_sol, &st_sol_account, &kp_stsol, 1_000_000_000)
+            .await;
 
         let fees = spl_token_swap::curve::fees::Fees {
             trade_fee_numerator: 0,

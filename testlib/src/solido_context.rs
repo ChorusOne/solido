@@ -611,7 +611,7 @@ impl Context {
     }
 
     /// Create an account with a given owner and size.
-    pub async fn create_account(&mut self, owner: &Keypair, size: usize) -> Pubkey {
+    pub async fn create_account(&mut self, owner: &Pubkey, size: usize) -> Keypair {
         let account = self.deterministic_keypair.new_keypair();
         let payer = self.context.payer.pubkey();
         let rent = self.get_rent().await;
@@ -625,13 +625,13 @@ impl Context {
                 &account.pubkey(),
                 lamports,
                 size as u64,
-                &owner.pubkey(),
+                &owner,
             )],
             vec![&account],
         )
         .await
         .expect("Failed to create account.");
-        account.pubkey()
+        account
     }
 
     /// Make `amount` appear in the recipient's account by transferring it from the context's funder.
@@ -1308,6 +1308,31 @@ impl Context {
         assert_eq!(account_info.mint, self.st_sol_mint);
 
         StLamports(account_info.amount)
+    }
+
+    pub async fn transfer_spl_token(
+        &mut self,
+        source: &Pubkey,
+        destination: &Pubkey,
+        authority: &Keypair,
+        amount: u64,
+    ) {
+        send_transaction(
+            &mut self.context,
+            &mut self.nonce,
+            &[spl_token::instruction::transfer(
+                &spl_token::id(),
+                source,
+                destination,
+                &authority.pubkey(),
+                &[],
+                amount,
+            )
+            .unwrap()],
+            vec![authority],
+        )
+        .await
+        .expect("Failed to transfer tokens.");
     }
 
     pub async fn get_solido(&mut self) -> Lido {

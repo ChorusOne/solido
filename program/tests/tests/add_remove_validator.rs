@@ -50,7 +50,7 @@ async fn test_add_validator_with_invalid_owner() {
     let owner = context.deterministic_keypair.new_keypair();
 
     let invalid_vote_account = context
-        .create_account(&owner, vote_account.data.len())
+        .create_account(&owner.pubkey(), vote_account.data.len())
         .await;
 
     let node_account = context.deterministic_keypair.new_keypair();
@@ -58,7 +58,7 @@ async fn test_add_validator_with_invalid_owner() {
     let result = context
         .try_add_validator(&ValidatorAccounts {
             node_account: node_account,
-            vote_account: invalid_vote_account,
+            vote_account: invalid_vote_account.pubkey(),
             fee_account: fee_account,
         })
         .await;
