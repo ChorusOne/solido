@@ -36,9 +36,7 @@ pub enum AnchorInstruction {
     },
 
     /// Claim rewards on Terra.
-    ClaimRewards {
-        nonce: u8,
-    },
+    ClaimRewards,
 }
 
 impl AnchorInstruction {
@@ -247,12 +245,8 @@ accounts_struct! {
     }
 }
 
-pub fn claim_rewards(
-    program_id: &Pubkey,
-    accounts: &ClaimRewardsAccountsMeta,
-    nonce: u8,
-) -> Instruction {
-    let data = AnchorInstruction::ClaimRewards { nonce };
+pub fn claim_rewards(program_id: &Pubkey, accounts: &ClaimRewardsAccountsMeta) -> Instruction {
+    let data = AnchorInstruction::ClaimRewards;
     Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),

@@ -90,6 +90,11 @@ fn process_initialize(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> Prog
     )?;
     initialize_reserve_account(&accounts, &reserve_account_seeds)?;
 
+    let (_, token_swap_bump_seed) = Pubkey::find_program_address(
+        &[&accounts.token_swap_instance.key.to_bytes()],
+        &spl_token_swap::id(),
+    );
+
     let anchor = Anchor {
         bsol_mint: *accounts.b_sol_mint.key,
         lido: *accounts.lido.key,
@@ -99,6 +104,7 @@ fn process_initialize(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> Prog
         mint_authority_bump_seed: mint_bump_seed,
         reserve_authority_bump_seed,
         reserve_account_bump_seed,
+        token_swap_bump_seed,
     };
 
     // TODO: Check the mint program, similar to `lido::logic::check_mint`.
@@ -173,11 +179,7 @@ fn process_deposit(
 }
 
 /// Claim Anker rewards
-fn process_claim_rewards(
-    program_id: &Pubkey,
-    accounts_raw: &[AccountInfo],
-    nonce: u8,
-) -> ProgramResult {
+fn process_claim_rewards(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> ProgramResult {
     let accounts = ClaimRewardsAccountsInfo::try_from_slice(accounts_raw)?;
     let anchor = deserialize_anchor(
         program_id,
@@ -203,7 +205,7 @@ fn process_claim_rewards(
     // FIXME: If stSOL got slashed, this might fail, see #453.
     let rewards = (reserve_st_sol - st_sol_amount)?;
 
-    check_token_swap(&anchor, &accounts, nonce)?;
+    check_token_swap(&anchor, &accounts)?;
 
     Ok(())
 }
@@ -215,8 +217,6 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
         AnchorInstruction::Initialize => process_initialize(program_id, accounts),
         AnchorInstruction::Deposit { amount } => process_deposit(program_id, accounts, amount),
         AnchorInstruction::Withdraw { amount } => todo!("{}", amount),
-        AnchorInstruction::ClaimRewards { nonce } => {
-            process_claim_rewards(program_id, accounts, nonce)
-        }
+        AnchorInstruction::ClaimRewards => process_claim_rewards(program_id, accounts),
     }
 }

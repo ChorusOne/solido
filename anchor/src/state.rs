@@ -10,7 +10,7 @@ use solana_program::{
 };
 
 /// Size of the serialized [`Anchor`] struct, in bytes.
-pub const ANKER_LEN: usize = 163;
+pub const ANKER_LEN: usize = 164;
 
 #[repr(C)]
 #[derive(
@@ -41,6 +41,7 @@ pub struct Anchor {
     pub mint_authority_bump_seed: u8,
     pub reserve_authority_bump_seed: u8,
     pub reserve_account_bump_seed: u8,
+    pub token_swap_bump_seed: u8,
 }
 
 impl Anchor {

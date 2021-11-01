@@ -10,6 +10,7 @@ use solana_sdk::transport;
 
 use anchor_integration::instruction;
 use anchor_integration::token::BLamports;
+use anchor_integration::{find_reserve_account, find_reserve_authority};
 use lido::token::Lamports;
 use lido::token::StLamports;
 use spl_token_swap::curve::base::{CurveType, SwapCurve};
@@ -264,6 +265,43 @@ impl Context {
         )
         .await
         .expect("Failed to swap StSol for UST tokens.");
+    }
+
+    pub async fn claim_rewards(&mut self) {
+        let (reserve_account, _reserve_account_bump_seed) =
+            find_reserve_account(&id(), &self.anker);
+        let (reserve_authority, _reserve_authority_bump_seed) =
+            find_reserve_authority(&id(), &self.anker);
+        let (token_pool_authority, _token_pool_authority_bump_seed) =
+            self.token_pool_context.get_token_pool_authority();
+        send_transaction(
+            &mut self.solido_context.context,
+            &mut self.solido_context.nonce,
+            &[instruction::claim_rewards(
+                &id(),
+                &instruction::ClaimRewardsAccountsMeta {
+                    anchor: self.anker,
+                    lido: self.solido_context.solido.pubkey(),
+                    lido_program: solido_context::id(),
+                    reserve_account: reserve_account,
+                    b_sol_mint: self.b_sol_mint,
+                    token_swap_instance: self.token_pool_context.swap_account.pubkey(),
+                    st_sol_token: self.token_pool_context.st_sol_address,
+                    ust_token: self.token_pool_context.ust_address,
+                    pool_mint: self.token_pool_context.mint_address,
+                    st_sol_mint: self.solido_context.st_sol_mint,
+                    ust_mint: self.token_pool_context.ust_mint_address,
+                    pool_fee_account: self.token_pool_context.fee_address,
+                    token_pool_authority: token_pool_authority,
+                    reserve_authority: reserve_authority,
+                    st_sol_reserve: reserve_account,
+                    rewards_destination: self.,
+                },
+            )],
+            vec![],
+        )
+        .await
+        .expect("Failed to initialize Anker instance.");
     }
 }
 

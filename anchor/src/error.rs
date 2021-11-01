@@ -24,10 +24,10 @@ pub enum AnchorError {
     WrongLidoInstance = 4,
 
     /// Wrong SPL token swap instance.
-    WrongSPLTokenSwap = 5,
+    WrongSplTokenSwap = 5,
 
     /// Data from the SPL token swap diverges from the stored on this instance.
-    WrongSPLTokenSwapParameters = 6,
+    WrongSplTokenSwapParameters = 6,
 }
 
 // Just reuse the generated Debug impl for Display. It shows the variant names.
