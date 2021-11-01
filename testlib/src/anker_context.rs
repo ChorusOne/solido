@@ -79,6 +79,7 @@ pub struct Context {
 
     pub token_pool_context: TokenPoolContext,
     pub rewards_owner: Keypair,
+    pub ust_rewards_account: Pubkey,
 }
 
 const INITIAL_DEPOSIT: Lamports = Lamports(1_000_000_000);
@@ -138,6 +139,7 @@ impl Context {
             reserve,
             token_pool_context,
             rewards_owner,
+            ust_rewards_account,
         }
     }
 
@@ -295,7 +297,7 @@ impl Context {
                     token_pool_authority: token_pool_authority,
                     reserve_authority: reserve_authority,
                     st_sol_reserve: reserve_account,
-                    rewards_destination: self.,
+                    rewards_destination: self.ust_rewards_account,
                 },
             )],
             vec![],
