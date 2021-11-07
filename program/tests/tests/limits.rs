@@ -26,7 +26,7 @@ async fn test_withdraw_inactive_stake_max_accounts() {
 
     // The maximum number of stake accounts per validator that we can support,
     // before WithdrawInactiveStake fails.
-    let max_accounts = 9;
+    let max_accounts = 8;
 
     for i in 0..=max_accounts {
         let amount = Lamports(2_000_000_000);
