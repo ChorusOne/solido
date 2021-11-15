@@ -21,6 +21,12 @@ use crate::{instruction::InitializeAccountsInfo, state::Anker};
 /// * The mint address should match the address stored in Anker.
 /// * The mint authority should match the address derived from Anker.
 /// * The reserve authority should match the address derived from Anker.
+///
+/// Note, the address of the Anker instance is a program-derived address that
+/// derived from the Anker program address, and the Solido instance address of
+/// the Solido instance that this Anker instance belongs to. This ensures that
+/// for a given deployment of the Anker program, there exists a unique Anker
+/// instance address per Solido instance.
 pub fn deserialize_anker(
     anker_program_id: &Pubkey,
     anker_account: &AccountInfo,
