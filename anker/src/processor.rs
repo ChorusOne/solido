@@ -1,7 +1,8 @@
 use borsh::BorshDeserialize;
 use solana_program::{
     account_info::AccountInfo, entrypoint::ProgramResult, msg, program::invoke,
-    program_error::ProgramError, program_pack::Pack, pubkey::Pubkey, rent::Rent, sysvar::Sysvar,
+    program_error::ProgramError, program_option::COption, program_pack::Pack, pubkey::Pubkey,
+    rent::Rent, sysvar::Sysvar,
 };
 
 use lido::{state::Lido, token::StLamports};
@@ -38,7 +39,7 @@ fn process_initialize(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> Prog
     // We generate these addresses here, and then at the end after constructing
     // the Anker instance, we check that these addresses match the provided ones.
     // This way we can re-use the existing checks.
-    let (_mint_authority, mint_bump_seed) = find_mint_authority(program_id, &anker_address);
+    let (mint_authority, mint_bump_seed) = find_mint_authority(program_id, &anker_address);
     let (_reserve_authority, reserve_authority_bump_seed) =
         find_reserve_authority(program_id, &anker_address);
     let (_reserve_account, reserve_account_bump_seed) =
@@ -85,6 +86,20 @@ fn process_initialize(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> Prog
     anker.check_reserve_address(program_id, &anker_address, accounts.reserve_account)?;
     anker.check_reserve_authority(program_id, &anker_address, accounts.reserve_authority)?;
     anker.check_is_st_sol_account(&solido, accounts.reserve_account)?;
+
+    match spl_token::state::Mint::unpack_from_slice(&accounts.b_sol_mint.data.borrow()) {
+        Ok(mint) if mint.mint_authority == COption::Some(mint_authority) => {
+            // Ok, we control this mint.
+        }
+        _ => {
+            msg!(
+                "Mint authority of bSOL mint {} is not the expected {}.",
+                accounts.b_sol_mint.key,
+                mint_authority,
+            );
+            return Err(AnkerError::InvalidTokenMint.into());
+        }
+    }
 
     anker.save(accounts.anker)
 }
