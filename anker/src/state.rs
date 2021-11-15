@@ -52,7 +52,7 @@ impl Anker {
         Ok(())
     }
 
-    /// Confirm that the account address is the derived address where Anker instance should live.
+    /// Confirm that the account address is the derived address where the Anker instance should live.
     pub fn check_self_address(
         &self,
         anker_program_id: &Pubkey,
