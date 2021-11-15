@@ -3,9 +3,9 @@ use std::fmt::Formatter;
 use num_derive::FromPrimitive;
 use solana_program::{decode_error::DecodeError, program_error::ProgramError};
 
-/// Errors that may be returned by the Lido program.
+/// Errors that may be returned by the Anker program.
 #[derive(Clone, Debug, Eq, FromPrimitive, PartialEq)]
-pub enum AnchorError {
+pub enum AnkerError {
     /// We expected an SPL token account that holds bSOL,
     /// but this was not an SPL token account,
     /// or its mint did not match.
@@ -25,20 +25,20 @@ pub enum AnchorError {
 }
 
 // Just reuse the generated Debug impl for Display. It shows the variant names.
-impl std::fmt::Display for AnchorError {
+impl std::fmt::Display for AnkerError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         std::fmt::Debug::fmt(self, f)
     }
 }
 
-impl From<AnchorError> for ProgramError {
-    fn from(e: AnchorError) -> Self {
+impl From<AnkerError> for ProgramError {
+    fn from(e: AnkerError) -> Self {
         ProgramError::Custom(e as u32)
     }
 }
 
-impl<T> DecodeError<T> for AnchorError {
+impl<T> DecodeError<T> for AnkerError {
     fn type_of() -> &'static str {
-        "Lido Error"
+        "Anker Error"
     }
 }

@@ -36,17 +36,23 @@ This repository contains the source code for the on-chain program, and for the
 `solido` utility to interact with it. The source code for the staking widget,
 and documentation, are in a different repository, which is not yet public.
 
- * `program` — The on-chain Solana BPF program.
+ * `program` — Solido, the on-chain Solana BPF program that implements Lido for
+   Solana.
+ * `anker` — Anker, the on-chain Solana BPF program that implements integration
+   with the [Anchor Protocol][anchor-protocol] on [Terra][terra].
  * `multisig` — A pinned version of the on-chain [Serum multisig
    program][multisig], used as the upgrade authority of the Solido program, and
    as the manager of the Solido instance.
  * `cli` — The command-line `solido` utility for interacting with the on-chain
    programs.
  * `docker` — Dockerfiles for reproducible builds, and for the maintainer image.
+ * `testlib` — Utilities for writing tests using the `solana-program-test` test
+   framework. The individual tests are in `program/tests` and `anker/tests`.
  * `tests` — Scripts that test the actual `solido` binary and on-chain program.
- * `program/tests` — Tests using the `solana-program-test` test framework.
 
-[multisig]: https://github.com/project-serum/multisig
+[multisig]:        https://github.com/project-serum/multisig
+[anchor-protocol]: https://anchorprotocol.com/
+[terra]:           https://www.terra.money/
 
 ## Building
 
@@ -114,7 +120,8 @@ $ cargo build-bpf
 $ cargo test-bpf
 ```
 
-The programs `lido.so` and `serum_multisig.so` can then be found in `target/deploy`.
+The programs `lido.so`, `anker.so`, and `serum_multisig.so` can then be found in
+`target/deploy`.
 
 ### Docker container
 

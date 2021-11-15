@@ -194,7 +194,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "anchor_integration"
+name = "anker"
 version = "0.0.1"
 dependencies = [
  "borsh",
@@ -3843,7 +3843,7 @@ dependencies = [
 name = "testlib"
 version = "1.1.0"
 dependencies = [
- "anchor_integration",
+ "anker",
  "borsh",
  "lido",
  "num-derive",

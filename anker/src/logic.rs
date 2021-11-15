@@ -1,4 +1,4 @@
-use crate::{error::AnchorError, token::BLamports, ANCHOR_MINT_AUTHORITY};
+use crate::{error::AnkerError, token::BLamports, ANKER_MINT_AUTHORITY};
 use lido::{error::LidoError, token::Lamports};
 use solana_program::{
     account_info::AccountInfo, borsh::try_from_slice_unchecked, entrypoint::ProgramResult, msg,
@@ -6,55 +6,55 @@ use solana_program::{
     system_instruction,
 };
 
-use crate::{instruction::InitializeAccountsInfo, state::Anchor};
+use crate::{instruction::InitializeAccountsInfo, state::Anker};
 
-/// Deserialize the Anchor state.
-/// Checks if the Lido instance is the same as the one stored in Anchor.
-/// Checks if the Reserve account is the same as the one stored in Anchor.
-pub fn deserialize_anchor(
+/// Deserialize the Anker state.
+/// Checks if the Lido instance is the same as the one stored in Anker.
+/// Checks if the Reserve account is the same as the one stored in Anker.
+pub fn deserialize_anker(
     program_id: &Pubkey,
-    anchor_account: &AccountInfo,
+    anker_account: &AccountInfo,
     lido: &Pubkey,
     reserve_account: &Pubkey,
-) -> Result<Anchor, ProgramError> {
-    if anchor_account.owner != program_id {
+) -> Result<Anker, ProgramError> {
+    if anker_account.owner != program_id {
         msg!(
-            "Anchor state is owned by {}, but should be owned by the Anchor program ({}).",
-            anchor_account.owner,
+            "Anker state is owned by {}, but should be owned by the Anker program ({}).",
+            anker_account.owner,
             program_id
         );
         return Err(LidoError::InvalidOwner.into());
     }
-    let anchor = try_from_slice_unchecked::<Anchor>(&anchor_account.data.borrow())?;
-    anchor.check_lido(lido)?;
-    anchor.check_reserve_account(program_id, anchor_account.key, reserve_account)?;
-    Ok(anchor)
+    let anker = try_from_slice_unchecked::<Anker>(&anker_account.data.borrow())?;
+    anker.check_lido(lido)?;
+    anker.check_reserve_account(program_id, anker_account.key, reserve_account)?;
+    Ok(anker)
 }
 
 /// Mint the given amount of bSOL and put it in the recipient's account.
 pub fn mint_b_sol_to<'a>(
-    anchor: &Anchor,
-    anchor_address: &Pubkey,
+    anker: &Anker,
+    anker_address: &Pubkey,
     spl_token_program: &AccountInfo<'a>,
     b_sol_mint: &AccountInfo<'a>,
     mint_authority: &AccountInfo<'a>,
     recipient: &AccountInfo<'a>,
     amount: BLamports,
 ) -> ProgramResult {
-    if &anchor.bsol_mint != b_sol_mint.key {
+    if &anker.bsol_mint != b_sol_mint.key {
         msg!(
             "Expected to find our bSOL mint ({}), but got {} instead.",
-            anchor.bsol_mint,
+            anker.bsol_mint,
             b_sol_mint.key
         );
-        return Err(AnchorError::InvalidBSolAccount.into());
+        return Err(AnkerError::InvalidBSolAccount.into());
     }
-    anchor.check_is_b_sol_account(recipient)?;
+    anker.check_is_b_sol_account(recipient)?;
 
     let authority_signature_seeds = [
-        &anchor_address.to_bytes(),
-        ANCHOR_MINT_AUTHORITY,
-        &[anchor.mint_authority_bump_seed],
+        &anker_address.to_bytes(),
+        ANKER_MINT_AUTHORITY,
+        &[anker.mint_authority_bump_seed],
     ];
     let signers = [&authority_signature_seeds[..]];
 
