@@ -5,5 +5,5 @@ use testlib::anker_context::Context;
 async fn test_successful_claim_rewards() {
     let mut context = Context::new().await;
 
-    context.claim_rewards();
+    context.claim_rewards().await;
 }

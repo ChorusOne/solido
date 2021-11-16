@@ -152,9 +152,11 @@ pub fn check_token_swap(anker: &Anchor, accounts: &ClaimRewardsAccountsInfo) -> 
         );
         return Err(AnchorError::WrongSplTokenSwap.into());
     }
+    // We should ignore the 1st byte for the unpack.
     let token_swap =
-        spl_token_swap::state::SwapV1::unpack(&accounts.token_swap_instance.data.borrow())?;
+        spl_token_swap::state::SwapV1::unpack(&accounts.token_swap_instance.data.borrow()[1..])?;
 
+    // `token_a` should be stSOL.
     if &token_swap.token_a != accounts.st_sol_token.key {
         msg!(
             "Token Swap StSol token is different from what is stored in the instance, expected {}, found {}",
@@ -163,6 +165,7 @@ pub fn check_token_swap(anker: &Anchor, accounts: &ClaimRewardsAccountsInfo) -> 
         );
         return Err(AnchorError::WrongSplTokenSwapParameters.into());
     }
+    // `token_b` should be UST.
     if &token_swap.token_b != accounts.ust_token.key {
         msg!(
             "Token Swap UST token is different from what is stored in the instance, expected {}, found {}",
@@ -171,6 +174,7 @@ pub fn check_token_swap(anker: &Anchor, accounts: &ClaimRewardsAccountsInfo) -> 
         );
         return Err(AnchorError::WrongSplTokenSwapParameters.into());
     }
+    // Check pool mint.
     if &token_swap.pool_mint != accounts.pool_mint.key {
         msg!(
             "Token Swap mint is different from what is stored in the instance, expected {}, found {}",
@@ -179,14 +183,7 @@ pub fn check_token_swap(anker: &Anchor, accounts: &ClaimRewardsAccountsInfo) -> 
         );
         return Err(AnchorError::WrongSplTokenSwapParameters.into());
     }
-    if &token_swap.pool_mint != accounts.pool_mint.key {
-        msg!(
-            "Token Swap mint is different from what is stored in the instance, expected {}, found {}",
-            token_swap.pool_mint,
-            accounts.pool_mint.key
-        );
-        return Err(AnchorError::WrongSplTokenSwapParameters.into());
-    }
+    // Check stSOL mint.
     if &token_swap.token_a_mint != accounts.st_sol_mint.key {
         msg!(
             "Token Swap StSol mint is different from what is stored in the instance, expected {}, found {}",
@@ -195,6 +192,7 @@ pub fn check_token_swap(anker: &Anchor, accounts: &ClaimRewardsAccountsInfo) -> 
         );
         return Err(AnchorError::WrongSplTokenSwapParameters.into());
     }
+    // Check UST mint.
     if &token_swap.token_b_mint != accounts.ust_mint.key {
         msg!(
             "Token Swap UST mint is different from what is stored in the instance, expected {}, found {}",
@@ -203,6 +201,7 @@ pub fn check_token_swap(anker: &Anchor, accounts: &ClaimRewardsAccountsInfo) -> 
         );
         return Err(AnchorError::WrongSplTokenSwapParameters.into());
     }
+    // Check pool fee.
     if &token_swap.pool_fee_account != accounts.pool_fee_account.key {
         msg!(
             "Token Swap fee account is different from what is stored in the instance, expected {}, found {}",

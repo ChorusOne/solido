@@ -202,7 +202,6 @@ fn process_claim_rewards(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> P
     let st_sol_amount = lido.exchange_rate.exchange_sol(Lamports(b_sol_supply))?;
 
     // If `reserve_st_sol` < `st_sol_amount` something went wrong, and we abort the transaction.
-    // FIXME: If stSOL got slashed, this might fail, see #453.
     let rewards = (reserve_st_sol - st_sol_amount)?;
 
     check_token_swap(&anchor, &accounts)?;

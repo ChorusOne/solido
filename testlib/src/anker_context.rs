@@ -303,7 +303,7 @@ impl Context {
             vec![],
         )
         .await
-        .expect("Failed to initialize Anker instance.");
+        .expect("Failed to claim rewards.");
     }
 }
 
@@ -317,7 +317,7 @@ pub async fn initialize_token_pool(
 
     // When packing the SwapV1 structure, `SwapV1::pack(swap_info, &mut
     // dst[1..])` is called. But the program also wants the size of the data
-    // to be `spl_token_swap::state::SwapV1::LEN`.  That is why we add the
+    // to be `spl_token_swap::state::SwapV1::LEN`. That is why we add the
     // `+1` to the size 🤷 .
     let swap_account = solido_context
         .create_account(
@@ -355,7 +355,7 @@ pub async fn initialize_token_pool(
 
     let token_pool_context = TokenPoolContext {
         swap_account,
-        mint_address: ust_mint_address,
+        mint_address: pool_mint_pubkey,
         token_address: pool_token_pubkey,
         fee_address: pool_fee_pubkey,
         st_sol_address: st_sol_account,
