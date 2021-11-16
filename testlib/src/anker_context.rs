@@ -230,7 +230,7 @@ impl Context {
     }
 
     /// Swap StSol for UST
-    pub async fn swap_st_sol_for_usdc(
+    pub async fn swap_st_sol_for_ust(
         &mut self,
         source: &Pubkey,
         destination: &Pubkey,
