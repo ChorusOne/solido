@@ -6,22 +6,26 @@ use solana_program::{decode_error::DecodeError, program_error::ProgramError};
 /// Errors that may be returned by the Anker program.
 #[derive(Clone, Debug, Eq, FromPrimitive, PartialEq)]
 pub enum AnkerError {
-    /// We expected an SPL token account that holds bSOL,
-    /// but this was not an SPL token account,
-    /// or its mint did not match.
-    InvalidBSolAccount = 0,
+    /// We failed to deserialize an SPL token account.
+    InvalidTokenAccount = 0,
 
-    /// We expected the BSol account to be owned by the SPL token program.
-    InvalidBSolAccountOwner = 1,
+    /// We expected the SPL token account to be owned by the SPL token program.
+    InvalidTokenAccountOwner = 1,
 
-    /// The provided mint is invalid.
-    InvalidBSolMint = 2,
+    /// The mint of a provided SPL token account does not match the expected mint.
+    InvalidTokenMint = 2,
 
     /// The provided reserve is invalid.
     InvalidReserveAccount = 3,
 
-    /// The provided Lido state is different from the stored one.
-    WrongLidoInstance = 4,
+    /// The provided Solido state is different from the stored one.
+    InvalidSolidoInstance = 4,
+
+    /// The one of the provided accounts does not match the expected derived address.
+    InvalidDerivedAccount = 5,
+
+    /// An account is not owned by the expected owner.
+    InvalidOwner = 6,
 }
 
 // Just reuse the generated Debug impl for Display. It shows the variant names.

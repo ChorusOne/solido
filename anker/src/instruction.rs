@@ -110,12 +110,6 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
-        // TODO(#449): Store this in the Anker instance instead, we never actually
-        // access the Lido program address for a deposit, only the instance.
-        pub solido_program {
-            is_signer: false,
-            is_writable: false,
-        },
         pub from_account {
             is_signer: false,
             is_writable: true, // We will reduce its balance.

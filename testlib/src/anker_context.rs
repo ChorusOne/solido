@@ -113,7 +113,6 @@ impl Context {
                 &instruction::DepositAccountsMeta {
                     anker: self.anker,
                     solido: self.solido_context.solido.pubkey(),
-                    solido_program: solido_context::id(),
                     from_account: from_st_sol,
                     user_authority: user.pubkey(),
                     to_reserve_account: self.reserve,
