@@ -74,6 +74,7 @@ pub fn deserialize_anker(
 
 /// Mint the given amount of bSOL and put it in the recipient's account.
 pub fn mint_b_sol_to<'a>(
+    anker_program_id: &Pubkey,
     anker: &Anker,
     anker_address: &Pubkey,
     spl_token_program: &AccountInfo<'a>,
@@ -82,6 +83,10 @@ pub fn mint_b_sol_to<'a>(
     recipient: &AccountInfo<'a>,
     amount: BLamports,
 ) -> ProgramResult {
+    // Check if the mint account is the same as the one stored in Anker.
+    anker.check_mint(b_sol_mint)?;
+    anker.check_mint_authority(anker_program_id, anker_address, mint_authority)?;
+
     anker.check_is_b_sol_account(recipient)?;
 
     let authority_signature_seeds = [

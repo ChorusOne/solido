@@ -124,14 +124,6 @@ fn process_deposit(
         accounts.to_reserve_account,
     )?;
 
-    // Check if the mint account is the same as the one stored in Anker.
-    anker.check_mint(accounts.b_sol_mint)?;
-    anker.check_mint_authority(
-        program_id,
-        accounts.anker.key,
-        accounts.b_sol_mint_authority,
-    )?;
-
     // Transfer `amount` StLamports to the reserve.
     invoke(
         &spl_token::instruction::transfer(
@@ -156,6 +148,7 @@ fn process_deposit(
     let b_sol_amount = BLamports(sol_value.0);
 
     mint_b_sol_to(
+        program_id,
         &anker,
         accounts.anker.key,
         accounts.spl_token,
