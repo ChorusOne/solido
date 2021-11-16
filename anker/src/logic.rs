@@ -1,8 +1,15 @@
 use crate::{error::AnkerError, token::BLamports, ANKER_MINT_AUTHORITY};
 use lido::{state::Lido, token::Lamports};
 use solana_program::{
-    account_info::AccountInfo, borsh::try_from_slice_unchecked, entrypoint::ProgramResult, msg,
-    program::invoke_signed, program_error::ProgramError, pubkey::Pubkey, rent::Rent,
+    account_info::AccountInfo,
+    borsh::try_from_slice_unchecked,
+    entrypoint::ProgramResult,
+    msg,
+    program::{invoke, invoke_signed},
+    program_error::ProgramError,
+    program_pack::Pack,
+    pubkey::Pubkey,
+    rent::Rent,
     system_instruction,
 };
 
@@ -117,6 +124,53 @@ pub fn mint_b_sol_to<'a>(
             spl_token_program.clone(),
         ],
         &signers,
+    )
+}
+
+/// Burn
+pub fn burn_b_sol<'a>(
+    anker: &Anker,
+    spl_token_program: &AccountInfo<'a>,
+    b_sol_mint: &AccountInfo<'a>,
+    burn_from: &AccountInfo<'a>,
+    burn_from_owner: &AccountInfo<'a>,
+    amount: BLamports,
+) -> ProgramResult {
+    anker.check_mint(b_sol_mint)?;
+    anker.check_is_b_sol_account(burn_from)?;
+
+    let b_sol_account: spl_token::state::Account =
+        spl_token::state::Account::unpack_from_slice(&burn_from.data.borrow())?;
+
+    // Check if the user is the account owner.
+    if &b_sol_account.owner != burn_from_owner.key {
+        msg!(
+            "bSOL account ns owned by {}, but provided owner is {}.",
+            b_sol_account.owner,
+            burn_from_owner.key,
+        );
+        return Err(AnkerError::InvalidOwner.into());
+    }
+
+    // The SPL token program supports multisig-managed mints, but we do not use those.
+    let burn_signers = [];
+    let instruction = spl_token::instruction::burn(
+        spl_token_program.key,
+        burn_from.key,
+        b_sol_mint.key,
+        burn_from_owner.key,
+        &burn_signers,
+        amount.0,
+    )?;
+
+    invoke(
+        &instruction,
+        &[
+            burn_from.clone(),
+            b_sol_mint.clone(),
+            burn_from_owner.clone(),
+            spl_token_program.clone(),
+        ],
     )
 }
 
