@@ -1,62 +1,101 @@
-use crate::{error::AnchorError, token::BLamports, ANCHOR_MINT_AUTHORITY};
-use crate::{
-    instruction::{ClaimRewardsAccountsInfo, InitializeAccountsInfo},
-    state::Anchor,
-};
-use lido::{error::LidoError, token::Lamports};
+use crate::{error::AnkerError, token::BLamports, ANKER_MINT_AUTHORITY};
+use lido::{state::Lido, token::Lamports};
 use solana_program::{
     account_info::AccountInfo, borsh::try_from_slice_unchecked, entrypoint::ProgramResult, msg,
     program::invoke_signed, program_error::ProgramError, program_pack::Pack, pubkey::Pubkey,
     rent::Rent, system_instruction,
 };
 
-/// Deserialize the Anchor state.
-/// Checks if the Lido instance is the same as the one stored in Anchor.
-/// Checks if the Reserve account is the same as the one stored in Anchor.
-pub fn deserialize_anchor(
-    program_id: &Pubkey,
-    anchor_account: &AccountInfo,
-    lido: &Pubkey,
-    reserve_account: &Pubkey,
-) -> Result<Anchor, ProgramError> {
-    if anchor_account.owner != program_id {
+use crate::{
+    instruction::{ClaimRewardsAccountsInfo, InitializeAccountsInfo},
+    state::Anker,
+};
+
+/// Deserialize the Solido and Anker state.
+///
+/// Check the following things for consistency:
+/// * The Solido state should be owned by the Solido program stored in Anker.
+/// * The Solido state should live at the address stored in Anker.
+/// * The reserve should live at the address derived from Anker.
+/// * The reserve should be valid stSOL account.
+///
+/// The following things are not checked, because these accounts are not always
+/// needed:
+/// * The mint address should match the address stored in Anker.
+/// * The mint authority should match the address derived from Anker.
+/// * The reserve authority should match the address derived from Anker.
+///
+/// Note, the address of the Anker instance is a program-derived address that
+/// derived from the Anker program address, and the Solido instance address of
+/// the Solido instance that this Anker instance belongs to. This ensures that
+/// for a given deployment of the Anker program, there exists a unique Anker
+/// instance address per Solido instance.
+pub fn deserialize_anker(
+    anker_program_id: &Pubkey,
+    anker_account: &AccountInfo,
+    solido_account: &AccountInfo,
+    reserve_account: &AccountInfo,
+) -> Result<(Lido, Anker), ProgramError> {
+    if anker_account.owner != anker_program_id {
         msg!(
-            "Anchor state is owned by {}, but should be owned by the Anchor program ({}).",
-            anchor_account.owner,
-            program_id
+            "Anker state is owned by {}, but should be owned by the Anker program ({}).",
+            anker_account.owner,
+            anker_program_id
         );
-        return Err(LidoError::InvalidOwner.into());
+        return Err(AnkerError::InvalidOwner.into());
     }
-    let anchor = try_from_slice_unchecked::<Anchor>(&anchor_account.data.borrow())?;
-    anchor.check_lido(lido)?;
-    anchor.check_reserve_account(program_id, anchor_account.key, reserve_account)?;
-    Ok(anchor)
+
+    let anker = try_from_slice_unchecked::<Anker>(&anker_account.data.borrow())?;
+
+    anker.check_self_address(anker_program_id, anker_account)?;
+
+    if *solido_account.owner != anker.solido_program_id {
+        msg!(
+            "Anker state is associated with Solido program at {}, but Solido state is owned by {}.",
+            anker.solido_program_id,
+            solido_account.owner,
+        );
+        return Err(AnkerError::InvalidOwner.into());
+    }
+
+    if *solido_account.key != anker.solido {
+        msg!(
+            "Anker state is associated with Solido instance at {}, but found {}.",
+            anker.solido,
+            solido_account.owner,
+        );
+        return Err(AnkerError::InvalidSolidoInstance.into());
+    }
+
+    let solido = Lido::deserialize_lido(&anker.solido_program_id, solido_account)?;
+
+    anker.check_reserve_address(anker_program_id, anker_account.key, reserve_account)?;
+    anker.check_is_st_sol_account(&solido, reserve_account)?;
+
+    Ok((solido, anker))
 }
 
 /// Mint the given amount of bSOL and put it in the recipient's account.
 pub fn mint_b_sol_to<'a>(
-    anchor: &Anchor,
-    anchor_address: &Pubkey,
+    anker_program_id: &Pubkey,
+    anker: &Anker,
+    anker_address: &Pubkey,
     spl_token_program: &AccountInfo<'a>,
     b_sol_mint: &AccountInfo<'a>,
     mint_authority: &AccountInfo<'a>,
     recipient: &AccountInfo<'a>,
     amount: BLamports,
 ) -> ProgramResult {
-    if &anchor.bsol_mint != b_sol_mint.key {
-        msg!(
-            "Expected to find our bSOL mint ({}), but got {} instead.",
-            anchor.bsol_mint,
-            b_sol_mint.key
-        );
-        return Err(AnchorError::InvalidBSolAccount.into());
-    }
-    anchor.check_is_b_sol_account(recipient)?;
+    // Check if the mint account is the same as the one stored in Anker.
+    anker.check_mint(b_sol_mint)?;
+    anker.check_mint_authority(anker_program_id, anker_address, mint_authority)?;
+
+    anker.check_is_b_sol_account(recipient)?;
 
     let authority_signature_seeds = [
-        &anchor_address.to_bytes(),
-        ANCHOR_MINT_AUTHORITY,
-        &[anchor.mint_authority_bump_seed],
+        &anker_address.to_bytes(),
+        ANKER_MINT_AUTHORITY,
+        &[anker.mint_authority_bump_seed],
     ];
     let signers = [&authority_signature_seeds[..]];
 
@@ -143,14 +182,14 @@ pub fn initialize_reserve_account(
 /// instance.
 ///
 /// Checks all the associated accounts.
-pub fn check_token_swap(anker: &Anchor, accounts: &ClaimRewardsAccountsInfo) -> ProgramResult {
+pub fn check_token_swap(anker: &Anker, accounts: &ClaimRewardsAccountsInfo) -> ProgramResult {
     if &anker.token_swap_instance != accounts.token_swap_instance.key {
         msg!(
             "Invalid Token Swap instance, expected {}, found {}",
             anker.token_swap_instance,
             accounts.token_swap_instance.key
         );
-        return Err(AnchorError::WrongSplTokenSwap.into());
+        return Err(AnkerError::WrongSplTokenSwap.into());
     }
     // We should ignore the 1st byte for the unpack.
     let token_swap =
@@ -163,7 +202,7 @@ pub fn check_token_swap(anker: &Anchor, accounts: &ClaimRewardsAccountsInfo) -> 
             token_swap.token_a,
             accounts.st_sol_token.key
         );
-        return Err(AnchorError::WrongSplTokenSwapParameters.into());
+        return Err(AnkerError::WrongSplTokenSwapParameters.into());
     }
     // `token_b` should be UST.
     if &token_swap.token_b != accounts.ust_token.key {
@@ -172,7 +211,7 @@ pub fn check_token_swap(anker: &Anchor, accounts: &ClaimRewardsAccountsInfo) -> 
             token_swap.token_b,
             accounts.ust_token.key
         );
-        return Err(AnchorError::WrongSplTokenSwapParameters.into());
+        return Err(AnkerError::WrongSplTokenSwapParameters.into());
     }
     // Check pool mint.
     if &token_swap.pool_mint != accounts.pool_mint.key {
@@ -181,7 +220,7 @@ pub fn check_token_swap(anker: &Anchor, accounts: &ClaimRewardsAccountsInfo) -> 
             token_swap.pool_mint,
             accounts.pool_mint.key
         );
-        return Err(AnchorError::WrongSplTokenSwapParameters.into());
+        return Err(AnkerError::WrongSplTokenSwapParameters.into());
     }
     // Check stSOL mint.
     if &token_swap.token_a_mint != accounts.st_sol_mint.key {
@@ -190,7 +229,7 @@ pub fn check_token_swap(anker: &Anchor, accounts: &ClaimRewardsAccountsInfo) -> 
             token_swap.token_a_mint,
             accounts.st_sol_mint.key
         );
-        return Err(AnchorError::WrongSplTokenSwapParameters.into());
+        return Err(AnkerError::WrongSplTokenSwapParameters.into());
     }
     // Check UST mint.
     if &token_swap.token_b_mint != accounts.ust_mint.key {
@@ -199,7 +238,7 @@ pub fn check_token_swap(anker: &Anchor, accounts: &ClaimRewardsAccountsInfo) -> 
             token_swap.token_b_mint,
             accounts.ust_mint.key
         );
-        return Err(AnchorError::WrongSplTokenSwapParameters.into());
+        return Err(AnkerError::WrongSplTokenSwapParameters.into());
     }
     // Check pool fee.
     if &token_swap.pool_fee_account != accounts.pool_fee_account.key {
@@ -208,7 +247,7 @@ pub fn check_token_swap(anker: &Anchor, accounts: &ClaimRewardsAccountsInfo) -> 
             token_swap.pool_fee_account,
             accounts.pool_fee_account.key
         );
-        return Err(AnchorError::WrongSplTokenSwapParameters.into());
+        return Err(AnkerError::WrongSplTokenSwapParameters.into());
     }
 
     Ok(())

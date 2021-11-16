@@ -1,10 +1,10 @@
 [workspace]
 resolver = "2"
 members = [
+    "anker",
     "cli",
     "multisig/programs/multisig",
     "program",
-    "anchor",
     "testlib",
 ]
 

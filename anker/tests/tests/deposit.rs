@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2021 Chorus One AG
 // SPDX-License-Identifier: GPL-3.0
 
-use anchor_integration::token::BLamports;
+use anker::token::BLamports;
 use lido::token::{Lamports, StLamports};
 use solana_program_test::tokio;
 use testlib::anker_context::Context;
