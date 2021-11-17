@@ -13,6 +13,7 @@ use solana_program::{
     system_instruction,
 };
 
+use crate::instruction::DepositAccountsInfo;
 use crate::{instruction::InitializeAccountsInfo, state::Anker};
 
 /// Deserialize the Solido and Anker state.
@@ -80,24 +81,24 @@ pub fn deserialize_anker(
 }
 
 /// Mint the given amount of bSOL and put it in the recipient's account.
-pub fn mint_b_sol_to<'a>(
+pub fn mint_b_sol_to(
     anker_program_id: &Pubkey,
     anker: &Anker,
-    anker_address: &Pubkey,
-    spl_token_program: &AccountInfo<'a>,
-    b_sol_mint: &AccountInfo<'a>,
-    mint_authority: &AccountInfo<'a>,
-    recipient: &AccountInfo<'a>,
+    accounts: &DepositAccountsInfo,
     amount: BLamports,
 ) -> ProgramResult {
     // Check if the mint account is the same as the one stored in Anker.
-    anker.check_mint(b_sol_mint)?;
-    anker.check_mint_authority(anker_program_id, anker_address, mint_authority)?;
+    anker.check_mint(accounts.b_sol_mint)?;
+    anker.check_mint_authority(
+        anker_program_id,
+        accounts.anker.key,
+        accounts.b_sol_mint_authority,
+    )?;
 
-    anker.check_is_b_sol_account(recipient)?;
+    anker.check_is_b_sol_account(accounts.b_sol_user_account)?;
 
     let authority_signature_seeds = [
-        &anker_address.to_bytes(),
+        &accounts.anker.key.to_bytes(),
         ANKER_MINT_AUTHORITY,
         &[anker.mint_authority_bump_seed],
     ];
@@ -107,10 +108,10 @@ pub fn mint_b_sol_to<'a>(
     // use those.
     let mint_to_signers = [];
     let instruction = spl_token::instruction::mint_to(
-        spl_token_program.key,
-        b_sol_mint.key,
-        recipient.key,
-        mint_authority.key,
+        accounts.spl_token.key,
+        accounts.b_sol_mint.key,
+        accounts.b_sol_user_account.key,
+        accounts.b_sol_mint_authority.key,
         &mint_to_signers,
         amount.0,
     )?;
@@ -118,10 +119,10 @@ pub fn mint_b_sol_to<'a>(
     invoke_signed(
         &instruction,
         &[
-            b_sol_mint.clone(),
-            recipient.clone(),
-            mint_authority.clone(),
-            spl_token_program.clone(),
+            accounts.b_sol_mint.clone(),
+            accounts.b_sol_user_account.clone(),
+            accounts.b_sol_mint_authority.clone(),
+            accounts.spl_token.clone(),
         ],
         &signers,
     )

@@ -156,16 +156,7 @@ fn process_deposit(
     let exchange_rate = ExchangeRate::from_solido_pegged(&solido);
     let b_sol_amount = exchange_rate.exchange_st_sol(amount)?;
 
-    mint_b_sol_to(
-        program_id,
-        &anker,
-        accounts.anker.key,
-        accounts.spl_token,
-        accounts.b_sol_mint,
-        accounts.b_sol_mint_authority,
-        accounts.b_sol_user_account,
-        b_sol_amount,
-    )?;
+    mint_b_sol_to(program_id, &anker, &accounts, b_sol_amount)?;
 
     msg!(
         "Anker: Deposited {}, minted {} in return.",

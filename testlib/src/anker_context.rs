@@ -176,7 +176,7 @@ impl Context {
                     anker: self.anker,
                     solido: self.solido_context.solido.pubkey(),
                     from_b_sol_account: b_sol_account,
-                    from_b_sol_authority: user.pubkey().clone(),
+                    from_b_sol_authority: user.pubkey(),
                     to_st_sol_account: recipient,
                     reserve_account: self.reserve,
                     reserve_authority: self.reserve_authority,
