@@ -174,10 +174,6 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
-        pub solido_program {
-            is_signer: false,
-            is_writable: false,
-        },
         // Needs to be writable so we can sell stSOL.
         pub reserve_account {
             is_signer: false,

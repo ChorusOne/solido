@@ -282,7 +282,6 @@ impl Context {
                 &instruction::ClaimRewardsAccountsMeta {
                     anker: self.anker,
                     solido: self.solido_context.solido.pubkey(),
-                    solido_program: solido_context::id(),
                     reserve_account,
                     b_sol_mint: self.b_sol_mint,
                     token_swap_instance: self.token_pool_context.swap_account.pubkey(),
