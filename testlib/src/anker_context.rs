@@ -212,4 +212,18 @@ impl Context {
         assert_eq!(account_info.mint, self.b_sol_mint);
         BLamports(account_info.amount)
     }
+
+    /// Return the value of the given amount of stSOL in SOL.
+    pub async fn exchange_st_sol(&mut self, amount: StLamports) -> Lamports {
+        let solido = self.solido_context.get_solido().await;
+        solido.exchange_rate.exchange_st_sol(amount).unwrap()
+    }
+
+    /// Return the current amount of bSOL in existence.
+    pub async fn get_b_sol_supply(&mut self) -> BLamports {
+        let mint_account = self.solido_context.get_account(self.b_sol_mint).await;
+        let mint: spl_token::state::Mint =
+            spl_token::state::Mint::unpack_from_slice(mint_account.data.as_slice()).unwrap();
+        BLamports(mint.supply)
+    }
 }
