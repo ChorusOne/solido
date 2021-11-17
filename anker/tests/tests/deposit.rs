@@ -26,7 +26,11 @@ async fn test_successful_deposit() {
 
 #[tokio::test]
 async fn test_successful_deposit_different_exchange_rate() {
-    let mut context = Context::new_different_exchange_rate().await;
+    // Donates 11 Sol to Lido's reserve. Since the context's initialization will
+    // deposit 10 Sol to lido for the token swap, and there is already a deposit
+    // of 1 Sol in when initializing the context.  We end up with a 1:2 rate as
+    // exchange rate.
+    let mut context = Context::new_different_exchange_rate(Lamports(11_000_000_000)).await;
     let (_owner, recipient) = context.deposit(Lamports(TEST_DEPOSIT_AMOUNT.0)).await;
     let reserve_balance = context
         .solido_context
