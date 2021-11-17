@@ -206,7 +206,8 @@ jobs:
           sudo apt-get install -y libudev-dev
           rustup component add llvm-tools-preview
           rustup toolchain install nightly-2021-06-25
-          cargo install rustfilt cargo-binutils
+          cargo install rustfilt --version 0.2.1
+          cargo install cargo-binutils --version 0.3.3
           sh -c "$(curl -sSfL https://release.solana.com/v1.7.8/install)"
 
       - name: Build on-chain programs (without coverage)
