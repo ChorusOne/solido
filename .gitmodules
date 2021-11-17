@@ -1,6 +1,3 @@
 [submodule "multisig"]
 	path = multisig
 	url = https://github.com/chorusone/multisig
-[submodule "spl-token-swap"]
-	path = spl-token-swap
-	url = https://github.com/ChorusOne/spl-token-swap
