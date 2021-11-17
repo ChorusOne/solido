@@ -8,7 +8,7 @@ use solana_program::{
 
 use lido::{state::Lido, token::StLamports};
 
-use crate::logic::{check_token_swap, create_account, initialize_reserve_account};
+use crate::logic::{create_account, initialize_reserve_account, swap_rewards};
 use crate::state::ANKER_LEN;
 use crate::{
     error::AnkerError,
@@ -183,8 +183,8 @@ fn process_claim_rewards(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> P
     let accounts = ClaimRewardsAccountsInfo::try_from_slice(accounts_raw)?;
     let (lido, anker) = deserialize_anker(
         program_id,
-        accounts.anchor,
-        accounts.lido,
+        accounts.anker,
+        accounts.solido,
         accounts.reserve_account,
     )?;
     anker.check_mint(accounts.b_sol_mint)?;
@@ -202,10 +202,7 @@ fn process_claim_rewards(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> P
 
     // If `reserve_st_sol` < `st_sol_amount` something went wrong, and we abort the transaction.
     let rewards = (reserve_st_sol - st_sol_amount)?;
-
-    check_token_swap(&anker, &accounts)?;
-
-    Ok(())
+    swap_rewards(rewards, &anker, &accounts)
 }
 
 /// Processes [Instruction](enum.Instruction.html).

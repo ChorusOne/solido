@@ -1,10 +1,14 @@
-use crate::{error::AnkerError, token::BLamports, ANKER_MINT_AUTHORITY};
-use lido::{state::Lido, token::Lamports};
+use crate::{error::AnkerError, token::BLamports, ANKER_MINT_AUTHORITY, ANKER_RESERVE_AUTHORITY};
+use lido::{
+    state::Lido,
+    token::{Lamports, StLamports},
+};
 use solana_program::{
     account_info::AccountInfo, borsh::try_from_slice_unchecked, entrypoint::ProgramResult, msg,
     program::invoke_signed, program_error::ProgramError, program_pack::Pack, pubkey::Pubkey,
     rent::Rent, system_instruction,
 };
+use spl_token_swap::instruction::Swap;
 
 use crate::{
     instruction::{ClaimRewardsAccountsInfo, InitializeAccountsInfo},
@@ -76,6 +80,7 @@ pub fn deserialize_anker(
 }
 
 /// Mint the given amount of bSOL and put it in the recipient's account.
+#[allow(clippy::too_many_arguments)]
 pub fn mint_b_sol_to<'a>(
     anker_program_id: &Pubkey,
     anker: &Anker,
@@ -181,8 +186,10 @@ pub fn initialize_reserve_account(
 /// Check the if the token swap program is the same as the one stored in the
 /// instance.
 ///
-/// Checks all the associated accounts.
-pub fn check_token_swap(anker: &Anker, accounts: &ClaimRewardsAccountsInfo) -> ProgramResult {
+/// Check all the token swap associated accounts.
+/// Check if the rewards destination is the same as the one stored in Anker.
+fn check_token_swap(anker: &Anker, accounts: &ClaimRewardsAccountsInfo) -> ProgramResult {
+    // Check token swap instance parameters.
     if &anker.token_swap_instance != accounts.token_swap_instance.key {
         msg!(
             "Invalid Token Swap instance, expected {}, found {}",
@@ -250,5 +257,78 @@ pub fn check_token_swap(anker: &Anker, accounts: &ClaimRewardsAccountsInfo) -> P
         return Err(AnkerError::WrongSplTokenSwapParameters.into());
     }
 
+    // Check rewards destination.
+    // The reserve address is checked in `deserialize_anker`, this function
+    // should be called prior to this. We don't need to check the reserve
+    // authority, as the transaction will fail if a different one is provided.
+    if &anker.rewards_destination != accounts.rewards_destination.key {
+        msg!(
+            "The UST token rewards destination address is different from what is stored in the instance, expected {}, found {}",
+            anker.rewards_destination,
+            accounts.rewards_destination.key
+        );
+        return Err(AnkerError::InvalidRewardsDestination.into());
+    }
+
+    Ok(())
+}
+
+/// Swap the `amount` from StSOL to UST
+///
+/// Sends the UST to the `accounts.rewards_destination`
+pub fn swap_rewards(
+    amount: StLamports,
+    anker: &Anker,
+    accounts: &ClaimRewardsAccountsInfo,
+) -> ProgramResult {
+    if amount == StLamports(0) {
+        msg!("Anker rewards must be greater than zero to be claimable.");
+        return Err(AnkerError::ZeroRewardsToClaim.into());
+    }
+    check_token_swap(anker, accounts)?;
+
+    let swap_instruction = spl_token_swap::instruction::swap(
+        accounts.spl_token_swap.key,
+        accounts.spl_token.key,
+        accounts.token_swap_instance.key,
+        accounts.token_pool_authority.key,
+        accounts.reserve_authority.key,
+        accounts.reserve_account.key,
+        accounts.st_sol_token.key,
+        accounts.ust_token.key,
+        accounts.rewards_destination.key,
+        accounts.pool_mint.key,
+        accounts.pool_fee_account.key,
+        None,
+        Swap {
+            amount_in: amount.0,
+            minimum_amount_out: 0,
+        },
+    )?;
+
+    let authority_signature_seeds = [
+        &accounts.anker.key.to_bytes(),
+        ANKER_RESERVE_AUTHORITY,
+        &[anker.reserve_authority_bump_seed],
+    ];
+    let signers = [&authority_signature_seeds[..]];
+
+    invoke_signed(
+        &swap_instruction,
+        &[
+            accounts.token_swap_instance.clone(),
+            accounts.token_pool_authority.clone(),
+            accounts.reserve_authority.clone(),
+            accounts.reserve_account.clone(),
+            accounts.st_sol_token.clone(),
+            accounts.ust_token.clone(),
+            accounts.rewards_destination.clone(),
+            accounts.pool_mint.clone(),
+            accounts.pool_fee_account.clone(),
+            accounts.spl_token.clone(),
+            accounts.spl_token_swap.clone(),
+        ],
+        &signers,
+    )?;
     Ok(())
 }

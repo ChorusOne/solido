@@ -166,22 +166,22 @@ pub fn deposit(
 
 accounts_struct! {
     ClaimRewardsAccountsMeta, ClaimRewardsAccountsInfo {
-        pub anchor {
+        pub anker {
             is_signer: false,
             is_writable: false,
         },
-        pub lido {
+        pub solido {
             is_signer: false,
             is_writable: false,
         },
-        pub lido_program {
+        pub solido_program {
             is_signer: false,
             is_writable: false,
         },
         // Needs to be writable so we can sell stSOL.
         pub reserve_account {
             is_signer: false,
-            is_writable: true,
+            is_writable: true, // Needed to swap tokens.
         },
         pub b_sol_mint {
             is_signer: false,
@@ -224,10 +224,6 @@ accounts_struct! {
         pub reserve_authority {
             is_signer: false,
             is_writable: false,
-        },
-        pub st_sol_reserve {
-            is_signer: false,
-            is_writable: true,
         },
         pub rewards_destination {
             is_signer: false,

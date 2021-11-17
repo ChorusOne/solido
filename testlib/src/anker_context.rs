@@ -261,7 +261,7 @@ impl Context {
             &mut self.solido_context.context,
             &mut self.solido_context.nonce,
             &[swap_instruction],
-            vec![&authority],
+            vec![authority],
         )
         .await
         .expect("Failed to swap StSol for UST tokens.");
@@ -280,10 +280,10 @@ impl Context {
             &[instruction::claim_rewards(
                 &id(),
                 &instruction::ClaimRewardsAccountsMeta {
-                    anchor: self.anker,
-                    lido: self.solido_context.solido.pubkey(),
-                    lido_program: solido_context::id(),
-                    reserve_account: reserve_account,
+                    anker: self.anker,
+                    solido: self.solido_context.solido.pubkey(),
+                    solido_program: solido_context::id(),
+                    reserve_account,
                     b_sol_mint: self.b_sol_mint,
                     token_swap_instance: self.token_pool_context.swap_account.pubkey(),
                     st_sol_token: self.token_pool_context.st_sol_address,
@@ -292,9 +292,8 @@ impl Context {
                     st_sol_mint: self.solido_context.st_sol_mint,
                     ust_mint: self.token_pool_context.ust_mint_address,
                     pool_fee_account: self.token_pool_context.fee_address,
-                    token_pool_authority: token_pool_authority,
-                    reserve_authority: reserve_authority,
-                    st_sol_reserve: reserve_account,
+                    token_pool_authority,
+                    reserve_authority,
                     rewards_destination: self.ust_rewards_account,
                 },
             )],
@@ -358,8 +357,8 @@ pub async fn initialize_token_pool(
         fee_address: pool_fee_pubkey,
         st_sol_address: st_sol_account,
         ust_address: ust_account,
-        ust_mint_authority: ust_mint_authority,
-        ust_mint_address: ust_mint_address,
+        ust_mint_authority,
+        ust_mint_address,
     };
 
     // Transfer some UST and StSOL to the pool.
