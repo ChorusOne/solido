@@ -25,6 +25,7 @@ pub struct Context {
     pub b_sol_mint: Pubkey,
     pub b_sol_mint_authority: Pubkey,
     pub reserve: Pubkey,
+    pub reserve_authority: Pubkey,
 }
 
 const INITIAL_DEPOSIT: Lamports = Lamports(1_000_000_000);
@@ -73,6 +74,7 @@ impl Context {
             b_sol_mint,
             b_sol_mint_authority,
             reserve,
+            reserve_authority,
         }
     }
 
@@ -153,8 +155,56 @@ impl Context {
             .expect("Failed to call Deposit on Anker instance.")
     }
 
+    /// Create a new stSOL account owned by the user, and withdraw into it.
+    pub async fn try_withdraw(
+        &mut self,
+        user: &Keypair,
+        b_sol_account: Pubkey,
+        amount: BLamports,
+    ) -> transport::Result<Pubkey> {
+        let recipient = self
+            .solido_context
+            .create_st_sol_account(user.pubkey())
+            .await;
+
+        send_transaction(
+            &mut self.solido_context.context,
+            &mut self.solido_context.nonce,
+            &[instruction::withdraw(
+                &id(),
+                &instruction::WithdrawAccountsMeta {
+                    anker: self.anker,
+                    solido: self.solido_context.solido.pubkey(),
+                    from_b_sol_account: b_sol_account,
+                    from_b_sol_authority: user.pubkey().clone(),
+                    to_st_sol_account: recipient,
+                    reserve_account: self.reserve,
+                    reserve_authority: self.reserve_authority,
+                    b_sol_mint: self.b_sol_mint,
+                },
+                amount,
+            )],
+            vec![user],
+        )
+        .await?;
+
+        Ok(recipient)
+    }
+
+    /// Create a new stSOL account owned by the user, and withdraw into it.
+    pub async fn withdraw(
+        &mut self,
+        user: &Keypair,
+        b_sol_account: Pubkey,
+        amount: BLamports,
+    ) -> Pubkey {
+        self.try_withdraw(user, b_sol_account, amount)
+            .await
+            .expect("Failed to call Withdraw on Anker instance.")
+    }
+
     /// Get the bSOL balance from an SPL token account.
-    pub async fn get_st_sol_balance(&mut self, address: Pubkey) -> BLamports {
+    pub async fn get_b_sol_balance(&mut self, address: Pubkey) -> BLamports {
         let token_account = self.solido_context.get_account(address).await;
         let account_info: spl_token::state::Account =
             spl_token::state::Account::unpack_from_slice(token_account.data.as_slice()).unwrap();
