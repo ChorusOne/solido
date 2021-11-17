@@ -253,11 +253,6 @@ impl Context {
             crate::anker_context::id(),
             processor!(anker::processor::process),
         );
-        program_test.add_program(
-            "spl_token_swap",
-            spl_token_swap::id(),
-            processor!(spl_token_swap::processor::Processor::process),
-        );
 
         let mut result = Self {
             context: program_test.start_with_context().await,
