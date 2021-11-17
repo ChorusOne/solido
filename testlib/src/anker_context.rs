@@ -12,6 +12,8 @@ use anker::instruction;
 use anker::token::{BLamports, UstLamports};
 use lido::token::Lamports;
 use lido::token::StLamports;
+use spl_token_swap::curve::base::{CurveType, SwapCurve};
+use spl_token_swap::curve::constant_product::ConstantProductCurve;
 use spl_token_swap::instruction::Swap;
 
 use crate::solido_context::send_transaction;
@@ -344,7 +346,7 @@ pub async fn initialize_token_pool(
         )
         .await;
 
-    let (authority_pubkey, _authority_bump_seed) = Pubkey::find_program_address(
+    let (authority_pubkey, authority_bump_seed) = Pubkey::find_program_address(
         &[&swap_account.pubkey().to_bytes()[..]],
         &spl_token_swap::id(),
     );
