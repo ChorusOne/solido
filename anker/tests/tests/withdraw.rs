@@ -1,10 +1,12 @@
 // SPDX-FileCopyrightText: 2021 Chorus One AG
 // SPDX-License-Identifier: GPL-3.0
 
+use anker::error::AnkerError;
 use anker::token::BLamports;
 use lido::token::{Lamports, StLamports};
 use solana_program_test::tokio;
 use testlib::anker_context::Context;
+use testlib::assert_solido_error;
 
 const TEST_DEPOSIT_AMOUNT: Lamports = Lamports(1_000_000_000);
 
@@ -97,4 +99,30 @@ async fn test_withdraw_after_st_sol_price_increase() {
         .await;
     let reserve_sol = context.exchange_st_sol(reserve_st_sol).await;
     assert_eq!(reserve_sol, Lamports(500_000_001));
+}
+
+#[tokio::test]
+async fn test_withdraw_wrong_token_mint() {
+    let mut context = Context::new().await;
+
+    let (owner, st_sol_account) = context
+        .solido_context
+        .deposit(Lamports(1_000_000_000))
+        .await;
+    let b_sol_account = context
+        .try_deposit_st_sol(&owner, st_sol_account, StLamports(500_000_000))
+        .await
+        .unwrap();
+
+    // Withdrawing with the wrong type of account should fail. We need to put in
+    // a bSOL account, not an stSOL account to withdraw from.
+    let result = context
+        .try_withdraw(&owner, st_sol_account, BLamports(250_000_000))
+        .await;
+    assert_solido_error!(result, AnkerError::InvalidTokenMint);
+
+    // With the right type of account, it should succeed.
+    context
+        .withdraw(&owner, b_sol_account, BLamports(250_000_000))
+        .await;
 }
