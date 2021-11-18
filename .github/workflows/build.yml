@@ -218,6 +218,7 @@ jobs:
       - name: Collect coverage
         run: |
           export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
+          export RUSTUP_TOOLCHAIN="nightly-2021-06-25"
           validator=$(tests/start_test_validator.py)
 
           # Perform initial Solana setup.
