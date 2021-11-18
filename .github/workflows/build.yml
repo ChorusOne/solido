@@ -205,21 +205,21 @@ jobs:
           sudo apt update
           sudo apt-get install -y libudev-dev
           rustup component add llvm-tools-preview
-          rustup toolchain install nightly-2021-06-25
-          export RUSTUP_TOOLCHAIN="nightly-2021-06-25"
+          rustup toolchain install nightly-2021-11-18
+          export RUSTUP_TOOLCHAIN="nightly-2021-11-18"
           cargo install rustfilt --version 0.2.1
-          cargo install cargo-binutils --version 0.3.3
+          cargo install cargo-binutils --version 0.3.4
           sh -c "$(curl -sSfL https://release.solana.com/v1.7.8/install)"
 
       - name: Build on-chain programs (without coverage)
         run: |
           export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
-          cargo +nightly-2021-06-25 build-bpf
+          cargo +nightly-2021-11-18 build-bpf
 
       - name: Collect coverage
         run: |
           export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
-          export RUSTUP_TOOLCHAIN="nightly-2021-06-25"
+          export RUSTUP_TOOLCHAIN="nightly-2021-11-18"
           validator=$(tests/start_test_validator.py)
 
           # Perform initial Solana setup.
