@@ -12,3 +12,4 @@ use std::{
 use lido::token::Result;
 
 impl_token!(BLamports, "bSOL");
+impl_token!(UstLamports, "UST");

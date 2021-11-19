@@ -9,7 +9,7 @@ use solana_sdk::signature::{Keypair, Signer};
 use solana_sdk::transport;
 
 use anker::instruction;
-use anker::token::BLamports;
+use anker::token::{BLamports, UstLamports};
 use lido::token::Lamports;
 use lido::token::StLamports;
 use spl_token_swap::instruction::Swap;
@@ -46,7 +46,7 @@ impl TokenPoolContext {
         &self,
         solido_context: &mut solido_context::Context,
         account: &Pubkey,
-        amount: u64,
+        amount: UstLamports,
     ) {
         let mint_instruction = spl_token::instruction::mint_to(
             &spl_token::id(),
@@ -54,7 +54,7 @@ impl TokenPoolContext {
             account,
             &self.ust_mint_authority.pubkey(),
             &[],
-            amount,
+            amount.0,
         )
         .expect("Failed to generate UST mint instruction.");
         send_transaction(
@@ -65,6 +65,27 @@ impl TokenPoolContext {
         )
         .await
         .expect("Failed to mint UST tokens.");
+    }
+
+    // Put StSOL and UST to the liquidity provider
+    pub async fn provide_liquidity(
+        &self,
+        solido_context: &mut solido_context::Context,
+        st_sol_amount: StLamports,
+        ust_amount: UstLamports,
+    ) {
+        // Transfer some UST and StSOL to the pool.
+        self.mint_ust(solido_context, &self.ust_address, ust_amount)
+            .await;
+        let (kp_stsol, token_st_sol) = solido_context.deposit(Lamports(10_000_000_000)).await;
+        solido_context
+            .transfer_spl_token(
+                &token_st_sol,
+                &self.st_sol_address,
+                &kp_stsol,
+                st_sol_amount.0,
+            )
+            .await;
     }
 }
 
@@ -140,6 +161,9 @@ impl Context {
         }
     }
 
+    // Start a new Anker context with `amount` Lamports donated to Solido's
+    // reserve. Also update the exchange rate. Usually used when testing a
+    // different 1:1 exchange rate.
     pub async fn new_different_exchange_rate(amount: Lamports) -> Context {
         let mut context = Context::new().await;
         context
@@ -357,15 +381,6 @@ pub async fn initialize_token_pool(
         ust_mint_authority,
         ust_mint_address,
     };
-
-    // Transfer some UST and StSOL to the pool.
-    token_pool_context
-        .mint_ust(solido_context, &ust_account, 10_000_000_000)
-        .await;
-    let (kp_stsol, token_st_sol) = solido_context.deposit(Lamports(10_000_000_000)).await;
-    solido_context
-        .transfer_spl_token(&token_st_sol, &st_sol_account, &kp_stsol, 10_000_000_000)
-        .await;
 
     token_pool_context
 }
