@@ -371,7 +371,7 @@ pub async fn initialize_token_pool(
         .create_spl_token_account(solido_context.st_sol_mint, authority_pubkey)
         .await;
 
-    let token_pool_context = TokenPoolContext {
+    TokenPoolContext {
         swap_account,
         mint_address: pool_mint_pubkey,
         token_address: pool_token_pubkey,
@@ -380,7 +380,5 @@ pub async fn initialize_token_pool(
         ust_address: ust_account,
         ust_mint_authority,
         ust_mint_address,
-    };
-
-    token_pool_context
+    }
 }
