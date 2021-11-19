@@ -39,7 +39,7 @@ impl TokenPoolContext {
     pub fn get_token_pool_authority(&self) -> (Pubkey, u8) {
         Pubkey::find_program_address(
             &[&self.swap_account.pubkey().to_bytes()[..]],
-            &spl_token_swap::id(),
+            &anker::orca_token_swap_v2::id(),
         )
     }
 
@@ -263,7 +263,7 @@ impl Context {
         minimum_amount_out: u64,
     ) {
         let swap_instruction = spl_token_swap::instruction::swap(
-            &spl_token_swap::id(),
+            &anker::orca_token_swap_v2::id(),
             &spl_token::id(),
             &self.token_pool_context.swap_account.pubkey(),
             &self.token_pool_context.get_token_pool_authority().0,
@@ -341,14 +341,14 @@ pub async fn initialize_token_pool(
     // `+1` to the size 🤷 .
     let swap_account = solido_context
         .create_account(
-            &spl_token_swap::id(),
+            &anker::orca_token_swap_v2::id(),
             spl_token_swap::state::SwapV1::LEN + 1,
         )
         .await;
 
     let (authority_pubkey, authority_bump_seed) = Pubkey::find_program_address(
         &[&swap_account.pubkey().to_bytes()[..]],
-        &spl_token_swap::id(),
+        &anker::orca_token_swap_v2::id(),
     );
 
     let pool_mint_pubkey = solido_context.create_mint(authority_pubkey).await;
