@@ -59,8 +59,8 @@ jobs:
           ~/.cargo/registry/cache/
           ~/.cargo/git/db/
           target/
-        key: build-1.7.8-v1-${{ hashFiles('Cargo.lock') }}
-        restore-keys: build-1.7.8-v1
+        key: build-1.7.8-v2-${{ hashFiles('Cargo.lock') }}
+        restore-keys: build-1.7.8-v2
 
     - name: Install development tools
       run: |
