@@ -79,7 +79,12 @@ impl TokenPoolContext {
         // Transfer some UST and StSOL to the pool.
         self.mint_ust(solido_context, &self.ust_address, ust_amount)
             .await;
-        let (kp_stsol, token_st_sol) = solido_context.deposit(Lamports(10_000_000_000)).await;
+        let solido = solido_context.get_solido().await;
+        let sol_amount = solido
+            .exchange_rate
+            .exchange_st_sol(st_sol_amount)
+            .expect("Some StSol should have been minted at this point.");
+        let (kp_stsol, token_st_sol) = solido_context.deposit(sol_amount).await;
         solido_context
             .transfer_spl_token(
                 &token_st_sol,
@@ -117,7 +122,7 @@ impl Context {
         let b_sol_mint = solido_context.create_mint(b_sol_mint_authority).await;
         let payer = solido_context.context.payer.pubkey();
 
-        let token_pool_context = initialize_token_pool(&mut solido_context).await;
+        let token_pool_context = setup_token_pool(&mut solido_context).await;
 
         let rewards_owner = solido_context.deterministic_keypair.new_keypair();
         let ust_rewards_account = solido_context
@@ -174,6 +179,66 @@ impl Context {
             .await;
         context.solido_context.advance_to_normal_epoch(1);
         context.solido_context.update_exchange_rate().await;
+        context
+    }
+
+    // Start a new Anker context with 10 StSOL and 10 UST in the liquidity
+    // provider AMM and initialized token pool.
+    pub async fn new_with_initialized_token_pool() -> Context {
+        const LIQUIDITY_AMOUNT: u64 = 10_000_000_000;
+        let mut context = Context::new().await;
+        context
+            .token_pool_context
+            .provide_liquidity(
+                &mut context.solido_context,
+                StLamports(LIQUIDITY_AMOUNT),
+                UstLamports(LIQUIDITY_AMOUNT),
+            )
+            .await;
+        let fees = spl_token_swap::curve::fees::Fees {
+            trade_fee_numerator: 0,
+            trade_fee_denominator: 10,
+            owner_trade_fee_numerator: 0,
+            owner_trade_fee_denominator: 10,
+            owner_withdraw_fee_numerator: 0,
+            owner_withdraw_fee_denominator: 10,
+            host_fee_numerator: 0,
+            host_fee_denominator: 10,
+        };
+        let swap_curve = SwapCurve {
+            curve_type: CurveType::ConstantProduct,
+            calculator: Box::new(ConstantProductCurve),
+        };
+
+        let (authority_pubkey, authority_bump_seed) = Pubkey::find_program_address(
+            &[&context.token_pool_context.swap_account.pubkey().to_bytes()[..]],
+            &spl_token_swap::id(),
+        );
+
+        let pool_instruction = spl_token_swap::instruction::initialize(
+            &spl_token_swap::id(),
+            &spl_token::id(),
+            &context.token_pool_context.swap_account.pubkey(),
+            &authority_pubkey,
+            &context.token_pool_context.st_sol_address,
+            &context.token_pool_context.ust_address,
+            &context.token_pool_context.mint_address,
+            &context.token_pool_context.fee_address,
+            &context.token_pool_context.token_address,
+            authority_bump_seed,
+            fees,
+            swap_curve,
+        )
+        .expect("Failed to create token pool initialization instruction.");
+
+        send_transaction(
+            &mut context.solido_context.context,
+            &mut context.solido_context.nonce,
+            &[pool_instruction],
+            vec![&context.token_pool_context.swap_account],
+        )
+        .await
+        .expect("Failed to initialize token pool.");
         context
     }
 
@@ -329,10 +394,12 @@ impl Context {
 
 /// Create a new token pool using `CurveType::ConstantProduct`.
 ///
-/// Fund UST and StSOL with 10 * 1e9 Lamports each.
-pub async fn initialize_token_pool(
-    solido_context: &mut solido_context::Context,
-) -> TokenPoolContext {
+/// The stake pool is not initialized at the end of this function.  To
+/// initialize the token swap instance, it requires funded token pairs on the
+/// liquidity pool.
+/// To get a new Context with an initialized token pool, call
+/// `Context::new_with_liquidity_on_amm`.
+pub async fn setup_token_pool(solido_context: &mut solido_context::Context) -> TokenPoolContext {
     let admin = solido_context.deterministic_keypair.new_keypair();
 
     // When packing the SwapV1 structure, `SwapV1::pack(swap_info, &mut
@@ -346,7 +413,7 @@ pub async fn initialize_token_pool(
         )
         .await;
 
-    let (authority_pubkey, authority_bump_seed) = Pubkey::find_program_address(
+    let (authority_pubkey, _authority_bump_seed) = Pubkey::find_program_address(
         &[&swap_account.pubkey().to_bytes()[..]],
         &anker::orca_token_swap_v2::id(),
     );

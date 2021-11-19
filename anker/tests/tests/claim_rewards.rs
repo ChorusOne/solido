@@ -7,7 +7,7 @@ const DEPOSIT_AMOUNT: u64 = 1_000_000_000; // 1e9 units
 
 #[tokio::test]
 async fn test_successful_claim_rewards() {
-    let mut context = Context::new().await;
+    let mut context = Context::new_with_initialized_token_pool().await;
     context.deposit(Lamports(DEPOSIT_AMOUNT)).await;
     // Donate something to Solido's reserve so we can see some rewards.
     context
