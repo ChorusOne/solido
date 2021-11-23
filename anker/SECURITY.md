@@ -143,6 +143,8 @@ are upgradeable. Therefore:
 We are interested in minimizing the impact that a compromised Orca or Wormhole
 program could have, but in principle we trust these programs.
 
+We also trust the contracts on the Terra side that we send the UST rewards to.
+
 ## Further resources
 
  * [Anchor Protocol documentation](https://docs.anchorprotocol.com/)
