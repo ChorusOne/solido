@@ -183,8 +183,6 @@ fn process_withdraw(
     )?;
 
     anker.check_mint(accounts.b_sol_mint)?;
-    anker.check_is_st_sol_account(&solido, accounts.reserve_account)?;
-    anker.check_reserve_address(program_id, accounts.anker.key, accounts.reserve_account)?;
     anker.check_reserve_authority(program_id, accounts.anker.key, accounts.reserve_authority)?;
 
     let mint = match spl_token::state::Mint::unpack_from_slice(&accounts.b_sol_mint.data.borrow()) {
