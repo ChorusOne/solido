@@ -15,9 +15,15 @@ panic = "abort"
 [profile.release]
 panic = "abort"
 
+# We take our fork of Solana 1.7.8, which has one patch applied:
+# https://github.com/solana-labs/solana/pull/21415.
+# This patch enables testing more situations using solana-program-test.
+# We need to override the other Solana packages as well because they are interdependent,
+# and if we don’t override them, Cargo will include two incompatible versions of those
+# packages (one from crates.io and one from the fork).
 [patch.crates-io]
-solana-program-test = { path = "../solana/program-test" }
-solana-sdk = { path = "../solana/sdk" }
-solana-program = { path = "../solana/sdk/program" }
-solana-frozen-abi-macro = { path = "../solana/frozen-abi/macro" }
-solana-frozen-abi = { path = "../solana/frozen-abi" }
+solana-frozen-abi = { git = "https://github.com/ChorusOne/solana", branch = "program-test-178" }
+solana-frozen-abi-macro = { git = "https://github.com/ChorusOne/solana", branch = "program-test-178" }
+solana-program = { git = "https://github.com/ChorusOne/solana", branch = "program-test-178" }
+solana-program-test = { git = "https://github.com/ChorusOne/solana", branch = "program-test-178" }
+solana-sdk = { git = "https://github.com/ChorusOne/solana", branch = "program-test-178" }
