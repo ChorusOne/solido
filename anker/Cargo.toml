@@ -23,6 +23,7 @@ num-traits = "0.2"
 [dev-dependencies]
 testlib = { path = "../testlib"}
 solana-program-test = "1.7.8"
+solana-sdk = "1.7.8"
 
 [lib]
 crate-type = ["cdylib", "lib"]

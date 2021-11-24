@@ -4,3 +4,4 @@
 #![cfg(feature = "test-bpf")]
 
 pub mod deposit;
+pub mod withdraw;

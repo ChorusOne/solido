@@ -204,6 +204,7 @@ dependencies = [
  "serde",
  "solana-program",
  "solana-program-test",
+ "solana-sdk",
  "spl-token",
  "testlib",
 ]
