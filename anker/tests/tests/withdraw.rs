@@ -4,9 +4,9 @@
 use anker::error::AnkerError;
 use anker::token::BLamports;
 use borsh::BorshSerialize;
-use lido::token::{Lamports, StLamports};
 use lido::state::Lido;
-use solana_program::{borsh::try_from_slice_unchecked};
+use lido::token::{Lamports, StLamports};
+use solana_program::borsh::try_from_slice_unchecked;
 use solana_program_test::tokio;
 use solana_sdk::account::WritableAccount;
 use solana_sdk::signer::Signer;
@@ -145,7 +145,10 @@ async fn test_withdraw_after_st_sol_price_decrease() {
     // introduce slashing in the future, then it might.
     context.solido_context.advance_to_normal_epoch(1);
     context.solido_context.update_exchange_rate().await;
-    let mut solido_account = context.solido_context.get_account(context.solido_context.solido.pubkey()).await;
+    let mut solido_account = context
+        .solido_context
+        .get_account(context.solido_context.solido.pubkey())
+        .await;
     let mut solido = try_from_slice_unchecked::<Lido>(solido_account.data.as_slice()).unwrap();
     // Set 1 stSOL = 0.5 SOL.
     solido.exchange_rate.sol_balance = Lamports(1_000_000_000);
@@ -158,7 +161,10 @@ async fn test_withdraw_after_st_sol_price_decrease() {
     );
     solido_account_shared.set_rent_epoch(solido_account.rent_epoch);
     solido_account_shared.set_data(solido_account.data);
-    context.solido_context.context.set_account(&context.solido_context.solido.pubkey(), &solido_account_shared);
+    context.solido_context.context.set_account(
+        &context.solido_context.solido.pubkey(),
+        &solido_account_shared,
+    );
 
     assert_eq!(b_sol_balance, BLamports(1_000_000_000));
 

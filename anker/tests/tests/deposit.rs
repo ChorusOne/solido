@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2021 Chorus One AG
 // SPDX-License-Identifier: GPL-3.0
 
-use anker::token::BLamports;
 use anker::error::AnkerError;
+use anker::token::BLamports;
 use lido::token::{Lamports, StLamports};
 use solana_program_test::tokio;
 use solana_sdk::account::WritableAccount;
@@ -73,7 +73,10 @@ async fn test_deposit_fails_with_wrong_instance_address() {
     );
     fake_account_shared.set_rent_epoch(real_account.rent_epoch);
     fake_account_shared.set_data(real_account.data.clone());
-    context.solido_context.context.set_account(&fake_addr.pubkey(), &fake_account_shared);
+    context
+        .solido_context
+        .context
+        .set_account(&fake_addr.pubkey(), &fake_account_shared);
 
     // Confirm that we succeeded to make a copy. Only the addresses should differ.
     let fake_account = context.solido_context.get_account(fake_addr.pubkey()).await;
