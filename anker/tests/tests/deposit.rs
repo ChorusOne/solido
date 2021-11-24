@@ -5,6 +5,7 @@ use anker::token::BLamports;
 use anker::error::AnkerError;
 use lido::token::{Lamports, StLamports};
 use solana_program_test::tokio;
+use solana_sdk::account::WritableAccount;
 use solana_sdk::signer::Signer;
 use testlib::anker_context::Context;
 use testlib::assert_solido_error;
@@ -53,6 +54,36 @@ async fn test_deposit_fails_with_wrong_reserve() {
     // instance, and fail the transaction if it's a different account. Otherwise
     // we could pass in a reserve controlled by us (where we are an attacker), and
     // get bSOL while also retaining the stSOL.
+    let result = context.try_deposit(Lamports(TEST_DEPOSIT_AMOUNT.0)).await;
+    assert_solido_error!(result, AnkerError::InvalidDerivedAccount);
+}
+
+#[tokio::test]
+async fn test_deposit_fails_with_wrong_instance_address() {
+    let mut context = Context::new().await;
+
+    let real_account = context.solido_context.get_account(context.anker).await;
+
+    // Make a copy of the Anker instance, but put it at a different address.
+    let fake_addr = context.solido_context.deterministic_keypair.new_keypair();
+    let mut fake_account_shared = solana_sdk::account::AccountSharedData::new(
+        real_account.lamports,
+        real_account.data.len(),
+        &real_account.owner,
+    );
+    fake_account_shared.set_rent_epoch(real_account.rent_epoch);
+    fake_account_shared.set_data(real_account.data.clone());
+    context.solido_context.context.set_account(&fake_addr.pubkey(), &fake_account_shared);
+
+    // Confirm that we succeeded to make a copy. Only the addresses should differ.
+    let fake_account = context.solido_context.get_account(fake_addr.pubkey()).await;
+    assert_eq!(real_account, fake_account);
+
+    // Then poison our context to make it pass the wrong instance.
+    context.anker = fake_addr.pubkey();
+
+    // Depositing should now fail, because the instance does not live at the
+    // right address.
     let result = context.try_deposit(Lamports(TEST_DEPOSIT_AMOUNT.0)).await;
     assert_solido_error!(result, AnkerError::InvalidDerivedAccount);
 }

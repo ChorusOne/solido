@@ -14,3 +14,10 @@ panic = "abort"
 
 [profile.release]
 panic = "abort"
+
+[patch.crates-io]
+solana-program-test = { path = "../solana/program-test" }
+solana-sdk = { path = "../solana/sdk" }
+solana-program = { path = "../solana/sdk/program" }
+solana-frozen-abi-macro = { path = "../solana/frozen-abi/macro" }
+solana-frozen-abi = { path = "../solana/frozen-abi" }
