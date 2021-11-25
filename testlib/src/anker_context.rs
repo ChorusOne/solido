@@ -16,7 +16,7 @@ use spl_token_swap::instruction::Swap;
 
 use crate::solido_context::send_transaction;
 use crate::solido_context::{self};
-use anker::{find_reserve_account, find_reserve_authority};
+use anker::{find_reserve_authority, find_stsol_reserve_account};
 
 // Program id for the Anker program. Only used for tests.
 solana_program::declare_id!("Anker111111111111111111111111111111111111117");
@@ -94,7 +94,8 @@ pub struct Context {
     pub anker: Pubkey,
     pub b_sol_mint: Pubkey,
     pub b_sol_mint_authority: Pubkey,
-    pub reserve: Pubkey,
+    pub stsol_reserve: Pubkey,
+    pub ust_reserve: Pubkey,
 
     pub token_pool_context: TokenPoolContext,
     pub rewards_owner: Keypair,
@@ -108,7 +109,8 @@ impl Context {
         let mut solido_context = solido_context::Context::new_with_maintainer().await;
         let (anker, _seed) = anker::find_instance_address(&id(), &solido_context.solido.pubkey());
 
-        let (reserve, _seed) = anker::find_reserve_account(&id(), &anker);
+        let (stsol_reserve, _seed) = anker::find_stsol_reserve_account(&id(), &anker);
+        let (ust_reserve, _seed) = anker::find_ust_reserve_account(&id(), &anker);
         let (reserve_authority, _seed) = anker::find_reserve_authority(&id(), &anker);
         let (b_sol_mint_authority, _seed) = anker::find_mint_authority(&id(), &anker);
 
@@ -134,10 +136,12 @@ impl Context {
                     solido_program: solido_context::id(),
                     st_sol_mint: solido_context.st_sol_mint,
                     b_sol_mint,
-                    reserve_account: reserve,
+                    stsol_reserve_account: stsol_reserve,
+                    ust_reserve_account: ust_reserve,
                     reserve_authority,
-                    token_swap_instance: token_pool_context.swap_account.pubkey(),
+                    pool: token_pool_context.swap_account.pubkey(),
                     rewards_destination: ust_rewards_account,
+                    ust_mint: token_pool_context.ust_mint_address,
                 },
             )],
             vec![],
@@ -154,7 +158,8 @@ impl Context {
             anker,
             b_sol_mint,
             b_sol_mint_authority,
-            reserve,
+            stsol_reserve,
+            ust_reserve,
             token_pool_context,
             rewards_owner,
             ust_rewards_account,
@@ -203,7 +208,7 @@ impl Context {
                     solido: self.solido_context.solido.pubkey(),
                     from_account: from_st_sol,
                     user_authority: user.pubkey(),
-                    to_reserve_account: self.reserve,
+                    to_reserve_account: self.stsol_reserve,
                     b_sol_user_account: recipient,
                     b_sol_mint: self.b_sol_mint,
                     b_sol_mint_authority: self.b_sol_mint_authority,
@@ -289,9 +294,9 @@ impl Context {
         .expect("Failed to swap StSol for UST tokens.");
     }
 
-    pub async fn claim_rewards(&mut self) {
-        let (reserve_account, _reserve_account_bump_seed) =
-            find_reserve_account(&id(), &self.anker);
+    pub async fn sell_rewards(&mut self) {
+        let (stsol_reserve_account, _reserve_account_bump_seed) =
+            find_stsol_reserve_account(&id(), &self.anker);
         let (reserve_authority, _reserve_authority_bump_seed) =
             find_reserve_authority(&id(), &self.anker);
         let (token_pool_authority, _token_pool_authority_bump_seed) =
@@ -299,14 +304,14 @@ impl Context {
         send_transaction(
             &mut self.solido_context.context,
             &mut self.solido_context.nonce,
-            &[instruction::claim_rewards(
+            &[instruction::sell_rewards(
                 &id(),
-                &instruction::ClaimRewardsAccountsMeta {
+                &instruction::SellRewardsAccountsMeta {
                     anker: self.anker,
                     solido: self.solido_context.solido.pubkey(),
-                    reserve_account,
+                    stsol_reserve_account,
                     b_sol_mint: self.b_sol_mint,
-                    token_swap_instance: self.token_pool_context.swap_account.pubkey(),
+                    pool: self.token_pool_context.swap_account.pubkey(),
                     st_sol_token: self.token_pool_context.st_sol_address,
                     ust_token: self.token_pool_context.ust_address,
                     pool_mint: self.token_pool_context.mint_address,
@@ -321,7 +326,7 @@ impl Context {
             vec![],
         )
         .await
-        .expect("Failed to claim rewards.");
+        .expect("Failed to sell rewards.");
     }
 }
 

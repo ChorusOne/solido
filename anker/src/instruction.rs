@@ -35,8 +35,8 @@ pub enum AnkerInstruction {
         amount: StLamports,
     },
 
-    /// Claim rewards on Terra.
-    ClaimRewards,
+    /// Sell rewards to the UST reserve.
+    SellRewards,
 }
 
 impl AnkerInstruction {
@@ -76,7 +76,11 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
-        pub reserve_account {
+        pub stsol_reserve_account {
+            is_signer: false,
+            is_writable: true, // Writable because we need to initialize it.
+        },
+        pub ust_reserve_account {
             is_signer: false,
             is_writable: true, // Writable because we need to initialize it.
         },
@@ -85,11 +89,15 @@ accounts_struct! {
             is_writable: false,
         },
         // Instance of the token swap data used for trading StSOL for UST.
-        pub token_swap_instance {
+        pub pool {
             is_signer: false,
             is_writable: false,
         },
         pub rewards_destination {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub ust_mint {
             is_signer: false,
             is_writable: false,
         },
@@ -165,7 +173,7 @@ pub fn deposit(
 }
 
 accounts_struct! {
-    ClaimRewardsAccountsMeta, ClaimRewardsAccountsInfo {
+    SellRewardsAccountsMeta, SellRewardsAccountsInfo {
         pub anker {
             is_signer: false,
             is_writable: false,
@@ -175,7 +183,7 @@ accounts_struct! {
             is_writable: false,
         },
         // Needs to be writable so we can sell stSOL.
-        pub reserve_account {
+        pub stsol_reserve_account {
             is_signer: false,
             is_writable: true, // Needed to swap tokens.
         },
@@ -185,7 +193,7 @@ accounts_struct! {
         },
 
         // Accounts for token swap
-        pub token_swap_instance {
+        pub pool {
             is_signer: false,
             is_writable: false,
         },
@@ -231,8 +239,8 @@ accounts_struct! {
     }
 }
 
-pub fn claim_rewards(program_id: &Pubkey, accounts: &ClaimRewardsAccountsMeta) -> Instruction {
-    let data = AnkerInstruction::ClaimRewards;
+pub fn sell_rewards(program_id: &Pubkey, accounts: &SellRewardsAccountsMeta) -> Instruction {
+    let data = AnkerInstruction::SellRewards;
     Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
