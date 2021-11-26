@@ -108,6 +108,17 @@ jobs:
         tests/test_solido.py
         kill $validator
 
+    - name: Run Anker integration test
+      run: |
+        export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
+        validator=$(tests/start_test_validator.py)
+
+        # We don't need to run keygen/setup again, the private key and state
+        # should still be there from the previous run.
+
+        tests/test_anker.py
+        kill $validator
+
     - name: Run Multisig integration test
       run: |
         export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
