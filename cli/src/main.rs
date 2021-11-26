@@ -5,8 +5,6 @@ use std::fmt;
 use std::path::PathBuf;
 
 use clap::Clap;
-use commands_solido::command_show_solido_authorities;
-use commands_solido::command_withdraw;
 use serde::Serialize;
 use solana_client::rpc_client::RpcClient;
 use solana_remote_wallet::locator::Locator;
@@ -20,15 +18,18 @@ use solana_sdk::signer::Signer;
 use solana_sdk::signers::Signers;
 use solana_sdk::transaction::Transaction;
 
+use crate::commands_anker::command_create_anker;
 use crate::commands_multisig::MultisigOpts;
 use crate::commands_solido::{
     command_add_maintainer, command_add_validator, command_create_solido,
     command_deactivate_validator, command_deposit, command_remove_maintainer, command_show_solido,
+    command_show_solido_authorities, command_withdraw,
 };
 use crate::config::*;
 use crate::error::{Abort, CliError, Error};
 use crate::snapshot::{Snapshot, SnapshotClient};
 
+mod commands_anker;
 mod commands_multisig;
 mod commands_solido;
 mod config;
@@ -158,6 +159,9 @@ REWARDS
     to the developer.
     ")]
     CreateSolido(CreateSolidoOpts),
+
+    /// Create a new Anker instance for Anchor Protocol integration.
+    CreateAnker(CreateAnkerOpts),
 
     /// Adds a new validator.
     AddValidator(AddValidatorOpts),
@@ -352,6 +356,11 @@ fn main() {
             let output = result.ok_or_abort_with("Failed to create Solido instance.");
             print_output(output_mode, &output);
         }
+        SubCommand::CreateAnker(cmd_opts) => {
+            let result = config.with_snapshot(|config| command_create_anker(config, &cmd_opts));
+            let output = result.ok_or_abort_with("Failed to create Anker instance.");
+            print_output(output_mode, &output);
+        }
         SubCommand::Multisig(cmd_opts) => commands_multisig::main(&mut config, cmd_opts),
         SubCommand::PerformMaintenance(cmd_opts) => {
             // This command only performs one iteration, `RunMaintainer` runs continuously.
@@ -423,6 +432,7 @@ fn merge_with_config_and_environment(
 ) {
     match subcommand {
         SubCommand::CreateSolido(opts) => opts.merge_with_config_and_environment(config_file),
+        SubCommand::CreateAnker(opts) => opts.merge_with_config_and_environment(config_file),
         SubCommand::AddValidator(opts) => opts.merge_with_config_and_environment(config_file),
         SubCommand::DeactivateValidator(opts) => {
             opts.merge_with_config_and_environment(config_file)
