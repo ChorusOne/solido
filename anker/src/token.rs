@@ -11,5 +11,5 @@ use std::{
 
 pub use lido::token::Result;
 
-impl_token!(BLamports, "bSOL");
-impl_token!(UstLamports, "UST");
+impl_token!(BLamports, "bSOL", 9);
+impl_token!(UstLamports, "UST", 6);
