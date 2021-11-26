@@ -51,7 +51,7 @@ pub type Result<T> = std::result::Result<T, ArithmeticError>;
 /// only used for `Debug` and `Display` printing.
 #[macro_export]
 macro_rules! impl_token {
-    ($TokenLamports:ident, $symbol:expr, $decimals:expr) => {
+    ($TokenLamports:ident, $symbol:expr, decimals = $decimals:expr) => {
         #[derive(
             Copy,
             Clone,
@@ -69,11 +69,18 @@ macro_rules! impl_token {
 
         impl fmt::Display for $TokenLamports {
             fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                write!(
-                    f,
-                    "{}.{:0>9} {}",
+                let str_number = format!(
+                    "{}.{:0>9}",
                     self.0 / 10u64.pow($decimals),
                     self.0 % 10u64.pow($decimals),
+                );
+                write!(
+                    f,
+                    "{} {}",
+                    &str_number[..str_number.len() - (9 - $decimals)],
+                    // "{}.{:0>9} {}",
+                    // self.0 / 10u64.pow($decimals),
+                    // self.0 % 10u64.pow($decimals),
                     $symbol
                 )
             }
@@ -204,8 +211,8 @@ macro_rules! impl_token {
     };
 }
 
-impl_token!(Lamports, "SOL", 9);
-impl_token!(StLamports, "stSOL", 9);
+impl_token!(Lamports, "SOL", decimals = 9);
+impl_token!(StLamports, "stSOL", decimals = 9);
 
 #[cfg(test)]
 pub mod test {

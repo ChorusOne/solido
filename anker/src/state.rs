@@ -36,11 +36,12 @@ pub struct Anker {
 
     /// Token swap data. Used to swap stSOL for UST.
     #[serde(serialize_with = "serialize_b58")]
-    pub pool: Pubkey,
+    pub token_swap_pool: Pubkey,
 
     /// Destination of the rewards on Terra, paid in UST.
+    /// FIXME: Confirm Terra addresses have length 32 bytes.
     #[serde(serialize_with = "serialize_b58")]
-    pub rewards_destination: Pubkey,
+    pub terra_rewards_destination: Pubkey,
 
     /// Bump seed for the derived address that this Anker instance should live at.
     pub self_bump_seed: u8,
@@ -156,7 +157,7 @@ impl Anker {
         self.check_derived_account_address(
             "the UST reserve account",
             ANKER_UST_RESERVE_ACCOUNT,
-            self.st_sol_reserve_account_bump_seed,
+            self.ust_reserve_account_bump_seed,
             anker_program_id,
             anker_instance,
             ust_reserve_account_info,
@@ -284,16 +285,17 @@ impl Anker {
         accounts: &SellRewardsAccountsInfo,
     ) -> ProgramResult {
         // Check token swap instance parameters.
-        if &self.pool != accounts.pool.key {
+        if &self.token_swap_pool != accounts.token_swap_pool.key {
             msg!(
                 "Invalid Token Swap instance, expected {}, found {}",
-                self.pool,
-                accounts.pool.key
+                self.token_swap_pool,
+                accounts.token_swap_pool.key
             );
             return Err(AnkerError::WrongSplTokenSwap.into());
         }
         // We should ignore the 1st byte for the unpack.
-        let token_swap = spl_token_swap::state::SwapV1::unpack(&accounts.pool.data.borrow()[1..])?;
+        let token_swap =
+            spl_token_swap::state::SwapV1::unpack(&accounts.token_swap_pool.data.borrow()[1..])?;
 
         // Check UST token accounts.
         self.check_ust_reserve_address(anker_program_id, accounts.anker.key, accounts.ust_token)?;
@@ -351,19 +353,6 @@ impl Anker {
             accounts.pool_fee_account.key
         );
             return Err(AnkerError::WrongSplTokenSwapParameters.into());
-        }
-
-        // Check rewards destination.
-        // The reserve address is checked in `deserialize_anker`, this function
-        // should be called prior to this. We don't need to check the reserve
-        // authority, as the transaction will fail if a different one is provided.
-        if &self.rewards_destination != accounts.rewards_destination.key {
-            msg!(
-            "The UST token rewards destination address is different from what is stored in the instance, expected {}, found {}",
-            self.rewards_destination,
-            accounts.rewards_destination.key
-        );
-            return Err(AnkerError::InvalidRewardsDestination.into());
         }
 
         Ok(())

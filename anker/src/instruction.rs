@@ -89,11 +89,11 @@ accounts_struct! {
             is_writable: false,
         },
         // Instance of the token swap data used for trading StSOL for UST.
-        pub pool {
+        pub token_swap_pool {
             is_signer: false,
             is_writable: false,
         },
-        pub rewards_destination {
+        pub terra_rewards_destination {
             is_signer: false,
             is_writable: false,
         },
@@ -251,7 +251,7 @@ accounts_struct! {
         },
 
         // Accounts for token swap
-        pub pool {
+        pub token_swap_pool {
             is_signer: false,
             is_writable: false,
         },
@@ -287,7 +287,7 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
-        pub rewards_destination {
+        pub ust_reserve {
             is_signer: false,
             is_writable: true, // Needed to swap tokens.
         },

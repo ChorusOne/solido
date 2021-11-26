@@ -115,15 +115,17 @@ fn process_initialize(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> Prog
         accounts.ust_mint,
     )?;
 
-    let (_, token_swap_bump_seed) =
-        Pubkey::find_program_address(&[&accounts.pool.key.to_bytes()], &spl_token_swap::id());
+    let (_, token_swap_bump_seed) = Pubkey::find_program_address(
+        &[&accounts.token_swap_pool.key.to_bytes()],
+        &spl_token_swap::id(),
+    );
 
     let anker = Anker {
         b_sol_mint: *accounts.b_sol_mint.key,
         solido_program_id: *accounts.solido_program.key,
         solido: *accounts.solido.key,
-        pool: *accounts.pool.key,
-        rewards_destination: *accounts.rewards_destination.key,
+        token_swap_pool: *accounts.token_swap_pool.key,
+        terra_rewards_destination: *accounts.terra_rewards_destination.key,
         self_bump_seed: anker_bump_seed,
         mint_authority_bump_seed: mint_bump_seed,
         reserve_authority_bump_seed,

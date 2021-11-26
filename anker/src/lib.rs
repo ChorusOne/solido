@@ -21,7 +21,7 @@ pub const ANKER_MINT_AUTHORITY: &[u8] = b"mint_authority";
 pub const ANKER_RESERVE_AUTHORITY: &[u8] = b"reserve_authority";
 
 /// Anker's reserve account. Holds StSOL.
-pub const ANKER_STSOL_RESERVE_ACCOUNT: &[u8] = b"reserve_account";
+pub const ANKER_STSOL_RESERVE_ACCOUNT: &[u8] = b"st_sol_reserve_account";
 
 /// Anker's UST reserve account. Holds UST.
 pub const ANKER_UST_RESERVE_ACCOUNT: &[u8] = b"ust_reserve_account";

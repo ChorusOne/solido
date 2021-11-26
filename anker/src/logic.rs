@@ -231,7 +231,7 @@ pub fn initialize_spl_account<'a, 'b>(
 
 /// Swap the `amount` from StSOL to UST
 ///
-/// Sends the UST to the `accounts.rewards_destination`
+/// Sends the UST to the `accounts.ust_reserve`
 pub fn swap_rewards(
     program_id: &Pubkey,
     amount: StLamports,
@@ -247,13 +247,13 @@ pub fn swap_rewards(
     let swap_instruction = spl_token_swap::instruction::swap(
         accounts.spl_token_swap.key,
         accounts.spl_token.key,
-        accounts.pool.key,
+        accounts.token_swap_pool.key,
         accounts.token_pool_authority.key,
         accounts.reserve_authority.key,
         accounts.st_sol_reserve_account.key,
         accounts.st_sol_token.key,
         accounts.ust_token.key,
-        accounts.rewards_destination.key,
+        accounts.ust_reserve.key,
         accounts.pool_mint.key,
         accounts.pool_fee_account.key,
         None,
@@ -273,13 +273,13 @@ pub fn swap_rewards(
     invoke_signed(
         &swap_instruction,
         &[
-            accounts.pool.clone(),
+            accounts.token_swap_pool.clone(),
             accounts.token_pool_authority.clone(),
             accounts.reserve_authority.clone(),
             accounts.st_sol_reserve_account.clone(),
             accounts.st_sol_token.clone(),
             accounts.ust_token.clone(),
-            accounts.rewards_destination.clone(),
+            accounts.ust_reserve.clone(),
             accounts.pool_mint.clone(),
             accounts.pool_fee_account.clone(),
             accounts.spl_token.clone(),
