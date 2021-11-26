@@ -5,8 +5,8 @@ use std::fmt;
 use std::path::PathBuf;
 
 use clap::Clap;
-use helpers::command_show_solido_authorities;
-use helpers::command_withdraw;
+use commands_solido::command_show_solido_authorities;
+use commands_solido::command_withdraw;
 use serde::Serialize;
 use solana_client::rpc_client::RpcClient;
 use solana_remote_wallet::locator::Locator;
@@ -20,21 +20,21 @@ use solana_sdk::signer::Signer;
 use solana_sdk::signers::Signers;
 use solana_sdk::transaction::Transaction;
 
-use crate::config::*;
-use crate::error::{Abort, CliError, Error};
-use crate::helpers::{
+use crate::commands_multisig::MultisigOpts;
+use crate::commands_solido::{
     command_add_maintainer, command_add_validator, command_create_solido,
     command_deactivate_validator, command_deposit, command_remove_maintainer, command_show_solido,
 };
-use crate::multisig::MultisigOpts;
+use crate::config::*;
+use crate::error::{Abort, CliError, Error};
 use crate::snapshot::{Snapshot, SnapshotClient};
 
+mod commands_multisig;
+mod commands_solido;
 mod config;
 mod daemon;
 mod error;
-mod helpers;
 mod maintenance;
-mod multisig;
 mod prometheus;
 mod snapshot;
 mod spl_token_utils;
@@ -352,7 +352,7 @@ fn main() {
             let output = result.ok_or_abort_with("Failed to create Solido instance.");
             print_output(output_mode, &output);
         }
-        SubCommand::Multisig(cmd_opts) => multisig::main(&mut config, cmd_opts),
+        SubCommand::Multisig(cmd_opts) => commands_multisig::main(&mut config, cmd_opts),
         SubCommand::PerformMaintenance(cmd_opts) => {
             // This command only performs one iteration, `RunMaintainer` runs continuously.
             let result = config
