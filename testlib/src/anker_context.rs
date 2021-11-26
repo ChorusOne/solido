@@ -404,12 +404,12 @@ pub async fn initialize_token_pool(
 
     // When packing the SwapV1 structure, `SwapV1::pack(swap_info, &mut
     // dst[1..])` is called. But the program also wants the size of the data
-    // to be `spl_token_swap::state::SwapV1::LEN`. That is why we add the
-    // `+1` to the size 🤷 .
+    // to be `spl_token_swap::state::SwapV1::LEN`. `LATEST_LEN` is 1 +
+    // SwapV1::LEN 🤷.
     let swap_account = solido_context
         .create_account(
             &spl_token_swap::id(),
-            spl_token_swap::state::SwapV1::LEN + 1,
+            spl_token_swap::state::SwapVersion::LATEST_LEN,
         )
         .await;
 
