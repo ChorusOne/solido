@@ -9,7 +9,7 @@ use std::{
     ops::{Add, Div, Mul, Sub},
 };
 
-use lido::token::Result;
+pub use lido::token::Result;
 
 impl_token!(BLamports, "bSOL");
 impl_token!(UstLamports, "UST");

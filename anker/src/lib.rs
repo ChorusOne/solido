@@ -41,7 +41,7 @@ pub fn find_reserve_authority(anker_program_id: &Pubkey, anker_instance: &Pubkey
 }
 
 /// Return the address of the stSOL reserve account, and bump seed.
-pub fn find_stsol_reserve_account(
+pub fn find_st_sol_reserve_account(
     anker_program_id: &Pubkey,
     anker_instance: &Pubkey,
 ) -> (Pubkey, u8) {

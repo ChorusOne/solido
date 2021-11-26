@@ -16,7 +16,7 @@ use spl_token_swap::instruction::Swap;
 
 use crate::solido_context::send_transaction;
 use crate::solido_context::{self};
-use anker::{find_reserve_authority, find_stsol_reserve_account};
+use anker::{find_reserve_authority, find_st_sol_reserve_account};
 
 // Program id for the Anker program. Only used for tests.
 solana_program::declare_id!("Anker111111111111111111111111111111111111117");
@@ -94,12 +94,13 @@ pub struct Context {
     pub anker: Pubkey,
     pub b_sol_mint: Pubkey,
     pub b_sol_mint_authority: Pubkey,
-    pub stsol_reserve: Pubkey,
+    pub st_sol_reserve: Pubkey,
     pub ust_reserve: Pubkey,
 
     pub token_pool_context: TokenPoolContext,
     pub rewards_owner: Keypair,
     pub ust_rewards_account: Pubkey,
+    pub reserve_authority: Pubkey,
 }
 
 const INITIAL_DEPOSIT: Lamports = Lamports(1_000_000_000);
@@ -109,7 +110,7 @@ impl Context {
         let mut solido_context = solido_context::Context::new_with_maintainer().await;
         let (anker, _seed) = anker::find_instance_address(&id(), &solido_context.solido.pubkey());
 
-        let (stsol_reserve, _seed) = anker::find_stsol_reserve_account(&id(), &anker);
+        let (st_sol_reserve, _seed) = anker::find_st_sol_reserve_account(&id(), &anker);
         let (ust_reserve, _seed) = anker::find_ust_reserve_account(&id(), &anker);
         let (reserve_authority, _seed) = anker::find_reserve_authority(&id(), &anker);
         let (b_sol_mint_authority, _seed) = anker::find_mint_authority(&id(), &anker);
@@ -136,7 +137,7 @@ impl Context {
                     solido_program: solido_context::id(),
                     st_sol_mint: solido_context.st_sol_mint,
                     b_sol_mint,
-                    stsol_reserve_account: stsol_reserve,
+                    st_sol_reserve_account: st_sol_reserve,
                     ust_reserve_account: ust_reserve,
                     reserve_authority,
                     pool: token_pool_context.swap_account.pubkey(),
@@ -158,11 +159,12 @@ impl Context {
             anker,
             b_sol_mint,
             b_sol_mint_authority,
-            stsol_reserve,
+            st_sol_reserve,
             ust_reserve,
             token_pool_context,
             rewards_owner,
             ust_rewards_account,
+            reserve_authority,
         }
     }
 
@@ -208,7 +210,7 @@ impl Context {
                     solido: self.solido_context.solido.pubkey(),
                     from_account: from_st_sol,
                     user_authority: user.pubkey(),
-                    to_reserve_account: self.stsol_reserve,
+                    to_reserve_account: self.st_sol_reserve,
                     b_sol_user_account: recipient,
                     b_sol_mint: self.b_sol_mint,
                     b_sol_mint_authority: self.b_sol_mint_authority,
@@ -244,6 +246,54 @@ impl Context {
         self.try_deposit(amount)
             .await
             .expect("Failed to call Deposit on Anker instance.")
+    }
+
+    /// Create a new stSOL account owned by the user, and withdraw into it.
+    pub async fn try_withdraw(
+        &mut self,
+        user: &Keypair,
+        b_sol_account: Pubkey,
+        amount: BLamports,
+    ) -> transport::Result<Pubkey> {
+        let recipient = self
+            .solido_context
+            .create_st_sol_account(user.pubkey())
+            .await;
+
+        send_transaction(
+            &mut self.solido_context.context,
+            &mut self.solido_context.nonce,
+            &[instruction::withdraw(
+                &id(),
+                &instruction::WithdrawAccountsMeta {
+                    anker: self.anker,
+                    solido: self.solido_context.solido.pubkey(),
+                    from_b_sol_account: b_sol_account,
+                    from_b_sol_authority: user.pubkey(),
+                    to_st_sol_account: recipient,
+                    reserve_account: self.st_sol_reserve,
+                    reserve_authority: self.reserve_authority,
+                    b_sol_mint: self.b_sol_mint,
+                },
+                amount,
+            )],
+            vec![user],
+        )
+        .await?;
+
+        Ok(recipient)
+    }
+
+    /// Create a new stSOL account owned by the user, and withdraw into it.
+    pub async fn withdraw(
+        &mut self,
+        user: &Keypair,
+        b_sol_account: Pubkey,
+        amount: BLamports,
+    ) -> Pubkey {
+        self.try_withdraw(user, b_sol_account, amount)
+            .await
+            .expect("Failed to call Withdraw on Anker instance.")
     }
 
     /// Get the bSOL balance from an SPL token account.
@@ -295,8 +345,8 @@ impl Context {
     }
 
     pub async fn sell_rewards(&mut self) {
-        let (stsol_reserve_account, _reserve_account_bump_seed) =
-            find_stsol_reserve_account(&id(), &self.anker);
+        let (st_sol_reserve_account, _reserve_account_bump_seed) =
+            find_st_sol_reserve_account(&id(), &self.anker);
         let (reserve_authority, _reserve_authority_bump_seed) =
             find_reserve_authority(&id(), &self.anker);
         let (token_pool_authority, _token_pool_authority_bump_seed) =
@@ -309,7 +359,7 @@ impl Context {
                 &instruction::SellRewardsAccountsMeta {
                     anker: self.anker,
                     solido: self.solido_context.solido.pubkey(),
-                    stsol_reserve_account,
+                    st_sol_reserve_account,
                     b_sol_mint: self.b_sol_mint,
                     pool: self.token_pool_context.swap_account.pubkey(),
                     st_sol_token: self.token_pool_context.st_sol_address,
@@ -327,6 +377,20 @@ impl Context {
         )
         .await
         .expect("Failed to sell rewards.");
+    }
+
+    /// Return the value of the given amount of stSOL in SOL.
+    pub async fn exchange_st_sol(&mut self, amount: StLamports) -> Lamports {
+        let solido = self.solido_context.get_solido().await;
+        solido.exchange_rate.exchange_st_sol(amount).unwrap()
+    }
+
+    /// Return the current amount of bSOL in existence.
+    pub async fn get_b_sol_supply(&mut self) -> BLamports {
+        let mint_account = self.solido_context.get_account(self.b_sol_mint).await;
+        let mint: spl_token::state::Mint =
+            spl_token::state::Mint::unpack_from_slice(mint_account.data.as_slice()).unwrap();
+        BLamports(mint.supply)
     }
 }
 

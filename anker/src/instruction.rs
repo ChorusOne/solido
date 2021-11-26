@@ -2,7 +2,7 @@
 #![allow(dead_code)]
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-
+use lido::{accounts_struct, accounts_struct_meta, error::LidoError, token::StLamports};
 use solana_program::{
     account_info::AccountInfo,
     instruction::{AccountMeta, Instruction},
@@ -11,7 +11,7 @@ use solana_program::{
     system_program, sysvar,
 };
 
-use lido::{accounts_struct, accounts_struct_meta, error::LidoError, token::StLamports};
+use crate::token::BLamports;
 
 #[repr(C)]
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
@@ -26,13 +26,13 @@ pub enum AnkerInstruction {
         amount: StLamports,
     },
 
-    /// Withdraw a given amount of stSOL.
+    /// Withdraw a given amount of bSOL.
     ///
-    /// Caller provides some `amount` of StLamports that are to be burned in
-    /// order to withdraw bSOL.
+    /// Caller provides some `amount` of bLamports that are to be burned in
+    /// order to withdraw stSOL.
     Withdraw {
         #[allow(dead_code)] // but it's not
-        amount: StLamports,
+        amount: BLamports,
     },
 
     /// Sell rewards to the UST reserve.
@@ -76,7 +76,7 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
-        pub stsol_reserve_account {
+        pub st_sol_reserve_account {
             is_signer: false,
             is_writable: true, // Writable because we need to initialize it.
         },
@@ -173,6 +173,64 @@ pub fn deposit(
 }
 
 accounts_struct! {
+    WithdrawAccountsMeta, WithdrawAccountsInfo {
+        pub anker {
+            is_signer: false,
+            is_writable: false,
+        },
+        // For reading the stSOL/SOL exchange rate.
+        pub solido {
+            is_signer: false,
+            is_writable: false,
+        },
+        // SPL token account that holds the bSOL to return.
+        pub from_b_sol_account {
+            is_signer: false,
+            is_writable: true, // We will decrease its balance.
+        },
+        // Owner of `from_b_sol_account` SPL token account.
+        // Must sign the transaction in order to move tokens.
+        pub from_b_sol_authority {
+            is_signer: true,
+            is_writable: false,
+        },
+        // Recipient of the proceeds, must be an SPL token account that holds stSOL.
+        pub to_st_sol_account {
+            is_signer: false,
+            is_writable: true, // We will increase its balance.
+        },
+        // Anker's reserve, where the stSOL move out of.
+        pub reserve_account {
+            is_signer: false,
+            is_writable: true, // We will decrease its balance.
+        },
+        // Owner of Anker's reserve, a program-derived address.
+        pub reserve_authority {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub b_sol_mint {
+            is_signer: false,
+            is_writable: true, // Burning bSOL changes the supply, which is stored in the mint.
+        },
+        const spl_token = spl_token::id(),
+    }
+}
+
+pub fn withdraw(
+    program_id: &Pubkey,
+    accounts: &WithdrawAccountsMeta,
+    amount: BLamports,
+) -> Instruction {
+    let data = AnkerInstruction::Withdraw { amount };
+    Instruction {
+        program_id: *program_id,
+        accounts: accounts.to_vec(),
+        data: data.to_vec(),
+    }
+}
+
+accounts_struct! {
     SellRewardsAccountsMeta, SellRewardsAccountsInfo {
         pub anker {
             is_signer: false,
@@ -183,7 +241,7 @@ accounts_struct! {
             is_writable: false,
         },
         // Needs to be writable so we can sell stSOL.
-        pub stsol_reserve_account {
+        pub st_sol_reserve_account {
             is_signer: false,
             is_writable: true, // Needed to swap tokens.
         },
