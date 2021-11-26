@@ -294,7 +294,7 @@ impl Anker {
             return Err(AnkerError::WrongSplTokenSwap.into());
         }
         // Check that version byte corresponds to V1 version byte.
-        if &accounts.token_swap_pool.data.borrow()[0] != &1u8 {
+        if accounts.token_swap_pool.data.borrow()[0] != 1u8 {
             msg!(
                 "Token Swap instance version is different from what we expect, expected 1, found {}",
                 accounts.token_swap_pool.data.borrow()[0]
