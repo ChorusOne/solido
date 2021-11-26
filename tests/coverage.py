@@ -67,7 +67,7 @@ def merge_profdata() -> None:
         'profdata',
         '--',
         'merge',
-        '-output',
+        '--output',
         'coverage/tests.profdata',
     ]
     for fname in os.listdir('coverage'):
