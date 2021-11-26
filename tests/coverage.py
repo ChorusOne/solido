@@ -27,7 +27,7 @@ from typing import List, Iterable
 # Using -Z instrument-coverage requires a nightly rustc. Passing
 # except-unused-generics to it requires a fairly recent nightly
 # (2021-05 was too old).
-NIGHTLY = '+nightly-2021-06-25'
+NIGHTLY = '+nightly-2021-11-18'
 
 
 def build_binaries(command: List[str]) -> Iterable[str]:
@@ -67,7 +67,7 @@ def merge_profdata() -> None:
         'profdata',
         '--',
         'merge',
-        '-output',
+        '--output',
         'coverage/tests.profdata',
     ]
     for fname in os.listdir('coverage'):
