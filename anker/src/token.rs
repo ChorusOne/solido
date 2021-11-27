@@ -9,7 +9,7 @@ use std::{
     ops::{Add, Div, Mul, Sub},
 };
 
-use lido::token::Result;
+pub use lido::token::Result;
 
-impl_token!(BLamports, "bSOL");
-impl_token!(UstLamports, "UST");
+impl_token!(BLamports, "bSOL", decimals = 9);
+impl_token!(UstLamports, "UST", decimals = 6);

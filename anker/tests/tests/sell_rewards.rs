@@ -6,7 +6,7 @@ use testlib::anker_context::Context;
 const DEPOSIT_AMOUNT: u64 = 1_000_000_000; // 1e9 units
 
 #[tokio::test]
-async fn test_successful_claim_rewards() {
+async fn test_successful_sell_rewards() {
     let mut context = Context::new_with_initialized_token_pool().await;
     context.deposit(Lamports(DEPOSIT_AMOUNT)).await;
     // Donate something to Solido's reserve so we can see some rewards.
@@ -21,11 +21,11 @@ async fn test_successful_claim_rewards() {
     context.solido_context.advance_to_normal_epoch(1);
     context.solido_context.update_exchange_rate().await;
 
-    context.claim_rewards().await;
+    context.sell_rewards().await;
 
     let ust_account = context
         .solido_context
-        .get_account(context.ust_rewards_account)
+        .get_account(context.ust_reserve)
         .await;
     let ust_spl_account: spl_token::state::Account =
         spl_token::state::Account::unpack_from_slice(ust_account.data.as_slice()).unwrap();

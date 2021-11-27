@@ -1,16 +1,21 @@
+use crate::instruction::SellRewardsAccountsInfo;
 use crate::{
-    error::AnkerError, ANKER_MINT_AUTHORITY, ANKER_RESERVE_ACCOUNT, ANKER_RESERVE_AUTHORITY,
+    error::AnkerError, ANKER_MINT_AUTHORITY, ANKER_RESERVE_AUTHORITY, ANKER_STSOL_RESERVE_ACCOUNT,
+    ANKER_UST_RESERVE_ACCOUNT,
 };
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use lido::state::Lido;
+use lido::token::{Rational, StLamports};
 use lido::util::serialize_b58;
 use serde::Serialize;
 use solana_program::{
     account_info::AccountInfo, entrypoint::ProgramResult, msg, program_pack::Pack, pubkey::Pubkey,
 };
 
+use crate::token::{self, BLamports};
+
 /// Size of the serialized [`Anker`] struct, in bytes.
-pub const ANKER_LEN: usize = 165;
+pub const ANKER_LEN: usize = 166;
 
 #[repr(C)]
 #[derive(
@@ -31,11 +36,12 @@ pub struct Anker {
 
     /// Token swap data. Used to swap stSOL for UST.
     #[serde(serialize_with = "serialize_b58")]
-    pub token_swap_instance: Pubkey,
+    pub token_swap_pool: Pubkey,
 
-    /// Destination of the rewards, paid in UST.
+    /// Destination of the rewards on Terra, paid in UST.
+    /// FIXME: Confirm Terra addresses have length 32 bytes.
     #[serde(serialize_with = "serialize_b58")]
-    pub rewards_destination: Pubkey,
+    pub terra_rewards_destination: Pubkey,
 
     /// Bump seed for the derived address that this Anker instance should live at.
     pub self_bump_seed: u8,
@@ -47,7 +53,10 @@ pub struct Anker {
     pub reserve_authority_bump_seed: u8,
 
     /// Bump seed for the reserve account (SPL token account that holds stSOL).
-    pub reserve_account_bump_seed: u8,
+    pub st_sol_reserve_account_bump_seed: u8,
+
+    /// Bump seed for the UST reserve account.
+    pub ust_reserve_account_bump_seed: u8,
 
     /// Bump seed for the Token Swap.
     pub token_swap_bump_seed: u8,
@@ -115,22 +124,43 @@ impl Anker {
         Ok(())
     }
 
-    /// Confirm that the provided reserve account is the one that belongs to this instance.
+    /// Confirm that the provided stSOL reserve accounts is the one that
+    /// belongs to this instance.
     ///
-    /// This does not check that the reserve is an stSOL account.
-    pub fn check_reserve_address(
+    /// This does not check that the stSOL reserve is an stSOL account.
+    pub fn check_st_sol_reserve_address(
         &self,
         anker_program_id: &Pubkey,
         anker_instance: &Pubkey,
-        reserve_account_info: &AccountInfo,
+        st_sol_reserve_account_info: &AccountInfo,
     ) -> ProgramResult {
         self.check_derived_account_address(
-            "the reserve account",
-            ANKER_RESERVE_ACCOUNT,
-            self.reserve_account_bump_seed,
+            "the stSOL reserve account",
+            ANKER_STSOL_RESERVE_ACCOUNT,
+            self.st_sol_reserve_account_bump_seed,
             anker_program_id,
             anker_instance,
-            reserve_account_info,
+            st_sol_reserve_account_info,
+        )
+    }
+
+    /// Confirm that the provided UST reserve accounts is the one that
+    /// belongs to this instance.
+    ///
+    /// This does not check that the UST reserve is an UST account.
+    pub fn check_ust_reserve_address(
+        &self,
+        anker_program_id: &Pubkey,
+        anker_instance: &Pubkey,
+        ust_reserve_account_info: &AccountInfo,
+    ) -> ProgramResult {
+        self.check_derived_account_address(
+            "the UST reserve account",
+            ANKER_UST_RESERVE_ACCOUNT,
+            self.ust_reserve_account_bump_seed,
+            anker_program_id,
+            anker_instance,
+            ust_reserve_account_info,
         )
     }
 
@@ -242,6 +272,171 @@ impl Anker {
         token_account_info: &AccountInfo,
     ) -> ProgramResult {
         Anker::check_is_spl_token_account("Solido's stSOL", &solido.st_sol_mint, token_account_info)
+    }
+
+    /// Check the if the token swap program is the same as the one stored in the
+    /// instance.
+    ///
+    /// Check all the token swap associated accounts.
+    /// Check if the rewards destination is the same as the one stored in Anker.
+    pub fn check_token_swap(
+        &self,
+        anker_program_id: &Pubkey,
+        accounts: &SellRewardsAccountsInfo,
+    ) -> ProgramResult {
+        // Check token swap instance parameters.
+        if &self.token_swap_pool != accounts.token_swap_pool.key {
+            msg!(
+                "Invalid Token Swap instance, expected {}, found {}",
+                self.token_swap_pool,
+                accounts.token_swap_pool.key
+            );
+            return Err(AnkerError::WrongSplTokenSwap.into());
+        }
+        // Check that version byte corresponds to V1 version byte.
+        if accounts.token_swap_pool.data.borrow()[0] != 1u8 {
+            msg!(
+                "Token Swap instance version is different from what we expect, expected 1, found {}",
+                accounts.token_swap_pool.data.borrow()[0]
+            );
+            return Err(AnkerError::WrongSplTokenSwapParameters.into());
+        }
+        // We should ignore the 1st byte for the unpack.
+        let token_swap =
+            spl_token_swap::state::SwapV1::unpack(&accounts.token_swap_pool.data.borrow()[1..])?;
+
+        // Check UST token accounts.
+        self.check_ust_reserve_address(anker_program_id, accounts.anker.key, accounts.ust_reserve)?;
+
+        // `token_a` should be stSOL.
+        if &token_swap.token_a != accounts.st_sol_token.key {
+            msg!(
+            "Token Swap StSol token is different from what is stored in the instance, expected {}, found {}",
+            token_swap.token_a,
+            accounts.st_sol_token.key
+        );
+            return Err(AnkerError::WrongSplTokenSwapParameters.into());
+        }
+        // `token_b` should be UST.
+        if &token_swap.token_b != accounts.ust_token.key {
+            msg!(
+            "Token Swap UST token is different from what is stored in the instance, expected {}, found {}",
+            token_swap.token_b,
+            accounts.ust_token.key
+        );
+            return Err(AnkerError::WrongSplTokenSwapParameters.into());
+        }
+        // Check pool mint.
+        if &token_swap.pool_mint != accounts.pool_mint.key {
+            msg!(
+            "Token Swap mint is different from what is stored in the instance, expected {}, found {}",
+            token_swap.pool_mint,
+            accounts.pool_mint.key
+        );
+            return Err(AnkerError::WrongSplTokenSwapParameters.into());
+        }
+        // Check stSOL mint.
+        if &token_swap.token_a_mint != accounts.st_sol_mint.key {
+            msg!(
+            "Token Swap StSol mint is different from what is stored in the instance, expected {}, found {}",
+            token_swap.token_a_mint,
+            accounts.st_sol_mint.key
+        );
+            return Err(AnkerError::WrongSplTokenSwapParameters.into());
+        }
+        // Check UST mint.
+        if &token_swap.token_b_mint != accounts.ust_mint.key {
+            msg!(
+            "Token Swap UST mint is different from what is stored in the instance, expected {}, found {}",
+            token_swap.token_b_mint,
+            accounts.ust_mint.key
+        );
+            return Err(AnkerError::WrongSplTokenSwapParameters.into());
+        }
+        // Check pool fee.
+        if &token_swap.pool_fee_account != accounts.pool_fee_account.key {
+            msg!(
+            "Token Swap fee account is different from what is stored in the instance, expected {}, found {}",
+            token_swap.pool_fee_account,
+            accounts.pool_fee_account.key
+        );
+            return Err(AnkerError::WrongSplTokenSwapParameters.into());
+        }
+
+        Ok(())
+    }
+}
+
+/// Exchange rate from bSOL to stSOL.
+///
+/// This can be computed in different ways, but
+pub struct ExchangeRate {
+    /// Amount of stSOL that is equal in value to `b_sol_amount`.
+    pub st_sol_amount: StLamports,
+
+    /// Amount of bSOL that is equal in value to `st_sol_amount`.
+    pub b_sol_amount: BLamports,
+}
+
+impl ExchangeRate {
+    /// Return the bSOL/stSOL rate that ensures that 1 bSOL = 1 SOL.
+    pub fn from_solido_pegged(solido: &Lido) -> ExchangeRate {
+        ExchangeRate {
+            st_sol_amount: solido.exchange_rate.st_sol_supply,
+            // By definition here, we set 1 bSOL equal to 1 SOL.
+            b_sol_amount: BLamports(solido.exchange_rate.sol_balance.0),
+        }
+    }
+
+    /// Return the bSOL/stSOL rate assuming 1 bSOL is a fraction 1/supply of the reserve.
+    pub fn from_anker_unpegged(
+        b_sol_supply: BLamports,
+        reserve_balance: StLamports,
+    ) -> ExchangeRate {
+        ExchangeRate {
+            st_sol_amount: reserve_balance,
+            b_sol_amount: b_sol_supply,
+        }
+    }
+
+    pub fn exchange_st_sol(&self, amount: StLamports) -> token::Result<BLamports> {
+        // This swap is only used when depositing, so we should use the exchange
+        // rate based on the Solido instance. It should have a non-zero amount
+        // of assets under management, so the exchange rate is well-defined.
+        assert!(self.b_sol_amount > BLamports(0));
+        assert!(self.st_sol_amount > StLamports(0));
+
+        let rate = Rational {
+            numerator: self.b_sol_amount.0,
+            denominator: self.st_sol_amount.0,
+        };
+
+        // The result is in StLamports, because the type system considers Rational
+        // dimensionless, but in this case `rate` has dimensions bSOL/stSOL, so
+        // we need to re-wrap the result in the right type.
+        (amount * rate).map(|x| BLamports(x.0))
+    }
+
+    pub fn exchange_b_sol(&self, amount: BLamports) -> token::Result<StLamports> {
+        // We can get the exchange rate either from Solido, or from the reserve + supply.
+        // But in either case, neither of the values should be zero when we exchange bSOL
+        // back to stSOL: in Solido neither the SOL balance nor the stSOL supply should
+        // ever become zero, because we deposited some SOL in it that we do not plan to
+        // ever withdraw. And for Anker, if you have bSOL to exchange, the only way in
+        // which it could have been created is by locking some stSOL in Anker, so there
+        // is a nonzero bSOL supply and nonzero reserve.
+        assert!(self.b_sol_amount > BLamports(0));
+        assert!(self.st_sol_amount > StLamports(0));
+
+        let rate = Rational {
+            numerator: self.st_sol_amount.0,
+            denominator: self.b_sol_amount.0,
+        };
+
+        // The result is in BLamports, because the type system considers Rational
+        // dimensionless, but in this case `rate` has dimensions stSOL/bSOL, so
+        // we need to re-wrap the result in the right type.
+        (amount * rate).map(|x| StLamports(x.0))
     }
 }
 

@@ -4,5 +4,6 @@
 #![cfg(feature = "test-bpf")]
 
 pub mod amm;
-pub mod claim_rewards;
 pub mod deposit;
+pub mod sell_rewards;
+pub mod withdraw;

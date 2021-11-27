@@ -15,7 +15,7 @@ async fn test_successful_deposit() {
 
     let reserve_balance = context
         .solido_context
-        .get_st_sol_balance(context.reserve)
+        .get_st_sol_balance(context.st_sol_reserve)
         .await;
     let recipient_balance = context.get_b_sol_balance(recipient).await;
 
@@ -30,7 +30,7 @@ async fn test_successful_deposit_different_exchange_rate() {
     let (_owner, recipient) = context.deposit(Lamports(TEST_DEPOSIT_AMOUNT.0)).await;
     let reserve_balance = context
         .solido_context
-        .get_st_sol_balance(context.reserve)
+        .get_st_sol_balance(context.st_sol_reserve)
         .await;
     let recipient_balance = context.get_b_sol_balance(recipient).await;
 

@@ -4,14 +4,20 @@ use lido::{
     token::{Lamports, StLamports},
 };
 use solana_program::{
-    account_info::AccountInfo, borsh::try_from_slice_unchecked, entrypoint::ProgramResult, msg,
-    program::invoke_signed, program_error::ProgramError, program_pack::Pack, pubkey::Pubkey,
-    rent::Rent, system_instruction,
+    account_info::AccountInfo,
+    borsh::try_from_slice_unchecked,
+    entrypoint::ProgramResult,
+    msg,
+    program::{invoke, invoke_signed},
+    program_error::ProgramError,
+    pubkey::Pubkey,
+    rent::Rent,
+    system_instruction,
 };
 use spl_token_swap::instruction::Swap;
 
 use crate::{
-    instruction::{ClaimRewardsAccountsInfo, InitializeAccountsInfo},
+    instruction::{DepositAccountsInfo, InitializeAccountsInfo, SellRewardsAccountsInfo},
     state::Anker,
 };
 
@@ -38,7 +44,7 @@ pub fn deserialize_anker(
     anker_program_id: &Pubkey,
     anker_account: &AccountInfo,
     solido_account: &AccountInfo,
-    reserve_account: &AccountInfo,
+    st_sol_reserve_account: &AccountInfo,
 ) -> Result<(Lido, Anker), ProgramError> {
     if anker_account.owner != anker_program_id {
         msg!(
@@ -73,32 +79,35 @@ pub fn deserialize_anker(
 
     let solido = Lido::deserialize_lido(&anker.solido_program_id, solido_account)?;
 
-    anker.check_reserve_address(anker_program_id, anker_account.key, reserve_account)?;
-    anker.check_is_st_sol_account(&solido, reserve_account)?;
+    anker.check_st_sol_reserve_address(
+        anker_program_id,
+        anker_account.key,
+        st_sol_reserve_account,
+    )?;
+    anker.check_is_st_sol_account(&solido, st_sol_reserve_account)?;
 
     Ok((solido, anker))
 }
 
 /// Mint the given amount of bSOL and put it in the recipient's account.
-#[allow(clippy::too_many_arguments)]
-pub fn mint_b_sol_to<'a>(
+pub fn mint_b_sol_to(
     anker_program_id: &Pubkey,
     anker: &Anker,
-    anker_address: &Pubkey,
-    spl_token_program: &AccountInfo<'a>,
-    b_sol_mint: &AccountInfo<'a>,
-    mint_authority: &AccountInfo<'a>,
-    recipient: &AccountInfo<'a>,
+    accounts: &DepositAccountsInfo,
     amount: BLamports,
 ) -> ProgramResult {
     // Check if the mint account is the same as the one stored in Anker.
-    anker.check_mint(b_sol_mint)?;
-    anker.check_mint_authority(anker_program_id, anker_address, mint_authority)?;
+    anker.check_mint(accounts.b_sol_mint)?;
+    anker.check_mint_authority(
+        anker_program_id,
+        accounts.anker.key,
+        accounts.b_sol_mint_authority,
+    )?;
 
-    anker.check_is_b_sol_account(recipient)?;
+    anker.check_is_b_sol_account(accounts.b_sol_user_account)?;
 
     let authority_signature_seeds = [
-        &anker_address.to_bytes(),
+        &accounts.anker.key.to_bytes(),
         ANKER_MINT_AUTHORITY,
         &[anker.mint_authority_bump_seed],
     ];
@@ -108,10 +117,10 @@ pub fn mint_b_sol_to<'a>(
     // use those.
     let mint_to_signers = [];
     let instruction = spl_token::instruction::mint_to(
-        spl_token_program.key,
-        b_sol_mint.key,
-        recipient.key,
-        mint_authority.key,
+        accounts.spl_token.key,
+        accounts.b_sol_mint.key,
+        accounts.b_sol_user_account.key,
+        accounts.b_sol_mint_authority.key,
         &mint_to_signers,
         amount.0,
     )?;
@@ -119,12 +128,46 @@ pub fn mint_b_sol_to<'a>(
     invoke_signed(
         &instruction,
         &[
-            b_sol_mint.clone(),
-            recipient.clone(),
-            mint_authority.clone(),
-            spl_token_program.clone(),
+            accounts.b_sol_mint.clone(),
+            accounts.b_sol_user_account.clone(),
+            accounts.b_sol_mint_authority.clone(),
+            accounts.spl_token.clone(),
         ],
         &signers,
+    )
+}
+
+/// Burn
+pub fn burn_b_sol<'a>(
+    anker: &Anker,
+    spl_token_program: &AccountInfo<'a>,
+    b_sol_mint: &AccountInfo<'a>,
+    burn_from: &AccountInfo<'a>,
+    burn_from_authority: &AccountInfo<'a>,
+    amount: BLamports,
+) -> ProgramResult {
+    anker.check_mint(b_sol_mint)?;
+    anker.check_is_b_sol_account(burn_from)?;
+
+    // The SPL token program supports multisig-managed mints, but we do not use those.
+    let burn_signers = [];
+    let instruction = spl_token::instruction::burn(
+        spl_token_program.key,
+        burn_from.key,
+        b_sol_mint.key,
+        burn_from_authority.key,
+        &burn_signers,
+        amount.0,
+    )?;
+
+    invoke(
+        &instruction,
+        &[
+            burn_from.clone(),
+            b_sol_mint.clone(),
+            burn_from_authority.clone(),
+            spl_token_program.clone(),
+        ],
     )
 }
 
@@ -161,21 +204,24 @@ pub fn create_account<'a, 'b>(
     )
 }
 
-pub fn initialize_reserve_account(
-    accounts: &InitializeAccountsInfo,
+/// Initialize an SPL account with the owner set as the reserve authority.
+pub fn initialize_spl_account<'a, 'b>(
+    accounts: &InitializeAccountsInfo<'a, 'b>,
     seeds: &[&[u8]],
+    account: &'a AccountInfo<'b>,
+    mint: &'a AccountInfo<'b>,
 ) -> ProgramResult {
     // Initialize the reserve account.
     invoke_signed(
         &spl_token::instruction::initialize_account(
             &spl_token::id(),
-            accounts.reserve_account.key,
-            accounts.st_sol_mint.key,
+            account.key,
+            mint.key,
             accounts.reserve_authority.key,
         )?,
         &[
-            accounts.reserve_account.clone(),
-            accounts.st_sol_mint.clone(),
+            account.clone(),
+            mint.clone(),
             accounts.reserve_authority.clone(),
             accounts.sysvar_rent.clone(),
         ],
@@ -183,120 +229,31 @@ pub fn initialize_reserve_account(
     )
 }
 
-/// Check the if the token swap program is the same as the one stored in the
-/// instance.
-///
-/// Check all the token swap associated accounts.
-/// Check if the rewards destination is the same as the one stored in Anker.
-fn check_token_swap(anker: &Anker, accounts: &ClaimRewardsAccountsInfo) -> ProgramResult {
-    // Check token swap instance parameters.
-    if &anker.token_swap_instance != accounts.token_swap_instance.key {
-        msg!(
-            "Invalid Token Swap instance, expected {}, found {}",
-            anker.token_swap_instance,
-            accounts.token_swap_instance.key
-        );
-        return Err(AnkerError::WrongSplTokenSwap.into());
-    }
-    // We should ignore the 1st byte for the unpack.
-    let token_swap =
-        spl_token_swap::state::SwapV1::unpack(&accounts.token_swap_instance.data.borrow()[1..])?;
-
-    // `token_a` should be stSOL.
-    if &token_swap.token_a != accounts.st_sol_token.key {
-        msg!(
-            "Token Swap StSol token is different from what is stored in the instance, expected {}, found {}",
-            token_swap.token_a,
-            accounts.st_sol_token.key
-        );
-        return Err(AnkerError::WrongSplTokenSwapParameters.into());
-    }
-    // `token_b` should be UST.
-    if &token_swap.token_b != accounts.ust_token.key {
-        msg!(
-            "Token Swap UST token is different from what is stored in the instance, expected {}, found {}",
-            token_swap.token_b,
-            accounts.ust_token.key
-        );
-        return Err(AnkerError::WrongSplTokenSwapParameters.into());
-    }
-    // Check pool mint.
-    if &token_swap.pool_mint != accounts.pool_mint.key {
-        msg!(
-            "Token Swap mint is different from what is stored in the instance, expected {}, found {}",
-            token_swap.pool_mint,
-            accounts.pool_mint.key
-        );
-        return Err(AnkerError::WrongSplTokenSwapParameters.into());
-    }
-    // Check stSOL mint.
-    if &token_swap.token_a_mint != accounts.st_sol_mint.key {
-        msg!(
-            "Token Swap StSol mint is different from what is stored in the instance, expected {}, found {}",
-            token_swap.token_a_mint,
-            accounts.st_sol_mint.key
-        );
-        return Err(AnkerError::WrongSplTokenSwapParameters.into());
-    }
-    // Check UST mint.
-    if &token_swap.token_b_mint != accounts.ust_mint.key {
-        msg!(
-            "Token Swap UST mint is different from what is stored in the instance, expected {}, found {}",
-            token_swap.token_b_mint,
-            accounts.ust_mint.key
-        );
-        return Err(AnkerError::WrongSplTokenSwapParameters.into());
-    }
-    // Check pool fee.
-    if &token_swap.pool_fee_account != accounts.pool_fee_account.key {
-        msg!(
-            "Token Swap fee account is different from what is stored in the instance, expected {}, found {}",
-            token_swap.pool_fee_account,
-            accounts.pool_fee_account.key
-        );
-        return Err(AnkerError::WrongSplTokenSwapParameters.into());
-    }
-
-    // Check rewards destination.
-    // The reserve address is checked in `deserialize_anker`, this function
-    // should be called prior to this. We don't need to check the reserve
-    // authority, as the transaction will fail if a different one is provided.
-    if &anker.rewards_destination != accounts.rewards_destination.key {
-        msg!(
-            "The UST token rewards destination address is different from what is stored in the instance, expected {}, found {}",
-            anker.rewards_destination,
-            accounts.rewards_destination.key
-        );
-        return Err(AnkerError::InvalidRewardsDestination.into());
-    }
-
-    Ok(())
-}
-
 /// Swap the `amount` from StSOL to UST
 ///
-/// Sends the UST to the `accounts.rewards_destination`
+/// Sends the UST to the `accounts.ust_reserve`
 pub fn swap_rewards(
+    program_id: &Pubkey,
     amount: StLamports,
     anker: &Anker,
-    accounts: &ClaimRewardsAccountsInfo,
+    accounts: &SellRewardsAccountsInfo,
 ) -> ProgramResult {
     if amount == StLamports(0) {
         msg!("Anker rewards must be greater than zero to be claimable.");
         return Err(AnkerError::ZeroRewardsToClaim.into());
     }
-    check_token_swap(anker, accounts)?;
+    anker.check_token_swap(program_id, accounts)?;
 
     let swap_instruction = spl_token_swap::instruction::swap(
         accounts.orca_token_swap_v2.key,
         accounts.spl_token.key,
-        accounts.token_swap_instance.key,
+        accounts.token_swap_pool.key,
         accounts.token_pool_authority.key,
         accounts.reserve_authority.key,
-        accounts.reserve_account.key,
+        accounts.st_sol_reserve_account.key,
         accounts.st_sol_token.key,
         accounts.ust_token.key,
-        accounts.rewards_destination.key,
+        accounts.ust_reserve.key,
         accounts.pool_mint.key,
         accounts.pool_fee_account.key,
         None,
@@ -316,19 +273,18 @@ pub fn swap_rewards(
     invoke_signed(
         &swap_instruction,
         &[
-            accounts.token_swap_instance.clone(),
+            accounts.token_swap_pool.clone(),
             accounts.token_pool_authority.clone(),
             accounts.reserve_authority.clone(),
-            accounts.reserve_account.clone(),
+            accounts.st_sol_reserve_account.clone(),
             accounts.st_sol_token.clone(),
             accounts.ust_token.clone(),
-            accounts.rewards_destination.clone(),
+            accounts.ust_reserve.clone(),
             accounts.pool_mint.clone(),
             accounts.pool_fee_account.clone(),
             accounts.spl_token.clone(),
             accounts.orca_token_swap_v2.clone(),
         ],
         &signers,
-    )?;
-    Ok(())
+    )
 }

@@ -253,11 +253,6 @@ impl Context {
             crate::anker_context::id(),
             processor!(anker::processor::process),
         );
-        program_test.add_program(
-            "spl_token_swap",
-            spl_token_swap::id(),
-            processor!(spl_token_swap::processor::Processor::process),
-        );
 
         // Add the actual Orca token swap program, so we test against the real thing.
         // If we don't have it locally, download it from the chain.
