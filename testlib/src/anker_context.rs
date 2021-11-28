@@ -18,7 +18,7 @@ use spl_token_swap::instruction::Swap;
 
 use crate::solido_context::send_transaction;
 use crate::solido_context::{self};
-use anker::{find_reserve_authority, find_st_sol_reserve_account, find_ust_reserve_account};
+use anker::{find_reserve_authority, find_st_sol_reserve_account};
 
 // Program id for the Anker program. Only used for tests.
 solana_program::declare_id!("Anker111111111111111111111111111111111111117");
@@ -411,13 +411,18 @@ impl Context {
     }
 
     pub async fn sell_rewards(&mut self) {
+        self.try_sell_rewards()
+            .await
+            .expect("Failed to call SellRewards on Anker instance.")
+    }
+
+    pub async fn try_sell_rewards(&mut self) -> transport::Result<()> {
         let (st_sol_reserve_account, _reserve_account_bump_seed) =
             find_st_sol_reserve_account(&id(), &self.anker);
         let (reserve_authority, _reserve_authority_bump_seed) =
             find_reserve_authority(&id(), &self.anker);
         let (token_pool_authority, _token_pool_authority_bump_seed) =
             self.token_pool_context.get_token_pool_authority();
-        let (ust_reserve, _ust_reserve_bump_key) = find_ust_reserve_account(&id(), &self.anker);
 
         send_transaction(
             &mut self.solido_context.context,
@@ -438,13 +443,13 @@ impl Context {
                     pool_fee_account: self.token_pool_context.fee_address,
                     token_pool_authority,
                     reserve_authority,
-                    ust_reserve,
+                    ust_reserve: self.ust_reserve,
                 },
             )],
             vec![],
         )
-        .await
-        .expect("Failed to sell rewards.");
+        .await?;
+        Ok(())
     }
 
     /// Return the value of the given amount of stSOL in SOL.
