@@ -10,6 +10,7 @@ use solana_program::{
     msg,
     program::{invoke, invoke_signed},
     program_error::ProgramError,
+    program_pack::Pack,
     pubkey::Pubkey,
     rent::Rent,
     system_instruction,
@@ -33,6 +34,7 @@ use crate::{
 /// needed:
 /// * The mint address should match the address stored in Anker.
 /// * The mint authority should match the address derived from Anker.
+/// * The StSOL/UST reserve address should match the address derived from Anker.
 /// * The reserve authority should match the address derived from Anker.
 ///
 /// Note, the address of the Anker instance is a program-derived address that
@@ -44,7 +46,6 @@ pub fn deserialize_anker(
     anker_program_id: &Pubkey,
     anker_account: &AccountInfo,
     solido_account: &AccountInfo,
-    st_sol_reserve_account: &AccountInfo,
 ) -> Result<(Lido, Anker), ProgramError> {
     if anker_account.owner != anker_program_id {
         msg!(
@@ -78,13 +79,6 @@ pub fn deserialize_anker(
     }
 
     let solido = Lido::deserialize_lido(&anker.solido_program_id, solido_account)?;
-
-    anker.check_st_sol_reserve_address(
-        anker_program_id,
-        anker_account.key,
-        st_sol_reserve_account,
-    )?;
-    anker.check_is_st_sol_account(&solido, st_sol_reserve_account)?;
 
     Ok((solido, anker))
 }
@@ -288,4 +282,21 @@ pub fn swap_rewards(
         ],
         &signers,
     )
+}
+
+/// Get an instance of the Token Swap V1 from the provided account info.
+pub fn get_token_swap_instance(
+    token_swap_account: &AccountInfo,
+) -> Result<spl_token_swap::state::SwapV1, ProgramError> {
+    // Check that version byte corresponds to V1 version byte.
+    if token_swap_account.data.borrow()[0] != 1u8 {
+        msg!(
+            "Token Swap instance version is different from what we expect, expected 1, found {}",
+            token_swap_account.data.borrow()[0]
+        );
+        return Err(AnkerError::WrongSplTokenSwapParameters.into());
+    }
+    // We should ignore the 1st byte for the unpack.
+
+    spl_token_swap::state::SwapV1::unpack(&token_swap_account.data.borrow()[1..])
 }

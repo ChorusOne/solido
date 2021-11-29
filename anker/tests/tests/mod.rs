@@ -5,5 +5,6 @@
 
 pub mod amm;
 pub mod deposit;
+pub mod manager;
 pub mod sell_rewards;
 pub mod withdraw;

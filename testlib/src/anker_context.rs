@@ -516,6 +516,52 @@ impl Context {
             .create_spl_token_account(self.token_pool_context.ust_mint_address, owner)
             .await
     }
+
+    pub async fn try_change_token_swap_pool(
+        &mut self,
+        manager: &Keypair,
+        terra_rewards_destination: Pubkey,
+    ) -> transport::Result<()> {
+        send_transaction(
+            &mut self.solido_context.context,
+            &mut self.solido_context.nonce,
+            &[instruction::change_terra_rewards_destination(
+                &id(),
+                &instruction::ChangeTerraRewardsDestinationAccountsMeta {
+                    anker: self.anker,
+                    solido: self.solido_context.solido.pubkey(),
+                    manager: manager.pubkey(),
+                    terra_rewards_destination,
+                },
+            )],
+            vec![manager],
+        )
+        .await?;
+        Ok(())
+    }
+
+    pub async fn try_change_terra_rewards_destination(
+        &mut self,
+        manager: &Keypair,
+        token_swap_pool: Pubkey,
+    ) -> transport::Result<()> {
+        send_transaction(
+            &mut self.solido_context.context,
+            &mut self.solido_context.nonce,
+            &[instruction::change_token_swap_pool(
+                &id(),
+                &instruction::ChangeTokenSwapPoolAccountsMeta {
+                    anker: self.anker,
+                    solido: self.solido_context.solido.pubkey(),
+                    manager: manager.pubkey(),
+                    token_swap_pool,
+                },
+            )],
+            vec![manager],
+        )
+        .await?;
+        Ok(())
+    }
 }
 
 /// Create a new token pool using `CurveType::ConstantProduct`.

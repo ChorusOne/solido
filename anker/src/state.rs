@@ -1,4 +1,5 @@
 use crate::instruction::SellRewardsAccountsInfo;
+use crate::logic::get_token_swap_instance;
 use crate::{
     error::AnkerError, ANKER_MINT_AUTHORITY, ANKER_RESERVE_AUTHORITY, ANKER_STSOL_RESERVE_ACCOUNT,
     ANKER_UST_RESERVE_ACCOUNT,
@@ -293,17 +294,7 @@ impl Anker {
             );
             return Err(AnkerError::WrongSplTokenSwap.into());
         }
-        // Check that version byte corresponds to V1 version byte.
-        if accounts.token_swap_pool.data.borrow()[0] != 1u8 {
-            msg!(
-                "Token Swap instance version is different from what we expect, expected 1, found {}",
-                accounts.token_swap_pool.data.borrow()[0]
-            );
-            return Err(AnkerError::WrongSplTokenSwapParameters.into());
-        }
-        // We should ignore the 1st byte for the unpack.
-        let token_swap =
-            spl_token_swap::state::SwapV1::unpack(&accounts.token_swap_pool.data.borrow()[1..])?;
+        let token_swap = get_token_swap_instance(accounts.token_swap_pool)?;
 
         // Check UST token accounts.
         self.check_ust_reserve_address(

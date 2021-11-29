@@ -1,5 +1,5 @@
 use borsh::BorshDeserialize;
-use lido::token::Lamports;
+use lido::{error::LidoError, token::Lamports};
 use solana_program::{
     account_info::AccountInfo,
     entrypoint::ProgramResult,
@@ -20,10 +20,11 @@ use crate::{
     find_instance_address, find_mint_authority, find_reserve_authority,
     find_st_sol_reserve_account,
     instruction::{
-        AnkerInstruction, DepositAccountsInfo, InitializeAccountsInfo, SellRewardsAccountsInfo,
-        WithdrawAccountsInfo,
+        AnkerInstruction, ChangeTerraRewardsDestinationAccountsInfo,
+        ChangeTokenSwapPoolAccountsInfo, DepositAccountsInfo, InitializeAccountsInfo,
+        SellRewardsAccountsInfo, WithdrawAccountsInfo,
     },
-    logic::{burn_b_sol, deserialize_anker, mint_b_sol_to},
+    logic::{burn_b_sol, deserialize_anker, get_token_swap_instance, mint_b_sol_to},
     state::Anker,
     token::BLamports,
 };
@@ -174,12 +175,13 @@ fn process_deposit(
         return Err(ProgramError::InvalidArgument);
     }
 
-    let (solido, anker) = deserialize_anker(
+    let (solido, anker) = deserialize_anker(program_id, accounts.anker, accounts.solido)?;
+    anker.check_st_sol_reserve_address(
         program_id,
-        accounts.anker,
-        accounts.solido,
+        accounts.anker.key,
         accounts.to_reserve_account,
     )?;
+    anker.check_is_st_sol_account(&solido, accounts.to_reserve_account)?;
 
     // Transfer `amount` StLamports to the reserve.
     invoke(
@@ -218,12 +220,13 @@ fn process_deposit(
 /// Sell Anker rewards.
 fn process_sell_rewards(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> ProgramResult {
     let accounts = SellRewardsAccountsInfo::try_from_slice(accounts_raw)?;
-    let (lido, anker) = deserialize_anker(
+    let (solido, anker) = deserialize_anker(program_id, accounts.anker, accounts.solido)?;
+    anker.check_st_sol_reserve_address(
         program_id,
-        accounts.anker,
-        accounts.solido,
+        accounts.anker.key,
         accounts.st_sol_reserve_account,
     )?;
+    anker.check_is_st_sol_account(&solido, accounts.st_sol_reserve_account)?;
     anker.check_mint(accounts.b_sol_mint)?;
 
     let token_mint_state =
@@ -236,7 +239,7 @@ fn process_sell_rewards(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> Pr
     let reserve_st_sol = StLamports(st_sol_reserve_state.amount);
 
     // Get StLamports corresponding to the amount of b_sol minted.
-    let st_sol_amount = lido.exchange_rate.exchange_sol(Lamports(b_sol_supply))?;
+    let st_sol_amount = solido.exchange_rate.exchange_sol(Lamports(b_sol_supply))?;
 
     // If `reserve_st_sol` < `st_sol_amount` something went wrong, and we abort the transaction.
     let rewards = (reserve_st_sol - st_sol_amount)?;
@@ -251,12 +254,9 @@ fn process_withdraw(
 ) -> ProgramResult {
     let accounts = WithdrawAccountsInfo::try_from_slice(accounts_raw)?;
 
-    let (solido, anker) = deserialize_anker(
-        program_id,
-        accounts.anker,
-        accounts.solido,
-        accounts.reserve_account,
-    )?;
+    let (solido, anker) = deserialize_anker(program_id, accounts.anker, accounts.solido)?;
+    anker.check_is_st_sol_account(&solido, accounts.reserve_account)?;
+    anker.check_mint(accounts.b_sol_mint)?;
 
     anker.check_mint(accounts.b_sol_mint)?;
     anker.check_reserve_authority(program_id, accounts.anker.key, accounts.reserve_authority)?;
@@ -340,6 +340,42 @@ fn process_withdraw(
     Ok(())
 }
 
+/// Change the Terra rewards destination.
+/// Solido's manager needs to sign the transaction.
+fn process_change_terra_rewards_destination(
+    program_id: &Pubkey,
+    accounts_raw: &[AccountInfo],
+) -> ProgramResult {
+    let accounts = ChangeTerraRewardsDestinationAccountsInfo::try_from_slice(accounts_raw)?;
+    let (solido, mut anker) = deserialize_anker(program_id, accounts.anker, accounts.solido)?;
+    solido.check_manager(accounts.manager)?;
+
+    anker.terra_rewards_destination = *accounts.terra_rewards_destination.key;
+    anker.save(accounts.anker)
+}
+
+/// Change the Token Pool instance.
+/// Solido's manager needs to sign the transaction.
+fn process_change_token_swap_pool(
+    program_id: &Pubkey,
+    accounts_raw: &[AccountInfo],
+) -> ProgramResult {
+    let accounts = ChangeTokenSwapPoolAccountsInfo::try_from_slice(accounts_raw)?;
+    let (solido, mut anker) = deserialize_anker(program_id, accounts.anker, accounts.solido)?;
+    solido.check_manager(accounts.manager)?;
+
+    // Checks if the provided account is a valid Token Swap instance.
+    get_token_swap_instance(accounts.token_swap_pool)?;
+
+    anker.token_swap_pool = *accounts.token_swap_pool.key;
+    let (_, token_swap_bump_seed) = Pubkey::find_program_address(
+        &[&accounts.token_swap_pool.key.to_bytes()],
+        &crate::orca_token_swap_v2::id(),
+    );
+    anker.token_swap_bump_seed = token_swap_bump_seed;
+    anker.save(accounts.anker)
+}
+
 /// Processes [Instruction](enum.Instruction.html).
 pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> ProgramResult {
     let instruction = AnkerInstruction::try_from_slice(input)?;
@@ -348,5 +384,11 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
         AnkerInstruction::Deposit { amount } => process_deposit(program_id, accounts, amount),
         AnkerInstruction::Withdraw { amount } => process_withdraw(program_id, accounts, amount),
         AnkerInstruction::SellRewards => process_sell_rewards(program_id, accounts),
+        AnkerInstruction::ChangeTerraRewardsDestination => {
+            process_change_terra_rewards_destination(program_id, accounts)
+        }
+        AnkerInstruction::ChangeTokenSwapPool => {
+            process_change_token_swap_pool(program_id, accounts)
+        }
     }
 }
