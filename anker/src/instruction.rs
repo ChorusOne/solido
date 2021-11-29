@@ -255,11 +255,15 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
-        pub st_sol_token {
+        pub pool_st_sol_account {
             is_signer: false,
             is_writable: true, // Needed to swap tokens.
         },
-        pub ust_token {
+        pub pool_ust_account {
+            is_signer: false,
+            is_writable: true, // Needed to swap tokens.
+        },
+        pub ust_reserve_account {
             is_signer: false,
             is_writable: true, // Needed to swap tokens.
         },
@@ -286,10 +290,6 @@ accounts_struct! {
         pub reserve_authority {
             is_signer: false,
             is_writable: false,
-        },
-        pub ust_reserve {
-            is_signer: false,
-            is_writable: true, // Needed to swap tokens.
         },
 
         const spl_token = spl_token::id(),

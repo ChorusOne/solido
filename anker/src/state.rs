@@ -306,23 +306,27 @@ impl Anker {
             spl_token_swap::state::SwapV1::unpack(&accounts.token_swap_pool.data.borrow()[1..])?;
 
         // Check UST token accounts.
-        self.check_ust_reserve_address(anker_program_id, accounts.anker.key, accounts.ust_token)?;
+        self.check_ust_reserve_address(
+            anker_program_id,
+            accounts.anker.key,
+            accounts.pool_ust_account,
+        )?;
 
         // `token_a` should be stSOL.
-        if &token_swap.token_a != accounts.st_sol_token.key {
+        if &token_swap.token_a != accounts.pool_st_sol_account.key {
             msg!(
             "Token Swap StSol token is different from what is stored in the instance, expected {}, found {}",
             token_swap.token_a,
-            accounts.st_sol_token.key
+            accounts.pool_st_sol_account.key
         );
             return Err(AnkerError::WrongSplTokenSwapParameters.into());
         }
         // `token_b` should be UST.
-        if &token_swap.token_b != accounts.ust_token.key {
+        if &token_swap.token_b != accounts.pool_ust_account.key {
             msg!(
             "Token Swap UST token is different from what is stored in the instance, expected {}, found {}",
             token_swap.token_b,
-            accounts.ust_token.key
+            accounts.pool_ust_account.key
         );
             return Err(AnkerError::WrongSplTokenSwapParameters.into());
         }

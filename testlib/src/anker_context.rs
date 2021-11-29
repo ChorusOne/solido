@@ -9,7 +9,7 @@ use solana_sdk::signature::{Keypair, Signer};
 use solana_sdk::transport;
 
 use anker::instruction;
-use anker::token::{BLamports, UstLamports};
+use anker::token::{BLamports, MicroUst};
 use lido::token::Lamports;
 use lido::token::StLamports;
 use spl_token_swap::instruction::Swap;
@@ -46,7 +46,7 @@ impl TokenPoolContext {
         &self,
         solido_context: &mut solido_context::Context,
         account: &Pubkey,
-        amount: UstLamports,
+        amount: MicroUst,
     ) {
         let mint_instruction = spl_token::instruction::mint_to(
             &spl_token::id(),
@@ -72,7 +72,7 @@ impl TokenPoolContext {
         &self,
         solido_context: &mut solido_context::Context,
         st_sol_amount: StLamports,
-        ust_amount: UstLamports,
+        ust_amount: MicroUst,
     ) {
         // Transfer some UST and StSOL to the pool.
         self.mint_ust(solido_context, &self.ust_address, ust_amount)
@@ -362,15 +362,15 @@ impl Context {
                     st_sol_reserve_account,
                     b_sol_mint: self.b_sol_mint,
                     token_swap_pool: self.token_pool_context.swap_account.pubkey(),
-                    st_sol_token: self.token_pool_context.st_sol_address,
-                    ust_token: self.token_pool_context.ust_address,
+                    pool_st_sol_account: self.token_pool_context.st_sol_address,
+                    pool_ust_account: self.token_pool_context.ust_address,
                     pool_mint: self.token_pool_context.mint_address,
                     st_sol_mint: self.solido_context.st_sol_mint,
                     ust_mint: self.token_pool_context.ust_mint_address,
                     pool_fee_account: self.token_pool_context.fee_address,
                     token_pool_authority,
                     reserve_authority,
-                    ust_reserve: self.ust_rewards_account,
+                    ust_reserve_account: self.ust_rewards_account,
                 },
             )],
             vec![],
@@ -405,7 +405,7 @@ pub async fn initialize_token_pool(
     // When packing the SwapV1 structure, `SwapV1::pack(swap_info, &mut
     // dst[1..])` is called. But the program also wants the size of the data
     // to be `spl_token_swap::state::SwapV1::LEN`. `LATEST_LEN` is 1 +
-    // SwapV1::LEN 🤷.
+    // SwapV1::LEN.
     let swap_account = solido_context
         .create_account(
             &spl_token_swap::id(),

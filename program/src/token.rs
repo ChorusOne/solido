@@ -69,18 +69,11 @@ macro_rules! impl_token {
 
         impl fmt::Display for $TokenLamports {
             fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                let str_number = format!(
-                    "{}.{:0>9}",
-                    self.0 / 10u64.pow($decimals),
-                    self.0 % 10u64.pow($decimals),
-                );
                 write!(
                     f,
-                    "{} {}",
-                    &str_number[..str_number.len() - (9 - $decimals)],
-                    // "{}.{:0>9} {}",
-                    // self.0 / 10u64.pow($decimals),
-                    // self.0 % 10u64.pow($decimals),
+                    "{}.{} {}",
+                    self.0 / 10u64.pow($decimals),
+                    &format!("{:0>9}", self.0 % 10u64.pow($decimals))[9 - $decimals..],
                     $symbol
                 )
             }
@@ -167,7 +160,7 @@ macro_rules! impl_token {
             fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
                 let mut value = 0_u64;
                 let mut is_after_decimal = false;
-                let mut exponent = 9_i32;
+                let mut exponent: i32 = $decimals;
                 let mut had_digit = false;
 
                 // Walk the bytes one by one, we only expect ASCII digits or '.', so bytes
@@ -219,16 +212,25 @@ pub mod test {
     use super::*;
     use std::str::FromStr;
 
+    impl_token!(MicroUst, "UST", decimals = 6);
+
     #[test]
     fn test_lamports_from_str_roundtrip() {
         let mut x = 0;
         while x < u64::MAX / 17 {
-            let orig = Lamports(x);
-            let s = format!("{}", orig);
+            let lamports_orig = Lamports(x);
+            let lamports_string = format!("{}", lamports_orig);
             // Cut off the " SOL" suffix.
-            let without_suffix = &s[..s.len() - 4];
-            let reconstructed = Lamports::from_str(without_suffix).unwrap();
-            assert_eq!(reconstructed, orig);
+            let lamports_without_suffix = &lamports_string[..lamports_string.len() - 4];
+            let lamports_reconstructed = Lamports::from_str(lamports_without_suffix).unwrap();
+            assert_eq!(lamports_reconstructed, lamports_orig);
+
+            let ust_orig = MicroUst(x);
+            let ust_string = format!("{}", ust_orig);
+            // Cut off the " UST" suffix.
+            let ust_without_suffix = &ust_string[..ust_string.len() - 4];
+            let ust_reconstructed = MicroUst::from_str(ust_without_suffix).unwrap();
+            assert_eq!(ust_reconstructed, ust_orig);
 
             x += 1;
             x *= 17;
@@ -326,5 +328,13 @@ pub mod test {
         };
         assert_eq!(x.partial_cmp(&y), None);
         assert_eq!(y.partial_cmp(&x), None);
+    }
+
+    #[test]
+    fn test_token_format() {
+        assert_eq!(format!("{}", Lamports(1)), "0.000000001 SOL");
+        assert_eq!(format!("{}", Lamports(1_000_000_002)), "1.000000002 SOL");
+        assert_eq!(format!("{}", MicroUst(1)), "0.000001 UST");
+        assert_eq!(format!("{}", MicroUst(1_000_000_002)), "1000.000002 UST");
     }
 }
