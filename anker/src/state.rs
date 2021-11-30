@@ -1,4 +1,4 @@
-use crate::instruction::SellRewardsAccountsInfo;
+use crate::instruction::{ChangeTokenSwapPoolAccountsInfo, SellRewardsAccountsInfo};
 use crate::logic::get_token_swap_instance;
 use crate::{
     error::AnkerError, ANKER_MINT_AUTHORITY, ANKER_RESERVE_AUTHORITY, ANKER_STSOL_RESERVE_ACCOUNT,
@@ -273,6 +273,17 @@ impl Anker {
         token_account_info: &AccountInfo,
     ) -> ProgramResult {
         Anker::check_is_spl_token_account("Solido's stSOL", &solido.st_sol_mint, token_account_info)
+    }
+
+    /// Checks if we can change the token swap account.
+    pub fn check_change_token_swap(
+        &self,
+        solido: &Lido,
+        accounts: &ChangeTokenSwapPoolAccountsInfo,
+    ) -> ProgramResult {
+        // Checks if the provided account is a valid Token Swap instance.
+        let token_swap = get_token_swap_instance(accounts.token_swap_pool)?;
+        Ok(())
     }
 
     /// Check the if the token swap program is the same as the one stored in the

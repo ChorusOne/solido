@@ -1,5 +1,5 @@
 use borsh::BorshDeserialize;
-use lido::{error::LidoError, token::Lamports};
+use lido::token::Lamports;
 use solana_program::{
     account_info::AccountInfo,
     entrypoint::ProgramResult,
@@ -363,9 +363,7 @@ fn process_change_token_swap_pool(
     let accounts = ChangeTokenSwapPoolAccountsInfo::try_from_slice(accounts_raw)?;
     let (solido, mut anker) = deserialize_anker(program_id, accounts.anker, accounts.solido)?;
     solido.check_manager(accounts.manager)?;
-
-    // Checks if the provided account is a valid Token Swap instance.
-    get_token_swap_instance(accounts.token_swap_pool)?;
+    anker.check_change_token_swap(&solido, &accounts)?;
 
     anker.token_swap_pool = *accounts.token_swap_pool.key;
     let (_, token_swap_bump_seed) = Pubkey::find_program_address(

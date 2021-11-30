@@ -289,6 +289,14 @@ pub fn get_token_swap_instance(
     token_swap_account: &AccountInfo,
 ) -> Result<spl_token_swap::state::SwapV1, ProgramError> {
     // Check that version byte corresponds to V1 version byte.
+    if token_swap_account.data.borrow().len() != spl_token_swap::state::SwapVersion::LATEST_LEN {
+        msg!(
+            "Length of the Token Swap is invalid, expected {}, found {}",
+            spl_token_swap::state::SwapVersion::LATEST_LEN,
+            token_swap_account.data.borrow().len()
+        );
+        return Err(AnkerError::WrongSplTokenSwapParameters.into());
+    }
     if token_swap_account.data.borrow()[0] != 1u8 {
         msg!(
             "Token Swap instance version is different from what we expect, expected 1, found {}",
@@ -296,7 +304,6 @@ pub fn get_token_swap_instance(
         );
         return Err(AnkerError::WrongSplTokenSwapParameters.into());
     }
-    // We should ignore the 1st byte for the unpack.
-
+    // We should ignore the version 1st byte for the unpack.
     spl_token_swap::state::SwapV1::unpack(&token_swap_account.data.borrow()[1..])
 }

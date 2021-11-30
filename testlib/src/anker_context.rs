@@ -3,6 +3,7 @@
 
 //! Test context for testing Anker, the Anchor Protocol integration.
 
+use solana_program::borsh::try_from_slice_unchecked;
 use solana_program::program_pack::Pack;
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::{Keypair, Signer};
@@ -517,7 +518,7 @@ impl Context {
             .await
     }
 
-    pub async fn try_change_token_swap_pool(
+    pub async fn try_change_terra_rewards_destination(
         &mut self,
         manager: &Keypair,
         terra_rewards_destination: Pubkey,
@@ -540,7 +541,7 @@ impl Context {
         Ok(())
     }
 
-    pub async fn try_change_terra_rewards_destination(
+    pub async fn try_change_token_swap_pool(
         &mut self,
         manager: &Keypair,
         token_swap_pool: Pubkey,
@@ -561,6 +562,14 @@ impl Context {
         )
         .await?;
         Ok(())
+    }
+
+    pub async fn get_anker(&mut self) -> anker::state::Anker {
+        let anker_account = self.solido_context.get_account(self.anker).await;
+        // This returns a Result because it can cause an IO error, but that should
+        // not happen in the test environment. (And if it does, then the test just
+        // fails.)
+        try_from_slice_unchecked::<anker::state::Anker>(anker_account.data.as_slice()).unwrap()
     }
 }
 
