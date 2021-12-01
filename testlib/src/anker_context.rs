@@ -84,12 +84,12 @@ impl TokenPoolContext {
             .exchange_rate
             .exchange_st_sol(st_sol_amount)
             .expect("Some StSol should have been minted at this point.");
-        let (kp_stsol, token_st_sol) = solido_context.deposit(sol_amount).await;
+        let (st_sol_keypair, token_st_sol) = solido_context.deposit(sol_amount).await;
         solido_context
             .transfer_spl_token(
                 &token_st_sol,
                 &self.st_sol_address,
-                &kp_stsol,
+                &st_sol_keypair,
                 st_sol_amount.0,
             )
             .await;
@@ -378,8 +378,8 @@ impl Context {
         source: &Pubkey,
         destination: &Pubkey,
         authority: &Keypair,
-        amount_in: u64,
-        minimum_amount_out: u64,
+        amount_in: StLamports,
+        minimum_amount_out: MicroUst,
     ) {
         let swap_instruction = spl_token_swap::instruction::swap(
             &anker::orca_token_swap_v2::id(),
@@ -395,8 +395,8 @@ impl Context {
             &self.token_pool_context.fee_address,
             None,
             Swap {
-                amount_in,
-                minimum_amount_out,
+                amount_in: amount_in.0,
+                minimum_amount_out: minimum_amount_out.0,
             },
         )
         .expect("Could not create swap instruction.");
@@ -465,15 +465,24 @@ impl Context {
             spl_token::state::Mint::unpack_from_slice(mint_account.data.as_slice()).unwrap();
         BLamports(mint.supply)
     }
+
+    /// Return the `MicroUst` balance of the account in `address`.
+    pub async fn get_ust_balance(&mut self, address: Pubkey) -> MicroUst {
+        let ust_account = self.solido_context.get_account(address).await;
+        let ust_spl_account: spl_token::state::Account =
+            spl_token::state::Account::unpack_from_slice(ust_account.data.as_slice())
+                .expect("UST account does not exist");
+        MicroUst(ust_spl_account.amount)
+    }
 }
 
 /// Create a new token pool using `CurveType::ConstantProduct`.
 ///
-/// The stake pool is not initialized at the end of this function.  To
+/// The stake pool is not initialized at the end of this function. To
 /// initialize the token swap instance, it requires funded token pairs on the
 /// liquidity pool.
 /// To get a new Context with an initialized token pool, call
-/// `Context::new_with_liquidity_on_amm`.
+/// `Context::new_with_initialized_token_pool`.
 pub async fn setup_token_pool(solido_context: &mut solido_context::Context) -> TokenPoolContext {
     let admin = solido_context.deterministic_keypair.new_keypair();
 
