@@ -12,18 +12,15 @@ async fn test_successful_sell_rewards() {
     let mut context = Context::new_with_token_pool_rewards(Lamports(DEPOSIT_AMOUNT)).await;
     context.sell_rewards().await;
 
-    let ust_account = context
-        .solido_context
-        .get_account(context.ust_reserve)
-        .await;
-    let ust_spl_account: spl_token::state::Account =
-        spl_token::state::Account::unpack_from_slice(ust_account.data.as_slice()).unwrap();
-
+    let ust_balance = context.get_ust_balance(context.ust_reserve).await;
     // Exchange rate is 12 stSol : 13 Sol
     // We have 1 stSOL, our rewards were 1 - (1 * 12/13) = 0.076923077
     // Initially there are 10 StSol and 10 UST in the AMM
     // We should get 10 - (10*10 / 10.076923077) = 0.07633587793834806 UST
-    assert_eq!(ust_spl_account.amount, 76335877);
+    assert_eq!(ust_balance, MicroUst(76335877));
+    // Test claiming the reward again fails.
+    let result = context.try_sell_rewards().await;
+    assert_solido_error!(result, AnkerError::ZeroRewardsToClaim);
 }
 
 // Create a token pool where the token a and b are swapped (what matters is that
