@@ -47,7 +47,7 @@ async fn test_withdraw_single_epoch() {
     // The reserve should now be empty, we withdrew everything.
     let reserve_st_sol = context
         .solido_context
-        .get_st_sol_balance(context.reserve)
+        .get_st_sol_balance(context.st_sol_reserve)
         .await;
     assert_eq!(reserve_st_sol, StLamports(0));
 }
@@ -100,7 +100,7 @@ async fn test_withdraw_after_st_sol_price_increase() {
     // (Plus one lamport rounding error.)
     let reserve_st_sol = context
         .solido_context
-        .get_st_sol_balance(context.reserve)
+        .get_st_sol_balance(context.st_sol_reserve)
         .await;
     let reserve_sol = context.exchange_st_sol(reserve_st_sol).await;
     assert_eq!(reserve_sol, Lamports(500_000_001));

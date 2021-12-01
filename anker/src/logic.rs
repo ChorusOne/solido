@@ -1,5 +1,8 @@
-use crate::{error::AnkerError, token::BLamports, ANKER_MINT_AUTHORITY};
-use lido::{state::Lido, token::Lamports};
+use crate::{error::AnkerError, token::BLamports, ANKER_MINT_AUTHORITY, ANKER_RESERVE_AUTHORITY};
+use lido::{
+    state::Lido,
+    token::{Lamports, StLamports},
+};
 use solana_program::{
     account_info::AccountInfo,
     borsh::try_from_slice_unchecked,
@@ -11,9 +14,12 @@ use solana_program::{
     rent::Rent,
     system_instruction,
 };
+use spl_token_swap::instruction::Swap;
 
-use crate::instruction::DepositAccountsInfo;
-use crate::{instruction::InitializeAccountsInfo, state::Anker};
+use crate::{
+    instruction::{DepositAccountsInfo, InitializeAccountsInfo, SellRewardsAccountsInfo},
+    state::Anker,
+};
 
 /// Deserialize the Solido and Anker state.
 ///
@@ -38,7 +44,7 @@ pub fn deserialize_anker(
     anker_program_id: &Pubkey,
     anker_account: &AccountInfo,
     solido_account: &AccountInfo,
-    reserve_account: &AccountInfo,
+    st_sol_reserve_account: &AccountInfo,
 ) -> Result<(Lido, Anker), ProgramError> {
     if anker_account.owner != anker_program_id {
         msg!(
@@ -73,8 +79,12 @@ pub fn deserialize_anker(
 
     let solido = Lido::deserialize_lido(&anker.solido_program_id, solido_account)?;
 
-    anker.check_reserve_address(anker_program_id, anker_account.key, reserve_account)?;
-    anker.check_is_st_sol_account(&solido, reserve_account)?;
+    anker.check_st_sol_reserve_address(
+        anker_program_id,
+        anker_account.key,
+        st_sol_reserve_account,
+    )?;
+    anker.check_is_st_sol_account(&solido, st_sol_reserve_account)?;
 
     Ok((solido, anker))
 }
@@ -194,24 +204,88 @@ pub fn create_account<'a, 'b>(
     )
 }
 
-pub fn initialize_reserve_account(
-    accounts: &InitializeAccountsInfo,
+/// Initialize an SPL account with the owner set as the reserve authority.
+pub fn initialize_spl_account<'a, 'b>(
+    accounts: &InitializeAccountsInfo<'a, 'b>,
     seeds: &[&[u8]],
+    account: &'a AccountInfo<'b>,
+    mint: &'a AccountInfo<'b>,
 ) -> ProgramResult {
     // Initialize the reserve account.
     invoke_signed(
         &spl_token::instruction::initialize_account(
             &spl_token::id(),
-            accounts.reserve_account.key,
-            accounts.st_sol_mint.key,
+            account.key,
+            mint.key,
             accounts.reserve_authority.key,
         )?,
         &[
-            accounts.reserve_account.clone(),
-            accounts.st_sol_mint.clone(),
+            account.clone(),
+            mint.clone(),
             accounts.reserve_authority.clone(),
             accounts.sysvar_rent.clone(),
         ],
         &[seeds],
     )
+}
+
+/// Swap the `amount` from StSOL to UST
+///
+/// Sends the UST to the `accounts.ust_reserve`
+pub fn swap_rewards(
+    program_id: &Pubkey,
+    amount: StLamports,
+    anker: &Anker,
+    accounts: &SellRewardsAccountsInfo,
+) -> ProgramResult {
+    if amount == StLamports(0) {
+        msg!("Anker rewards must be greater than zero to be claimable.");
+        return Err(AnkerError::ZeroRewardsToClaim.into());
+    }
+    anker.check_token_swap(program_id, accounts)?;
+
+    let swap_instruction = spl_token_swap::instruction::swap(
+        accounts.spl_token_swap.key,
+        accounts.spl_token.key,
+        accounts.token_swap_pool.key,
+        accounts.token_pool_authority.key,
+        accounts.reserve_authority.key,
+        accounts.st_sol_reserve_account.key,
+        accounts.pool_st_sol_account.key,
+        accounts.pool_ust_account.key,
+        accounts.ust_reserve_account.key,
+        accounts.pool_mint.key,
+        accounts.pool_fee_account.key,
+        None,
+        Swap {
+            amount_in: amount.0,
+            minimum_amount_out: 0,
+        },
+    )?;
+
+    let authority_signature_seeds = [
+        &accounts.anker.key.to_bytes(),
+        ANKER_RESERVE_AUTHORITY,
+        &[anker.reserve_authority_bump_seed],
+    ];
+    let signers = [&authority_signature_seeds[..]];
+
+    invoke_signed(
+        &swap_instruction,
+        &[
+            accounts.token_swap_pool.clone(),
+            accounts.token_pool_authority.clone(),
+            accounts.reserve_authority.clone(),
+            accounts.st_sol_reserve_account.clone(),
+            accounts.pool_st_sol_account.clone(),
+            accounts.pool_ust_account.clone(),
+            accounts.ust_reserve_account.clone(),
+            accounts.pool_mint.clone(),
+            accounts.pool_fee_account.clone(),
+            accounts.spl_token.clone(),
+            accounts.spl_token_swap.clone(),
+        ],
+        &signers,
+    )?;
+    Ok(())
 }

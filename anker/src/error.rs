@@ -26,6 +26,18 @@ pub enum AnkerError {
 
     /// An account is not owned by the expected owner.
     InvalidOwner = 6,
+
+    /// Wrong SPL Token Swap instance.
+    WrongSplTokenSwap = 7,
+
+    /// Wrong parameters for the SPL Token Swap instruction.
+    WrongSplTokenSwapParameters = 8,
+
+    /// The provided rewards destination is different from what is stored in the instance.
+    InvalidRewardsDestination = 9,
+
+    /// The amount of rewards to be claimed are zero.
+    ZeroRewardsToClaim = 10,
 }
 
 // Just reuse the generated Debug impl for Display. It shows the variant names.

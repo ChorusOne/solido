@@ -9,39 +9,121 @@ use solana_sdk::signature::{Keypair, Signer};
 use solana_sdk::transport;
 
 use anker::instruction;
-use anker::token::BLamports;
+use anker::token::{BLamports, MicroUst};
 use lido::token::Lamports;
 use lido::token::StLamports;
+use spl_token_swap::instruction::Swap;
 
 use crate::solido_context::send_transaction;
 use crate::solido_context::{self};
+use anker::{find_reserve_authority, find_st_sol_reserve_account};
 
 // Program id for the Anker program. Only used for tests.
 solana_program::declare_id!("Anker111111111111111111111111111111111111117");
+
+pub struct TokenPoolContext {
+    pub swap_account: Keypair,
+    pub mint_address: Pubkey,
+    pub token_address: Pubkey,
+    pub fee_address: Pubkey,
+    pub st_sol_address: Pubkey,
+    pub ust_address: Pubkey,
+
+    pub ust_mint_authority: Keypair,
+    pub ust_mint_address: Pubkey,
+}
+
+impl TokenPoolContext {
+    pub fn get_token_pool_authority(&self) -> (Pubkey, u8) {
+        Pubkey::find_program_address(
+            &[&self.swap_account.pubkey().to_bytes()[..]],
+            &spl_token_swap::id(),
+        )
+    }
+
+    /// Mint `amount` UST to `account`.
+    pub async fn mint_ust(
+        &self,
+        solido_context: &mut solido_context::Context,
+        account: &Pubkey,
+        amount: MicroUst,
+    ) {
+        let mint_instruction = spl_token::instruction::mint_to(
+            &spl_token::id(),
+            &self.ust_mint_address,
+            account,
+            &self.ust_mint_authority.pubkey(),
+            &[],
+            amount.0,
+        )
+        .expect("Failed to generate UST mint instruction.");
+        send_transaction(
+            &mut solido_context.context,
+            &mut solido_context.nonce,
+            &[mint_instruction],
+            vec![&self.ust_mint_authority],
+        )
+        .await
+        .expect("Failed to mint UST tokens.");
+    }
+
+    // Put StSOL and UST to the liquidity provider
+    pub async fn provide_liquidity(
+        &self,
+        solido_context: &mut solido_context::Context,
+        st_sol_amount: StLamports,
+        ust_amount: MicroUst,
+    ) {
+        // Transfer some UST and StSOL to the pool.
+        self.mint_ust(solido_context, &self.ust_address, ust_amount)
+            .await;
+        let (kp_stsol, token_st_sol) = solido_context.deposit(Lamports(10_000_000_000)).await;
+        solido_context
+            .transfer_spl_token(
+                &token_st_sol,
+                &self.st_sol_address,
+                &kp_stsol,
+                st_sol_amount.0,
+            )
+            .await;
+    }
+}
 
 pub struct Context {
     pub solido_context: solido_context::Context,
     pub anker: Pubkey,
     pub b_sol_mint: Pubkey,
     pub b_sol_mint_authority: Pubkey,
-    pub reserve: Pubkey,
+    pub st_sol_reserve: Pubkey,
+    pub ust_reserve: Pubkey,
+
+    pub token_pool_context: TokenPoolContext,
+    pub rewards_owner: Keypair,
+    pub ust_rewards_account: Pubkey,
     pub reserve_authority: Pubkey,
 }
 
 const INITIAL_DEPOSIT: Lamports = Lamports(1_000_000_000);
 
 impl Context {
-    pub async fn new() -> Context {
+    pub async fn new() -> Self {
         let mut solido_context = solido_context::Context::new_with_maintainer().await;
         let (anker, _seed) = anker::find_instance_address(&id(), &solido_context.solido.pubkey());
 
-        let (reserve, _seed) = anker::find_reserve_account(&id(), &anker);
+        let (st_sol_reserve, _seed) = anker::find_st_sol_reserve_account(&id(), &anker);
+        let (ust_reserve, _seed) = anker::find_ust_reserve_account(&id(), &anker);
         let (reserve_authority, _seed) = anker::find_reserve_authority(&id(), &anker);
         let (b_sol_mint_authority, _seed) = anker::find_mint_authority(&id(), &anker);
 
         let b_sol_mint = solido_context.create_mint(b_sol_mint_authority).await;
-
         let payer = solido_context.context.payer.pubkey();
+
+        let token_pool_context = initialize_token_pool(&mut solido_context).await;
+
+        let rewards_owner = solido_context.deterministic_keypair.new_keypair();
+        let ust_rewards_account = solido_context
+            .create_spl_token_account(token_pool_context.ust_mint_address, rewards_owner.pubkey())
+            .await;
 
         send_transaction(
             &mut solido_context.context,
@@ -55,8 +137,12 @@ impl Context {
                     solido_program: solido_context::id(),
                     st_sol_mint: solido_context.st_sol_mint,
                     b_sol_mint,
-                    reserve_account: reserve,
+                    st_sol_reserve_account: st_sol_reserve,
+                    ust_reserve_account: ust_reserve,
                     reserve_authority,
+                    token_swap_pool: token_pool_context.swap_account.pubkey(),
+                    terra_rewards_destination: ust_rewards_account,
+                    ust_mint: token_pool_context.ust_mint_address,
                 },
             )],
             vec![],
@@ -68,21 +154,28 @@ impl Context {
         solido_context.advance_to_normal_epoch(0);
         solido_context.update_exchange_rate().await;
 
-        Context {
+        Self {
             solido_context,
             anker,
             b_sol_mint,
             b_sol_mint_authority,
-            reserve,
+            st_sol_reserve,
+            ust_reserve,
+            token_pool_context,
+            rewards_owner,
+            ust_rewards_account,
             reserve_authority,
         }
     }
 
-    pub async fn new_different_exchange_rate() -> Context {
+    // Start a new Anker context with `amount` Lamports donated to Solido's
+    // reserve. Also update the exchange rate. Usually used when testing a
+    // different 1:1 exchange rate.
+    pub async fn new_different_exchange_rate(amount: Lamports) -> Context {
         let mut context = Context::new().await;
         context
             .solido_context
-            .fund(context.solido_context.reserve_address, INITIAL_DEPOSIT)
+            .fund(context.solido_context.reserve_address, amount)
             .await;
         context.solido_context.advance_to_normal_epoch(1);
         context.solido_context.update_exchange_rate().await;
@@ -117,7 +210,7 @@ impl Context {
                     solido: self.solido_context.solido.pubkey(),
                     from_account: from_st_sol,
                     user_authority: user.pubkey(),
-                    to_reserve_account: self.reserve,
+                    to_reserve_account: self.st_sol_reserve,
                     b_sol_user_account: recipient,
                     b_sol_mint: self.b_sol_mint,
                     b_sol_mint_authority: self.b_sol_mint_authority,
@@ -178,7 +271,7 @@ impl Context {
                     from_b_sol_account: b_sol_account,
                     from_b_sol_authority: user.pubkey(),
                     to_st_sol_account: recipient,
-                    reserve_account: self.reserve,
+                    reserve_account: self.st_sol_reserve,
                     reserve_authority: self.reserve_authority,
                     b_sol_mint: self.b_sol_mint,
                 },
@@ -213,6 +306,79 @@ impl Context {
         BLamports(account_info.amount)
     }
 
+    /// Swap StSol for UST
+    pub async fn swap_st_sol_for_ust(
+        &mut self,
+        source: &Pubkey,
+        destination: &Pubkey,
+        authority: &Keypair,
+        amount_in: u64,
+        minimum_amount_out: u64,
+    ) {
+        let swap_instruction = spl_token_swap::instruction::swap(
+            &spl_token_swap::id(),
+            &spl_token::id(),
+            &self.token_pool_context.swap_account.pubkey(),
+            &self.token_pool_context.get_token_pool_authority().0,
+            &authority.pubkey(),
+            source,
+            &self.token_pool_context.st_sol_address,
+            &self.token_pool_context.ust_address,
+            destination,
+            &self.token_pool_context.mint_address,
+            &self.token_pool_context.fee_address,
+            None,
+            Swap {
+                amount_in,
+                minimum_amount_out,
+            },
+        )
+        .expect("Could not create swap instruction.");
+        send_transaction(
+            &mut self.solido_context.context,
+            &mut self.solido_context.nonce,
+            &[swap_instruction],
+            vec![authority],
+        )
+        .await
+        .expect("Failed to swap StSol for UST tokens.");
+    }
+
+    pub async fn sell_rewards(&mut self) {
+        let (st_sol_reserve_account, _reserve_account_bump_seed) =
+            find_st_sol_reserve_account(&id(), &self.anker);
+        let (reserve_authority, _reserve_authority_bump_seed) =
+            find_reserve_authority(&id(), &self.anker);
+        let (token_pool_authority, _token_pool_authority_bump_seed) =
+            self.token_pool_context.get_token_pool_authority();
+        send_transaction(
+            &mut self.solido_context.context,
+            &mut self.solido_context.nonce,
+            &[instruction::sell_rewards(
+                &id(),
+                &instruction::SellRewardsAccountsMeta {
+                    anker: self.anker,
+                    solido: self.solido_context.solido.pubkey(),
+                    st_sol_reserve_account,
+                    b_sol_mint: self.b_sol_mint,
+                    token_swap_pool: self.token_pool_context.swap_account.pubkey(),
+                    pool_st_sol_account: self.token_pool_context.st_sol_address,
+                    pool_ust_account: self.token_pool_context.ust_address,
+                    pool_mint: self.token_pool_context.mint_address,
+                    st_sol_mint: self.solido_context.st_sol_mint,
+                    ust_mint: self.token_pool_context.ust_mint_address,
+                    pool_fee_account: self.token_pool_context.fee_address,
+                    token_pool_authority,
+                    reserve_authority,
+                    ust_reserve_account: self.ust_rewards_account,
+                },
+            )],
+            vec![],
+        )
+        .await
+        .expect("Failed to sell rewards.");
+    }
+
     /// Return the value of the given amount of stSOL in SOL.
     pub async fn exchange_st_sol(&mut self, amount: StLamports) -> Lamports {
         let solido = self.solido_context.get_solido().await;
@@ -225,5 +391,63 @@ impl Context {
         let mint: spl_token::state::Mint =
             spl_token::state::Mint::unpack_from_slice(mint_account.data.as_slice()).unwrap();
         BLamports(mint.supply)
+    }
+}
+
+/// Create a new token pool using `CurveType::ConstantProduct`.
+///
+/// Fund UST and StSOL with 10 * 1e9 Lamports each.
+pub async fn initialize_token_pool(
+    solido_context: &mut solido_context::Context,
+) -> TokenPoolContext {
+    let admin = solido_context.deterministic_keypair.new_keypair();
+
+    // When packing the SwapV1 structure, `SwapV1::pack(swap_info, &mut
+    // dst[1..])` is called. But the program also wants the size of the data
+    // to be `spl_token_swap::state::SwapV1::LEN`. `LATEST_LEN` is 1 +
+    // SwapV1::LEN.
+    let swap_account = solido_context
+        .create_account(
+            &spl_token_swap::id(),
+            spl_token_swap::state::SwapVersion::LATEST_LEN,
+        )
+        .await;
+
+    let (authority_pubkey, _authority_bump_seed) = Pubkey::find_program_address(
+        &[&swap_account.pubkey().to_bytes()[..]],
+        &spl_token_swap::id(),
+    );
+
+    let pool_mint_pubkey = solido_context.create_mint(authority_pubkey).await;
+    let pool_token_pubkey = solido_context
+        .create_spl_token_account(pool_mint_pubkey, admin.pubkey())
+        .await;
+    let pool_fee_pubkey = solido_context
+        .create_spl_token_account(pool_mint_pubkey, admin.pubkey())
+        .await;
+
+    // Create UST token
+    let ust_mint_authority = solido_context.deterministic_keypair.new_keypair();
+    let ust_mint_address = solido_context
+        .create_mint(ust_mint_authority.pubkey())
+        .await;
+
+    // UST and StSOL token accounts for the pool.
+    let ust_account = solido_context
+        .create_spl_token_account(ust_mint_address, authority_pubkey)
+        .await;
+    let st_sol_account = solido_context
+        .create_spl_token_account(solido_context.st_sol_mint, authority_pubkey)
+        .await;
+
+    TokenPoolContext {
+        swap_account,
+        mint_address: pool_mint_pubkey,
+        token_address: pool_token_pubkey,
+        fee_address: pool_fee_pubkey,
+        st_sol_address: st_sol_account,
+        ust_address: ust_account,
+        ust_mint_authority,
+        ust_mint_address,
     }
 }

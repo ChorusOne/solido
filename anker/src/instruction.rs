@@ -35,8 +35,8 @@ pub enum AnkerInstruction {
         amount: BLamports,
     },
 
-    /// Claim rewards on Terra.
-    ClaimRewards,
+    /// Sell rewards to the UST reserve.
+    SellRewards,
 }
 
 impl AnkerInstruction {
@@ -76,11 +76,28 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
-        pub reserve_account {
+        pub st_sol_reserve_account {
+            is_signer: false,
+            is_writable: true, // Writable because we need to initialize it.
+        },
+        pub ust_reserve_account {
             is_signer: false,
             is_writable: true, // Writable because we need to initialize it.
         },
         pub reserve_authority {
+            is_signer: false,
+            is_writable: false,
+        },
+        // Instance of the token swap data used for trading StSOL for UST.
+        pub token_swap_pool {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub terra_rewards_destination {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub ust_mint {
             is_signer: false,
             is_writable: false,
         },
@@ -206,6 +223,82 @@ pub fn withdraw(
     amount: BLamports,
 ) -> Instruction {
     let data = AnkerInstruction::Withdraw { amount };
+    Instruction {
+        program_id: *program_id,
+        accounts: accounts.to_vec(),
+        data: data.to_vec(),
+    }
+}
+
+accounts_struct! {
+    SellRewardsAccountsMeta, SellRewardsAccountsInfo {
+        pub anker {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub solido {
+            is_signer: false,
+            is_writable: false,
+        },
+        // Needs to be writable so we can sell stSOL.
+        pub st_sol_reserve_account {
+            is_signer: false,
+            is_writable: true, // Needed to swap tokens.
+        },
+        pub b_sol_mint {
+            is_signer: false,
+            is_writable: false,
+        },
+
+        // Accounts for token swap
+        pub token_swap_pool {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub pool_st_sol_account {
+            is_signer: false,
+            is_writable: true, // Needed to swap tokens.
+        },
+        pub pool_ust_account {
+            is_signer: false,
+            is_writable: true, // Needed to swap tokens.
+        },
+        pub ust_reserve_account {
+            is_signer: false,
+            is_writable: true, // Needed to swap tokens.
+        },
+        pub pool_mint {
+            is_signer: false,
+            is_writable: true, // Needed to swap tokens.
+        },
+        pub st_sol_mint {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub ust_mint {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub pool_fee_account {
+            is_signer: false,
+            is_writable: true, // Needed to swap tokens.
+        },
+        pub token_pool_authority {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub reserve_authority {
+            is_signer: false,
+            is_writable: false,
+        },
+
+        const spl_token = spl_token::id(),
+        const spl_token_swap = spl_token_swap::id(),
+    }
+}
+
+pub fn sell_rewards(program_id: &Pubkey, accounts: &SellRewardsAccountsMeta) -> Instruction {
+    let data = AnkerInstruction::SellRewards;
     Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),

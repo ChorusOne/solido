@@ -1,4 +1,5 @@
 use borsh::BorshDeserialize;
+use lido::token::Lamports;
 use solana_program::{
     account_info::AccountInfo,
     entrypoint::ProgramResult,
@@ -14,19 +15,24 @@ use solana_program::{
 
 use lido::{state::Lido, token::StLamports};
 
-use crate::logic::{create_account, initialize_reserve_account};
-use crate::state::{ExchangeRate, ANKER_LEN};
 use crate::{
     error::AnkerError,
-    find_instance_address, find_mint_authority, find_reserve_account, find_reserve_authority,
+    find_instance_address, find_mint_authority, find_reserve_authority,
+    find_st_sol_reserve_account,
     instruction::{
-        AnkerInstruction, DepositAccountsInfo, InitializeAccountsInfo, WithdrawAccountsInfo,
+        AnkerInstruction, DepositAccountsInfo, InitializeAccountsInfo, SellRewardsAccountsInfo,
+        WithdrawAccountsInfo,
     },
     logic::{burn_b_sol, deserialize_anker, mint_b_sol_to},
     state::Anker,
     token::BLamports,
-    ANKER_RESERVE_ACCOUNT, ANKER_RESERVE_AUTHORITY,
 };
+use crate::{find_ust_reserve_account, ANKER_STSOL_RESERVE_ACCOUNT, ANKER_UST_RESERVE_ACCOUNT};
+use crate::{
+    logic::{create_account, initialize_spl_account, swap_rewards},
+    state::ExchangeRate,
+};
+use crate::{state::ANKER_LEN, ANKER_RESERVE_AUTHORITY};
 
 fn process_initialize(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> ProgramResult {
     let accounts = InitializeAccountsInfo::try_from_slice(accounts_raw)?;
@@ -51,8 +57,10 @@ fn process_initialize(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> Prog
     let (mint_authority, mint_bump_seed) = find_mint_authority(program_id, &anker_address);
     let (_reserve_authority, reserve_authority_bump_seed) =
         find_reserve_authority(program_id, &anker_address);
-    let (_reserve_account, reserve_account_bump_seed) =
-        find_reserve_account(program_id, &anker_address);
+    let (_reserve_account, st_sol_reserve_account_bump_seed) =
+        find_st_sol_reserve_account(program_id, &anker_address);
+    let (_ust_reserve_account, ust_reserve_account_bump_seed) =
+        find_ust_reserve_account(program_id, &anker_address);
 
     // Create an account for the Anker instance.
     let anker_seeds = [accounts.solido.key.as_ref(), &[anker_bump_seed]];
@@ -66,35 +74,75 @@ fn process_initialize(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> Prog
     )?;
 
     // Create and initialize an stSOL SPL token account for the reserve.
-    let reserve_account_seeds = [
+    let st_sol_reserve_account_seeds = [
         anker_address.as_ref(),
-        ANKER_RESERVE_ACCOUNT,
-        &[reserve_account_bump_seed],
+        ANKER_STSOL_RESERVE_ACCOUNT,
+        &[st_sol_reserve_account_bump_seed],
     ];
     create_account(
         &spl_token::ID,
         &accounts,
-        accounts.reserve_account,
+        accounts.st_sol_reserve_account,
         &rent,
         spl_token::state::Account::LEN,
-        &reserve_account_seeds,
+        &st_sol_reserve_account_seeds,
     )?;
-    initialize_reserve_account(&accounts, &reserve_account_seeds)?;
+    initialize_spl_account(
+        &accounts,
+        &st_sol_reserve_account_seeds,
+        accounts.st_sol_reserve_account,
+        accounts.st_sol_mint,
+    )?;
+
+    // Create and initialize an UST SPL token account for the reserve
+    let ust_reserve_account_seeds = [
+        anker_address.as_ref(),
+        ANKER_UST_RESERVE_ACCOUNT,
+        &[ust_reserve_account_bump_seed],
+    ];
+    create_account(
+        &spl_token::ID,
+        &accounts,
+        accounts.ust_reserve_account,
+        &rent,
+        spl_token::state::Account::LEN,
+        &ust_reserve_account_seeds,
+    )?;
+    initialize_spl_account(
+        &accounts,
+        &ust_reserve_account_seeds,
+        accounts.ust_reserve_account,
+        accounts.ust_mint,
+    )?;
+
+    let (_, token_swap_bump_seed) = Pubkey::find_program_address(
+        &[&accounts.token_swap_pool.key.to_bytes()],
+        &spl_token_swap::id(),
+    );
 
     let anker = Anker {
         b_sol_mint: *accounts.b_sol_mint.key,
         solido_program_id: *accounts.solido_program.key,
         solido: *accounts.solido.key,
+        token_swap_pool: *accounts.token_swap_pool.key,
+        terra_rewards_destination: *accounts.terra_rewards_destination.key,
         self_bump_seed: anker_bump_seed,
         mint_authority_bump_seed: mint_bump_seed,
         reserve_authority_bump_seed,
-        reserve_account_bump_seed,
+        st_sol_reserve_account_bump_seed,
+        ust_reserve_account_bump_seed,
+        token_swap_bump_seed,
     };
 
     anker.check_mint(accounts.b_sol_mint)?;
-    anker.check_reserve_address(program_id, &anker_address, accounts.reserve_account)?;
+    anker.check_st_sol_reserve_address(
+        program_id,
+        &anker_address,
+        accounts.st_sol_reserve_account,
+    )?;
+    anker.check_ust_reserve_address(program_id, &anker_address, accounts.ust_reserve_account)?;
     anker.check_reserve_authority(program_id, &anker_address, accounts.reserve_authority)?;
-    anker.check_is_st_sol_account(&solido, accounts.reserve_account)?;
+    anker.check_is_st_sol_account(&solido, accounts.st_sol_reserve_account)?;
 
     match spl_token::state::Mint::unpack_from_slice(&accounts.b_sol_mint.data.borrow()) {
         Ok(mint) if mint.mint_authority == COption::Some(mint_authority) => {
@@ -165,6 +213,34 @@ fn process_deposit(
     );
 
     Ok(())
+}
+
+/// Sell Anker rewards.
+fn process_sell_rewards(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> ProgramResult {
+    let accounts = SellRewardsAccountsInfo::try_from_slice(accounts_raw)?;
+    let (lido, anker) = deserialize_anker(
+        program_id,
+        accounts.anker,
+        accounts.solido,
+        accounts.st_sol_reserve_account,
+    )?;
+    anker.check_mint(accounts.b_sol_mint)?;
+
+    let token_mint_state =
+        spl_token::state::Mint::unpack_from_slice(&accounts.b_sol_mint.data.borrow())?;
+    let b_sol_supply = token_mint_state.supply;
+
+    let st_sol_reserve_state = spl_token::state::Account::unpack_from_slice(
+        &accounts.st_sol_reserve_account.data.borrow(),
+    )?;
+    let reserve_st_sol = StLamports(st_sol_reserve_state.amount);
+
+    // Get StLamports corresponding to the amount of b_sol minted.
+    let st_sol_amount = lido.exchange_rate.exchange_sol(Lamports(b_sol_supply))?;
+
+    // If `reserve_st_sol` < `st_sol_amount` something went wrong, and we abort the transaction.
+    let rewards = (reserve_st_sol - st_sol_amount)?;
+    swap_rewards(program_id, rewards, &anker, &accounts)
 }
 
 /// Return some bSOL and get back the underlying stSOL.
@@ -271,6 +347,6 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
         AnkerInstruction::Initialize => process_initialize(program_id, accounts),
         AnkerInstruction::Deposit { amount } => process_deposit(program_id, accounts, amount),
         AnkerInstruction::Withdraw { amount } => process_withdraw(program_id, accounts, amount),
-        AnkerInstruction::ClaimRewards => todo!(),
+        AnkerInstruction::SellRewards => process_sell_rewards(program_id, accounts),
     }
 }
