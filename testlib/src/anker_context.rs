@@ -114,6 +114,61 @@ impl TokenPoolContext {
             )
             .await;
     }
+
+    // Initialize token pool.
+    pub async fn initialize_token_pool(&mut self, solido_context: &mut solido_context::Context) {
+        const LIQUIDITY_AMOUNT: u64 = 10_000_000_000;
+        self.provide_liquidity(
+            solido_context,
+            StLamports(LIQUIDITY_AMOUNT),
+            MicroUst(LIQUIDITY_AMOUNT),
+        )
+        .await;
+        let fees = spl_token_swap::curve::fees::Fees {
+            trade_fee_numerator: 0,
+            trade_fee_denominator: 10,
+            owner_trade_fee_numerator: 0,
+            owner_trade_fee_denominator: 10,
+            owner_withdraw_fee_numerator: 0,
+            owner_withdraw_fee_denominator: 10,
+            host_fee_numerator: 0,
+            host_fee_denominator: 10,
+        };
+        let swap_curve = SwapCurve {
+            curve_type: CurveType::ConstantProduct,
+            calculator: Box::new(ConstantProductCurve),
+        };
+
+        let (authority_pubkey, authority_bump_seed) = Pubkey::find_program_address(
+            &[&self.swap_account.pubkey().to_bytes()[..]],
+            &anker::orca_token_swap_v2::id(),
+        );
+
+        let pool_instruction = spl_token_swap::instruction::initialize(
+            &anker::orca_token_swap_v2::id(),
+            &spl_token::id(),
+            &self.swap_account.pubkey(),
+            &authority_pubkey,
+            &self.token_a,
+            &self.token_b,
+            &self.mint_address,
+            &self.fee_address,
+            &self.token_address,
+            authority_bump_seed,
+            fees,
+            swap_curve,
+        )
+        .expect("Failed to create token pool initialization instruction.");
+
+        send_transaction(
+            &mut solido_context.context,
+            &mut solido_context.nonce,
+            &[pool_instruction],
+            vec![&self.swap_account],
+        )
+        .await
+        .expect("Failed to initialize token pool.");
+    }
 }
 
 pub struct Context {
