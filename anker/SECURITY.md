@@ -81,7 +81,7 @@ There are two types of actors involved in the Anker program:
    UST rewards. The manager will be the same multisig instance that also acts as
    the manager for the Solido program. We trust the manager and assume that the
    manager acts in the best interest of the Anker program. We assume that the
-   maintainer will configure the Anker program correctly.
+   manager will configure the Anker program correctly.
 
  * **Users**. Users deposit stSOL and receive bSOL in return.
 
