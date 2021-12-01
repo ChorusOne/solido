@@ -273,7 +273,7 @@ impl Anker {
     }
 
     /// Check if we can change the token swap account.
-    pub fn check_change_token_swap(
+    pub fn check_change_token_swap_pool(
         &self,
         solido: &Lido,
         accounts: &ChangeTokenSwapPoolAccountsInfo,

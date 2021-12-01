@@ -357,7 +357,7 @@ fn process_change_token_swap_pool(
     let accounts = ChangeTokenSwapPoolAccountsInfo::try_from_slice(accounts_raw)?;
     let (solido, mut anker) = deserialize_anker(program_id, accounts.anker, accounts.solido)?;
     solido.check_manager(accounts.manager)?;
-    anker.check_change_token_swap(&solido, &accounts)?;
+    anker.check_change_token_swap_pool(&solido, &accounts)?;
 
     anker.token_swap_pool = *accounts.new_token_swap_pool.key;
     anker.save(accounts.anker)
