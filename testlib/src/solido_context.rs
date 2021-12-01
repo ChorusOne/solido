@@ -27,6 +27,7 @@ use solana_sdk::transport::TransportError;
 use solana_vote_program::vote_instruction;
 use solana_vote_program::vote_state::{VoteInit, VoteState};
 
+use anker::error::AnkerError;
 use lido::account_map::PubkeyAndEntry;
 use lido::processor::StakeType;
 use lido::stake_account::StakeAccount;
@@ -187,6 +188,15 @@ pub async fn send_transaction(
                 err
             ),
             None => println!("This error is not a known Solido error."),
+        }
+        // Even though this is the Solido context, we also check for the Anker error,
+        // because the Anker context builds on this.
+        match AnkerError::from_u32(error_code) {
+            Some(err) => println!(
+                "If this error originated from Anker, it was this variant: {:?}",
+                err,
+            ),
+            None => println!("This error is not a known Anker error."),
         }
     }
 
