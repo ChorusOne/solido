@@ -48,7 +48,7 @@ async fn test_deposit_fails_with_wrong_reserve() {
     let mut context = Context::new().await;
 
     let fake_reserve = context.solido_context.deterministic_keypair.new_keypair();
-    context.reserve = fake_reserve.pubkey();
+    context.st_sol_reserve = fake_reserve.pubkey();
 
     // The program should confirm that the reserve we use is the reserve of the
     // instance, and fail the transaction if it's a different account. Otherwise
