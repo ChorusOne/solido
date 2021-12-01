@@ -755,3 +755,11 @@ cli_opt_struct! {
         terra_rewards_address: ForeignAddress,
     }
 }
+
+cli_opt_struct! {
+    ShowAnkerOpts {
+        /// Address of the Anker instance.
+        #[clap(long, value_name = "address")]
+        anker_address: Pubkey,
+    }
+}

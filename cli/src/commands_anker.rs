@@ -3,18 +3,61 @@
 
 use std::fmt;
 
+use anker::token::BLamports;
+use clap::Clap;
+use lido::token::{Lamports, StLamports};
 use lido::util::serialize_b58;
 use serde::Serialize;
 use solana_program::pubkey::Pubkey;
 use solana_sdk::signer::Signer;
 
-use crate::config::CreateAnkerOpts;
+use crate::config::{ConfigFile, CreateAnkerOpts, ShowAnkerOpts};
+use crate::error::Abort;
 use crate::snapshot::Result;
 use crate::spl_token_utils::push_create_spl_token_mint;
-use crate::SnapshotConfig;
+use crate::{print_output, SnapshotClientConfig, SnapshotConfig};
+
+#[derive(Clap, Debug)]
+enum SubCommand {
+    /// Create a new Anker instance.
+    Create(CreateAnkerOpts),
+
+    /// Display the details of an Anker instance.
+    Show(ShowAnkerOpts),
+}
+
+#[derive(Clap, Debug)]
+pub struct AnkerOpts {
+    #[clap(subcommand)]
+    subcommand: SubCommand,
+}
+
+impl AnkerOpts {
+    pub fn merge_with_config_and_environment(&mut self, config_file: Option<&ConfigFile>) {
+        match &mut self.subcommand {
+            SubCommand::Create(opts) => opts.merge_with_config_and_environment(config_file),
+            SubCommand::Show(opts) => opts.merge_with_config_and_environment(config_file),
+        }
+    }
+}
+
+pub fn main(config: &mut SnapshotClientConfig, anker_opts: &AnkerOpts) {
+    match &anker_opts.subcommand {
+        SubCommand::Create(opts) => {
+            let result = config.with_snapshot(|config| command_create_anker(config, &opts));
+            let output = result.ok_or_abort_with("Failed to create Anker instance.");
+            print_output(config.output_mode, &output);
+        }
+        SubCommand::Show(opts) => {
+            let result = config.with_snapshot(|config| command_show_anker(config, &opts));
+            let output = result.ok_or_abort_with("Failed to show Anker instance.");
+            print_output(config.output_mode, &output);
+        }
+    }
+}
 
 #[derive(Serialize)]
-pub struct CreateAnkerOutput {
+struct CreateAnkerOutput {
     /// Account that stores the data for this Anker instance.
     #[serde(serialize_with = "serialize_b58")]
     pub anker_address: Pubkey,
@@ -47,7 +90,7 @@ impl fmt::Display for CreateAnkerOutput {
     }
 }
 
-pub fn command_create_anker(
+fn command_create_anker(
     config: &mut SnapshotConfig,
     opts: &CreateAnkerOpts,
 ) -> Result<CreateAnkerOutput> {
@@ -116,4 +159,69 @@ pub fn command_create_anker(
     };
 
     Ok(result)
+}
+
+#[derive(Serialize)]
+struct ShowAnkerOutput {
+    #[serde(serialize_with = "serialize_b58")]
+    anker_address: Pubkey,
+
+    #[serde(serialize_with = "serialize_b58")]
+    anker_program_id: Pubkey,
+
+    #[serde(serialize_with = "serialize_b58")]
+    solido_address: Pubkey,
+
+    #[serde(serialize_with = "serialize_b58")]
+    solido_program_id: Pubkey,
+
+    #[serde(serialize_with = "serialize_b58")]
+    b_sol_mint: Pubkey,
+
+    #[serde(serialize_with = "serialize_b58")]
+    b_sol_mint_authority: Pubkey,
+
+    #[serde(serialize_with = "serialize_b58")]
+    reserve_authority: Pubkey,
+
+    #[serde(serialize_with = "serialize_b58")]
+    st_sol_reserve: Pubkey,
+
+    // TODO(ruuda): Add UST reserve.
+    st_sol_reserve_balance: StLamports,
+    st_sol_reserve_value: Lamports,
+    // TODO(ruuda): Add UST reserve balance.
+    b_sol_supply: BLamports,
+}
+
+impl fmt::Display for ShowAnkerOutput {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        writeln!(f, "Anker address:           {}", self.anker_address)?;
+        writeln!(f, "Anker program id:        {}", self.anker_program_id)?;
+        writeln!(f, "Solido address:          {}", self.solido_address)?;
+        writeln!(f, "Solido program id:       {}", self.solido_program_id)?;
+        writeln!(f, "bSOL mint:               {}", self.solido_program_id)?;
+        writeln!(f, "bSOL mint authority:     {}", self.b_sol_mint_authority)?;
+        writeln!(f, "Reserve authority:       {}", self.st_sol_reserve)?;
+        writeln!(f, "Reserve (stSOL) address: {}", self.reserve_authority)?;
+        writeln!(
+            f,
+            "Reserve (stSOL) balance: {}",
+            self.st_sol_reserve_balance
+        )?;
+        writeln!(
+            f,
+            "Reserve (stSOL) value:   {}",
+            self.st_sol_reserve_balance
+        )?;
+        writeln!(f, "bSOL supply:             {}", self.b_sol_supply)?;
+        Ok(())
+    }
+}
+
+fn command_show_anker(
+    _config: &mut SnapshotConfig,
+    _opts: &ShowAnkerOpts,
+) -> Result<ShowAnkerOutput> {
+    unimplemented!("TODO");
 }
