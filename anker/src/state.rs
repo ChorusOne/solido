@@ -312,20 +312,28 @@ impl Anker {
             accounts.ust_reserve_account,
         )?;
 
-        // `token_a` should be stSOL.
-        if &token_swap.token_a != accounts.pool_st_sol_account.key {
+        // Pool stSOL and UST token could be swapped.
+        let (pool_st_sol_account, pool_ust_account) =
+            if &token_swap.token_a == accounts.pool_st_sol_account.key {
+                (token_swap.token_a, token_swap.token_b)
+            } else {
+                (token_swap.token_b, token_swap.token_a)
+            };
+
+        // check stSOL token.
+        if &pool_st_sol_account != accounts.pool_st_sol_account.key {
             msg!(
             "Token Swap StSol token is different from what is stored in the instance, expected {}, found {}",
-            token_swap.token_a,
+            pool_st_sol_account,
             accounts.pool_st_sol_account.key
         );
             return Err(AnkerError::WrongSplTokenSwapParameters.into());
         }
         // `token_b` should be UST.
-        if &token_swap.token_b != accounts.pool_ust_account.key {
+        if &pool_ust_account != accounts.pool_ust_account.key {
             msg!(
             "Token Swap UST token is different from what is stored in the instance, expected {}, found {}",
-            token_swap.token_b,
+            pool_ust_account,
             accounts.pool_ust_account.key
         );
             return Err(AnkerError::WrongSplTokenSwapParameters.into());
@@ -339,20 +347,29 @@ impl Anker {
         );
             return Err(AnkerError::WrongSplTokenSwapParameters.into());
         }
+
+        // Get mint from tokens, depending on the order.
+        let (pool_st_sol_mint, pool_ust_mint) =
+            if &token_swap.token_a_mint == accounts.st_sol_mint.key {
+                (token_swap.token_a_mint, token_swap.token_b_mint)
+            } else {
+                (token_swap.token_b_mint, token_swap.token_a_mint)
+            };
+
         // Check stSOL mint.
-        if &token_swap.token_a_mint != accounts.st_sol_mint.key {
+        if &pool_st_sol_mint != accounts.st_sol_mint.key {
             msg!(
             "Token Swap StSol mint is different from what is stored in the instance, expected {}, found {}",
-            token_swap.token_a_mint,
+            pool_st_sol_mint,
             accounts.st_sol_mint.key
         );
             return Err(AnkerError::WrongSplTokenSwapParameters.into());
         }
         // Check UST mint.
-        if &token_swap.token_b_mint != accounts.ust_mint.key {
+        if &pool_ust_mint != accounts.ust_mint.key {
             msg!(
             "Token Swap UST mint is different from what is stored in the instance, expected {}, found {}",
-            token_swap.token_b_mint,
+            pool_ust_mint,
             accounts.ust_mint.key
         );
             return Err(AnkerError::WrongSplTokenSwapParameters.into());
