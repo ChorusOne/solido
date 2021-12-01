@@ -24,7 +24,7 @@ use crate::{
         ChangeTokenSwapPoolAccountsInfo, DepositAccountsInfo, InitializeAccountsInfo,
         SellRewardsAccountsInfo, WithdrawAccountsInfo,
     },
-    logic::{burn_b_sol, deserialize_anker, get_token_swap_instance, mint_b_sol_to},
+    logic::{burn_b_sol, deserialize_anker, mint_b_sol_to},
     state::Anker,
     token::BLamports,
 };
@@ -116,11 +116,6 @@ fn process_initialize(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> Prog
         accounts.ust_mint,
     )?;
 
-    let (_, token_swap_bump_seed) = Pubkey::find_program_address(
-        &[&accounts.token_swap_pool.key.to_bytes()],
-        &crate::orca_token_swap_v2::id(),
-    );
-
     let anker = Anker {
         b_sol_mint: *accounts.b_sol_mint.key,
         solido_program_id: *accounts.solido_program.key,
@@ -132,7 +127,6 @@ fn process_initialize(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> Prog
         reserve_authority_bump_seed,
         st_sol_reserve_account_bump_seed,
         ust_reserve_account_bump_seed,
-        token_swap_bump_seed,
     };
 
     anker.check_mint(accounts.b_sol_mint)?;
@@ -365,12 +359,7 @@ fn process_change_token_swap_pool(
     solido.check_manager(accounts.manager)?;
     anker.check_change_token_swap(&solido, &accounts)?;
 
-    anker.token_swap_pool = *accounts.token_swap_pool.key;
-    let (_, token_swap_bump_seed) = Pubkey::find_program_address(
-        &[&accounts.token_swap_pool.key.to_bytes()],
-        &crate::orca_token_swap_v2::id(),
-    );
-    anker.token_swap_bump_seed = token_swap_bump_seed;
+    anker.token_swap_pool = *accounts.new_token_swap_pool.key;
     anker.save(accounts.anker)
 }
 

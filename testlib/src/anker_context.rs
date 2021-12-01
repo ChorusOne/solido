@@ -546,6 +546,7 @@ impl Context {
         manager: &Keypair,
         token_swap_pool: Pubkey,
     ) -> transport::Result<()> {
+        let anker = self.get_anker().await;
         send_transaction(
             &mut self.solido_context.context,
             &mut self.solido_context.nonce,
@@ -555,7 +556,8 @@ impl Context {
                     anker: self.anker,
                     solido: self.solido_context.solido.pubkey(),
                     manager: manager.pubkey(),
-                    token_swap_pool,
+                    current_token_swap_pool: anker.token_swap_pool,
+                    new_token_swap_pool: token_swap_pool,
                 },
             )],
             vec![manager],

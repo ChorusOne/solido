@@ -58,9 +58,6 @@ pub struct Anker {
 
     /// Bump seed for the UST reserve account.
     pub ust_reserve_account_bump_seed: u8,
-
-    /// Bump seed for the Token Swap.
-    pub token_swap_bump_seed: u8,
 }
 
 impl Anker {
@@ -275,14 +272,77 @@ impl Anker {
         Anker::check_is_spl_token_account("Solido's stSOL", &solido.st_sol_mint, token_account_info)
     }
 
-    /// Checks if we can change the token swap account.
+    /// Check if we can change the token swap account.
     pub fn check_change_token_swap(
         &self,
         solido: &Lido,
         accounts: &ChangeTokenSwapPoolAccountsInfo,
     ) -> ProgramResult {
+        // Check if the token swap account is the same one as the stored in the instance.
+        self.check_token_swap_pool(accounts.current_token_swap_pool)?;
+        let current_token_swap = get_token_swap_instance(accounts.current_token_swap_pool)?;
         // Checks if the provided account is a valid Token Swap instance.
-        let token_swap = get_token_swap_instance(accounts.token_swap_pool)?;
+        let new_token_swap = get_token_swap_instance(accounts.new_token_swap_pool)?;
+
+        // Get stSOL and UST mint. We trust that the UST mint stored in the current instance is right.
+        let (st_sol_mint, ust_mint) = if current_token_swap.token_a_mint == solido.st_sol_mint {
+            (
+                current_token_swap.token_a_mint,
+                current_token_swap.token_b_mint,
+            )
+        } else {
+            (
+                current_token_swap.token_b_mint,
+                current_token_swap.token_a_mint,
+            )
+        };
+
+        // get the stSOL and UST pool token, and verify if the minters are right.
+        if new_token_swap.token_a_mint == st_sol_mint {
+            // token_a_mint is stSOL mint.
+            if new_token_swap.token_b_mint != ust_mint {
+                // token_b_mint should be ust_mint.
+                msg!(
+                    "token_b_mint is expected to be the UST mint ({}), but is {}",
+                    ust_mint,
+                    new_token_swap.token_b_mint
+                );
+                return Err(AnkerError::WrongSplTokenSwapParameters.into());
+            }
+        } else if new_token_swap.token_a_mint == ust_mint {
+            // token_a is UST.
+            if new_token_swap.token_b_mint != st_sol_mint {
+                // token_b_mint should be ust_mint.
+                msg!(
+                    "token_b_mint is expected to be the stSOL mint ({}), but is {}",
+                    st_sol_mint,
+                    new_token_swap.token_b_mint
+                );
+                return Err(AnkerError::WrongSplTokenSwapParameters.into());
+            }
+        } else {
+            // token_a_mint is wrong.
+            msg!(
+                "token_a_mint is expected to be either stSOL mint ({}), or UST mint ({}) but is {}",
+                st_sol_mint,
+                ust_mint,
+                new_token_swap.token_b_mint
+            );
+            return Err(AnkerError::WrongSplTokenSwapParameters.into());
+        };
+
+        Ok(())
+    }
+
+    pub fn check_token_swap_pool(&self, token_swap_account: &AccountInfo) -> ProgramResult {
+        if &self.token_swap_pool != token_swap_account.key {
+            msg!(
+                "Invalid Token Swap instance, expected {}, found {}",
+                self.token_swap_pool,
+                token_swap_account.key
+            );
+            return Err(AnkerError::WrongSplTokenSwap.into());
+        }
         Ok(())
     }
 
@@ -296,16 +356,10 @@ impl Anker {
         anker_program_id: &Pubkey,
         accounts: &SellRewardsAccountsInfo,
     ) -> ProgramResult {
-        // Check token swap instance parameters.
-        if &self.token_swap_pool != accounts.token_swap_pool.key {
-            msg!(
-                "Invalid Token Swap instance, expected {}, found {}",
-                self.token_swap_pool,
-                accounts.token_swap_pool.key
-            );
-            return Err(AnkerError::WrongSplTokenSwap.into());
-        }
+        // Check if the token swap account is the same one as the stored in the instance.
+        self.check_token_swap_pool(accounts.token_swap_pool)?;
         let token_swap = get_token_swap_instance(accounts.token_swap_pool)?;
+        // Check token swap instance parameters.
 
         // Check UST token accounts.
         self.check_ust_reserve_address(

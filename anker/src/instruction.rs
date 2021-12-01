@@ -359,7 +359,11 @@ accounts_struct! {
             is_signer: true,
             is_writable: false,
         },
-        pub token_swap_pool {
+        pub current_token_swap_pool {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub new_token_swap_pool {
             is_signer: false,
             is_writable: false,
         },
