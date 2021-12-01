@@ -30,6 +30,10 @@ async fn test_successful_sell_rewards() {
     // Initially there are 10 StSol and 10 UST in the AMM
     // We should get 10 - (10*10 / 10.076923077) = 0.07633587793834806 UST
     assert_eq!(ust_balance, MicroUst(76335877));
+
+    // Test claiming the reward again fails.
+    let result = context.try_sell_rewards().await;
+    assert_solido_error!(result, AnkerError::ZeroRewardsToClaim);
 }
 
 #[tokio::test]
