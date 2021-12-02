@@ -725,6 +725,17 @@ cli_opt_struct! {
 
         /// Optionally the bSOL mint address. If not passed a random one will be created.
         #[clap(long, value_name = "address")]
-        mint_address: Pubkey => Pubkey::default(),
+        b_sol_mint_address: Pubkey => Pubkey::default(),
+
+        /// The UST mint address.
+        ///
+        /// The mainnet address of Wormhole-v2 wrapped UST is
+        /// 9vMJfxuKxXBoEa7rM12mYLMwTacLMLDJqHozw96WQL8i.
+        #[clap(long, value_name = "address")]
+        ust_mint_address: Pubkey,
+
+        /// Orca (or other SPL token swap) pool used for stSOL/UST swap.
+        #[clap(long, value_name = "address")]
+        token_swap_pool: Pubkey,
     }
 }

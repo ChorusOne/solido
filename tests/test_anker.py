@@ -41,6 +41,12 @@ print(f'> Treasury account owner:      {treasury_account_owner}')
 developer_account_owner = create_test_account('tests/.keys/developer-fee-key.json')
 print(f'> Developer fee account owner: {developer_account_owner}')
 
+
+print('\nSetting up UST mint ...')
+ust_mint_address = create_test_account('tests/.keys/ust_mint_address.json', fund=False)
+spl_token('create-token', 'tests/.keys/ust_mint_address.json')
+print(f'> UST mint is {ust_mint_address.pubkey}.')
+
 print('\nUploading Multisig program ...')
 multisig_program_id = solana_program_deploy(
     get_solido_program_path() + '/serum_multisig.so'
@@ -136,9 +142,15 @@ result = solido(
     solido_address,
     '--anker-program-id',
     anker_program_id,
+    '--ust-mint-address',
+    ust_mint_address.pubkey,
+    '--token-swap-pool',
+    # TODO: Deploy the Orca program on the test validator and set up a test pool.
+    ust_mint_address.pubkey,
 )
 # TODO: Also provide --mint-address, we need to be sure that that one works.
 anker_address = result['anker_address']
-anker_reserve_account = result['reserve_account']
+anker_st_sol_reserve_account = result['st_sol_reserve_account']
+anker_ust_reserve_account = result['ust_reserve_account']
 b_sol_mint_address = result['b_sol_mint_address']
 print(f'> Created instance at {anker_address}.')

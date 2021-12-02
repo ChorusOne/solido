@@ -21,7 +21,11 @@ pub struct CreateAnkerOutput {
 
     /// Manages the deposited stSOL.
     #[serde(serialize_with = "serialize_b58")]
-    pub reserve_account: Pubkey,
+    pub st_sol_reserve_account: Pubkey,
+
+    /// Holds the UST proceeds until they are sent to Terra.
+    #[serde(serialize_with = "serialize_b58")]
+    pub ust_reserve_account: Pubkey,
 
     /// SPL token mint account for bSOL tokens.
     #[serde(serialize_with = "serialize_b58")]
@@ -31,9 +35,14 @@ pub struct CreateAnkerOutput {
 impl fmt::Display for CreateAnkerOutput {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         writeln!(f, "Anker details:")?;
-        writeln!(f, "  Anker address:    {}", self.anker_address)?;
-        writeln!(f, "  Reserve account:  {}", self.reserve_account)?;
-        writeln!(f, "  bSOL mint:        {}", self.b_sol_mint_address)?;
+        writeln!(f, "  Anker address:           {}", self.anker_address)?;
+        writeln!(
+            f,
+            "  Reserve account (stSOL): {}",
+            self.st_sol_reserve_account
+        )?;
+        writeln!(f, "  Reserve account (UST):   {}", self.ust_reserve_account)?;
+        writeln!(f, "  bSOL mint:               {}", self.b_sol_mint_address)?;
         Ok(())
     }
 }
@@ -48,15 +57,17 @@ pub fn command_create_anker(
         anker::find_instance_address(opts.anker_program_id(), opts.solido_address());
     let (mint_authority, _bump_seed) =
         anker::find_mint_authority(opts.anker_program_id(), &anker_address);
-    let (reserve_account, _bump_seed) =
-        anker::find_reserve_account(opts.anker_program_id(), &anker_address);
+    let (st_sol_reserve_account, _bump_seed) =
+        anker::find_st_sol_reserve_account(opts.anker_program_id(), &anker_address);
+    let (ust_reserve_account, _bump_seed) =
+        anker::find_ust_reserve_account(opts.anker_program_id(), &anker_address);
     let (reserve_authority, _bump_seed) =
         anker::find_reserve_authority(opts.anker_program_id(), &anker_address);
 
     let b_sol_mint_address = {
-        if opts.mint_address() != &Pubkey::default() {
+        if opts.b_sol_mint_address() != &Pubkey::default() {
             // If we've been given a mint address, use that one.
-            *opts.mint_address()
+            *opts.b_sol_mint_address()
         } else {
             // If not, set up the Anker bSOL SPL token mint account.
             let mut instructions = Vec::new();
@@ -76,7 +87,7 @@ pub fn command_create_anker(
     };
 
     let instructions = [anker::instruction::initialize(
-        &opts.anker_program_id(),
+        opts.anker_program_id(),
         &anker::instruction::InitializeAccountsMeta {
             fund_rent_from: config.signer.pubkey(),
             anker: anker_address,
@@ -84,8 +95,14 @@ pub fn command_create_anker(
             solido_program: *opts.solido_program_id(),
             st_sol_mint: solido.st_sol_mint,
             b_sol_mint: b_sol_mint_address,
-            reserve_account,
+            st_sol_reserve_account,
+            ust_reserve_account,
             reserve_authority,
+            // TODO(#462): Make this configurable, but then we need to figure out
+            // the address format first.
+            terra_rewards_destination: Pubkey::new_unique(),
+            ust_mint: *opts.ust_mint_address(),
+            token_swap_pool: *opts.token_swap_pool(),
         },
     )];
 
@@ -93,7 +110,8 @@ pub fn command_create_anker(
 
     let result = CreateAnkerOutput {
         anker_address,
-        reserve_account,
+        st_sol_reserve_account,
+        ust_reserve_account,
         b_sol_mint_address,
     };
 
