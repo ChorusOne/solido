@@ -262,19 +262,16 @@ impl Context {
         .expect("Failed to initialize token pool.");
     }
 
-    pub async fn new_with_token_pool_rewards(deposit_amount: Lamports) -> Context {
-        let mut context = Context::new().await;
-        context.initialize_token_pool().await;
-        context.deposit(deposit_amount).await;
+    pub async fn initialize_token_pool_and_deposit(&mut self, deposit_amount: Lamports) {
+        self.initialize_token_pool().await;
+        self.deposit(deposit_amount).await;
         // Donate something to Solido's reserve so we can see some rewards.
-        context
-            .solido_context
-            .fund(context.solido_context.reserve_address, deposit_amount)
+        self.solido_context
+            .fund(self.solido_context.reserve_address, deposit_amount)
             .await;
         // Update the exchange rate so we see some rewards.
-        context.solido_context.advance_to_normal_epoch(1);
-        context.solido_context.update_exchange_rate().await;
-        context
+        self.solido_context.advance_to_normal_epoch(1);
+        self.solido_context.update_exchange_rate().await;
     }
 
     /// Create a new SPL token account holding bSOL, return its address.
