@@ -326,7 +326,7 @@ impl Anker {
                 "token_a_mint is expected to be either stSOL mint ({}), or UST mint ({}) but is {}",
                 st_sol_mint,
                 ust_mint,
-                new_token_swap.token_b_mint
+                new_token_swap.token_a_mint
             );
             return Err(AnkerError::WrongSplTokenSwapParameters.into());
         };

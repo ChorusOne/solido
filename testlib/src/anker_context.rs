@@ -99,19 +99,16 @@ impl TokenPoolContext {
         // Transfer some UST and StSOL to the pool.
         self.mint_ust(solido_context, &ust_address, ust_amount)
             .await;
+
         let solido = solido_context.get_solido().await;
         let sol_amount = solido
             .exchange_rate
             .exchange_st_sol(st_sol_amount)
             .expect("Some StSol should have been minted at this point.");
         let (st_sol_keypair, token_st_sol) = solido_context.deposit(sol_amount).await;
+        let balance = solido_context.get_st_sol_balance(token_st_sol).await;
         solido_context
-            .transfer_spl_token(
-                &token_st_sol,
-                &st_sol_address,
-                &st_sol_keypair,
-                st_sol_amount.0,
-            )
+            .transfer_spl_token(&token_st_sol, &st_sol_address, &st_sol_keypair, balance.0)
             .await;
     }
 
@@ -636,7 +633,7 @@ impl Context {
 /// initialize the token swap instance, it requires funded token pairs on the
 /// liquidity pool.
 /// To get a new Context with an initialized token pool, call
-/// `Context::new_with_initialized_token_pool`.
+/// `Context::new_with_token_pool_rewards`.
 pub async fn setup_token_pool(solido_context: &mut solido_context::Context) -> TokenPoolContext {
     let admin = solido_context.deterministic_keypair.new_keypair();
 
