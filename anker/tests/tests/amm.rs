@@ -13,11 +13,7 @@ async fn test_successful_token_swap() {
         .await;
 
     let ust_address = context
-        .solido_context
-        .create_spl_token_account(
-            context.token_pool_context.ust_mint_address,
-            st_sol_keypair.pubkey(),
-        )
+        .create_ust_token_account(st_sol_keypair.pubkey())
         .await;
 
     let amount_in = StLamports(1_000_000_000);

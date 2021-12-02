@@ -27,9 +27,9 @@ async fn test_successful_sell_rewards() {
     let ust_balance = context.get_ust_balance(context.ust_reserve).await;
     // Exchange rate is 12 stSol : 13 Sol
     // We have 1 stSOL, our rewards were 1 - (1 * 12/13) = 0.076923077
-    // Initially there are 10 StSol and 10 UST in the AMM
-    // We should get 10 - (10*10 / 10.076923077) = 0.07633587793834806 UST
-    assert_eq!(ust_balance, MicroUst(76335877));
+    // Initially there are 10 StSol and 10_000 UST in the AMM
+    // We should get 10000 - (10*10000 / 10.076923077) = 76.33587793834886 UST
+    assert_eq!(ust_balance, MicroUst(76_335_877));
 
     // Test claiming the reward again fails.
     let result = context.try_sell_rewards().await;

@@ -238,6 +238,7 @@ pub fn swap_rewards(
     anker: &Anker,
     accounts: &SellRewardsAccountsInfo,
 ) -> ProgramResult {
+    msg!("AMOUNT: {}", amount);
     if amount == StLamports(0) {
         msg!("Anker rewards must be greater than zero to be claimable.");
         return Err(AnkerError::ZeroRewardsToClaim.into());

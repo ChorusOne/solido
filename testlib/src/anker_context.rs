@@ -188,17 +188,16 @@ impl Context {
         context
     }
 
-    // Start a new Anker context with 10 StSOL and 10 UST in the liquidity
+    // Start a new Anker context with 10 StSOL and 10_000 UST in the liquidity
     // provider AMM and initialized token pool.
     pub async fn new_with_initialized_token_pool() -> Context {
-        const LIQUIDITY_AMOUNT: u64 = 10_000_000_000;
         let mut context = Context::new().await;
         context
             .token_pool_context
             .provide_liquidity(
                 &mut context.solido_context,
-                StLamports(LIQUIDITY_AMOUNT),
-                MicroUst(LIQUIDITY_AMOUNT),
+                StLamports(10_000_000_000), // 10 Sol
+                MicroUst(10_000_000_000),   // 10_000 UST
             )
             .await;
         let fees = spl_token_swap::curve::fees::Fees {
@@ -473,6 +472,13 @@ impl Context {
             spl_token::state::Account::unpack_from_slice(ust_account.data.as_slice())
                 .expect("UST account does not exist");
         MicroUst(ust_spl_account.amount)
+    }
+
+    // Create a new UST token account.
+    pub async fn create_ust_token_account(&mut self, owner: Pubkey) -> Pubkey {
+        self.solido_context
+            .create_spl_token_account(self.token_pool_context.ust_mint_address, owner)
+            .await
     }
 }
 
