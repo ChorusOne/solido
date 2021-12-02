@@ -313,14 +313,32 @@ impl Anker {
         )?;
 
         // Pool stSOL and UST token could be swapped.
-        let (pool_st_sol_account, pool_ust_account) =
+        let (pool_st_sol_account, pool_st_sol_mint, pool_ust_account, pool_ust_mint) =
             if &token_swap.token_a == accounts.pool_st_sol_account.key {
-                (token_swap.token_a, token_swap.token_b)
+                Ok((
+                    token_swap.token_a,
+                    token_swap.token_a_mint,
+                    token_swap.token_b,
+                    token_swap.token_b_mint,
+                ))
+            } else if &token_swap.token_a == accounts.pool_ust_account.key {
+                Ok((
+                    token_swap.token_b,
+                    token_swap.token_b_mint,
+                    token_swap.token_a,
+                    token_swap.token_a_mint,
+                ))
             } else {
-                (token_swap.token_b, token_swap.token_a)
-            };
+                msg!(
+                    "Could not find a match for token swap account {}, candidates were the StSol account {} or UST account {}",
+                    token_swap.token_a,
+                    accounts.pool_st_sol_account.key,
+                    accounts.pool_ust_account.key
+                );
+                Err(AnkerError::WrongSplTokenSwapParameters)
+            }?;
 
-        // check stSOL token.
+        // Check stSOL token.
         if &pool_st_sol_account != accounts.pool_st_sol_account.key {
             msg!(
             "Token Swap StSol token is different from what is stored in the instance, expected {}, found {}",
@@ -329,7 +347,7 @@ impl Anker {
         );
             return Err(AnkerError::WrongSplTokenSwapParameters.into());
         }
-        // `token_b` should be UST.
+        // Check UST token.
         if &pool_ust_account != accounts.pool_ust_account.key {
             msg!(
             "Token Swap UST token is different from what is stored in the instance, expected {}, found {}",
@@ -347,14 +365,6 @@ impl Anker {
         );
             return Err(AnkerError::WrongSplTokenSwapParameters.into());
         }
-
-        // Get mint from tokens, depending on the order.
-        let (pool_st_sol_mint, pool_ust_mint) =
-            if &token_swap.token_a_mint == accounts.st_sol_mint.key {
-                (token_swap.token_a_mint, token_swap.token_b_mint)
-            } else {
-                (token_swap.token_b_mint, token_swap.token_a_mint)
-            };
 
         // Check stSOL mint.
         if &pool_st_sol_mint != accounts.st_sol_mint.key {
