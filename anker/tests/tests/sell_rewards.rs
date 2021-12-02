@@ -1,6 +1,6 @@
 use anker::{error::AnkerError, token::MicroUst};
 use lido::token::Lamports;
-use solana_program::{program_pack::Pack, pubkey::Pubkey};
+use solana_program::pubkey::Pubkey;
 use solana_program_test::tokio;
 use std::mem;
 use testlib::{anker_context::Context, assert_solido_error};

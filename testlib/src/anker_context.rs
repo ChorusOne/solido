@@ -166,6 +166,13 @@ impl TokenPoolContext {
         .await
         .expect("Failed to initialize token pool.");
     }
+    pub fn get_authority(&self) -> Pubkey {
+        let (authority, _bump_seed) = Pubkey::find_program_address(
+            &[&self.swap_account.pubkey().to_bytes()[..]],
+            &anker::orca_token_swap_v2::id(),
+        );
+        authority
+    }
 }
 
 pub struct Context {
