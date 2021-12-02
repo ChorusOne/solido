@@ -16,7 +16,7 @@ use solana_program::{
 use crate::token::{self, BLamports};
 
 /// Size of the serialized [`Anker`] struct, in bytes.
-pub const ANKER_LEN: usize = 166;
+pub const ANKER_LEN: usize = 165;
 
 #[repr(C)]
 #[derive(
