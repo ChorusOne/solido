@@ -251,7 +251,7 @@ fn command_show_anker(
 
     let result = ShowAnkerOutput {
         anker_address: *opts.anker_address(),
-        anker_program_id: anker_program_id.clone(),
+        anker_program_id,
 
         solido_address: anker.solido,
         solido_program_id: anker.solido_program_id,
