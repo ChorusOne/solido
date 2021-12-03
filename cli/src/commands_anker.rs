@@ -3,7 +3,7 @@
 
 use std::fmt;
 
-use anker::token::BLamports;
+use anker::token::{BLamports, MicroUst};
 use clap::Clap;
 use lido::token::{Lamports, StLamports};
 use lido::util::serialize_b58;
@@ -12,7 +12,7 @@ use solana_program::pubkey::Pubkey;
 use solana_sdk::signer::Signer;
 
 use crate::config::{ConfigFile, CreateAnkerOpts, ShowAnkerOpts};
-use crate::error::Abort;
+use crate::error::{Abort, CliError};
 use crate::snapshot::Result;
 use crate::spl_token_utils::push_create_spl_token_mint;
 use crate::{print_output, SnapshotClientConfig, SnapshotConfig};
@@ -187,41 +187,88 @@ struct ShowAnkerOutput {
     #[serde(serialize_with = "serialize_b58")]
     st_sol_reserve: Pubkey,
 
-    // TODO(ruuda): Add UST reserve.
+    #[serde(serialize_with = "serialize_b58")]
+    ust_reserve: Pubkey,
+
+    ust_reserve_balance: MicroUst,
     st_sol_reserve_balance: StLamports,
     st_sol_reserve_value: Lamports,
-    // TODO(ruuda): Add UST reserve balance.
+
     b_sol_supply: BLamports,
 }
 
 impl fmt::Display for ShowAnkerOutput {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        writeln!(f, "Anker address:           {}", self.anker_address)?;
-        writeln!(f, "Anker program id:        {}", self.anker_program_id)?;
-        writeln!(f, "Solido address:          {}", self.solido_address)?;
-        writeln!(f, "Solido program id:       {}", self.solido_program_id)?;
-        writeln!(f, "bSOL mint:               {}", self.solido_program_id)?;
-        writeln!(f, "bSOL mint authority:     {}", self.b_sol_mint_authority)?;
-        writeln!(f, "Reserve authority:       {}", self.st_sol_reserve)?;
-        writeln!(f, "Reserve (stSOL) address: {}", self.reserve_authority)?;
-        writeln!(
-            f,
-            "Reserve (stSOL) balance: {}",
-            self.st_sol_reserve_balance
-        )?;
-        writeln!(
-            f,
-            "Reserve (stSOL) value:   {}",
-            self.st_sol_reserve_balance
-        )?;
-        writeln!(f, "bSOL supply:             {}", self.b_sol_supply)?;
+        writeln!(f, "Anker address:         {}", self.anker_address)?;
+        writeln!(f, "Anker program id:      {}", self.anker_program_id)?;
+        writeln!(f, "Solido address:        {}", self.solido_address)?;
+        writeln!(f, "Solido program id:     {}", self.solido_program_id)?;
+        writeln!(f, "bSOL mint:             {}", self.solido_program_id)?;
+        writeln!(f, "bSOL mint authority:   {}", self.b_sol_mint_authority)?;
+        writeln!(f, "bSOL supply:           {}", self.b_sol_supply)?;
+        writeln!(f, "Reserve authority:     {}", self.st_sol_reserve)?;
+        writeln!(f, "stSOL reserve address: {}", self.reserve_authority)?;
+        writeln!(f, "stSOL reserve balance: {}", self.st_sol_reserve_balance)?;
+        writeln!(f, "stSOL reserve value:   {}", self.st_sol_reserve_balance)?;
+        writeln!(f, "UST reserve address:   {}", self.ust_reserve)?;
+        writeln!(f, "UST reserve balance:   {}", self.ust_reserve_balance)?;
         Ok(())
     }
 }
 
 fn command_show_anker(
-    _config: &mut SnapshotConfig,
-    _opts: &ShowAnkerOpts,
+    config: &mut SnapshotConfig,
+    opts: &ShowAnkerOpts,
 ) -> Result<ShowAnkerOutput> {
-    unimplemented!("TODO");
+    let client = &mut config.client;
+    let anker_account = client.get_account(opts.anker_address())?;
+    let anker_program_id = anker_account.owner;
+    let anker = client.get_anker(opts.anker_address())?;
+    let solido = client.get_solido(&anker.solido)?;
+
+    let (mint_authority, _seed) =
+        anker::find_mint_authority(&anker_program_id, opts.anker_address());
+    let (reserve_authority, _seed) =
+        anker::find_reserve_authority(&anker_program_id, opts.anker_address());
+    let (st_sol_reserve, _seed) =
+        anker::find_st_sol_reserve_account(&anker_program_id, opts.anker_address());
+    let (ust_reserve, _seed) =
+        anker::find_ust_reserve_account(&anker_program_id, opts.anker_address());
+
+    let st_sol_reserve_balance = StLamports(client.get_spl_token_balance(&st_sol_reserve)?);
+    let ust_reserve_balance = MicroUst(client.get_spl_token_balance(&ust_reserve)?);
+
+    let st_sol_reserve_value = solido
+        .exchange_rate
+        .exchange_st_sol(st_sol_reserve_balance)
+        .map_err(|err| {
+            CliError::with_cause(
+                "Failed to convert stSOL to SOL at Solido exchange rate.",
+                err,
+            )
+        })?;
+    let b_sol_mint = client.get_spl_token_mint(&anker.b_sol_mint)?;
+    let b_sol_supply = BLamports(b_sol_mint.supply);
+
+    let result = ShowAnkerOutput {
+        anker_address: *opts.anker_address(),
+        anker_program_id: anker_program_id.clone(),
+
+        solido_address: anker.solido,
+        solido_program_id: anker.solido_program_id,
+
+        b_sol_mint: anker.b_sol_mint,
+        b_sol_mint_authority: mint_authority,
+        reserve_authority,
+        st_sol_reserve,
+        ust_reserve,
+
+        st_sol_reserve_balance,
+        st_sol_reserve_value,
+
+        ust_reserve_balance,
+        b_sol_supply,
+    };
+
+    Ok(result)
 }
