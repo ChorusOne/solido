@@ -12,7 +12,7 @@ use solana_program::pubkey::Pubkey;
 use solana_sdk::signer::Signer;
 
 use crate::config::{ConfigFile, CreateAnkerOpts, ShowAnkerOpts};
-use crate::error::{Abort, CliError};
+use crate::error::Abort;
 use crate::snapshot::Result;
 use crate::spl_token_utils::push_create_spl_token_mint;
 use crate::{print_output, SnapshotClientConfig, SnapshotConfig};
@@ -192,7 +192,7 @@ struct ShowAnkerOutput {
 
     ust_reserve_balance: MicroUst,
     st_sol_reserve_balance: StLamports,
-    st_sol_reserve_value: Lamports,
+    st_sol_reserve_value: Option<Lamports>,
 
     b_sol_supply: BLamports,
 }
@@ -203,13 +203,17 @@ impl fmt::Display for ShowAnkerOutput {
         writeln!(f, "Anker program id:      {}", self.anker_program_id)?;
         writeln!(f, "Solido address:        {}", self.solido_address)?;
         writeln!(f, "Solido program id:     {}", self.solido_program_id)?;
-        writeln!(f, "bSOL mint:             {}", self.solido_program_id)?;
+        writeln!(f, "bSOL mint:             {}", self.b_sol_mint)?;
         writeln!(f, "bSOL mint authority:   {}", self.b_sol_mint_authority)?;
         writeln!(f, "bSOL supply:           {}", self.b_sol_supply)?;
         writeln!(f, "Reserve authority:     {}", self.st_sol_reserve)?;
         writeln!(f, "stSOL reserve address: {}", self.reserve_authority)?;
         writeln!(f, "stSOL reserve balance: {}", self.st_sol_reserve_balance)?;
-        writeln!(f, "stSOL reserve value:   {}", self.st_sol_reserve_balance)?;
+        write!(f, "stSOL reserve value:   ")?;
+        match self.st_sol_reserve_value {
+            Some(sol_value) => writeln!(f, "{}", sol_value),
+            None => writeln!(f, "Undefined; does Solido have nonzero deposits?"),
+        }?;
         writeln!(f, "UST reserve address:   {}", self.ust_reserve)?;
         writeln!(f, "UST reserve balance:   {}", self.ust_reserve_balance)?;
         Ok(())
@@ -241,12 +245,7 @@ fn command_show_anker(
     let st_sol_reserve_value = solido
         .exchange_rate
         .exchange_st_sol(st_sol_reserve_balance)
-        .map_err(|err| {
-            CliError::with_cause(
-                "Failed to convert stSOL to SOL at Solido exchange rate.",
-                err,
-            )
-        })?;
+        .ok();
     let b_sol_mint = client.get_spl_token_mint(&anker.b_sol_mint)?;
     let b_sol_supply = BLamports(b_sol_mint.supply);
 
