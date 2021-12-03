@@ -12,16 +12,12 @@ default localhost port, and it expects a keypair at ~/.config/solana/id.json
 that corresponds to a sufficiently funded account.
 """
 import os
-import json
 
 from util import (
-    TestAccount,
-    create_spl_token_account,
     create_test_account,
-    create_vote_account,
+    get_approve_and_execute,
     get_solido_program_path,
     multisig,
-    solana,
     solana_program_deploy,
     solido,
     spl_token,
@@ -76,25 +72,11 @@ multisig_pda = multisig_data['multisig_program_derived_address']
 print(f'> Created instance at {multisig_instance}.')
 
 
-def approve_and_execute(
-    transaction_to_approve: str,
-    signer: TestAccount,
-) -> None:
-    """
-    Helper to execute a multisig transaction. We set the threshold to 1 in this
-    test (we assume the multisig works correctly, this is tested elsewhere), and
-    the proposer already approves, so only executing is left to do.
-    """
-    multisig(
-        'execute-transaction',
-        '--multisig-program-id',
-        multisig_program_id,
-        '--multisig-address',
-        multisig_instance,
-        '--transaction-address',
-        transaction_to_approve,
-        keypair_path=signer.keypair_path,
-    )
+approve_and_execute = get_approve_and_execute(
+    multisig_program_id=multisig_program_id,
+    multisig_instance=multisig_instance,
+    signer_keypair_paths=[t.keypair_path for t in test_addrs],
+)
 
 
 print('\nCreating Solido instance ...')
