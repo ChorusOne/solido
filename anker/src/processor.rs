@@ -22,11 +22,12 @@ use crate::{
     instruction::{
         AnkerInstruction, ChangeTerraRewardsDestinationAccountsInfo,
         ChangeTokenSwapPoolAccountsInfo, DepositAccountsInfo, InitializeAccountsInfo,
-        SellRewardsAccountsInfo, WithdrawAccountsInfo,
+        SellRewardsAccountsInfo, SendRewardsAccountsInfo, WithdrawAccountsInfo,
     },
     logic::{burn_b_sol, deserialize_anker, mint_b_sol_to},
-    state::Anker,
-    token::BLamports,
+    state::{Anker, WormholeParameters},
+    token::{BLamports, MicroUst},
+    wormhole::get_wormhole_transfer_instruction,
 };
 use crate::{find_ust_reserve_account, ANKER_STSOL_RESERVE_ACCOUNT, ANKER_UST_RESERVE_ACCOUNT};
 use crate::{
@@ -122,6 +123,10 @@ fn process_initialize(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> Prog
         solido: *accounts.solido.key,
         token_swap_pool: *accounts.token_swap_pool.key,
         terra_rewards_destination: *accounts.terra_rewards_destination.key,
+        wormhole_parameters: WormholeParameters {
+            core_bridge_program_id: *accounts.wormhole_core_bridge_program_id.key,
+            token_bridge_program_id: *accounts.wormhole_token_bridge_program_id.key,
+        },
         self_bump_seed: anker_bump_seed,
         mint_authority_bump_seed: mint_bump_seed,
         reserve_authority_bump_seed,
@@ -369,6 +374,59 @@ fn process_change_token_swap_pool(
     anker.save(accounts.anker)
 }
 
+/// Send rewards via Wormhole from the UST reserve address to Terra.
+fn process_send_rewards(
+    program_id: &Pubkey,
+    accounts_raw: &[AccountInfo],
+    nonce: u32,
+    fee: u64,
+) -> ProgramResult {
+    let accounts = SendRewardsAccountsInfo::try_from_slice(accounts_raw)?;
+    let (solido, anker) = deserialize_anker(program_id, accounts.anker, accounts.solido)?;
+    let wormhole_transfer_args = anker.check_send_rewards(&solido, &accounts)?;
+    let ust_reserve_state =
+        spl_token::state::Account::unpack_from_slice(&accounts.from.data.borrow())?;
+    let reserve_ust_amount = MicroUst(ust_reserve_state.amount);
+    let payload = crate::wormhole::Payload::new(
+        nonce,
+        reserve_ust_amount,
+        fee,
+        anker.terra_rewards_destination.to_bytes(),
+    );
+
+    // Send UST tokens via Wormhole 🤞.
+    let reserve_seeds = [
+        accounts.anker.key.as_ref(),
+        ANKER_RESERVE_AUTHORITY,
+        &[anker.reserve_authority_bump_seed],
+    ];
+
+    invoke_signed(
+        &get_wormhole_transfer_instruction(&payload, &wormhole_transfer_args),
+        &[
+            accounts.payer.clone(),
+            accounts.config_key.clone(),
+            accounts.from.clone(),
+            accounts.mint.clone(),
+            accounts.custody_key.clone(),
+            accounts.authority_signer_key.clone(),
+            accounts.custody_signer_key.clone(),
+            accounts.bridge_config.clone(),
+            accounts.message.clone(),
+            accounts.emitter_key.clone(),
+            accounts.sequence_key.clone(),
+            accounts.fee_collector_key.clone(),
+            accounts.sysvar_clock.clone(),
+            accounts.sysvar_rent.clone(),
+            accounts.system_program.clone(),
+            accounts.wormhole_core_bridge_program_id.clone(),
+            accounts.spl_token.clone(),
+            accounts.wormhole_token_bridge_program_id.clone(),
+        ],
+        &[&reserve_seeds[..]],
+    )
+}
+
 /// Processes [Instruction](enum.Instruction.html).
 pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> ProgramResult {
     let instruction = AnkerInstruction::try_from_slice(input)?;
@@ -382,6 +440,9 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
         }
         AnkerInstruction::ChangeTokenSwapPool => {
             process_change_token_swap_pool(program_id, accounts)
+        }
+        AnkerInstruction::SendRewards { nonce, fee } => {
+            process_send_rewards(program_id, accounts, nonce, fee)
         }
     }
 }

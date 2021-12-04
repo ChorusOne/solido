@@ -37,6 +37,11 @@ pub enum AnkerInstruction {
 
     /// Sell rewards to the UST reserve.
     SellRewards,
+    /// Transfer from the UST reserve to terra through Wormhole.
+    SendRewards {
+        nonce: u32, // FIXME: Check this nonce business.
+        fee: u64,   // FIXME: I don't know if this can be variable or not. Check it.
+    },
     /// Change the Anker's rewards destination address on Terra:
     /// `terra_rewards_destination`.
     ChangeTerraRewardsDestination,
@@ -70,6 +75,15 @@ accounts_struct! {
             is_writable: false,
         },
         pub solido_program {
+            is_signer: false,
+            is_writable: false,
+        },
+        // Store wormhole program ids
+        pub wormhole_core_bridge_program_id {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub wormhole_token_bridge_program_id {
             is_signer: false,
             is_writable: false,
         },
@@ -375,6 +389,105 @@ pub fn change_token_swap_pool(
     accounts: &ChangeTokenSwapPoolAccountsMeta,
 ) -> Instruction {
     let data = AnkerInstruction::ChangeTokenSwapPool;
+    Instruction {
+        program_id: *program_id,
+        accounts: accounts.to_vec(),
+        data: data.to_vec(),
+    }
+}
+
+accounts_struct! {
+    SendRewardsAccountsMeta, SendRewardsAccountsInfo {
+        // Needs to be writtable in order to save new Token Pool address.
+        pub anker {
+            is_signer: false,
+            is_writable: true,
+        },
+        // So we can get the UST minter.
+        pub token_swap_pool {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub solido {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub reserve_authority {
+            is_signer: false,
+            is_writable: false,
+        },
+        // Accounts for Wormhole swap.
+        pub wormhole_token_bridge_program_id {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub wormhole_core_bridge_program_id {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub payer {
+            is_signer: true,
+            is_writable: true,
+        },
+        pub config_key {
+            is_signer: false,
+            is_writable: false,
+        },
+        // From should be the UST token address.
+        pub from {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub mint {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub custody_key {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub authority_signer_key {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub custody_signer_key {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub bridge_config {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub message {
+            is_signer: true,
+            is_writable: true,
+        },
+        pub emitter_key {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub sequence_key {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub fee_collector_key {
+            is_signer: false,
+            is_writable: true,
+        },
+        const sysvar_clock = sysvar::clock::id(),
+        const sysvar_rent = sysvar::rent::id(),
+        const system_program = system_program::id(),
+        const spl_token = spl_token::id(),
+    }
+}
+
+pub fn send_rewards(
+    program_id: &Pubkey,
+    accounts: &SendRewardsAccountsMeta,
+    nonce: u32,
+    fee: u64,
+) -> Instruction {
+    let data = AnkerInstruction::SendRewards { nonce, fee };
     Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),

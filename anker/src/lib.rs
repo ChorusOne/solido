@@ -13,6 +13,7 @@ pub mod instruction;
 pub mod processor;
 pub mod state;
 pub mod token;
+pub mod wormhole;
 
 /// Mint authority, mints bSOL.
 pub const ANKER_MINT_AUTHORITY: &[u8] = b"mint_authority";

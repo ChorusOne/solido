@@ -38,6 +38,9 @@ pub enum AnkerError {
 
     /// The amount of rewards to be claimed are zero.
     ZeroRewardsToClaim = 10,
+
+    /// Arguments/Accounts for SendRewards are wrong.
+    InvalidSendRewardsParameters = 11,
 }
 
 // Just reuse the generated Debug impl for Display. It shows the variant names.

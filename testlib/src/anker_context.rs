@@ -221,6 +221,8 @@ impl Context {
                     anker,
                     solido: solido_context.solido.pubkey(),
                     solido_program: solido_context::id(),
+                    wormhole_core_bridge_program_id: Pubkey::new_unique(),
+                    wormhole_token_bridge_program_id: Pubkey::new_unique(),
                     st_sol_mint: solido_context.st_sol_mint,
                     b_sol_mint,
                     st_sol_reserve_account: st_sol_reserve,

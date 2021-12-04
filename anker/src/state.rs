@@ -1,4 +1,5 @@
-use crate::instruction::SellRewardsAccountsInfo;
+use crate::instruction::{SellRewardsAccountsInfo, SendRewardsAccountsInfo};
+use crate::wormhole::{check_wormhole_account, WormholeTransferArgs};
 use crate::{
     error::AnkerError, ANKER_MINT_AUTHORITY, ANKER_RESERVE_AUTHORITY, ANKER_STSOL_RESERVE_ACCOUNT,
     ANKER_UST_RESERVE_ACCOUNT,
@@ -23,6 +24,17 @@ pub const ANKER_LEN: usize = 165;
 #[derive(
     Clone, Debug, Default, BorshDeserialize, BorshSerialize, BorshSchema, Eq, PartialEq, Serialize,
 )]
+pub struct WormholeParameters {
+    /// The Wormhole program associated with this instance.
+    pub core_bridge_program_id: Pubkey,
+    /// The Wormhole program for token transfers associated with this instance.
+    pub token_bridge_program_id: Pubkey,
+}
+
+#[repr(C)]
+#[derive(
+    Clone, Debug, Default, BorshDeserialize, BorshSerialize, BorshSchema, Eq, PartialEq, Serialize,
+)]
 pub struct Anker {
     /// The Solido program that owns the `solido` instance.
     #[serde(serialize_with = "serialize_b58")]
@@ -41,9 +53,14 @@ pub struct Anker {
     pub token_swap_pool: Pubkey,
 
     /// Destination of the rewards on Terra, paid in UST.
-    /// FIXME: Confirm Terra addresses have length 32 bytes.
+    /// Although Terra addresses are variable in size, on Wormhole they must
+    /// have 32 bytes.
+    /// FIXME: Change to another type.
     #[serde(serialize_with = "serialize_b58")]
     pub terra_rewards_destination: Pubkey,
+
+    /// Wormhole parameters associated with this instance.
+    pub wormhole_parameters: WormholeParameters,
 
     /// Bump seed for the derived address that this Anker instance should live at.
     pub self_bump_seed: u8,
@@ -483,6 +500,83 @@ impl Anker {
         }
 
         Ok(())
+    }
+
+    pub fn check_send_rewards(
+        &self,
+        solido: &Lido,
+        accounts: &SendRewardsAccountsInfo,
+    ) -> Result<WormholeTransferArgs, ProgramError> {
+        check_wormhole_account(
+            "token bridge program",
+            &self.wormhole_parameters.token_bridge_program_id,
+            accounts.wormhole_token_bridge_program_id.key,
+        )?;
+        check_wormhole_account(
+            "core bridge program",
+            &self.wormhole_parameters.core_bridge_program_id,
+            accounts.wormhole_core_bridge_program_id.key,
+        )?;
+
+        // Get UST mint from token swap.
+        let token_swap_pool = self.get_token_swap_instance(accounts.token_swap_pool)?;
+        // We trust the minters stored in solido and the token_swap pool.
+        let mint = if solido.st_sol_mint == token_swap_pool.token_a_mint {
+            token_swap_pool.token_a_mint
+        } else {
+            token_swap_pool.token_b_mint
+        };
+
+        let wormhole_transfer_args = WormholeTransferArgs::new(
+            self.wormhole_parameters.token_bridge_program_id,
+            self.wormhole_parameters.core_bridge_program_id,
+            mint,
+            *accounts.payer.key,
+            self.terra_rewards_destination,
+            *accounts.message.key,
+        );
+
+        check_wormhole_account(
+            "config key",
+            &wormhole_transfer_args.config_key,
+            accounts.config_key.key,
+        )?;
+        check_wormhole_account(
+            "custody key",
+            &wormhole_transfer_args.custody_key,
+            accounts.custody_key.key,
+        )?;
+        check_wormhole_account(
+            "authority signer key",
+            &wormhole_transfer_args.authority_signer_key,
+            accounts.authority_signer_key.key,
+        )?;
+        check_wormhole_account(
+            "custody signer key",
+            &wormhole_transfer_args.custody_signer_key,
+            accounts.custody_signer_key.key,
+        )?;
+        check_wormhole_account(
+            "bridge config",
+            &wormhole_transfer_args.bridge_config,
+            accounts.bridge_config.key,
+        )?;
+        check_wormhole_account(
+            "emitter key",
+            &wormhole_transfer_args.emitter_key,
+            accounts.emitter_key.key,
+        )?;
+        check_wormhole_account(
+            "sequence key",
+            &wormhole_transfer_args.sequence_key,
+            accounts.sequence_key.key,
+        )?;
+        check_wormhole_account(
+            "fee collector key",
+            &wormhole_transfer_args.fee_collector_key,
+            accounts.fee_collector_key.key,
+        )?;
+        Ok(wormhole_transfer_args)
     }
 }
 
