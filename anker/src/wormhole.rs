@@ -160,7 +160,6 @@ pub fn get_wormhole_transfer_instruction(
 fn test_get_wormhole_instruction() {
     // wormDTUJ6AWPNvk59vGQbDvGJmqbDTdgWgAqcLBCgUb : Wormhole token bridge program id.
     // worm2ZoG2kUd4vFXhvjh93UUH596ayRfgQ2MgjNMTth : Wormhole core bridge program id.
-    use solana_sdk::signature::{Keypair, Signer};
     use std::str::FromStr;
 
     let wormhole_chain_id_ethereum = 2;
