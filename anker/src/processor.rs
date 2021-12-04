@@ -122,7 +122,7 @@ fn process_initialize(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> Prog
         solido_program_id: *accounts.solido_program.key,
         solido: *accounts.solido.key,
         token_swap_pool: *accounts.token_swap_pool.key,
-        terra_rewards_destination: *accounts.terra_rewards_destination.key,
+        terra_rewards_destination: accounts.terra_rewards_destination.key.to_bytes(),
         wormhole_parameters: WormholeParameters {
             core_bridge_program_id: *accounts.wormhole_core_bridge_program_id.key,
             token_bridge_program_id: *accounts.wormhole_token_bridge_program_id.key,
@@ -349,7 +349,7 @@ fn process_change_terra_rewards_destination(
     let (solido, mut anker) = deserialize_anker(program_id, accounts.anker, accounts.solido)?;
     solido.check_manager(accounts.manager)?;
 
-    anker.terra_rewards_destination = *accounts.terra_rewards_destination.key;
+    anker.terra_rewards_destination = accounts.terra_rewards_destination.key.to_bytes();
     anker.save(accounts.anker)
 }
 
@@ -391,7 +391,7 @@ fn process_send_rewards(
         nonce,
         reserve_ust_amount,
         fee,
-        anker.terra_rewards_destination.to_bytes(),
+        anker.terra_rewards_destination,
     );
 
     // Send UST tokens via Wormhole 🤞.

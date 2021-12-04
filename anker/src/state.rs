@@ -1,5 +1,5 @@
 use crate::instruction::{SellRewardsAccountsInfo, SendRewardsAccountsInfo};
-use crate::wormhole::{check_wormhole_account, WormholeTransferArgs};
+use crate::wormhole::{check_wormhole_account, ForeignAddress, WormholeTransferArgs};
 use crate::{
     error::AnkerError, ANKER_MINT_AUTHORITY, ANKER_RESERVE_AUTHORITY, ANKER_STSOL_RESERVE_ACCOUNT,
     ANKER_UST_RESERVE_ACCOUNT,
@@ -56,8 +56,7 @@ pub struct Anker {
     /// Although Terra addresses are variable in size, on Wormhole they must
     /// have 32 bytes.
     /// FIXME: Change to another type.
-    #[serde(serialize_with = "serialize_b58")]
-    pub terra_rewards_destination: Pubkey,
+    pub terra_rewards_destination: ForeignAddress,
 
     /// Wormhole parameters associated with this instance.
     pub wormhole_parameters: WormholeParameters,
