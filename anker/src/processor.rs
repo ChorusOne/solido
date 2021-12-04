@@ -383,6 +383,7 @@ fn process_send_rewards(
 ) -> ProgramResult {
     let accounts = SendRewardsAccountsInfo::try_from_slice(accounts_raw)?;
     let (solido, anker) = deserialize_anker(program_id, accounts.anker, accounts.solido)?;
+    anker.check_ust_reserve_address(program_id, accounts.anker.key, accounts.from)?;
     let wormhole_transfer_args = anker.check_send_rewards(&solido, &accounts)?;
     let ust_reserve_state =
         spl_token::state::Account::unpack_from_slice(&accounts.from.data.borrow())?;
