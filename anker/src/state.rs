@@ -532,7 +532,7 @@ impl Anker {
             self.wormhole_parameters.core_bridge_program_id,
             mint,
             *accounts.payer.key,
-            self.terra_rewards_destination,
+            *accounts.from.key,
             *accounts.message.key,
         );
 
