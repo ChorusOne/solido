@@ -11,12 +11,14 @@ use solana_program::{
     system_program, sysvar,
 };
 
-use crate::token::BLamports;
+use crate::{token::BLamports, wormhole::ForeignAddress};
 
 #[repr(C)]
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
 pub enum AnkerInstruction {
-    Initialize,
+    Initialize {
+        terra_rewards_destination: ForeignAddress,
+    },
 
     /// Deposit a given amount of StSOL, gets bSOL in return.
     ///
@@ -44,7 +46,9 @@ pub enum AnkerInstruction {
     },
     /// Change the Anker's rewards destination address on Terra:
     /// `terra_rewards_destination`.
-    ChangeTerraRewardsDestination,
+    ChangeTerraRewardsDestination {
+        terra_rewards_destination: ForeignAddress,
+    },
     /// Change the token pool instance.
     ChangeTokenSwapPool,
 }
@@ -112,10 +116,6 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
-        pub terra_rewards_destination {
-            is_signer: false,
-            is_writable: false,
-        },
         pub ust_mint {
             is_signer: false,
             is_writable: false,
@@ -126,8 +126,14 @@ accounts_struct! {
     }
 }
 
-pub fn initialize(program_id: &Pubkey, accounts: &InitializeAccountsMeta) -> Instruction {
-    let data = AnkerInstruction::Initialize;
+pub fn initialize(
+    program_id: &Pubkey,
+    accounts: &InitializeAccountsMeta,
+    terra_rewards_destination: ForeignAddress,
+) -> Instruction {
+    let data = AnkerInstruction::Initialize {
+        terra_rewards_destination,
+    };
     Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
@@ -339,18 +345,17 @@ accounts_struct! {
             is_signer: true,
             is_writable: false,
         },
-        pub terra_rewards_destination {
-            is_signer: false,
-            is_writable: false,
-        },
     }
 }
 
 pub fn change_terra_rewards_destination(
     program_id: &Pubkey,
     accounts: &ChangeTerraRewardsDestinationAccountsMeta,
+    terra_rewards_destination: ForeignAddress,
 ) -> Instruction {
-    let data = AnkerInstruction::ChangeTerraRewardsDestination;
+    let data = AnkerInstruction::ChangeTerraRewardsDestination {
+        terra_rewards_destination,
+    };
     Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),

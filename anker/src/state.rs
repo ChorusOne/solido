@@ -55,7 +55,6 @@ pub struct Anker {
     /// Destination of the rewards on Terra, paid in UST.
     /// Although Terra addresses are variable in size, on Wormhole they must
     /// have 32 bytes.
-    /// FIXME: Change to another type.
     pub terra_rewards_destination: ForeignAddress,
 
     /// Wormhole parameters associated with this instance.

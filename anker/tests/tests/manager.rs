@@ -89,7 +89,7 @@ async fn test_change_token_swap_pool_different_manager() {
 #[tokio::test]
 async fn test_successful_change_terra_rewards_destination() {
     let mut context = Context::new().await;
-    let new_terra_rewards_address = Pubkey::new_unique();
+    let new_terra_rewards_address = Pubkey::new_unique().to_bytes();
     let manager = Keypair::from_bytes(&context.solido_context.manager.to_bytes()).unwrap();
     let result = context
         .try_change_terra_rewards_destination(&manager, new_terra_rewards_address)
@@ -102,7 +102,7 @@ async fn test_successful_change_terra_rewards_destination() {
 #[tokio::test]
 async fn test_change_terra_rewards_destination_different_manager() {
     let mut context = Context::new().await;
-    let new_terra_rewards_address = Pubkey::new_unique();
+    let new_terra_rewards_address = Pubkey::new_unique().to_bytes();
     let wrong_manager = context.solido_context.deterministic_keypair.new_keypair();
     let anker = context.get_anker().await;
     let result = context
