@@ -278,6 +278,10 @@ impl Anker {
         solido: &Lido,
         accounts: &ChangeTokenSwapPoolAccountsInfo,
     ) -> ProgramResult {
+        // We don't check that the old pool's owner is the same as the new
+        // pool's owner. It's the manager's responsibility to replace the token
+        // pool swap with a valid one. This also allows us to change the pool
+        // program, if necessary.
         // Check if the token swap account is the same one as the stored in the instance.
         self.check_token_swap_pool(accounts.current_token_swap_pool)?;
         let current_token_swap = get_token_swap_instance(accounts.current_token_swap_pool)?;
@@ -297,7 +301,7 @@ impl Anker {
             )
         };
 
-        // get the stSOL and UST pool token, and verify if the minters are right.
+        // Get the stSOL and UST pool token, and verify that the minters are right.
         if new_token_swap.token_a_mint == st_sol_mint {
             // token_a_mint is stSOL mint.
             if new_token_swap.token_b_mint != ust_mint {
