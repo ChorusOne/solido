@@ -3,6 +3,7 @@
 
 //! Test context for testing Anker, the Anchor Protocol integration.
 
+use solana_program::borsh::try_from_slice_unchecked;
 use solana_program::program_pack::Pack;
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::{Keypair, Signer};
@@ -98,20 +99,80 @@ impl TokenPoolContext {
         // Transfer some UST and StSOL to the pool.
         self.mint_ust(solido_context, &ust_address, ust_amount)
             .await;
+
         let solido = solido_context.get_solido().await;
         let sol_amount = solido
             .exchange_rate
             .exchange_st_sol(st_sol_amount)
             .expect("Some StSol should have been minted at this point.");
         let (st_sol_keypair, token_st_sol) = solido_context.deposit(sol_amount).await;
+        let balance = solido_context.get_st_sol_balance(token_st_sol).await;
         solido_context
-            .transfer_spl_token(
-                &token_st_sol,
-                &st_sol_address,
-                &st_sol_keypair,
-                st_sol_amount.0,
-            )
+            .transfer_spl_token(&token_st_sol, &st_sol_address, &st_sol_keypair, balance.0)
             .await;
+    }
+
+    // Initialize token pool.
+    pub async fn initialize_token_pool(&mut self, solido_context: &mut solido_context::Context) {
+        self.provide_liquidity(
+            solido_context,
+            StLamports(10_000_000_000),
+            MicroUst(10_000_000_000),
+        )
+        .await;
+        let fees = spl_token_swap::curve::fees::Fees {
+            trade_fee_numerator: 0,
+            trade_fee_denominator: 10,
+            owner_trade_fee_numerator: 0,
+            owner_trade_fee_denominator: 10,
+            owner_withdraw_fee_numerator: 0,
+            owner_withdraw_fee_denominator: 10,
+            host_fee_numerator: 0,
+            host_fee_denominator: 10,
+        };
+        let swap_curve = SwapCurve {
+            curve_type: CurveType::ConstantProduct,
+            calculator: Box::new(ConstantProductCurve),
+        };
+
+        let (authority_pubkey, authority_bump_seed) = Pubkey::find_program_address(
+            &[&self.swap_account.pubkey().to_bytes()[..]],
+            &anker::orca_token_swap_v2::id(),
+        );
+
+        let pool_instruction = spl_token_swap::instruction::initialize(
+            &anker::orca_token_swap_v2::id(),
+            &spl_token::id(),
+            &self.swap_account.pubkey(),
+            &authority_pubkey,
+            &self.token_a,
+            &self.token_b,
+            &self.mint_address,
+            &self.fee_address,
+            &self.token_address,
+            authority_bump_seed,
+            fees,
+            swap_curve,
+        )
+        .expect("Failed to create token pool initialization instruction.");
+
+        send_transaction(
+            &mut solido_context.context,
+            &mut solido_context.nonce,
+            &[pool_instruction],
+            vec![&self.swap_account],
+        )
+        .await
+        .expect("Failed to initialize token pool.");
+    }
+
+    /// Get the Token Swap Pool authority.
+    pub fn get_authority(&self) -> Pubkey {
+        let (authority, _bump_seed) = Pubkey::find_program_address(
+            &[&self.swap_account.pubkey().to_bytes()[..]],
+            &anker::orca_token_swap_v2::id(),
+        );
+        authority
     }
 }
 
@@ -207,63 +268,10 @@ impl Context {
         context
     }
 
-    // Initialize token pool.
-    pub async fn initialize_token_pool(&mut self) {
-        self.token_pool_context
-            .provide_liquidity(
-                &mut self.solido_context,
-                StLamports(10_000_000_000), // 10 Sol
-                MicroUst(10_000_000_000),   // 10_000 UST
-            )
-            .await;
-        let fees = spl_token_swap::curve::fees::Fees {
-            trade_fee_numerator: 0,
-            trade_fee_denominator: 10,
-            owner_trade_fee_numerator: 0,
-            owner_trade_fee_denominator: 10,
-            owner_withdraw_fee_numerator: 0,
-            owner_withdraw_fee_denominator: 10,
-            host_fee_numerator: 0,
-            host_fee_denominator: 10,
-        };
-        let swap_curve = SwapCurve {
-            curve_type: CurveType::ConstantProduct,
-            calculator: Box::new(ConstantProductCurve),
-        };
-
-        let (authority_pubkey, authority_bump_seed) = Pubkey::find_program_address(
-            &[&self.token_pool_context.swap_account.pubkey().to_bytes()[..]],
-            &anker::orca_token_swap_v2::id(),
-        );
-
-        let pool_instruction = spl_token_swap::instruction::initialize(
-            &anker::orca_token_swap_v2::id(),
-            &spl_token::id(),
-            &self.token_pool_context.swap_account.pubkey(),
-            &authority_pubkey,
-            &self.token_pool_context.token_a,
-            &self.token_pool_context.token_b,
-            &self.token_pool_context.mint_address,
-            &self.token_pool_context.fee_address,
-            &self.token_pool_context.token_address,
-            authority_bump_seed,
-            fees,
-            swap_curve,
-        )
-        .expect("Failed to create token pool initialization instruction.");
-
-        send_transaction(
-            &mut self.solido_context.context,
-            &mut self.solido_context.nonce,
-            &[pool_instruction],
-            vec![&self.token_pool_context.swap_account],
-        )
-        .await
-        .expect("Failed to initialize token pool.");
-    }
-
     pub async fn initialize_token_pool_and_deposit(&mut self, deposit_amount: Lamports) {
-        self.initialize_token_pool().await;
+        self.token_pool_context
+            .initialize_token_pool(&mut self.solido_context)
+            .await;
         self.deposit(deposit_amount).await;
         // Donate something to Solido's reserve so we can see some rewards.
         self.solido_context
@@ -516,6 +524,61 @@ impl Context {
             .create_spl_token_account(self.token_pool_context.ust_mint_address, owner)
             .await
     }
+
+    pub async fn try_change_terra_rewards_destination(
+        &mut self,
+        manager: &Keypair,
+        terra_rewards_destination: Pubkey,
+    ) -> transport::Result<()> {
+        send_transaction(
+            &mut self.solido_context.context,
+            &mut self.solido_context.nonce,
+            &[instruction::change_terra_rewards_destination(
+                &id(),
+                &instruction::ChangeTerraRewardsDestinationAccountsMeta {
+                    anker: self.anker,
+                    solido: self.solido_context.solido.pubkey(),
+                    manager: manager.pubkey(),
+                    terra_rewards_destination,
+                },
+            )],
+            vec![manager],
+        )
+        .await?;
+        Ok(())
+    }
+
+    pub async fn try_change_token_swap_pool(
+        &mut self,
+        token_swap_pool: Pubkey,
+    ) -> transport::Result<()> {
+        let anker = self.get_anker().await;
+        send_transaction(
+            &mut self.solido_context.context,
+            &mut self.solido_context.nonce,
+            &[instruction::change_token_swap_pool(
+                &id(),
+                &instruction::ChangeTokenSwapPoolAccountsMeta {
+                    anker: self.anker,
+                    solido: self.solido_context.solido.pubkey(),
+                    manager: self.solido_context.manager.pubkey(),
+                    current_token_swap_pool: anker.token_swap_pool,
+                    new_token_swap_pool: token_swap_pool,
+                },
+            )],
+            vec![&self.solido_context.manager],
+        )
+        .await?;
+        Ok(())
+    }
+
+    pub async fn get_anker(&mut self) -> anker::state::Anker {
+        let anker_account = self.solido_context.get_account(self.anker).await;
+        // This returns a Result because it can cause an IO error, but that should
+        // not happen in the test environment. (And if it does, then the test just
+        // fails.)
+        try_from_slice_unchecked::<anker::state::Anker>(anker_account.data.as_slice()).unwrap()
+    }
 }
 
 /// Create a new token pool using `CurveType::ConstantProduct`.
@@ -524,7 +587,7 @@ impl Context {
 /// initialize the token swap instance, it requires funded token pairs on the
 /// liquidity pool.
 /// To get a new Context with an initialized token pool, call
-/// `Context::new_with_initialized_token_pool`.
+/// `Context::new_with_token_pool_rewards`.
 pub async fn setup_token_pool(solido_context: &mut solido_context::Context) -> TokenPoolContext {
     let admin = solido_context.deterministic_keypair.new_keypair();
 

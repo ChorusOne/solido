@@ -8,14 +8,16 @@ use lido::state::Lido;
 use lido::token::{Rational, StLamports};
 use lido::util::serialize_b58;
 use serde::Serialize;
+use solana_program::program_error::ProgramError;
 use solana_program::{
     account_info::AccountInfo, entrypoint::ProgramResult, msg, program_pack::Pack, pubkey::Pubkey,
 };
+use spl_token_swap::state::SwapV1;
 
 use crate::token::{self, BLamports};
 
 /// Size of the serialized [`Anker`] struct, in bytes.
-pub const ANKER_LEN: usize = 166;
+pub const ANKER_LEN: usize = 165;
 
 #[repr(C)]
 #[derive(
@@ -57,9 +59,6 @@ pub struct Anker {
 
     /// Bump seed for the UST reserve account.
     pub ust_reserve_account_bump_seed: u8,
-
-    /// Bump seed for the Token Swap.
-    pub token_swap_bump_seed: u8,
 }
 
 impl Anker {
@@ -274,6 +273,112 @@ impl Anker {
         Anker::check_is_spl_token_account("Solido's stSOL", &solido.st_sol_mint, token_account_info)
     }
 
+    /// Get an instance of the Token Swap V1 from the provided account info.
+    pub fn get_token_swap_instance(
+        &self,
+        token_swap_account: &AccountInfo,
+    ) -> Result<spl_token_swap::state::SwapV1, ProgramError> {
+        self.check_token_swap_pool(token_swap_account)?;
+        // We do not check the owner of the `token_swap_account`. Since we store
+        // this address in Anker's state, and we also trust the manager that changes
+        // this address, we don't verify the account's owner. This also allows us to
+        // test different token swap programs ids on different clusters.
+        // Check that version byte corresponds to V1 version byte.
+        if token_swap_account.data.borrow().len() != spl_token_swap::state::SwapVersion::LATEST_LEN
+        {
+            msg!(
+                "Length of the Token Swap is invalid, expected {}, found {}",
+                spl_token_swap::state::SwapVersion::LATEST_LEN,
+                token_swap_account.data.borrow().len()
+            );
+            return Err(AnkerError::WrongSplTokenSwapParameters.into());
+        }
+        if token_swap_account.data.borrow()[0] != 1u8 {
+            msg!(
+            "Token Swap instance version is different from what we expect, expected 1, found {}",
+            token_swap_account.data.borrow()[0]
+        );
+            return Err(AnkerError::WrongSplTokenSwapParameters.into());
+        }
+        // We should ignore the version 1st byte for the unpack.
+        spl_token_swap::state::SwapV1::unpack(&token_swap_account.data.borrow()[1..])
+    }
+
+    /// Check if we can change the token swap account.
+    pub fn check_change_token_swap_pool(
+        &self,
+        solido: &Lido,
+        current_token_swap: SwapV1,
+        new_token_swap: SwapV1,
+    ) -> ProgramResult {
+        // We don't check that the old pool's owner is the same as the new
+        // pool's owner. It's the manager's responsibility to replace the token
+        // pool swap with a valid one. This also allows us to change the pool
+        // program, if necessary.
+        // Check if the token swap account is the same one as the stored in the instance.
+
+        // Get stSOL and UST mint. We trust that the UST mint stored in the current instance is right.
+        let (st_sol_mint, ust_mint) = if current_token_swap.token_a_mint == solido.st_sol_mint {
+            (
+                current_token_swap.token_a_mint,
+                current_token_swap.token_b_mint,
+            )
+        } else {
+            (
+                current_token_swap.token_b_mint,
+                current_token_swap.token_a_mint,
+            )
+        };
+
+        // Get the stSOL and UST pool token, and verify that the minters are right.
+        if new_token_swap.token_a_mint == st_sol_mint {
+            // token_a_mint is stSOL mint.
+            if new_token_swap.token_b_mint != ust_mint {
+                // token_b_mint should be ust_mint.
+                msg!(
+                    "token_b_mint is expected to be the UST mint ({}), but is {}",
+                    ust_mint,
+                    new_token_swap.token_b_mint
+                );
+                return Err(AnkerError::WrongSplTokenSwapParameters.into());
+            }
+        } else if new_token_swap.token_a_mint == ust_mint {
+            // token_a is UST.
+            if new_token_swap.token_b_mint != st_sol_mint {
+                // token_b_mint should be ust_mint.
+                msg!(
+                    "token_b_mint is expected to be the stSOL mint ({}), but is {}",
+                    st_sol_mint,
+                    new_token_swap.token_b_mint
+                );
+                return Err(AnkerError::WrongSplTokenSwapParameters.into());
+            }
+        } else {
+            // token_a_mint is wrong.
+            msg!(
+                "token_a_mint is expected to be either stSOL mint ({}), or UST mint ({}) but is {}",
+                st_sol_mint,
+                ust_mint,
+                new_token_swap.token_a_mint
+            );
+            return Err(AnkerError::WrongSplTokenSwapParameters.into());
+        };
+
+        Ok(())
+    }
+
+    fn check_token_swap_pool(&self, token_swap_account: &AccountInfo) -> ProgramResult {
+        if &self.token_swap_pool != token_swap_account.key {
+            msg!(
+                "Invalid Token Swap instance, expected {}, found {}",
+                self.token_swap_pool,
+                token_swap_account.key
+            );
+            return Err(AnkerError::WrongSplTokenSwap.into());
+        }
+        Ok(())
+    }
+
     /// Check the if the token swap program is the same as the one stored in the
     /// instance.
     ///
@@ -284,27 +389,10 @@ impl Anker {
         anker_program_id: &Pubkey,
         accounts: &SellRewardsAccountsInfo,
     ) -> ProgramResult {
-        // Check token swap instance parameters.
-        if &self.token_swap_pool != accounts.token_swap_pool.key {
-            msg!(
-                "Invalid Token Swap instance, expected {}, found {}",
-                self.token_swap_pool,
-                accounts.token_swap_pool.key
-            );
-            return Err(AnkerError::WrongSplTokenSwap.into());
-        }
-        // Check that version byte corresponds to V1 version byte.
-        if accounts.token_swap_pool.data.borrow()[0] != 1u8 {
-            msg!(
-                "Token Swap instance version is different from what we expect, expected 1, found {}",
-                accounts.token_swap_pool.data.borrow()[0]
-            );
-            return Err(AnkerError::WrongSplTokenSwapParameters.into());
-        }
-        // We should ignore the 1st byte for the unpack.
-        let token_swap =
-            spl_token_swap::state::SwapV1::unpack(&accounts.token_swap_pool.data.borrow()[1..])?;
+        // Check if the token swap account is the same one as the stored in the instance.
+        let token_swap = self.get_token_swap_instance(accounts.token_swap_pool)?;
 
+        // Check token swap instance parameters.
         // Check UST token accounts.
         self.check_ust_reserve_address(
             anker_program_id,

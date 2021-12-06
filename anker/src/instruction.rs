@@ -37,6 +37,11 @@ pub enum AnkerInstruction {
 
     /// Sell rewards to the UST reserve.
     SellRewards,
+    /// Change the Anker's rewards destination address on Terra:
+    /// `terra_rewards_destination`.
+    ChangeTerraRewardsDestination,
+    /// Change the token pool instance.
+    ChangeTokenSwapPool,
 }
 
 impl AnkerInstruction {
@@ -298,6 +303,78 @@ accounts_struct! {
 
 pub fn sell_rewards(program_id: &Pubkey, accounts: &SellRewardsAccountsMeta) -> Instruction {
     let data = AnkerInstruction::SellRewards;
+    Instruction {
+        program_id: *program_id,
+        accounts: accounts.to_vec(),
+        data: data.to_vec(),
+    }
+}
+
+accounts_struct! {
+    ChangeTerraRewardsDestinationAccountsMeta, ChangeTerraRewardsDestinationAccountsInfo {
+        // Needs to be writtable in order to save new Terra address.
+        pub anker {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub solido {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub manager {
+            is_signer: true,
+            is_writable: false,
+        },
+        pub terra_rewards_destination {
+            is_signer: false,
+            is_writable: false,
+        },
+    }
+}
+
+pub fn change_terra_rewards_destination(
+    program_id: &Pubkey,
+    accounts: &ChangeTerraRewardsDestinationAccountsMeta,
+) -> Instruction {
+    let data = AnkerInstruction::ChangeTerraRewardsDestination;
+    Instruction {
+        program_id: *program_id,
+        accounts: accounts.to_vec(),
+        data: data.to_vec(),
+    }
+}
+
+accounts_struct! {
+    ChangeTokenSwapPoolAccountsMeta, ChangeTokenSwapPoolAccountsInfo {
+        // Needs to be writtable in order to save new Token Pool address.
+        pub anker {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub solido {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub manager {
+            is_signer: true,
+            is_writable: false,
+        },
+        pub current_token_swap_pool {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub new_token_swap_pool {
+            is_signer: false,
+            is_writable: false,
+        },
+    }
+}
+
+pub fn change_token_swap_pool(
+    program_id: &Pubkey,
+    accounts: &ChangeTokenSwapPoolAccountsMeta,
+) -> Instruction {
+    let data = AnkerInstruction::ChangeTokenSwapPool;
     Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),

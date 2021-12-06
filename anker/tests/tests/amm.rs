@@ -7,7 +7,10 @@ use testlib::anker_context::Context;
 #[tokio::test]
 async fn test_successful_token_swap() {
     let mut context = Context::new().await;
-    context.initialize_token_pool().await;
+    context
+        .token_pool_context
+        .initialize_token_pool(&mut context.solido_context)
+        .await;
     let (st_sol_keypair, st_sol_token) = context
         .solido_context
         .deposit(Lamports(10_000_000_000))

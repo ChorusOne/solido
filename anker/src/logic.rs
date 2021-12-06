@@ -33,6 +33,7 @@ use crate::{
 /// needed:
 /// * The mint address should match the address stored in Anker.
 /// * The mint authority should match the address derived from Anker.
+/// * The StSOL/UST reserve address should match the address derived from Anker.
 /// * The reserve authority should match the address derived from Anker.
 ///
 /// Note, the address of the Anker instance is a program-derived address that
@@ -44,7 +45,6 @@ pub fn deserialize_anker(
     anker_program_id: &Pubkey,
     anker_account: &AccountInfo,
     solido_account: &AccountInfo,
-    st_sol_reserve_account: &AccountInfo,
 ) -> Result<(Lido, Anker), ProgramError> {
     if anker_account.owner != anker_program_id {
         msg!(
@@ -78,13 +78,6 @@ pub fn deserialize_anker(
     }
 
     let solido = Lido::deserialize_lido(&anker.solido_program_id, solido_account)?;
-
-    anker.check_st_sol_reserve_address(
-        anker_program_id,
-        anker_account.key,
-        st_sol_reserve_account,
-    )?;
-    anker.check_is_st_sol_account(&solido, st_sol_reserve_account)?;
 
     Ok((solido, anker))
 }
