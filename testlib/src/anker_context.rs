@@ -550,7 +550,6 @@ impl Context {
 
     pub async fn try_change_token_swap_pool(
         &mut self,
-        manager: &Keypair,
         token_swap_pool: Pubkey,
     ) -> transport::Result<()> {
         let anker = self.get_anker().await;
@@ -562,12 +561,12 @@ impl Context {
                 &instruction::ChangeTokenSwapPoolAccountsMeta {
                     anker: self.anker,
                     solido: self.solido_context.solido.pubkey(),
-                    manager: manager.pubkey(),
+                    manager: self.solido_context.manager.pubkey(),
                     current_token_swap_pool: anker.token_swap_pool,
                     new_token_swap_pool: token_swap_pool,
                 },
             )],
-            vec![manager],
+            vec![&self.solido_context.manager],
         )
         .await?;
         Ok(())
