@@ -26,6 +26,15 @@ pub const ANKER_STSOL_RESERVE_ACCOUNT: &[u8] = b"st_sol_reserve_account";
 /// Anker's UST reserve account. Holds UST.
 pub const ANKER_UST_RESERVE_ACCOUNT: &[u8] = b"ust_reserve_account";
 
+/// Address of Orca.so's mainnet deployment of their token swap program.
+pub mod orca_token_swap_v2 {
+    use solana_program::declare_id;
+    // The Solana macro generates a function that returns the pubkey, always
+    // named "id", not a constant that we can assign to a const Pubkey, so we
+    // have to put it in a mod instead :/
+    declare_id!("9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP");
+}
+
 /// Return the address at which the Anker instance should live that belongs to
 /// the given Solido instance.
 pub fn find_instance_address(anker_program_id: &Pubkey, solido_instance: &Pubkey) -> (Pubkey, u8) {

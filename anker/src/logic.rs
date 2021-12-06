@@ -238,6 +238,7 @@ pub fn swap_rewards(
     anker: &Anker,
     accounts: &SellRewardsAccountsInfo,
 ) -> ProgramResult {
+    msg!("AMOUNT: {}", amount);
     if amount == StLamports(0) {
         msg!("Anker rewards must be greater than zero to be claimable.");
         return Err(AnkerError::ZeroRewardsToClaim.into());
@@ -245,7 +246,7 @@ pub fn swap_rewards(
     anker.check_token_swap(program_id, accounts)?;
 
     let swap_instruction = spl_token_swap::instruction::swap(
-        accounts.spl_token_swap.key,
+        accounts.orca_token_swap_v2.key,
         accounts.spl_token.key,
         accounts.token_swap_pool.key,
         accounts.token_pool_authority.key,
@@ -283,9 +284,8 @@ pub fn swap_rewards(
             accounts.pool_mint.clone(),
             accounts.pool_fee_account.clone(),
             accounts.spl_token.clone(),
-            accounts.spl_token_swap.clone(),
+            accounts.orca_token_swap_v2.clone(),
         ],
         &signers,
-    )?;
-    Ok(())
+    )
 }

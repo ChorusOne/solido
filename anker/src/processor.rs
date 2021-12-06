@@ -117,7 +117,7 @@ fn process_initialize(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> Prog
 
     let (_, token_swap_bump_seed) = Pubkey::find_program_address(
         &[&accounts.token_swap_pool.key.to_bytes()],
-        &spl_token_swap::id(),
+        &crate::orca_token_swap_v2::id(),
     );
 
     let anker = Anker {

@@ -264,6 +264,11 @@ impl Context {
             processor!(anker::processor::process),
         );
 
+        // Add the actual Orca token swap program, so we test against the real thing.
+        // If we don't have it locally, download it from the chain.
+        crate::util::ensure_orca_program_exists();
+        program_test.add_program("orca_token_swap_v2", anker::orca_token_swap_v2::id(), None);
+
         let mut result = Self {
             context: program_test.start_with_context().await,
             nonce: 0,

@@ -291,9 +291,8 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
-
         const spl_token = spl_token::id(),
-        const spl_token_swap = spl_token_swap::id(),
+        const orca_token_swap_v2 = crate::orca_token_swap_v2::id(),
     }
 }
 
