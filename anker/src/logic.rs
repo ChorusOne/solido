@@ -10,7 +10,6 @@ use solana_program::{
     msg,
     program::{invoke, invoke_signed},
     program_error::ProgramError,
-    program_pack::Pack,
     pubkey::Pubkey,
     rent::Rent,
     system_instruction,
@@ -282,32 +281,4 @@ pub fn swap_rewards(
         ],
         &signers,
     )
-}
-
-/// Get an instance of the Token Swap V1 from the provided account info.
-pub fn get_token_swap_instance(
-    token_swap_account: &AccountInfo,
-) -> Result<spl_token_swap::state::SwapV1, ProgramError> {
-    // We do not check the owner of the `token_swap_account`. Since we store
-    // this address in Anker's state, and we also trust the manager that changes
-    // this address, we don't verify the account's owner. This also allows us to
-    // test different token swap programs ids on different clusters.
-    // Check that version byte corresponds to V1 version byte.
-    if token_swap_account.data.borrow().len() != spl_token_swap::state::SwapVersion::LATEST_LEN {
-        msg!(
-            "Length of the Token Swap is invalid, expected {}, found {}",
-            spl_token_swap::state::SwapVersion::LATEST_LEN,
-            token_swap_account.data.borrow().len()
-        );
-        return Err(AnkerError::WrongSplTokenSwapParameters.into());
-    }
-    if token_swap_account.data.borrow()[0] != 1u8 {
-        msg!(
-            "Token Swap instance version is different from what we expect, expected 1, found {}",
-            token_swap_account.data.borrow()[0]
-        );
-        return Err(AnkerError::WrongSplTokenSwapParameters.into());
-    }
-    // We should ignore the version 1st byte for the unpack.
-    spl_token_swap::state::SwapV1::unpack(&token_swap_account.data.borrow()[1..])
 }
