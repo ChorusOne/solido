@@ -31,6 +31,6 @@ async fn test_successful_token_swap() {
 
     let ust_balance = context.get_ust_balance(ust_address).await;
     // For the constant product AMM:
-    // 10 - (10*10 / 11) = 0.9090909090909083
-    assert_eq!(ust_balance, MicroUst(909090909));
+    // 10000 - (10*10000 / 11) = 909.0909090909099
+    assert_eq!(ust_balance, MicroUst(909_090_909));
 }
