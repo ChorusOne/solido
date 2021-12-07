@@ -427,7 +427,6 @@ fn process_send_rewards(
             accounts.system_program.clone(),
             accounts.wormhole_core_bridge_program_id.clone(),
             accounts.spl_token.clone(),
-            accounts.wormhole_token_bridge_program_id.clone(),
         ],
         &[&reserve_seeds[..]],
     )
