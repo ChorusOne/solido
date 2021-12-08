@@ -502,7 +502,6 @@ impl Anker {
 
     pub fn check_send_rewards(
         &self,
-        solido: &Lido,
         accounts: &SendRewardsAccountsInfo,
     ) -> Result<WormholeTransferArgs, ProgramError> {
         check_wormhole_account(
@@ -516,21 +515,12 @@ impl Anker {
             accounts.wormhole_core_bridge_program_id.key,
         )?;
 
-        // Get UST mint from token swap.
-        let token_swap_pool = self.get_token_swap_instance(accounts.token_swap_pool)?;
-        // We trust the minters stored in solido and the token_swap pool.
-        let mint = if solido.st_sol_mint == token_swap_pool.token_a_mint {
-            token_swap_pool.token_a_mint
-        } else {
-            token_swap_pool.token_b_mint
-        };
-
         let wormhole_transfer_args = WormholeTransferArgs::new(
             self.wormhole_parameters.token_bridge_program_id,
             self.wormhole_parameters.core_bridge_program_id,
-            mint,
+            *accounts.ust_mint.key,
             *accounts.payer.key,
-            *accounts.from.key,
+            *accounts.ust_reserve_account.key,
             *accounts.message.key,
         );
 

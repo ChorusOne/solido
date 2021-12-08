@@ -386,11 +386,20 @@ fn process_send_rewards(
     wormhole_nonce: u32,
 ) -> ProgramResult {
     let accounts = SendRewardsAccountsInfo::try_from_slice(accounts_raw)?;
-    let (solido, anker) = deserialize_anker(program_id, accounts.anker, accounts.solido)?;
-    anker.check_ust_reserve_address(program_id, accounts.anker.key, accounts.from)?;
-    let wormhole_transfer_args = anker.check_send_rewards(&solido, &accounts)?;
+    let (_solido, anker) = deserialize_anker(program_id, accounts.anker, accounts.solido)?;
+    anker.check_ust_reserve_address(
+        program_id,
+        accounts.anker.key,
+        accounts.ust_reserve_account,
+    )?;
+    let wormhole_transfer_args = anker.check_send_rewards(&accounts)?;
     let ust_reserve_state =
-        spl_token::state::Account::unpack_from_slice(&accounts.from.data.borrow())?;
+        spl_token::state::Account::unpack_from_slice(&accounts.ust_reserve_account.data.borrow())?;
+    // Check UST mint.
+    if &ust_reserve_state.mint != accounts.ust_mint.key {
+        return Err(AnkerError::InvalidTokenMint.into());
+    }
+
     let reserve_ust_amount = MicroUst(ust_reserve_state.amount);
     let payload = crate::wormhole::Payload::new(
         wormhole_nonce,
@@ -410,8 +419,8 @@ fn process_send_rewards(
         &[
             accounts.payer.clone(),
             accounts.config_key.clone(),
-            accounts.from.clone(),
-            accounts.mint.clone(),
+            accounts.ust_reserve_account.clone(),
+            accounts.ust_mint.clone(),
             accounts.custody_key.clone(),
             accounts.authority_signer_key.clone(),
             accounts.custody_signer_key.clone(),

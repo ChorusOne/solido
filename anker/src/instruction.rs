@@ -406,11 +406,6 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
-        // So we can get the UST minter.
-        pub token_swap_pool {
-            is_signer: false,
-            is_writable: false,
-        },
         pub solido {
             is_signer: false,
             is_writable: false,
@@ -437,11 +432,11 @@ accounts_struct! {
             is_writable: false,
         },
         // From should be the UST token address.
-        pub from {
+        pub ust_reserve_account {
             is_signer: false,
             is_writable: true,
         },
-        pub mint {
+        pub ust_mint {
             is_signer: false,
             is_writable: true,
         },
