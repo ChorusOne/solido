@@ -1,4 +1,5 @@
 use crate::instruction::{SellRewardsAccountsInfo, SendRewardsAccountsInfo};
+use crate::metrics::Metrics;
 use crate::wormhole::{check_wormhole_account, TerraAddress, WormholeTransferArgs};
 use crate::{
     error::AnkerError, ANKER_MINT_AUTHORITY, ANKER_RESERVE_AUTHORITY, ANKER_STSOL_RESERVE_ACCOUNT,
@@ -57,6 +58,9 @@ pub struct Anker {
 
     /// Wormhole parameters associated with this instance.
     pub wormhole_parameters: WormholeParameters,
+
+    /// Metrics for informational purposes.
+    pub metrics: Metrics,
 
     /// Bump seed for the derived address that this Anker instance should live at.
     pub self_bump_seed: u8,
@@ -563,6 +567,13 @@ impl Anker {
             accounts.fee_collector_key.key,
         )?;
         Ok(Box::new(wormhole_transfer_args))
+    }
+
+    /// Get the `amount` of tokens from the SPL account defined by `account`.
+    /// Does not perform any checks, fails if not able to decode an SPL account.
+    pub fn get_token_amount(account: &AccountInfo) -> Result<u64, ProgramError> {
+        let account_state = spl_token::state::Account::unpack_from_slice(&account.data.borrow())?;
+        Ok(account_state.amount)
     }
 }
 

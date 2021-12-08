@@ -1,5 +1,5 @@
 use anker::{error::AnkerError, token::MicroUst};
-use lido::token::Lamports;
+use lido::token::{Lamports, StLamports};
 use solana_program::pubkey::Pubkey;
 use solana_program_test::tokio;
 use std::mem;
@@ -13,7 +13,20 @@ async fn test_successful_sell_rewards() {
     context
         .initialize_token_pool_and_deposit(Lamports(DEPOSIT_AMOUNT))
         .await;
+
+    let anker_before = context.get_anker().await;
     context.sell_rewards().await;
+    let anker_after = context.get_anker().await;
+    assert_eq!(
+        anker_after.metrics.swapped_rewards_st_sol_total
+            - anker_before.metrics.swapped_rewards_st_sol_total,
+        Ok(StLamports(0_923_076_923))
+    );
+    assert_eq!(
+        anker_after.metrics.swapped_rewards_ust_total
+            - anker_before.metrics.swapped_rewards_ust_total,
+        Ok(MicroUst(76_335_877))
+    );
 
     let ust_balance = context.get_ust_balance(context.ust_reserve).await;
     // Exchange rate is 12 stSol : 13 Sol
