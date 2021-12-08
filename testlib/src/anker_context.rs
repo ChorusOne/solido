@@ -208,7 +208,7 @@ impl Context {
         let token_pool_context = setup_token_pool(&mut solido_context).await;
 
         let rewards_owner = solido_context.deterministic_keypair.new_keypair();
-        let terra_rewards_destination = [0u8; 32];
+        let terra_rewards_destination = ForeignAddress::default();
 
         send_transaction(
             &mut solido_context.context,
@@ -230,7 +230,7 @@ impl Context {
                     token_swap_pool: token_pool_context.swap_account.pubkey(),
                     ust_mint: token_pool_context.ust_mint_address,
                 },
-                terra_rewards_destination,
+                terra_rewards_destination.clone(),
             )],
             vec![],
         )

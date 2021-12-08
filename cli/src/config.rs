@@ -6,6 +6,7 @@ use std::{
     str::FromStr,
 };
 
+use anker::wormhole::ForeignAddress;
 use clap::Clap;
 use serde::Deserialize;
 use serde_json::Value;
@@ -723,6 +724,14 @@ cli_opt_struct! {
         #[clap(long, value_name = "address")]
         anker_program_id: Pubkey,
 
+        /// Address of the Wormhole core bridge program.
+        #[clap(long, value_name = "address")]
+        wormhole_core_bridge_program_id: Pubkey,
+
+        /// Address of the Wormhole token bridge program.
+        #[clap(long, value_name = "address")]
+        wormhole_token_bridge_program_id: Pubkey,
+
         /// Optionally the bSOL mint address. If not passed a random one will be created.
         #[clap(long, value_name = "address")]
         b_sol_mint_address: Pubkey => Pubkey::default(),
@@ -737,5 +746,12 @@ cli_opt_struct! {
         /// Orca (or other SPL token swap) pool used for stSOL/UST swap.
         #[clap(long, value_name = "address")]
         token_swap_pool: Pubkey,
+
+        /// Terra address that will receive the UST rewards. Written as the
+        /// string representation of bytes, can be pre-appended with "0x".
+        ///
+        /// Left-padded with 0s until 32 bytes are present.
+        #[clap(long, value_name = "terra_address")]
+        terra_rewards_address: ForeignAddress,
     }
 }

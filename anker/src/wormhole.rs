@@ -1,5 +1,9 @@
+use std::str::FromStr;
+
 use crate::{error::AnkerError, token::MicroUst};
-use borsh::{BorshSchema, BorshSerialize};
+use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use hex::FromHexError;
+use serde::Serialize;
 use solana_program::{
     entrypoint::ProgramResult,
     instruction::{AccountMeta, Instruction},
@@ -15,7 +19,30 @@ pub const WORMHOLE_CHAIN_ID_TERRA: u16 = 3;
 /// solana/modules/token_bridge/program/src/lib.rs
 const WORMHOLE_NATIVE_TRANSFER_CODE: u8 = 5;
 
-pub type ForeignAddress = [u8; 32];
+#[repr(C)]
+#[derive(
+    Clone, Default, Debug, BorshSerialize, BorshDeserialize, BorshSchema, Eq, PartialEq, Serialize,
+)]
+pub struct ForeignAddress([u8; 32]);
+
+impl FromStr for ForeignAddress {
+    type Err = FromHexError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut foreign_address = [0; 32];
+        // Allow for array starting with 0x
+        let array_vec = if s.len() >= 2 && &s[..2] == "0x" {
+            hex::decode(&s[2..])
+        } else {
+            hex::decode(s)
+        }?;
+        if array_vec.len() > 32 {
+            return Err(FromHexError::InvalidStringLength);
+        }
+        let start = 32 - array_vec.len();
+        foreign_address[start..].clone_from_slice(&array_vec[..(32 - start)]);
+        Ok(ForeignAddress(foreign_address))
+    }
+}
 
 /// Payload copied and modified from the Wormhole project.
 #[repr(C)]
@@ -160,16 +187,10 @@ pub fn get_wormhole_transfer_instruction(
 fn test_get_wormhole_instruction() {
     // wormDTUJ6AWPNvk59vGQbDvGJmqbDTdgWgAqcLBCgUb : Wormhole token bridge program id.
     // worm2ZoG2kUd4vFXhvjh93UUH596ayRfgQ2MgjNMTth : Wormhole core bridge program id.
-    use std::str::FromStr;
 
     let wormhole_chain_id_ethereum = 2;
-    let ethereum_address_bytes = hex::decode("29fc5aacd613410b68c9c08d4e1656e3c890e482").unwrap();
-
-    let mut ethereum_pubkey = [0; 32];
-
-    for i in 12..32 {
-        ethereum_pubkey[i] = ethereum_address_bytes[i - 12];
-    }
+    let ethereum_pubkey =
+        ForeignAddress::from_str("29fc5aacd613410b68c9c08d4e1656e3c890e482").unwrap();
     let mut payload = Payload::new(14476, MicroUst(500_000_000), ethereum_pubkey);
     payload.target_chain = wormhole_chain_id_ethereum;
     let payer = Pubkey::new_unique();
@@ -210,4 +231,54 @@ fn test_get_wormhole_instruction() {
     let accounts: Vec<Pubkey> = instruction.accounts.iter().map(|acc| acc.pubkey).collect();
     assert_eq!(expected_accounts, accounts);
     assert_eq!(expected_data, instruction.data);
+}
+
+#[test]
+fn test_foreign_address_conversion() {
+    let zero_addr = ForeignAddress::from_str("").unwrap();
+    assert_eq!(zero_addr, ForeignAddress([0; 32]));
+    let zero_addr_start_0x = ForeignAddress::from_str("0x").unwrap();
+    assert_eq!(zero_addr, zero_addr_start_0x);
+
+    let eth_addr =
+        ForeignAddress::from_str("29fc5aacd613410b68c9c08d4e1656e3c890e4820200").unwrap();
+    assert_eq!(
+        eth_addr,
+        ForeignAddress([
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 41, 252, 90, 172, 214, 19, 65, 11, 104, 201, 192, 141,
+            78, 22, 86, 227, 200, 144, 228, 130, 2, 0
+        ])
+    );
+    let address_32_bytes = ForeignAddress::from_str(
+        "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+    )
+    .unwrap();
+
+    let address_32_bytes_start_with_0x = ForeignAddress::from_str(
+        "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+    )
+    .unwrap();
+    assert_eq!(address_32_bytes_start_with_0x, address_32_bytes);
+
+    assert_eq!(
+        address_32_bytes,
+        ForeignAddress([
+            222, 173, 190, 239, 222, 173, 190, 239, 222, 173, 190, 239, 222, 173, 190, 239, 222,
+            173, 190, 239, 222, 173, 190, 239, 222, 173, 190, 239, 222, 173, 190, 239
+        ])
+    );
+    let address_more_32_bytes = ForeignAddress::from_str(
+        "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefde",
+    );
+    assert_eq!(
+        address_more_32_bytes,
+        Err(FromHexError::InvalidStringLength)
+    );
+    let address_invalid_hexa = ForeignAddress::from_str("ka");
+    assert_eq!(
+        address_invalid_hexa,
+        Err(FromHexError::InvalidHexCharacter { c: 'k', index: 0 })
+    );
+    let address_odd_length_bytes = ForeignAddress::from_str("aaa");
+    assert_eq!(address_odd_length_bytes, Err(FromHexError::OddLength));
 }
