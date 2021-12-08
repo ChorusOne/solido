@@ -708,3 +708,34 @@ cli_opt_struct! {
         amount: u64
     }
 }
+
+cli_opt_struct! {
+    CreateAnkerOpts {
+        /// Address of the Solido program.
+        #[clap(long, value_name = "address")]
+        solido_program_id: Pubkey,
+
+        /// Account that stores the data for the underlying Solido instance.
+        #[clap(long, value_name = "address")]
+        solido_address: Pubkey,
+
+        /// Address of the Anker program.
+        #[clap(long, value_name = "address")]
+        anker_program_id: Pubkey,
+
+        /// Optionally the bSOL mint address. If not passed a random one will be created.
+        #[clap(long, value_name = "address")]
+        b_sol_mint_address: Pubkey => Pubkey::default(),
+
+        /// The UST mint address.
+        ///
+        /// The mainnet address of Wormhole-v2 wrapped UST is
+        /// 9vMJfxuKxXBoEa7rM12mYLMwTacLMLDJqHozw96WQL8i.
+        #[clap(long, value_name = "address")]
+        ust_mint_address: Pubkey,
+
+        /// Orca (or other SPL token swap) pool used for stSOL/UST swap.
+        #[clap(long, value_name = "address")]
+        token_swap_pool: Pubkey,
+    }
+}

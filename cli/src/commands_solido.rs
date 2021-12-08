@@ -22,19 +22,21 @@ use lido::{
 };
 
 use crate::{
+    commands_multisig::{
+        get_multisig_program_address, propose_instruction, ProposeInstructionOutput,
+    },
+    snapshot::Result,
+    spl_token_utils::{push_create_spl_token_account, push_create_spl_token_mint},
+    validator_info_utils::ValidatorInfo,
+    SnapshotClientConfig, SnapshotConfig,
+};
+use crate::{
     config::{
         AddRemoveMaintainerOpts, AddValidatorOpts, CreateSolidoOpts, DeactivateValidatorOpts,
         DepositOpts, ShowSolidoAuthoritiesOpts, ShowSolidoOpts, WithdrawOpts,
     },
     error::CliError,
     get_signer_from_path,
-};
-use crate::{
-    multisig::{get_multisig_program_address, propose_instruction, ProposeInstructionOutput},
-    snapshot::Result,
-    spl_token_utils::{push_create_spl_token_account, push_create_spl_token_mint},
-    validator_info_utils::ValidatorInfo,
-    SnapshotClientConfig, SnapshotConfig,
 };
 
 #[derive(Serialize)]

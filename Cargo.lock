@@ -3857,6 +3857,7 @@ name = "solido-cli"
 version = "1.1.0"
 dependencies = [
  "anchor-lang",
+ "anker",
  "bincode",
  "borsh 0.9.1",
  "bs58 0.4.0",
