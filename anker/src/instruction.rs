@@ -402,10 +402,9 @@ pub fn change_token_swap_pool(
 
 accounts_struct! {
     SendRewardsAccountsMeta, SendRewardsAccountsInfo {
-        // Needs to be writtable in order to save new Token Pool address.
         pub anker {
             is_signer: false,
-            is_writable: true,
+            is_writable: false,
         },
         // So we can get the UST minter.
         pub token_swap_pool {
