@@ -15,8 +15,7 @@ use solana_program::{
 pub const WORMHOLE_CHAIN_ID_TERRA: u16 = 3;
 
 /// Position of the native transfer code at the Wormhole project:
-/// https://github.com/certusone/wormhole
-/// solana/modules/token_bridge/program/src/lib.rs
+/// https://github.com/certusone/wormhole/blob/05425a96df6e5841f05e7be5e7f4c45be01985a6/solana/modules/token_bridge/program/src/lib.rs
 const WORMHOLE_NATIVE_TRANSFER_CODE: u8 = 5;
 
 #[repr(C)]
