@@ -264,7 +264,7 @@ def get_approve_and_execute(
     multisig_program_id: str,
     multisig_instance: str,
     signer_keypair_paths: List[str],
-) -> Callable[str, None]:
+) -> Callable[[str], None]:
     """
     Return a function, `approve_and_execute`, which approves and executes the
     given multisig transaction.
