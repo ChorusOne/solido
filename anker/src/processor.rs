@@ -383,8 +383,7 @@ fn process_change_token_swap_pool(
 fn process_send_rewards(
     program_id: &Pubkey,
     accounts_raw: &[AccountInfo],
-    nonce: u32,
-    fee: u64,
+    wormhole_nonce: u32,
 ) -> ProgramResult {
     let accounts = SendRewardsAccountsInfo::try_from_slice(accounts_raw)?;
     let (solido, anker) = deserialize_anker(program_id, accounts.anker, accounts.solido)?;
@@ -394,9 +393,8 @@ fn process_send_rewards(
         spl_token::state::Account::unpack_from_slice(&accounts.from.data.borrow())?;
     let reserve_ust_amount = MicroUst(ust_reserve_state.amount);
     let payload = crate::wormhole::Payload::new(
-        nonce,
+        wormhole_nonce,
         reserve_ust_amount,
-        fee,
         anker.terra_rewards_destination,
     );
 
@@ -452,8 +450,8 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
         AnkerInstruction::ChangeTokenSwapPool => {
             process_change_token_swap_pool(program_id, accounts)
         }
-        AnkerInstruction::SendRewards { nonce, fee } => {
-            process_send_rewards(program_id, accounts, nonce, fee)
+        AnkerInstruction::SendRewards { wormhole_nonce } => {
+            process_send_rewards(program_id, accounts, wormhole_nonce)
         }
     }
 }

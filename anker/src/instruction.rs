@@ -41,8 +41,7 @@ pub enum AnkerInstruction {
     SellRewards,
     /// Transfer from the UST reserve to terra through Wormhole.
     SendRewards {
-        nonce: u32, // FIXME: Check this nonce business.
-        fee: u64,   // FIXME: I don't know if this can be variable or not. Check it.
+        wormhole_nonce: u32, // Random number used to differentiate similar transaction.
     },
     /// Change the Anker's rewards destination address on Terra:
     /// `terra_rewards_destination`.
@@ -489,10 +488,9 @@ accounts_struct! {
 pub fn send_rewards(
     program_id: &Pubkey,
     accounts: &SendRewardsAccountsMeta,
-    nonce: u32,
-    fee: u64,
+    wormhole_nonce: u32,
 ) -> Instruction {
-    let data = AnkerInstruction::SendRewards { nonce, fee };
+    let data = AnkerInstruction::SendRewards { wormhole_nonce };
     Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),

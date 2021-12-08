@@ -29,11 +29,11 @@ pub struct Payload {
 }
 
 impl Payload {
-    pub fn new(nonce: u32, amount: MicroUst, fee: u64, foreign_address: ForeignAddress) -> Payload {
+    pub fn new(nonce: u32, amount: MicroUst, foreign_address: ForeignAddress) -> Payload {
         Payload {
             nonce,
             amount,
-            fee,
+            fee: 0,
             foreign_address,
             target_chain: WORMHOLE_CHAIN_ID_TERRA,
         }
@@ -170,7 +170,7 @@ fn test_get_wormhole_instruction() {
     for i in 12..32 {
         ethereum_pubkey[i] = ethereum_address_bytes[i - 12];
     }
-    let mut payload = Payload::new(14476, MicroUst(500_000_000), 0, ethereum_pubkey);
+    let mut payload = Payload::new(14476, MicroUst(500_000_000), ethereum_pubkey);
     payload.target_chain = wormhole_chain_id_ethereum;
     let payer = Pubkey::new_unique();
     let from = Pubkey::from_str("5F22sMTRuLQtkiuvTKif5WBYnv39cACJ8YcPzKfm1WaM").unwrap();
