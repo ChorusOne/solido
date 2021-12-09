@@ -416,7 +416,7 @@ fn process_send_rewards(
 
     invoke_signed(
         &get_wormhole_transfer_instruction(&payload, &wormhole_transfer_args),
-        &[
+        &vec![
             accounts.payer.clone(),
             accounts.config_key.clone(),
             accounts.ust_reserve_account.clone(),
