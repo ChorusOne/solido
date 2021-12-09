@@ -129,6 +129,15 @@ result = solido(
     '--token-swap-pool',
     # TODO: Deploy the Orca program on the test validator and set up a test pool.
     ust_mint_address.pubkey,
+    '--wormhole-core-bridge-program-id',
+    # Wormhole's testnet address. TODO: Replace with a new localhost program instance.
+    '3u8hJUVTA4jH1wYAyUur7FFZVQ8H635K3tSHHF4ssjQ5',
+    '--wormhole-token-bridge-program-id',
+    # Wormhole's testnet address. TODO: Replace with a new localhost program instance.
+    'DZnkkTmCiFWfYTfT41X3Rd1kDgozqzxWaHqsw6W4x2oe',
+    '--terra-rewards-address',
+    # TODO: Replace with an actual terra address
+    'deadbeefdeadbeefdeadbeefdeadbeef',
 )
 # TODO: Also provide --mint-address, we need to be sure that that one works.
 anker_address = result['anker_address']
