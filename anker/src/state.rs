@@ -503,7 +503,7 @@ impl Anker {
     pub fn check_send_rewards(
         &self,
         accounts: &SendRewardsAccountsInfo,
-    ) -> Result<WormholeTransferArgs, ProgramError> {
+    ) -> Result<Box<WormholeTransferArgs>, ProgramError> {
         check_wormhole_account(
             "token bridge program",
             &self.wormhole_parameters.token_bridge_program_id,
@@ -564,7 +564,7 @@ impl Anker {
             &wormhole_transfer_args.fee_collector_key,
             accounts.fee_collector_key.key,
         )?;
-        Ok(wormhole_transfer_args)
+        Ok(Box::new(wormhole_transfer_args))
     }
 }
 
