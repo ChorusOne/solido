@@ -65,7 +65,7 @@ async fn test_rewards_fail_with_different_reserve() {
         .initialize_token_pool_and_deposit(Lamports(DEPOSIT_AMOUNT))
         .await;
 
-    context.ust_reserve = Pubkey::new_unique();
+    context.ust_reserve = context.create_ust_token_account(Pubkey::new_unique()).await;
 
     let result = context.try_sell_rewards().await;
     assert_solido_error!(result, AnkerError::InvalidDerivedAccount);
