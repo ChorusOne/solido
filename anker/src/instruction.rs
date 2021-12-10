@@ -431,7 +431,6 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
-        // From should be the UST token address.
         pub ust_reserve_account {
             is_signer: false,
             is_writable: true,
