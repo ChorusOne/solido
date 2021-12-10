@@ -1,0 +1,102 @@
+import * as BufferLayout from '@solana/buffer-layout';
+import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
+import {
+  PublicKey,
+  StakeProgram,
+  SystemProgram,
+  SYSVAR_CLOCK_PUBKEY,
+  TransactionInstruction,
+} from '@solana/web3.js';
+import BN from 'bn.js';
+import type { Lamports, ProgramAddresses, Snapshot } from '../types';
+import {
+  findAuthorityProgramAddress,
+  getHeaviestValidatorStakeAccount,
+} from '../utils';
+
+export const getWithdrawInstruction = async (
+  snapshot: Snapshot,
+  programAddresses: ProgramAddresses,
+  stSolAccountOwnerAddress: PublicKey,
+  senderStSolAccountAddress: PublicKey,
+  recipientStakeAccountAddress: PublicKey,
+  amount: Lamports
+) => {
+  const stakeAuthorityAddress = await findAuthorityProgramAddress(
+    programAddresses,
+    'stake_authority'
+  );
+  const heaviestValidatorStakeAccount =
+    getHeaviestValidatorStakeAccount(snapshot);
+
+  if (amount.lamports.lte(snapshot.stakeAccountRentExemptionBalance.lamports)) {
+    throw new Error('Amount must be greater than the rent exemption balance');
+  }
+
+  const maxWithdrawAmount = heaviestValidatorStakeAccount.balance.lamports
+    .div(new BN(10))
+    .add(new BN(10));
+
+  if (amount.lamports.gte(maxWithdrawAmount)) {
+    throw new Error('Amount must be less than the maximum withdrawal amount');
+  }
+
+  const keys = [
+    {
+      pubkey: programAddresses.solidoProgramId,
+      isSigner: false,
+      isWritable: true,
+    },
+    { pubkey: stSolAccountOwnerAddress, isSigner: true, isWritable: false },
+    {
+      pubkey: senderStSolAccountAddress,
+      isSigner: false,
+      isWritable: true,
+    },
+    {
+      pubkey: programAddresses.stSolMintAddress,
+      isSigner: false,
+      isWritable: true,
+    },
+    {
+      pubkey: heaviestValidatorStakeAccount.validatorVoteAddress,
+      isSigner: false,
+      isWritable: false,
+    },
+    {
+      pubkey: heaviestValidatorStakeAccount.address,
+      isSigner: false,
+      isWritable: true,
+    },
+    {
+      pubkey: recipientStakeAccountAddress,
+      isSigner: true,
+      isWritable: true,
+    },
+    { pubkey: stakeAuthorityAddress, isSigner: false, isWritable: false },
+    { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+    { pubkey: SYSVAR_CLOCK_PUBKEY, isSigner: false, isWritable: false },
+    { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+    { pubkey: StakeProgram.programId, isSigner: false, isWritable: false },
+  ];
+
+  const dataLayout = BufferLayout.struct([
+    BufferLayout.u8('instruction'),
+    BufferLayout.nu64('amount'),
+  ]);
+
+  const data = Buffer.alloc(dataLayout.span);
+  dataLayout.encode(
+    {
+      instruction: 2,
+      amount: amount.lamports,
+    },
+    data
+  );
+
+  return new TransactionInstruction({
+    keys,
+    data,
+    programId: programAddresses.solidoProgramId,
+  });
+};
