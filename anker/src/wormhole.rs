@@ -42,6 +42,18 @@ pub enum AddressError {
     VariantIsNotBech32,
 }
 
+impl fmt::Display for AddressError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            AddressError::Bech32(err) => write!(f, "Invalid bech32 format: {}", err),
+            AddressError::HumanReadablePartIsNotTerra => write!(f, "Address does not start with 'terra'."),
+            AddressError::LengthNot20Bytes => write!(f, "The address is not 20 bytes long."),
+            AddressError::VariantIsNotBech32 => write!(f, "The address variant is not the classic BIP-0173 bech32."),
+        }
+    }
+
+}
+
 #[repr(C)]
 #[derive(
     Clone, Default, Debug, BorshSerialize, BorshDeserialize, BorshSchema, Eq, PartialEq, Serialize,
@@ -49,7 +61,7 @@ pub enum AddressError {
 pub struct TerraAddress([u8; 20]);
 
 impl TerraAddress {
-    fn to_foreign(&self) -> ForeignAddress {
+    pub fn to_foreign(&self) -> ForeignAddress {
         let mut foreign = [0_u8; 32];
         foreign[12..].copy_from_slice(&self.0[..]);
         ForeignAddress(foreign)

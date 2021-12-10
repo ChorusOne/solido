@@ -19,7 +19,7 @@ use spl_token_swap::instruction::Swap;
 
 use crate::solido_context::send_transaction;
 use crate::solido_context::{self};
-use anker::{find_reserve_authority, find_st_sol_reserve_account, wormhole::ForeignAddress};
+use anker::{find_reserve_authority, find_st_sol_reserve_account, wormhole::TerraAddress};
 
 // Program id for the Anker program. Only used for tests.
 solana_program::declare_id!("Anker111111111111111111111111111111111111117");
@@ -186,7 +186,7 @@ pub struct Context {
 
     pub token_pool_context: TokenPoolContext,
     pub rewards_owner: Keypair,
-    pub terra_rewards_destination: ForeignAddress,
+    pub terra_rewards_destination: TerraAddress,
     pub reserve_authority: Pubkey,
 }
 
@@ -208,7 +208,7 @@ impl Context {
         let token_pool_context = setup_token_pool(&mut solido_context).await;
 
         let rewards_owner = solido_context.deterministic_keypair.new_keypair();
-        let terra_rewards_destination = ForeignAddress::default();
+        let terra_rewards_destination = TerraAddress::default();
 
         send_transaction(
             &mut solido_context.context,
@@ -529,7 +529,7 @@ impl Context {
     pub async fn try_change_terra_rewards_destination(
         &mut self,
         manager: &Keypair,
-        terra_rewards_destination: ForeignAddress,
+        terra_rewards_destination: TerraAddress,
     ) -> transport::Result<()> {
         send_transaction(
             &mut self.solido_context.context,

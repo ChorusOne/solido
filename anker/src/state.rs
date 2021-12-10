@@ -1,5 +1,5 @@
 use crate::instruction::{SellRewardsAccountsInfo, SendRewardsAccountsInfo};
-use crate::wormhole::{check_wormhole_account, ForeignAddress, WormholeTransferArgs};
+use crate::wormhole::{check_wormhole_account, TerraAddress, WormholeTransferArgs};
 use crate::{
     error::AnkerError, ANKER_MINT_AUTHORITY, ANKER_RESERVE_AUTHORITY, ANKER_STSOL_RESERVE_ACCOUNT,
     ANKER_UST_RESERVE_ACCOUNT,
@@ -18,7 +18,7 @@ use spl_token_swap::state::SwapV1;
 use crate::token::{self, BLamports};
 
 /// Size of the serialized [`Anker`] struct, in bytes.
-pub const ANKER_LEN: usize = 229;
+pub const ANKER_LEN: usize = 217;
 
 #[repr(C)]
 #[derive(
@@ -53,9 +53,7 @@ pub struct Anker {
     pub token_swap_pool: Pubkey,
 
     /// Destination of the rewards on Terra, paid in UST.
-    /// Although Terra addresses are variable in size, on Wormhole they must
-    /// have 32 bytes.
-    pub terra_rewards_destination: ForeignAddress,
+    pub terra_rewards_destination: TerraAddress,
 
     /// Wormhole parameters associated with this instance.
     pub wormhole_parameters: WormholeParameters,

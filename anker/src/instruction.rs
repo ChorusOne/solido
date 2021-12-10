@@ -11,13 +11,13 @@ use solana_program::{
     system_program, sysvar,
 };
 
-use crate::{token::BLamports, wormhole::ForeignAddress};
+use crate::{token::BLamports, wormhole::TerraAddress};
 
 #[repr(C)]
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
 pub enum AnkerInstruction {
     Initialize {
-        terra_rewards_destination: ForeignAddress,
+        terra_rewards_destination: TerraAddress,
     },
 
     /// Deposit a given amount of StSOL, gets bSOL in return.
@@ -46,7 +46,7 @@ pub enum AnkerInstruction {
     /// Change the Anker's rewards destination address on Terra:
     /// `terra_rewards_destination`.
     ChangeTerraRewardsDestination {
-        terra_rewards_destination: ForeignAddress,
+        terra_rewards_destination: TerraAddress,
     },
     /// Change the token pool instance.
     ChangeTokenSwapPool,
@@ -128,7 +128,7 @@ accounts_struct! {
 pub fn initialize(
     program_id: &Pubkey,
     accounts: &InitializeAccountsMeta,
-    terra_rewards_destination: ForeignAddress,
+    terra_rewards_destination: TerraAddress,
 ) -> Instruction {
     let data = AnkerInstruction::Initialize {
         terra_rewards_destination,
@@ -350,7 +350,7 @@ accounts_struct! {
 pub fn change_terra_rewards_destination(
     program_id: &Pubkey,
     accounts: &ChangeTerraRewardsDestinationAccountsMeta,
-    terra_rewards_destination: ForeignAddress,
+    terra_rewards_destination: TerraAddress,
 ) -> Instruction {
     let data = AnkerInstruction::ChangeTerraRewardsDestination {
         terra_rewards_destination,

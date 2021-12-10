@@ -6,7 +6,7 @@ use std::{
     str::FromStr,
 };
 
-use anker::wormhole::ForeignAddress;
+use anker::wormhole::TerraAddress;
 use clap::Clap;
 use serde::Deserialize;
 use serde_json::Value;
@@ -747,12 +747,11 @@ cli_opt_struct! {
         #[clap(long, value_name = "address")]
         token_swap_pool: Pubkey,
 
-        /// Terra address that will receive the UST rewards. Written as the
-        /// string representation of bytes, can be pre-appended with "0x".
+        /// Terra address that will receive the UST rewards.
         ///
-        /// Left-padded with 0s until 32 bytes are present.
+        /// Must be provided in the usual Terra bech32 encoding.
         #[clap(long, value_name = "terra_address")]
-        terra_rewards_address: ForeignAddress,
+        terra_rewards_address: TerraAddress,
     }
 }
 
