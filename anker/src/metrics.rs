@@ -13,7 +13,7 @@ pub struct Metrics {
     #[serde(rename = "swaped_rewards_total_st_lamports")]
     pub swapped_rewards_st_sol_total: StLamports,
 
-    /// Total swapped amount of UST to StSOL.
+    /// Total amount of UST received through swaps.
     #[serde(rename = "swapped_rewards_ust_total_microust")]
     pub swapped_rewards_ust_total: MicroUst,
 }
