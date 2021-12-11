@@ -19,7 +19,7 @@ use spl_token_swap::state::SwapV1;
 use crate::token::{self, BLamports};
 
 /// Size of the serialized [`Anker`] struct, in bytes.
-pub const ANKER_LEN: usize = 217;
+pub const ANKER_LEN: usize = 233;
 
 #[repr(C)]
 #[derive(
