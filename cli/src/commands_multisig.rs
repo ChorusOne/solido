@@ -48,6 +48,7 @@ pub struct MultisigOpts {
 #[derive(Clap, Debug)]
 pub struct TokenOpts {
     #[clap(subcommand)]
+    #[allow(dead_code)]
     subcommand: TokenSubCommand,
 }
 

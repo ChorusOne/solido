@@ -174,9 +174,9 @@ fn run_maintenance_iteration(
     config: &mut SnapshotClientConfig,
     opts: &RunMaintainerOpts,
 ) -> MaintenanceResult {
-    let result = config.with_snapshot(|mut config| {
+    let result = config.with_snapshot(|config| {
         let state = SolidoState::new(
-            &mut config,
+            config,
             opts.solido_program_id(),
             opts.solido_address(),
             *opts.stake_time(),
@@ -189,7 +189,7 @@ fn run_maintenance_iteration(
             return Ok(MaintenanceResult::OkIdle(state));
         }
 
-        match try_perform_maintenance(&mut config, &state) {
+        match try_perform_maintenance(config, &state) {
             Ok(None) => Ok(MaintenanceResult::OkIdle(state)),
             Ok(Some(output)) => Ok(MaintenanceResult::OkMaintenance(state, output)),
             Err(SnapshotError::MissingAccount) => Err(SnapshotError::MissingAccount),

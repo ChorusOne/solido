@@ -27,7 +27,7 @@ use crate::{
     logic::{burn_b_sol, deserialize_anker, mint_b_sol_to},
     state::{Anker, WormholeParameters},
     token::{BLamports, MicroUst},
-    wormhole::{get_wormhole_transfer_instruction, ForeignAddress},
+    wormhole::{get_wormhole_transfer_instruction, TerraAddress},
 };
 use crate::{find_ust_reserve_account, ANKER_STSOL_RESERVE_ACCOUNT, ANKER_UST_RESERVE_ACCOUNT};
 use crate::{
@@ -39,7 +39,7 @@ use crate::{state::ANKER_LEN, ANKER_RESERVE_AUTHORITY};
 fn process_initialize(
     program_id: &Pubkey,
     accounts_raw: &[AccountInfo],
-    terra_rewards_destination: ForeignAddress,
+    terra_rewards_destination: TerraAddress,
 ) -> ProgramResult {
     let accounts = InitializeAccountsInfo::try_from_slice(accounts_raw)?;
     let rent = Rent::from_account_info(accounts.sysvar_rent)?;
@@ -348,7 +348,7 @@ fn process_withdraw(
 fn process_change_terra_rewards_destination(
     program_id: &Pubkey,
     accounts_raw: &[AccountInfo],
-    terra_rewards_destination: ForeignAddress,
+    terra_rewards_destination: TerraAddress,
 ) -> ProgramResult {
     let accounts = ChangeTerraRewardsDestinationAccountsInfo::try_from_slice(accounts_raw)?;
     let (solido, mut anker) = deserialize_anker(program_id, accounts.anker, accounts.solido)?;
@@ -404,7 +404,7 @@ fn process_send_rewards(
     let payload = crate::wormhole::Payload::new(
         wormhole_nonce,
         reserve_ust_amount,
-        anker.terra_rewards_destination,
+        anker.terra_rewards_destination.to_foreign(),
     );
 
     // Send UST tokens via Wormhole 🤞.

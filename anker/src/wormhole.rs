@@ -1,8 +1,9 @@
+use std::fmt;
+use std::fmt::Formatter;
 use std::str::FromStr;
 
-use crate::{error::AnkerError, token::MicroUst};
+use bech32::{FromBase32, ToBase32};
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use hex::FromHexError;
 use serde::Serialize;
 use solana_program::{
     entrypoint::ProgramResult,
@@ -10,6 +11,8 @@ use solana_program::{
     msg,
     pubkey::Pubkey,
 };
+
+use crate::{error::AnkerError, token::MicroUst};
 
 /// Wormhole's Terra chain id.
 pub const WORMHOLE_CHAIN_ID_TERRA: u16 = 3;
@@ -24,22 +27,80 @@ const WORMHOLE_NATIVE_TRANSFER_CODE: u8 = 5;
 )]
 pub struct ForeignAddress([u8; 32]);
 
-impl FromStr for ForeignAddress {
-    type Err = FromHexError;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut foreign_address = [0; 32];
-        // Allow for array starting with 0x
-        let array_vec = if s.len() >= 2 && &s[..2] == "0x" {
-            hex::decode(&s[2..])
-        } else {
-            hex::decode(s)
-        }?;
-        if array_vec.len() > 32 {
-            return Err(FromHexError::InvalidStringLength);
+#[derive(Debug, Eq, PartialEq)]
+pub enum AddressError {
+    /// Bech32 decoding failed.
+    Bech32(bech32::Error),
+
+    /// The human-readable part of the address is not "terra".
+    HumanReadablePartIsNotTerra,
+
+    /// The address is either too long or too short.
+    LengthNot20Bytes,
+
+    /// The variant is not the classic BIP-0173 bech32.
+    VariantIsNotBech32,
+}
+
+impl fmt::Display for AddressError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            AddressError::Bech32(err) => write!(f, "Invalid bech32 format: {}", err),
+            AddressError::HumanReadablePartIsNotTerra => {
+                write!(f, "Address does not start with 'terra'.")
+            }
+            AddressError::LengthNot20Bytes => write!(f, "The address is not 20 bytes long."),
+            AddressError::VariantIsNotBech32 => {
+                write!(f, "The address variant is not the classic BIP-0173 bech32.")
+            }
         }
-        let start = 32 - array_vec.len();
-        foreign_address[start..].clone_from_slice(&array_vec[..(32 - start)]);
-        Ok(ForeignAddress(foreign_address))
+    }
+}
+
+#[repr(C)]
+#[derive(
+    Clone, Default, Debug, BorshSerialize, BorshDeserialize, BorshSchema, Eq, PartialEq, Serialize,
+)]
+pub struct TerraAddress([u8; 20]);
+
+impl TerraAddress {
+    pub fn to_foreign(&self) -> ForeignAddress {
+        // Wormhole treats all addresses as bytestrings of length 32. If the
+        // address is shorter, it must be left-padded with zeros.
+        let mut foreign = [0_u8; 32];
+        foreign[12..].copy_from_slice(&self.0[..]);
+        ForeignAddress(foreign)
+    }
+}
+
+impl FromStr for TerraAddress {
+    type Err = AddressError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (hrp, data_u5, variant) = bech32::decode(s).map_err(AddressError::Bech32)?;
+        if hrp != "terra" {
+            return Err(AddressError::HumanReadablePartIsNotTerra);
+        }
+        if variant != bech32::Variant::Bech32 {
+            return Err(AddressError::VariantIsNotBech32);
+        }
+
+        let data_bytes = Vec::<u8>::from_base32(&data_u5).map_err(AddressError::Bech32)?;
+        if data_bytes.len() != 20 {
+            return Err(AddressError::LengthNot20Bytes);
+        }
+
+        let mut address = [0; 20];
+        address.copy_from_slice(&data_bytes);
+
+        Ok(TerraAddress(address))
+    }
+}
+
+impl fmt::Display for TerraAddress {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        bech32::encode_to_fmt(f, "terra", self.0.to_base32(), bech32::Variant::Bech32)
+            .expect("The HRP is hard-coded and known to be fine, it should not fail.")
     }
 }
 
@@ -188,8 +249,11 @@ fn test_get_wormhole_instruction() {
     // worm2ZoG2kUd4vFXhvjh93UUH596ayRfgQ2MgjNMTth : Wormhole core bridge program id.
 
     let wormhole_chain_id_ethereum = 2;
-    let ethereum_pubkey =
-        ForeignAddress::from_str("29fc5aacd613410b68c9c08d4e1656e3c890e482").unwrap();
+    let ethereum_pubkey = ForeignAddress([
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x29, 0xfc, 0x5a,
+        0xac, 0xd6, 0x13, 0x41, 0x0b, 0x68, 0xc9, 0xc0, 0x8d, 0x4e, 0x16, 0x56, 0xe3, 0xc8, 0x90,
+        0xe4, 0x82,
+    ]);
     let mut payload = Payload::new(14476, MicroUst(500_000_000), ethereum_pubkey);
     payload.target_chain = wormhole_chain_id_ethereum;
     let payer = Pubkey::new_unique();
@@ -233,51 +297,44 @@ fn test_get_wormhole_instruction() {
 }
 
 #[test]
-fn test_foreign_address_conversion() {
-    let zero_addr = ForeignAddress::from_str("").unwrap();
-    assert_eq!(zero_addr, ForeignAddress([0; 32]));
-    let zero_addr_start_0x = ForeignAddress::from_str("0x").unwrap();
-    assert_eq!(zero_addr, zero_addr_start_0x);
-
-    let eth_addr =
-        ForeignAddress::from_str("29fc5aacd613410b68c9c08d4e1656e3c890e4820200").unwrap();
+fn test_terra_address_from_string() {
+    // This is the address from the test transaction:
+    // https://github.com/ChorusOne/solido/issues/445#issuecomment-988002302.
     assert_eq!(
-        eth_addr,
+        TerraAddress::from_str("terra1z7529lza7elcleyhzj2sfq62uk7rtjgnrqeuxr"),
+        Ok(TerraAddress([
+            0x17, 0xa8, 0xa2, 0xfc, 0x5d, 0xf6, 0x7f, 0x8f, 0xe4, 0x97, 0x14, 0x95, 0x04, 0x83,
+            0x4a, 0xe5, 0xbc, 0x35, 0xc9, 0x13
+        ])),
+    );
+}
+
+#[test]
+fn test_terra_address_to_string() {
+    // This is the address from the test transaction:
+    // https://github.com/ChorusOne/solido/issues/445#issuecomment-988002302.
+    assert_eq!(
+        TerraAddress([
+            0x17, 0xa8, 0xa2, 0xfc, 0x5d, 0xf6, 0x7f, 0x8f, 0xe4, 0x97, 0x14, 0x95, 0x04, 0x83,
+            0x4a, 0xe5, 0xbc, 0x35, 0xc9, 0x13
+        ])
+        .to_string(),
+        "terra1z7529lza7elcleyhzj2sfq62uk7rtjgnrqeuxr",
+    );
+}
+
+#[test]
+fn terra_address_to_foreign_left_pads_with_zeros() {
+    assert_eq!(
+        TerraAddress([
+            0x17, 0xa8, 0xa2, 0xfc, 0x5d, 0xf6, 0x7f, 0x8f, 0xe4, 0x97, 0x14, 0x95, 0x04, 0x83,
+            0x4a, 0xe5, 0xbc, 0x35, 0xc9, 0x13
+        ])
+        .to_foreign(),
         ForeignAddress([
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 41, 252, 90, 172, 214, 19, 65, 11, 104, 201, 192, 141,
-            78, 22, 86, 227, 200, 144, 228, 130, 2, 0
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x17, 0xa8,
+            0xa2, 0xfc, 0x5d, 0xf6, 0x7f, 0x8f, 0xe4, 0x97, 0x14, 0x95, 0x04, 0x83, 0x4a, 0xe5,
+            0xbc, 0x35, 0xc9, 0x13
         ])
     );
-    let address_32_bytes = ForeignAddress::from_str(
-        "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
-    )
-    .unwrap();
-
-    let address_32_bytes_start_with_0x = ForeignAddress::from_str(
-        "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
-    )
-    .unwrap();
-    assert_eq!(address_32_bytes_start_with_0x, address_32_bytes);
-
-    assert_eq!(
-        address_32_bytes,
-        ForeignAddress([
-            222, 173, 190, 239, 222, 173, 190, 239, 222, 173, 190, 239, 222, 173, 190, 239, 222,
-            173, 190, 239, 222, 173, 190, 239, 222, 173, 190, 239, 222, 173, 190, 239
-        ])
-    );
-    let address_more_32_bytes = ForeignAddress::from_str(
-        "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefde",
-    );
-    assert_eq!(
-        address_more_32_bytes,
-        Err(FromHexError::InvalidStringLength)
-    );
-    let address_invalid_hexa = ForeignAddress::from_str("ka");
-    assert_eq!(
-        address_invalid_hexa,
-        Err(FromHexError::InvalidHexCharacter { c: 'k', index: 0 })
-    );
-    let address_odd_length_bytes = ForeignAddress::from_str("aaa");
-    assert_eq!(address_odd_length_bytes, Err(FromHexError::OddLength));
 }

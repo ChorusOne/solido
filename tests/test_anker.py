@@ -117,7 +117,8 @@ print(f'> Created instance at {solido_address}.')
 
 print('\nCreating Anker instance ...')
 result = solido(
-    'create-anker',
+    'anker',
+    'create',
     '--solido-program-id',
     solido_program_id,
     '--solido-address',
@@ -136,8 +137,7 @@ result = solido(
     # Wormhole's testnet address. TODO: Replace with a new localhost program instance.
     'DZnkkTmCiFWfYTfT41X3Rd1kDgozqzxWaHqsw6W4x2oe',
     '--terra-rewards-address',
-    # TODO: Replace with an actual terra address
-    'deadbeefdeadbeefdeadbeefdeadbeef',
+    'terra18aqm668ygwppxnmkmjn4wrtgdweq5ay7rs42ch',
 )
 # TODO: Also provide --mint-address, we need to be sure that that one works.
 anker_address = result['anker_address']
