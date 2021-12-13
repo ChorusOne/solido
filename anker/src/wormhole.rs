@@ -65,6 +65,8 @@ pub struct TerraAddress([u8; 20]);
 
 impl TerraAddress {
     pub fn to_foreign(&self) -> ForeignAddress {
+        // Wormhole treats all addresses as bytestrings of length 32. If the
+        // address is shorter, it must be left-padded with zeros.
         let mut foreign = [0_u8; 32];
         foreign[12..].copy_from_slice(&self.0[..]);
         ForeignAddress(foreign)
