@@ -98,12 +98,12 @@ pub fn command_create_anker(
             st_sol_reserve_account,
             ust_reserve_account,
             reserve_authority,
-            // TODO(#462): Make this configurable, but then we need to figure out
-            // the address format first.
-            terra_rewards_destination: Pubkey::new_unique(),
+            wormhole_core_bridge_program_id: *opts.wormhole_core_bridge_program_id(),
+            wormhole_token_bridge_program_id: *opts.wormhole_token_bridge_program_id(),
             ust_mint: *opts.ust_mint_address(),
             token_swap_pool: *opts.token_swap_pool(),
         },
+        opts.terra_rewards_address().clone(),
     )];
 
     config.sign_and_send_transaction(&instructions[..], &[config.signer])?;

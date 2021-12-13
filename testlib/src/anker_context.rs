@@ -19,7 +19,7 @@ use spl_token_swap::instruction::Swap;
 
 use crate::solido_context::send_transaction;
 use crate::solido_context::{self};
-use anker::{find_reserve_authority, find_st_sol_reserve_account};
+use anker::{find_reserve_authority, find_st_sol_reserve_account, wormhole::ForeignAddress};
 
 // Program id for the Anker program. Only used for tests.
 solana_program::declare_id!("Anker111111111111111111111111111111111111117");
@@ -186,7 +186,7 @@ pub struct Context {
 
     pub token_pool_context: TokenPoolContext,
     pub rewards_owner: Keypair,
-    pub terra_ust_rewards_account: Pubkey,
+    pub terra_rewards_destination: ForeignAddress,
     pub reserve_authority: Pubkey,
 }
 
@@ -208,8 +208,7 @@ impl Context {
         let token_pool_context = setup_token_pool(&mut solido_context).await;
 
         let rewards_owner = solido_context.deterministic_keypair.new_keypair();
-        // TODO: Replace with a valid Terra address.
-        let terra_ust_rewards_account = Pubkey::default();
+        let terra_rewards_destination = ForeignAddress::default();
 
         send_transaction(
             &mut solido_context.context,
@@ -221,15 +220,17 @@ impl Context {
                     anker,
                     solido: solido_context.solido.pubkey(),
                     solido_program: solido_context::id(),
+                    wormhole_core_bridge_program_id: Pubkey::new_unique(),
+                    wormhole_token_bridge_program_id: Pubkey::new_unique(),
                     st_sol_mint: solido_context.st_sol_mint,
                     b_sol_mint,
                     st_sol_reserve_account: st_sol_reserve,
                     ust_reserve_account: ust_reserve,
                     reserve_authority,
                     token_swap_pool: token_pool_context.swap_account.pubkey(),
-                    terra_rewards_destination: terra_ust_rewards_account,
                     ust_mint: token_pool_context.ust_mint_address,
                 },
+                terra_rewards_destination.clone(),
             )],
             vec![],
         )
@@ -249,7 +250,7 @@ impl Context {
             ust_reserve,
             token_pool_context,
             rewards_owner,
-            terra_ust_rewards_account,
+            terra_rewards_destination,
             reserve_authority,
         }
     }
@@ -528,7 +529,7 @@ impl Context {
     pub async fn try_change_terra_rewards_destination(
         &mut self,
         manager: &Keypair,
-        terra_rewards_destination: Pubkey,
+        terra_rewards_destination: ForeignAddress,
     ) -> transport::Result<()> {
         send_transaction(
             &mut self.solido_context.context,
@@ -539,8 +540,8 @@ impl Context {
                     anker: self.anker,
                     solido: self.solido_context.solido.pubkey(),
                     manager: manager.pubkey(),
-                    terra_rewards_destination,
                 },
+                terra_rewards_destination,
             )],
             vec![manager],
         )
