@@ -37,6 +37,7 @@ mod daemon;
 mod error;
 mod maintenance;
 mod prometheus;
+mod serialization_utils;
 mod snapshot;
 mod spl_token_utils;
 mod validator_info_utils;

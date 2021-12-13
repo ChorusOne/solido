@@ -4,6 +4,7 @@
 use std::fmt;
 
 use anker::token::{BLamports, MicroUst};
+use anker::wormhole::TerraAddress;
 use clap::Clap;
 use lido::token::{Lamports, StLamports};
 use lido::util::serialize_b58;
@@ -16,6 +17,7 @@ use crate::error::Abort;
 use crate::snapshot::Result;
 use crate::spl_token_utils::push_create_spl_token_mint;
 use crate::{print_output, SnapshotClientConfig, SnapshotConfig};
+use crate::serialization_utils::serialize_bech32;
 
 #[derive(Clap, Debug)]
 enum SubCommand {
@@ -181,6 +183,9 @@ struct ShowAnkerOutput {
     #[serde(serialize_with = "serialize_b58")]
     b_sol_mint_authority: Pubkey,
 
+    #[serde(serialize_with = "serialize_bech32")]
+    terra_rewards_destination: TerraAddress,
+
     #[serde(serialize_with = "serialize_b58")]
     reserve_authority: Pubkey,
 
@@ -193,7 +198,6 @@ struct ShowAnkerOutput {
     ust_reserve_balance: MicroUst,
     st_sol_reserve_balance: StLamports,
     st_sol_reserve_value: Option<Lamports>,
-
     b_sol_supply: BLamports,
 }
 
@@ -203,6 +207,7 @@ impl fmt::Display for ShowAnkerOutput {
         writeln!(f, "Anker program id:      {}", self.anker_program_id)?;
         writeln!(f, "Solido address:        {}", self.solido_address)?;
         writeln!(f, "Solido program id:     {}", self.solido_program_id)?;
+        writeln!(f, "Rewards destination:   {}", self.terra_rewards_destination)?;
         writeln!(f, "bSOL mint:             {}", self.b_sol_mint)?;
         writeln!(f, "bSOL mint authority:   {}", self.b_sol_mint_authority)?;
         writeln!(f, "bSOL supply:           {}", self.b_sol_supply)?;
@@ -255,6 +260,8 @@ fn command_show_anker(
 
         solido_address: anker.solido,
         solido_program_id: anker.solido_program_id,
+
+        terra_rewards_destination: anker.terra_rewards_destination,
 
         b_sol_mint: anker.b_sol_mint,
         b_sol_mint_authority: mint_authority,
