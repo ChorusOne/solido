@@ -68,12 +68,6 @@ jobs:
         sudo apt-get install -y libudev-dev
         sh -c "$(curl -sSfL https://release.solana.com/v1.7.8/install)"
 
-    - name: Run unit tests
-      run: |
-        cargo test --manifest-path program/Cargo.toml
-        cargo test --manifest-path anker/Cargo.toml
-        cargo test --manifest-path cli/Cargo.toml
-
     - name: Build on-chain BPF programs
       run: |
         export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
@@ -82,42 +76,8 @@ jobs:
         # because we will need them later to test Solido.
         cargo build-bpf
 
-    - name: Test on-chain BPF programs
-      run: |
-        export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
-
-        # But only run the tests for Solido itself, the SPL tests are already
-        # executed upstream.
-        cargo test-bpf --manifest-path program/Cargo.toml
-        cargo test-bpf --manifest-path anker/Cargo.toml
-
     - name: Build CLI client
       run: cargo build --bin solido
-
-    - name: Run Solido integration test
-      run: |
-        export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
-        validator=$(tests/start_test_validator.py)
-
-        # Perform initial Solana setup.
-        solana-keygen new --no-bip39-passphrase --silent
-        solana config set --url http://127.0.0.1:8899
-        # Try to airdrop some times in case it fails
-        tests/airdrop_lamports.sh
-
-        tests/test_solido.py
-        kill $validator
-
-    - name: Run Anker integration test
-      run: |
-        export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
-        validator=$(tests/start_test_validator.py)
-
-        # We don't need to run keygen/setup again, the private key and state
-        # should still be there from the previous run.
-
-        tests/test_anker.py
-        kill $validator
 
     - name: Run Multisig integration test
       run: |
