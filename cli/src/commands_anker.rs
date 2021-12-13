@@ -14,10 +14,10 @@ use solana_sdk::signer::Signer;
 
 use crate::config::{ConfigFile, CreateAnkerOpts, ShowAnkerOpts};
 use crate::error::Abort;
+use crate::serialization_utils::serialize_bech32;
 use crate::snapshot::Result;
 use crate::spl_token_utils::push_create_spl_token_mint;
 use crate::{print_output, SnapshotClientConfig, SnapshotConfig};
-use crate::serialization_utils::serialize_bech32;
 
 #[derive(Clap, Debug)]
 enum SubCommand {
@@ -207,7 +207,11 @@ impl fmt::Display for ShowAnkerOutput {
         writeln!(f, "Anker program id:      {}", self.anker_program_id)?;
         writeln!(f, "Solido address:        {}", self.solido_address)?;
         writeln!(f, "Solido program id:     {}", self.solido_program_id)?;
-        writeln!(f, "Rewards destination:   {}", self.terra_rewards_destination)?;
+        writeln!(
+            f,
+            "Rewards destination:   {}",
+            self.terra_rewards_destination
+        )?;
         writeln!(f, "bSOL mint:             {}", self.b_sol_mint)?;
         writeln!(f, "bSOL mint authority:   {}", self.b_sol_mint_authority)?;
         writeln!(f, "bSOL supply:           {}", self.b_sol_supply)?;
