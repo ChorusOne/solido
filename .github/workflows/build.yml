@@ -79,6 +79,20 @@ jobs:
     - name: Build CLI client
       run: cargo build --bin solido
 
+    - name: Run Solido integration test
+      run: |
+        export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
+        validator=$(tests/start_test_validator.py)
+
+        # Perform initial Solana setup.
+        solana-keygen new --no-bip39-passphrase --silent
+        solana config set --url http://127.0.0.1:8899
+        # Try to airdrop some times in case it fails
+        tests/airdrop_lamports.sh
+
+        tests/test_solido.py
+        kill $validator
+
     - name: Run Multisig integration test
       run: |
         export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
