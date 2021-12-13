@@ -63,6 +63,9 @@ struct MaintenanceMetrics {
 
     /// Number of times we performed `Unstake` on an active validator for balancing purposes.
     transactions_unstake_from_active_validator: u64,
+
+    /// Number of times we performed `SellRewards` on the Anker instance.
+    transactions_sell_rewards: u64,
 }
 
 impl MaintenanceMetrics {
@@ -141,6 +144,7 @@ impl MaintenanceMetrics {
             MaintenanceOutput::UnstakeFromActiveValidator { .. } => {
                 self.transactions_unstake_from_active_validator += 1
             }
+            MaintenanceOutput::SellRewards { .. } => self.transactions_sell_rewards += 1,
         }
     }
 }
@@ -178,6 +182,7 @@ fn run_maintenance_iteration(
         let state = SolidoState::new(
             config,
             opts.solido_program_id(),
+            opts.anker_program_id(),
             opts.solido_address(),
             *opts.stake_time(),
         )?;
@@ -302,6 +307,7 @@ impl<'a, 'b> Daemon<'a, 'b> {
             transactions_unstake_from_inactive_validator: 0,
             transactions_remove_validator: 0,
             transactions_unstake_from_active_validator: 0,
+            transactions_sell_rewards: 0,
         };
         Daemon {
             config,

@@ -3892,6 +3892,7 @@ dependencies = [
  "solana-vote-program 1.7.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "spl-associated-token-account",
  "spl-token",
+ "spl-token-swap",
  "tiny_http",
  "uriparse",
 ]
