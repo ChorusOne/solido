@@ -572,6 +572,14 @@ impl Anker {
     /// Get the `amount` of tokens from the SPL account defined by `account`.
     /// Does not perform any checks, fails if not able to decode an SPL account.
     pub fn get_token_amount(account: &AccountInfo) -> Result<u64, ProgramError> {
+        if account.owner != &spl_token::id() {
+            msg!(
+                "Token accounts should be owned by {}, it's owned by {}",
+                spl_token::id(),
+                account.owner
+            );
+            return Err(AnkerError::InvalidOwner.into());
+        }
         let account_state = spl_token::state::Account::unpack_from_slice(&account.data.borrow())?;
         Ok(account_state.amount)
     }
