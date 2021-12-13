@@ -22,7 +22,7 @@ use crate::serialization_utils::serialize_bech32;
 #[derive(Clap, Debug)]
 enum SubCommand {
     /// Create a new Anker instance.
-    Create(CreateAnkerOpts),
+    Create(Box<CreateAnkerOpts>),
 
     /// Display the details of an Anker instance.
     Show(ShowAnkerOpts),
@@ -46,12 +46,12 @@ impl AnkerOpts {
 pub fn main(config: &mut SnapshotClientConfig, anker_opts: &AnkerOpts) {
     match &anker_opts.subcommand {
         SubCommand::Create(opts) => {
-            let result = config.with_snapshot(|config| command_create_anker(config, &opts));
+            let result = config.with_snapshot(|config| command_create_anker(config, opts));
             let output = result.ok_or_abort_with("Failed to create Anker instance.");
             print_output(config.output_mode, &output);
         }
         SubCommand::Show(opts) => {
-            let result = config.with_snapshot(|config| command_show_anker(config, &opts));
+            let result = config.with_snapshot(|config| command_show_anker(config, opts));
             let output = result.ok_or_abort_with("Failed to show Anker instance.");
             print_output(config.output_mode, &output);
         }

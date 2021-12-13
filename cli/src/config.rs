@@ -174,7 +174,7 @@ impl FromStr for PubkeyVec {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let pubkeys = s
             .split(',')
-            .map(|key| Pubkey::from_str(key))
+            .map(Pubkey::from_str)
             .collect::<Result<Vec<Pubkey>, Self::Err>>()?;
         Ok(PubkeyVec(pubkeys))
     }
