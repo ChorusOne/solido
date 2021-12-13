@@ -25,6 +25,7 @@ use crate::{
         SellRewardsAccountsInfo, SendRewardsAccountsInfo, WithdrawAccountsInfo,
     },
     logic::{burn_b_sol, deserialize_anker, mint_b_sol_to},
+    metrics::Metrics,
     state::{Anker, WormholeParameters},
     token::{BLamports, MicroUst},
     wormhole::{get_wormhole_transfer_instruction, TerraAddress},
@@ -131,6 +132,7 @@ fn process_initialize(
             core_bridge_program_id: *accounts.wormhole_core_bridge_program_id.key,
             token_bridge_program_id: *accounts.wormhole_token_bridge_program_id.key,
         },
+        metrics: Metrics::new(),
         self_bump_seed: anker_bump_seed,
         mint_authority_bump_seed: mint_bump_seed,
         reserve_authority_bump_seed,
@@ -223,7 +225,7 @@ fn process_deposit(
 /// Sell Anker rewards.
 fn process_sell_rewards(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> ProgramResult {
     let accounts = SellRewardsAccountsInfo::try_from_slice(accounts_raw)?;
-    let (solido, anker) = deserialize_anker(program_id, accounts.anker, accounts.solido)?;
+    let (solido, mut anker) = deserialize_anker(program_id, accounts.anker, accounts.solido)?;
     anker.check_st_sol_reserve_address(
         program_id,
         accounts.anker.key,
@@ -236,17 +238,27 @@ fn process_sell_rewards(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> Pr
         spl_token::state::Mint::unpack_from_slice(&accounts.b_sol_mint.data.borrow())?;
     let b_sol_supply = token_mint_state.supply;
 
-    let st_sol_reserve_state = spl_token::state::Account::unpack_from_slice(
-        &accounts.st_sol_reserve_account.data.borrow(),
-    )?;
-    let reserve_st_sol = StLamports(st_sol_reserve_state.amount);
+    let reserve_st_sol = StLamports(Anker::get_token_amount(accounts.st_sol_reserve_account)?);
 
     // Get StLamports corresponding to the amount of b_sol minted.
     let st_sol_amount = solido.exchange_rate.exchange_sol(Lamports(b_sol_supply))?;
 
     // If `reserve_st_sol` < `st_sol_amount` something went wrong, and we abort the transaction.
     let rewards = (reserve_st_sol - st_sol_amount)?;
-    swap_rewards(program_id, rewards, &anker, &accounts)
+
+    // Get the amount of UST that we had.
+    let ust_before = MicroUst(Anker::get_token_amount(accounts.ust_reserve_account)?);
+    swap_rewards(program_id, rewards, &anker, &accounts)?;
+    // Get new UST amount.
+    let ust_after = MicroUst(Anker::get_token_amount(accounts.ust_reserve_account)?);
+    let swapped_ust = (ust_after - ust_before)?;
+
+    msg!("Swapped {} for {}.", st_sol_amount, swapped_ust);
+
+    anker
+        .metrics
+        .observe_token_swap(st_sol_amount, swapped_ust)?;
+    anker.save(accounts.anker)
 }
 
 /// Return some bSOL and get back the underlying stSOL.

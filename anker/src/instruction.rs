@@ -258,7 +258,7 @@ accounts_struct! {
     SellRewardsAccountsMeta, SellRewardsAccountsInfo {
         pub anker {
             is_signer: false,
-            is_writable: false,
+            is_writable: true, // Needed to update metrics.
         },
         pub solido {
             is_signer: false,
