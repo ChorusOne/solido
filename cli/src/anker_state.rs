@@ -1,7 +1,6 @@
 // SPDX-FileCopyrightText: 2021 Chorus One AG
 // SPDX-License-Identifier: GPL-3.0
 
-use anchor_lang::prelude::Pubkey;
 use anker::{
     find_instance_address, find_reserve_authority, find_st_sol_reserve_account,
     find_ust_reserve_account,
@@ -11,6 +10,9 @@ use anker::{
 use lido::{state::Lido, token::StLamports};
 use solana_program::{instruction::Instruction, program_pack::Pack};
 use solana_sdk::account::ReadableAccount;
+use solana_sdk::pubkey::Pubkey;
+use solana_sdk::signer::keypair::Keypair;
+use solana_sdk::signer::Signer;
 
 use crate::{snapshot::Result, SnapshotConfig};
 
@@ -129,5 +131,75 @@ impl AnkerState {
                 token_swap_program_id: self.token_swap_program_id,
             },
         )
+    }
+
+    /// Build the instruction to send rewards through Wormhole.
+    ///
+    /// Returns the instruction and one additional signer.
+    pub fn get_send_rewards_instruction(
+        &self,
+        solido_address: Pubkey,
+        maintainer_address: Pubkey,
+        wormhole_nonce: u32,
+    ) -> (Instruction, Keypair) {
+        // TODO(ruuda): In our test transaction [1], before the call to Wormhole,
+        // there is a transfer of 0.000_000_010 SOL to _some_ account ... is that
+        // to cover Wormhole transaction fees? Will it work without this?
+        let (anker_instance, _anker_bump_seed) =
+            find_instance_address(&self.anker_program_id, &solido_address);
+
+        let (ust_reserve_account, _ust_reserve_bump_seed) =
+            find_ust_reserve_account(&self.anker_program_id, &anker_instance);
+
+        let (st_sol_reserve_account, _st_sol_reserve_bump_seed) =
+            find_st_sol_reserve_account(&self.anker_program_id, &solido_address);
+
+        let (reserve_authority, _reserve_authority_bump_seed) =
+            find_reserve_authority(&self.anker_program_id, &solido_address);
+
+        let (token_pool_authority, _authority_bump_seed) = Pubkey::find_program_address(
+            &[&self.anker.token_swap_pool.to_bytes()[..]],
+            &anker::orca_token_swap_v2::id(),
+        );
+
+        // Wormhole requires allocating a new "message" account for every
+        // Wormhole transaction.
+        let message = Keypair::new();
+
+        // The maintainer who is submitting this transaction pays for the Wormhole fees.
+        let payer = maintainer_address;
+
+        let instruction = anker::instruction::send_rewards(
+            &self.anker_program_id,
+            &anker::instruction::SendRewardsAccountsMeta {
+                anker: anker_instance,
+                solido: solido_address,
+                reserve_authority,
+                wormhole_token_bridge_program_id: self
+                    .anker
+                    .wormhole_parameters
+                    .token_bridge_program_id,
+                wormhole_core_bridge_program_id: self
+                    .anker
+                    .wormhole_parameters
+                    .core_bridge_program_id,
+                payer,
+                config_key: unimplemented!("TODO: Get Wormhole 'config_key'"),
+                ust_reserve_account,
+                ust_mint: self.ust_mint,
+                custody_key: unimplemented!(
+                    "TODO: Put this in the config, or is it program-derived?"
+                ),
+                custody_signer_key: unimplemented!("TODO: Get owner of custody_key."),
+                bridge_config: unimplemented!("TODO: Get wormhole 'bridge_config'"),
+                message: message.pubkey(),
+                emitter_key: unimplemented!(),
+                sequence_key: unimplemented!(),
+                fee_collector_key: unimplemented!(),
+            },
+            wormhole_nonce,
+        );
+
+        (instruction, message)
     }
 }

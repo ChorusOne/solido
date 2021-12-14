@@ -540,11 +540,6 @@ impl Anker {
             accounts.custody_key.key,
         )?;
         check_wormhole_account(
-            "authority signer key",
-            &wormhole_transfer_args.authority_signer_key,
-            accounts.authority_signer_key.key,
-        )?;
-        check_wormhole_account(
             "custody signer key",
             &wormhole_transfer_args.custody_signer_key,
             accounts.custody_signer_key.key,

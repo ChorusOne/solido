@@ -1,9 +1,6 @@
 // SPDX-FileCopyrightText: 2021 Chorus One AG
 // SPDX-License-Identifier: GPL-3.0
 
-// TODO(#449): Remove this once Anker functions are all complete.
-#![allow(dead_code)]
-
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use lido::{accounts_struct, accounts_struct_meta, error::LidoError, token::StLamports};
 use solana_program::{
@@ -20,6 +17,7 @@ use crate::{token::BLamports, wormhole::TerraAddress};
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
 pub enum AnkerInstruction {
     Initialize {
+        #[allow(dead_code)] // It is not dead code when compiled for BPF.
         terra_rewards_destination: TerraAddress,
     },
 
@@ -42,13 +40,17 @@ pub enum AnkerInstruction {
 
     /// Sell rewards to the UST reserve.
     SellRewards,
+
     /// Transfer from the UST reserve to terra through Wormhole.
     SendRewards {
-        wormhole_nonce: u32, // Random number used to differentiate similar transaction.
+        /// Random number used to differentiate similar transactions.
+        #[allow(dead_code)] // It is not dead code when compiled for BPF.
+        wormhole_nonce: u32,
     },
     /// Change the Anker's rewards destination address on Terra:
     /// `terra_rewards_destination`.
     ChangeTerraRewardsDestination {
+        #[allow(dead_code)] // It is not dead code when compiled for BPF.
         terra_rewards_destination: TerraAddress,
     },
     /// Change the token pool instance.
@@ -445,14 +447,16 @@ accounts_struct! {
             is_signer: false,
             is_writable: true,
         },
+        // The "custody key" account is an SPL token account that will hold the
+        // tokens after sending them "through" wormhole; they stay in the custody
+        // account on the Solana side. It's a single account (per mint) for all
+        // of Wormhole's transfers. The token account owner must be the
+        // `custody_signer_key`.
         pub custody_key {
             is_signer: false,
             is_writable: true,
         },
-        pub authority_signer_key {
-            is_signer: false,
-            is_writable: false,
-        },
+        // The owner of the `custody_key`.
         pub custody_signer_key {
             is_signer: false,
             is_writable: false,
@@ -461,6 +465,9 @@ accounts_struct! {
             is_signer: false,
             is_writable: true,
         },
+        // The message account needs to be a new, uninitialized account, and then
+        // calling Wormhole will initialize it. (This is why it needs to be a
+        // signer.)
         pub message {
             is_signer: true,
             is_writable: true,

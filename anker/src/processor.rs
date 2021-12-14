@@ -429,6 +429,13 @@ fn process_send_rewards(
         &[anker.reserve_authority_bump_seed],
     ];
 
+    // The "authority signer key" is the authority that can approve SPL token
+    // transfers out of the "from" account and into Wormhole's custody account.
+    // If you use SPL token's "delegate"/"approve" feature, then this is the key
+    // to which you delegated, but it can also be the owner of the SPL token
+    // account directly, which is the reserve authority in our case.
+    let authority_signer_key = accounts.reserve_authority.clone();
+
     invoke_signed(
         &get_wormhole_transfer_instruction(&payload, &wormhole_transfer_args),
         &vec![
@@ -437,7 +444,7 @@ fn process_send_rewards(
             accounts.ust_reserve_account.clone(),
             accounts.ust_mint.clone(),
             accounts.custody_key.clone(),
-            accounts.authority_signer_key.clone(),
+            authority_signer_key,
             accounts.custody_signer_key.clone(),
             accounts.bridge_config.clone(),
             accounts.message.clone(),
