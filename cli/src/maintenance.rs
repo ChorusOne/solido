@@ -709,7 +709,7 @@ impl SolidoState {
         None
     }
 
-    /// If there is a validator ready for removal, try to remove it.
+    /// Try to sell the extra stSOL rewards for UST tokens.
     pub fn try_sell_anker_rewards(&self) -> Option<(Instruction, MaintenanceOutput)> {
         if self.anker_state.ust_reserve_balance > MicroUst(0) {
             Some((
