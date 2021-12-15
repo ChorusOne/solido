@@ -409,6 +409,8 @@ pub fn change_token_swap_pool(
 }
 
 accounts_struct! {
+    // For the Wormhole accounts, see also
+    // https://github.com/certusone/wormhole/blob/537d56b37aa041a585f2c90515fa3a7ffa5898b5/solana/modules/token_bridge/program/src/instructions.rs#L328-L390.
     SendRewardsAccountsMeta, SendRewardsAccountsInfo {
         pub anker {
             is_signer: false,

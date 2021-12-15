@@ -436,6 +436,8 @@ fn process_send_rewards(
     // account directly, which is the reserve authority in our case.
     let authority_signer_key = accounts.reserve_authority.clone();
 
+    // For the order and meaning of the accounts, see also
+    // https://github.com/certusone/wormhole/blob/537d56b37aa041a585f2c90515fa3a7ffa5898b5/solana/modules/token_bridge/program/src/instructions.rs#L328-L390.
     invoke_signed(
         &get_wormhole_transfer_instruction(&payload, &wormhole_transfer_args),
         &vec![
