@@ -340,7 +340,7 @@ fn command_create_token_swap(
 
     let (authority_pubkey, authority_bump_seed) = Pubkey::find_program_address(
         &[&token_pool_account.pubkey().to_bytes()[..]],
-        &opts.token_swap_program_id(),
+        opts.token_swap_program_id(),
     );
 
     let pool_mint_keypair =
@@ -362,7 +362,7 @@ fn command_create_token_swap(
     // Change the token owner to the pool's authority.
     instructions.push(spl_token::instruction::set_authority(
         &spl_token::id(),
-        &opts.st_sol_account(),
+        opts.st_sol_account(),
         Some(&authority_pubkey),
         spl_token::instruction::AuthorityType::AccountOwner,
         &config.signer.pubkey(),
@@ -372,7 +372,7 @@ fn command_create_token_swap(
     // Change the token owner to the pool's authority.
     instructions.push(spl_token::instruction::set_authority(
         &spl_token::id(),
-        &opts.ust_account(),
+        opts.ust_account(),
         Some(&authority_pubkey),
         spl_token::instruction::AuthorityType::AccountOwner,
         &config.signer.pubkey(),
@@ -408,8 +408,8 @@ fn command_create_token_swap(
         &spl_token::id(),
         &token_pool_account.pubkey(),
         &authority_pubkey,
-        &opts.st_sol_account(),
-        &opts.ust_account(),
+        opts.st_sol_account(),
+        opts.ust_account(),
         &pool_mint_pubkey,
         &pool_fee_keypair.pubkey(),
         &pool_token_keypair.pubkey(),
