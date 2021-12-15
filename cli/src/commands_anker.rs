@@ -31,8 +31,8 @@ enum SubCommand {
     /// Display the details of an Anker instance.
     Show(ShowAnkerOpts),
 
-    /// Create Token Swap instance.
-    CreateTokenSwap(CreateTokenPoolOpts),
+    /// Create Token Pool instance.
+    CreateTokenPool(CreateTokenPoolOpts),
 }
 
 #[derive(Clap, Debug)]
@@ -46,7 +46,7 @@ impl AnkerOpts {
         match &mut self.subcommand {
             SubCommand::Create(opts) => opts.merge_with_config_and_environment(config_file),
             SubCommand::Show(opts) => opts.merge_with_config_and_environment(config_file),
-            SubCommand::CreateTokenSwap(opts) => {
+            SubCommand::CreateTokenPool(opts) => {
                 opts.merge_with_config_and_environment(config_file)
             }
         }
@@ -65,8 +65,8 @@ pub fn main(config: &mut SnapshotClientConfig, anker_opts: &AnkerOpts) {
             let output = result.ok_or_abort_with("Failed to show Anker instance.");
             print_output(config.output_mode, &output);
         }
-        SubCommand::CreateTokenSwap(opts) => {
-            let result = config.with_snapshot(|config| command_create_token_swap(config, opts));
+        SubCommand::CreateTokenPool(opts) => {
+            let result = config.with_snapshot(|config| command_create_token_pool(config, opts));
             let output = result.ok_or_abort_with("Failed to create Token Pool instance.");
             print_output(config.output_mode, &output);
         }
@@ -314,12 +314,12 @@ impl fmt::Display for CreateTokenPoolOutput {
     }
 }
 
-/// Create a Token Swap Pool. Used for testing purposes only.
+/// Create a Token Pool. Used for testing purposes only.
 ///
 /// The pool is created with 0 fees.
 /// The pool is `ConstantProduct`, i.e., `token_a * token_b = C`, with C a
 /// constant.
-fn command_create_token_swap(
+fn command_create_token_pool(
     config: &mut SnapshotConfig,
     opts: &CreateTokenPoolOpts,
 ) -> Result<CreateTokenPoolOutput> {
