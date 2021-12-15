@@ -711,14 +711,24 @@ impl SolidoState {
 
     /// Try to sell the extra stSOL rewards for UST tokens.
     pub fn try_sell_anker_rewards(&self) -> Option<(Instruction, MaintenanceOutput)> {
-        if self.anker_state.ust_reserve_balance > MicroUst(0) {
-            Some((
-                self.anker_state
-                    .get_sell_rewards_instruction(self.solido_address, self.solido.st_sol_mint),
-                MaintenanceOutput::SellRewards {
-                    st_sol_amount: self.anker_state.st_sol_reserve_balance,
-                },
-            ))
+        let reserve_st_sol = self.anker_state.st_sol_reserve_balance;
+        let st_sol_amount = self
+            .solido
+            .exchange_rate
+            .exchange_sol(Lamports(self.anker_state.b_sol_total_supply_amount.0))
+            .unwrap();
+        if let Ok(rewards) = reserve_st_sol - st_sol_amount {
+            if rewards > StLamports(0) {
+                Some((
+                    self.anker_state
+                        .get_sell_rewards_instruction(self.solido_address, self.solido.st_sol_mint),
+                    MaintenanceOutput::SellRewards {
+                        st_sol_amount: self.anker_state.st_sol_reserve_balance,
+                    },
+                ))
+            } else {
+                None
+            }
         } else {
             None
         }

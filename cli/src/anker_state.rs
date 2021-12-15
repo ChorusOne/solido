@@ -1,7 +1,9 @@
 use anchor_lang::prelude::Pubkey;
 use anker::{
     find_instance_address, find_reserve_authority, find_st_sol_reserve_account,
-    find_ust_reserve_account, state::Anker, token::MicroUst,
+    find_ust_reserve_account,
+    state::Anker,
+    token::{BLamports, MicroUst},
 };
 use lido::{state::Lido, token::StLamports};
 use solana_program::{instruction::Instruction, program_pack::Pack};
@@ -14,6 +16,7 @@ pub struct AnkerState {
     pub anker: Anker,
     pub anker_program_id: Pubkey,
 
+    pub b_sol_total_supply_amount: BLamports,
     pub pool_st_sol_account: Pubkey,
     pub pool_ust_account: Pubkey,
     pub ust_mint: Pubkey,
@@ -47,6 +50,9 @@ impl AnkerState {
         let st_sol_reserve_balance =
             StLamports(config.client.get_spl_token_balance(&anker_st_sol_reserve)?);
 
+        let b_sol_mint_account = config.client.get_spl_token_mint(&anker.b_sol_mint)?;
+        let b_sol_total_supply_amount = BLamports(b_sol_mint_account.supply);
+
         let (ust_account, ust_mint, st_sol_account) =
             if token_swap.token_a_mint == solido.st_sol_mint {
                 (
@@ -65,7 +71,7 @@ impl AnkerState {
         Ok(AnkerState {
             anker_program_id,
             anker,
-
+            b_sol_total_supply_amount,
             pool_st_sol_account: st_sol_account,
             pool_ust_account: ust_account,
             ust_mint,
