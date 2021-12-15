@@ -465,8 +465,6 @@ def perform_maintenance() -> Any:
         solido_program_id,
         '--stake-time',
         'anytime',
-        '--anker-program-id',
-        anker_program_id,
         keypair_path=maintainer.keypair_path,
     )
 
