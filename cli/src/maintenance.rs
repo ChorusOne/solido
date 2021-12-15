@@ -274,7 +274,7 @@ pub struct SolidoState {
     pub solido: Lido,
 
     /// Anker parameters
-    pub anker_state: AnkerState,
+    pub anker_state: Option<AnkerState>,
 
     /// For each validator, in the same order as in `solido.validators`, holds
     /// the stake balance of the derived stake accounts from the begin seed until
@@ -487,7 +487,16 @@ impl SolidoState {
         // program does that anyway.
         let maintainer_address = config.signer.pubkey();
 
-        let anker_state = AnkerState::new(config, *anker_program_id, solido_address, &solido)?;
+        let anker_state = if anker_program_id == &Pubkey::default() {
+            None
+        } else {
+            Some(AnkerState::new(
+                config,
+                *anker_program_id,
+                solido_address,
+                &solido,
+            )?)
+        };
 
         Ok(SolidoState {
             produced_at: SystemTime::now(),
@@ -710,19 +719,20 @@ impl SolidoState {
 
     /// Try to sell the extra stSOL rewards for UST tokens.
     pub fn try_sell_anker_rewards(&self) -> Option<(Instruction, MaintenanceOutput)> {
-        let reserve_st_sol = self.anker_state.st_sol_reserve_balance;
+        let anker_state = self.anker_state.as_ref()?;
+        let reserve_st_sol = anker_state.st_sol_reserve_balance;
         let st_sol_amount = self
             .solido
             .exchange_rate
-            .exchange_sol(Lamports(self.anker_state.b_sol_total_supply_amount.0))
+            .exchange_sol(Lamports(anker_state.b_sol_total_supply_amount.0))
             .unwrap();
         if let Ok(rewards) = reserve_st_sol - st_sol_amount {
             if rewards > StLamports(0) {
                 Some((
-                    self.anker_state
+                    anker_state
                         .get_sell_rewards_instruction(self.solido_address, self.solido.st_sol_mint),
                     MaintenanceOutput::SellRewards {
-                        st_sol_amount: self.anker_state.st_sol_reserve_balance,
+                        st_sol_amount: anker_state.st_sol_reserve_balance,
                     },
                 ))
             } else {
@@ -1546,7 +1556,7 @@ mod test {
             solido_program_id: Pubkey::new_unique(),
             solido_address: Pubkey::new_unique(),
             solido: Lido::default(),
-            anker_state: AnkerState::default(),
+            anker_state: Some(AnkerState::default()),
             validator_stake_accounts: vec![],
             validator_unstake_accounts: vec![],
             validator_vote_account_balances: vec![],
