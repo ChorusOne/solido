@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2021 Chorus One AG
+// SPDX-License-Identifier: GPL-3.0
+
 use borsh::BorshDeserialize;
 use lido::token::Lamports;
 use solana_program::{

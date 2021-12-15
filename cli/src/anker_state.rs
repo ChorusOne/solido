@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2021 Chorus One AG
+// SPDX-License-Identifier: GPL-3.0
+
 use anchor_lang::prelude::Pubkey;
 use anker::{
     find_instance_address, find_reserve_authority, find_st_sol_reserve_account,

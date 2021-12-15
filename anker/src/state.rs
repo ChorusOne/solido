@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2021 Chorus One AG
+// SPDX-License-Identifier: GPL-3.0
+
 use crate::instruction::{SellRewardsAccountsInfo, SendRewardsAccountsInfo};
 use crate::metrics::Metrics;
 use crate::wormhole::{check_wormhole_account, TerraAddress, WormholeTransferArgs};

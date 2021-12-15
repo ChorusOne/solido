@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2021 Chorus One AG
+// SPDX-License-Identifier: GPL-3.0
+
 // TODO(#449): Remove this once Anker functions are all complete.
 #![allow(dead_code)]
 
