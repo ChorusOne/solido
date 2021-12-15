@@ -7,7 +7,6 @@ use std::fmt;
 use std::io;
 use std::time::SystemTime;
 
-use anker::token::MicroUst;
 use itertools::izip;
 
 use lido::processor::StakeType;
