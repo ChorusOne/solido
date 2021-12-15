@@ -770,3 +770,26 @@ cli_opt_struct! {
         anker_address: Pubkey,
     }
 }
+
+cli_opt_struct! {
+    CreateTokenPoolOpts {
+        /// Program id of the token swap program.
+        #[clap(long, value_name = "address")]
+        token_swap_program_id: Pubkey,
+
+        /// The UST mint address.
+        ///
+        /// The mainnet address of Wormhole-v2 wrapped UST is
+        /// 9vMJfxuKxXBoEa7rM12mYLMwTacLMLDJqHozw96WQL8i.
+        #[clap(long, value_name = "address")]
+        ust_mint_address: Pubkey,
+
+        /// stSOL account for the token swap, should be funded.
+        #[clap(long, value_name = "address")]
+        st_sol_account: Pubkey,
+
+        /// UST account for the token swap, should be funded.
+        #[clap(long, value_name = "address")]
+        ust_account: Pubkey,
+    }
+}

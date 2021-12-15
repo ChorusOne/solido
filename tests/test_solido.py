@@ -191,6 +191,40 @@ treasury_account = result['treasury_account']
 developer_account = result['developer_account']
 st_sol_mint_account = result['st_sol_mint_address']
 
+print('\nSetting up UST mint ...')
+ust_mint_address = create_test_account('tests/.keys/ust_mint_address.json', fund=False)
+spl_token('create-token', 'tests/.keys/ust_mint_address.json')
+print(f'> UST mint is {ust_mint_address.pubkey}.')
+
+print('\nUploading Anker program ...')
+anker_program_id = solana_program_deploy(get_solido_program_path() + '/anker.so')
+print(f'> Anker program id is {anker_program_id}.')
+
+print('\nCreating Anker instance ...')
+result = solido(
+    'anker',
+    'create',
+    '--solido-program-id',
+    solido_program_id,
+    '--solido-address',
+    solido_address,
+    '--anker-program-id',
+    anker_program_id,
+    '--ust-mint-address',
+    ust_mint_address.pubkey,
+    '--token-swap-pool',
+    # TODO: Deploy the Orca program on the test validator and set up a test pool.
+    ust_mint_address.pubkey,
+    '--wormhole-core-bridge-program-id',
+    # Wormhole's testnet address. TODO: Replace with a new localhost program instance.
+    '3u8hJUVTA4jH1wYAyUur7FFZVQ8H635K3tSHHF4ssjQ5',
+    '--wormhole-token-bridge-program-id',
+    # Wormhole's testnet address. TODO: Replace with a new localhost program instance.
+    'DZnkkTmCiFWfYTfT41X3Rd1kDgozqzxWaHqsw6W4x2oe',
+    '--terra-rewards-address',
+    'terra18aqm668ygwppxnmkmjn4wrtgdweq5ay7rs42ch',
+)
+
 print(f'> Created instance at {solido_address}.')
 
 solido_instance = solido(
@@ -431,6 +465,8 @@ def perform_maintenance() -> Any:
         solido_program_id,
         '--stake-time',
         'anytime',
+        '--anker-program-id',
+        anker_program_id,
         keypair_path=maintainer.keypair_path,
     )
 

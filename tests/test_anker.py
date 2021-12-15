@@ -21,6 +21,7 @@ from util import (
     solana_program_deploy,
     solido,
     spl_token,
+    create_spl_token_account,
 )
 
 print('Creating test accounts ...')
@@ -114,6 +115,53 @@ st_sol_mint_address = result['st_sol_mint_address']
 
 print(f'> Created instance at {solido_address}.')
 
+print('\nCreating Token Pool accounts ...')
+print('> Creating UST token pool account ...')
+ust_pool_account = create_spl_token_account(
+    test_addrs[0].keypair_path, ust_mint_address.pubkey
+)
+
+print('> Creating stSOL token pool account ...')
+st_sol_pool_account = create_spl_token_account(
+    test_addrs[0].keypair_path, st_sol_mint_address
+)
+
+print('> Adding liquidity ...')
+print(' > Depositing 1 Sol to Solido')
+result = solido(
+    'deposit',
+    '--solido-program-id',
+    solido_program_id,
+    '--solido-address',
+    solido_address,
+    '--amount-sol',
+    '1',
+)
+print(' > Transfering to pool\'s stSOL account.')
+spl_token('transfer', st_sol_mint_address, '1', st_sol_pool_account)
+print(' > Minting to pool\'s UST account.')
+spl_token('mint', ust_mint_address.pubkey, '1', ust_pool_account)
+
+orca_token_swap_program_id = solana_program_deploy(
+    get_solido_program_path() + '/orca_token_swap_v2.so'
+)
+
+print('\nCreating token pool instance ...')
+result = solido(
+    'anker',
+    'create-token-swap',
+    '--token-swap-program-id',
+    orca_token_swap_program_id,
+    '--st-sol-account',
+    st_sol_pool_account,
+    '--ust-account',
+    ust_pool_account,
+    '--ust-mint-address',
+    ust_mint_address.pubkey,
+    keypair_path=test_addrs[0].keypair_path,
+)
+token_pool_address = result['pool_address']
+print(f'> Created instance at {token_pool_address}.')
 
 print('\nCreating Anker instance ...')
 result = solido(
@@ -128,8 +176,7 @@ result = solido(
     '--ust-mint-address',
     ust_mint_address.pubkey,
     '--token-swap-pool',
-    # TODO: Deploy the Orca program on the test validator and set up a test pool.
-    ust_mint_address.pubkey,
+    token_pool_address,
     '--wormhole-core-bridge-program-id',
     # Wormhole's testnet address. TODO: Replace with a new localhost program instance.
     '3u8hJUVTA4jH1wYAyUur7FFZVQ8H635K3tSHHF4ssjQ5',
