@@ -97,7 +97,7 @@ class Details(NamedTuple):
         return [
             ('Name', ':--'),
             ('Amount (wLDO)', '--:'),
-            ('Recipient stSOL account', ':--'),
+            ('Recipient wLDO account', ':--'),
             ('Recipient owner account', ':--'),
             ('Multisig transaction', ':--'),
         ]
