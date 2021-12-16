@@ -11,7 +11,11 @@ Usage:
     scripts/print_incentive_history.py
 """
 
-from typing import NamedTuple
+from typing import Any, Dict, List, NamedTuple, Tuple
+
+import subprocess
+import os
+import json
 
 
 class Entry(NamedTuple):
@@ -41,3 +45,98 @@ entries = [
     Entry('2021-12-15', 'Raydium',   'stSOL-USDC',     60_000, '2UtYtZ4cydPJRv969ASqB3bqR9MDzDoWAs8gM42PkPtc'),
 ]
 # fmt: on
+
+
+def format_address_as_link(addr: str) -> str:
+    """
+    Format a Solana address as a Markdown hyperlink to Solscan.
+    """
+    href = f'https://solscan.io/account/{addr}'
+    name = f'{addr[:5]}…{addr[-5:]}'
+    return f"[`{name}`]({href} '{addr}')"
+
+
+class Details(NamedTuple):
+    # Multisig transaction details
+    did_execute: bool
+
+    # Token transfer details
+    token_address: str
+    from_address: str
+    to_address: str
+    amount: int
+
+    @staticmethod
+    def get_table_headers() -> List[Tuple[str, str]]:
+        """
+        Return table headers and alignment.
+        """
+        return [
+            ('Date', ':--'),
+            ('Name', ':--'),
+            ('Amount (wLDO)', '--:'),
+            ('Recipient stSOL account', ':--'),
+            ('Recipient owner account', ':--'),
+            ('Multisig transaction', ':--'),
+            ('Executed', ':--'),
+        ]
+
+    def to_table_row(self, entry: Entry) -> List[str]:
+        return [
+            entry.date,
+            f'{entry.name} {entry.pool}',
+            # wLDO has 8 decimals, so divide by 1e8.
+            f'{self.amount / 1e8:,.0f}',
+            format_address_as_link(self.to_address),
+            'TODO',
+            format_address_as_link(entry.multisig_tx),
+            'yes' if self.did_execute else 'not yet',
+        ]
+
+
+def get_multisig_transaction_details(addr: str) -> Details:
+    config = {
+        **os.environ,
+        'SOLIDO_CLUSTER': 'https://lido.rpcpool.com',
+        'SOLIDO_MULTISIG_PROGRAM_ID': 'AAHT26ecV3FEeFmL2gDZW6FfEqjPkghHbAkNZGqwT8Ww',
+        'SOLIDO_MULTISIG_ADDRESS': '3cXyJbjoAUNLpQsFrFJTTTp8GD3uPeabYbsCVobkQpD1',
+        'SOLIDO_SOLIDO_PROGRAM_ID': 'CrX7kMhLC3cSsXJdT7JDgqrRVWGnUpX3gfEfxxU2NVLi',
+        'SOLIDO_SOLIDO_ADDRESS': '49Yi1TKkNyYjPAFdR9LBvoHcUjuPX4Df5T5yv39w2XTn',
+    }
+    result = subprocess.run(
+        ['target/debug/solido', '--output', 'json', 'multisig', 'show-transaction', '--transaction-address', addr],
+        env=config,
+        check=True,
+        capture_output=True,
+        encoding='utf-8',
+    )
+    raw_details: Dict[str, Any] = json.loads(result.stdout)
+    transfer_details: Dict[str, Any] = raw_details['parsed_instruction']['TokenInstruction']['Transfer']
+    signer_details: Dict[str, Any]
+
+    return Details(
+        did_execute=raw_details['did_execute'],
+        from_address=transfer_details['from_address'],
+        to_address=transfer_details['to_address'],
+        token_address=transfer_details['token_address'],
+        amount=transfer_details['amount'],
+    )
+
+
+def main() -> None:
+    headers = Details.get_table_headers()
+    row0 = [col[0] for col in headers]
+    row1 = [col[1] for col in headers]
+    print('| ' + ' | '.join(row0) + ' |')
+    print('|' + '|'.join(row1) + '|')
+
+    for entry in entries:
+        details = get_multisig_transaction_details(entry.multisig_tx)
+        assert details.token_address == 'HZRCwxP2Vq9PCpPXooayhJ2bxTpo5xfpQrwB1svh332p', f'Expected token to be wLDO for {entry}'
+        assert details.from_address == 'T7VpKriUL68aQAKXFyfG3jJjvPHnxaC95XsjaZKSZ7b', f'Expected from address to be the Multisig wLDO account for {entry}'
+        assert details.amount / 1e8 == entry.amount_ldo, f'Expected amount in script to match transaction for {entry}'
+        print('| ' + ' | '.join(details.to_table_row(entry)) + ' |')
+
+
+if __name__ == '__main__':
+    main()
