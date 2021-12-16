@@ -73,8 +73,10 @@ class Details(NamedTuple):
         result = subprocess.run(
             [
                 'spl-token',
-                '--url', 'https://lido.rpcpool.com',
-                '--output', 'json',
+                '--url',
+                'https://lido.rpcpool.com',
+                '--output',
+                'json',
                 'account-info',
                 '--address',
                 self.to_address,
@@ -125,14 +127,24 @@ def get_multisig_transaction_details(addr: str) -> Details:
         'SOLIDO_SOLIDO_ADDRESS': '49Yi1TKkNyYjPAFdR9LBvoHcUjuPX4Df5T5yv39w2XTn',
     }
     result = subprocess.run(
-        ['target/debug/solido', '--output', 'json', 'multisig', 'show-transaction', '--transaction-address', addr],
+        [
+            'target/debug/solido',
+            '--output',
+            'json',
+            'multisig',
+            'show-transaction',
+            '--transaction-address',
+            addr,
+        ],
         env=config,
         check=True,
         capture_output=True,
         encoding='utf-8',
     )
     raw_details: Dict[str, Any] = json.loads(result.stdout)
-    transfer_details: Dict[str, Any] = raw_details['parsed_instruction']['TokenInstruction']['Transfer']
+    transfer_details: Dict[str, Any] = raw_details['parsed_instruction'][
+        'TokenInstruction'
+    ]['Transfer']
     signer_details: Dict[str, Any]
 
     return Details(
@@ -153,9 +165,15 @@ def main() -> None:
 
     for entry in entries:
         details = get_multisig_transaction_details(entry.multisig_tx)
-        assert details.token_address == 'HZRCwxP2Vq9PCpPXooayhJ2bxTpo5xfpQrwB1svh332p', f'Expected token to be wLDO for {entry}'
-        assert details.from_address == 'T7VpKriUL68aQAKXFyfG3jJjvPHnxaC95XsjaZKSZ7b', f'Expected from address to be the Multisig wLDO account for {entry}'
-        assert details.amount / 1e8 == entry.amount_ldo, f'Expected amount in script to match transaction for {entry}'
+        assert (
+            details.token_address == 'HZRCwxP2Vq9PCpPXooayhJ2bxTpo5xfpQrwB1svh332p'
+        ), f'Expected token to be wLDO for {entry}'
+        assert (
+            details.from_address == 'T7VpKriUL68aQAKXFyfG3jJjvPHnxaC95XsjaZKSZ7b'
+        ), f'Expected from address to be the Multisig wLDO account for {entry}'
+        assert (
+            details.amount / 1e8 == entry.amount_ldo
+        ), f'Expected amount in script to match transaction for {entry}'
         print('| ' + ' | '.join(details.to_table_row(entry)) + ' |')
 
 
