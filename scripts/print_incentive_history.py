@@ -52,7 +52,7 @@ def format_address_as_link(addr: str) -> str:
     Format a Solana address as a Markdown hyperlink to Solscan.
     """
     href = f'https://solscan.io/account/{addr}'
-    name = f'{addr[:5]}…{addr[-5:]}'
+    name = f'{addr[:6]}…{addr[-6:]}'
     return f"[`{name}`]({href} '{addr}')"
 
 
@@ -65,6 +65,27 @@ class Details(NamedTuple):
     from_address: str
     to_address: str
     amount: int
+
+    def get_to_owner(self) -> str:
+        """
+        Return the address that owns the `to_address` SPL token account.
+        """
+        result = subprocess.run(
+            [
+                'spl-token',
+                '--url', 'https://lido.rpcpool.com',
+                '--output', 'json',
+                'account-info',
+                '--address',
+                self.to_address,
+            ],
+            capture_output=True,
+            check=True,
+            encoding='utf-8',
+        )
+        result_object: Dict[str, Any] = json.loads(result.stdout)
+        owner: str = result_object['owner']
+        return owner
 
     @staticmethod
     def get_table_headers() -> List[Tuple[str, str]]:
@@ -88,7 +109,7 @@ class Details(NamedTuple):
             # wLDO has 8 decimals, so divide by 1e8.
             f'{self.amount / 1e8:,.0f}',
             format_address_as_link(self.to_address),
-            'TODO',
+            format_address_as_link(self.get_to_owner()),
             format_address_as_link(entry.multisig_tx),
             'yes' if self.did_execute else 'not yet',
         ]
