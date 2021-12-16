@@ -28,21 +28,21 @@ class Entry(NamedTuple):
 
 # fmt: off
 entries = [
-    # October 20201
-    Entry('2021-10-06', 'Mercurial', 'stSOL-SOL',      75_000, '7ymsoHodgC9ES6NJsWmt6aA7csJmkFvhsC4nBsTY67gF'),
-    Entry('2021-10-06', 'Orca',      'stSOL-wstETH',  125_000, '5V1gUNKBgFPpVmH2qoNfyhB3PjpmyZbJ6VHfeVxWKkfY'),
-    Entry('2021-10-06', 'Raydium',   'stSOL-USDC',    125_000, '6q6QgB2eAdhg9KLZCRTty8MDwFL9xqUa7v1FRDusTfyk'),
+    # December 2021
+    Entry('2021-12-15', 'Mercurial', 'stSOL-SOL',      40_000, 'FuoT4Yi2YMYwEyuFkBaQ36FARYDNVwjPp8dymB6mAizJ'),
+    Entry('2021-12-15', 'Orca',      'stSOL-USDC',     60_000, 'JB92vLZuRj7t9cYRi2j4TnKoRPjdJNHJZepiFd7GQHD3'),
+    Entry('2021-12-15', 'Orca',      'stSOL-wstETH',   10_000, 'FJTfrRt6xfYyR8mx4aQEQ3raBPi2vwcuyKtvSRLZBhxH'),
+    Entry('2021-12-15', 'Raydium',   'stSOL-USDC',     60_000, '2UtYtZ4cydPJRv969ASqB3bqR9MDzDoWAs8gM42PkPtc'),
 
     # November 2021
     Entry('2021-11-07', 'Mercurial', 'stSOL-SOL',      75_000, '6a1K1eF6k6oXp5PYKnUqGm2Y3uJxfBkGn1JDdiXgsud7'),
     Entry('2021-11-07', 'Orca',      'stSOL-wstETH',  125_000, 'Dmfp4UuFRqBJ5TU2U21JhPaTjv4HcLzZQgWBvj6DadZS'),
     Entry('2021-11-07', 'Raydium',   'stSOL-USDC',    125_000, 'ByJAsTdHzrabU8aihvZCtmLRorhtgVsXLBCF31P2PgUz'),
 
-    # December 2021
-    Entry('2021-12-15', 'Mercurial', 'stSOL-SOL',      40_000, 'FuoT4Yi2YMYwEyuFkBaQ36FARYDNVwjPp8dymB6mAizJ'),
-    Entry('2021-12-15', 'Orca',      'stSOL-USDC',     60_000, 'JB92vLZuRj7t9cYRi2j4TnKoRPjdJNHJZepiFd7GQHD3'),
-    Entry('2021-12-15', 'Orca',      'stSOL-wstETH',   10_000, 'FJTfrRt6xfYyR8mx4aQEQ3raBPi2vwcuyKtvSRLZBhxH'),
-    Entry('2021-12-15', 'Raydium',   'stSOL-USDC',     60_000, '2UtYtZ4cydPJRv969ASqB3bqR9MDzDoWAs8gM42PkPtc'),
+    # October 20201
+    Entry('2021-10-06', 'Mercurial', 'stSOL-SOL',     75_000, '7ymsoHodgC9ES6NJsWmt6aA7csJmkFvhsC4nBsTY67gF'),
+    Entry('2021-10-06', 'Orca',      'stSOL-wstETH', 125_000, '5V1gUNKBgFPpVmH2qoNfyhB3PjpmyZbJ6VHfeVxWKkfY'),
+    Entry('2021-10-06', 'Raydium',   'stSOL-USDC',   125_000, '6q6QgB2eAdhg9KLZCRTty8MDwFL9xqUa7v1FRDusTfyk'),
 ]
 # fmt: on
 
@@ -53,7 +53,7 @@ def format_address_as_link(addr: str) -> str:
     """
     href = f'https://solscan.io/account/{addr}'
     name = f'{addr[:6]}…{addr[-6:]}'
-    return f"[`{name}`]({href} '{addr}')"
+    return f"[{name}]({href} '{addr}')"
 
 
 class Details(NamedTuple):
@@ -95,25 +95,21 @@ class Details(NamedTuple):
         Return table headers and alignment.
         """
         return [
-            ('Date', ':--'),
             ('Name', ':--'),
             ('Amount (wLDO)', '--:'),
             ('Recipient stSOL account', ':--'),
             ('Recipient owner account', ':--'),
             ('Multisig transaction', ':--'),
-            ('Executed', ':--'),
         ]
 
     def to_table_row(self, entry: Entry) -> List[str]:
         return [
-            entry.date,
             f'{entry.name} {entry.pool}',
             # wLDO has 8 decimals, so divide by 1e8.
             f'{self.amount / 1e8:,.0f}',
             format_address_as_link(self.to_address),
             format_address_as_link(self.get_to_owner()),
             format_address_as_link(entry.multisig_tx),
-            'yes' if self.did_execute else 'not yet',
         ]
 
 
@@ -156,15 +152,20 @@ def get_multisig_transaction_details(addr: str) -> Details:
     )
 
 
-def main() -> None:
+def print_table_header() -> None:
     headers = Details.get_table_headers()
     row0 = [col[0] for col in headers]
     row1 = [col[1] for col in headers]
     print('| ' + ' | '.join(row0) + ' |')
     print('|' + '|'.join(row1) + '|')
 
+
+def main() -> None:
+    prev_date = ''
+
     for entry in entries:
         details = get_multisig_transaction_details(entry.multisig_tx)
+
         assert (
             details.token_address == 'HZRCwxP2Vq9PCpPXooayhJ2bxTpo5xfpQrwB1svh332p'
         ), f'Expected token to be wLDO for {entry}'
@@ -174,6 +175,15 @@ def main() -> None:
         assert (
             details.amount / 1e8 == entry.amount_ldo
         ), f'Expected amount in script to match transaction for {entry}'
+        assert (
+            details.did_execute
+        ), f'Expected transaction to be executed for {entry}'
+
+        if prev_date != entry.date:
+            print(f'\n### {entry.date}')
+            print_table_header()
+            prev_date = entry.date
+
         print('| ' + ' | '.join(details.to_table_row(entry)) + ' |')
 
 
