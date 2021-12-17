@@ -185,7 +185,6 @@ def create_vote_account(
         'create-vote-account',
         vote_key_fname,
         validator_key_fname,
-        '--authorized-withdrawer',
         authorized_withdrawer,
         '--commission',
         '100',
