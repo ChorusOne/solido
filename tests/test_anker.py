@@ -149,7 +149,7 @@ orca_token_swap_program_id = solana_program_deploy(
 print('\nCreating token pool instance ...')
 result = solido(
     'anker',
-    'create-token-swap',
+    'create-token-pool',
     '--token-swap-program-id',
     orca_token_swap_program_id,
     '--st-sol-account',
