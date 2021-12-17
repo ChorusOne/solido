@@ -3,6 +3,7 @@
 
 use std::collections::HashSet;
 use std::fmt;
+use std::str::FromStr;
 
 use anchor_lang::prelude::{AccountMeta, ToAccountMetas};
 use anchor_lang::{Discriminator, InstructionData};
@@ -38,6 +39,12 @@ use crate::error::{Abort, AsPrettyError};
 use crate::print_output;
 use crate::snapshot::{Result, SnapshotError};
 use crate::{SnapshotClientConfig, SnapshotConfig};
+
+/// The address of Wormhole-wrapped Lido DAO token (wLDO) on mainnet-beta.
+mod wormhole_ldo_token {
+    use solana_sdk::declare_id;
+    declare_id!("HZRCwxP2Vq9PCpPXooayhJ2bxTpo5xfpQrwB1svh332p");
+}
 
 #[derive(Clap, Debug)]
 pub struct MultisigOpts {
@@ -616,7 +623,7 @@ impl fmt::Display for ShowTransactionOutput {
                 )?;
             }
             ParsedInstruction::TokenInstruction(token_instruction) => {
-                write!(f, "  This is a Token instruction. ")?;
+                write!(f, "  This is an SPL token instruction. ")?;
                 match token_instruction {
                     TokenInstruction::Transfer {
                         from_address,
@@ -624,15 +631,28 @@ impl fmt::Display for ShowTransactionOutput {
                         token_address,
                         amount,
                     } => {
-                        writeln!(f, "It transfers tokens owned by the multisig.")?;
+                        writeln!(f, "It transfers tokens.")?;
                         writeln!(f, "    Token address: {}", token_address)?;
                         writeln!(f, "    From address:  {}", from_address)?;
                         writeln!(f, "    To address:    {}", to_address)?;
-                        writeln!(
-                            f,
-                            "    Amount:        {}, of the token's smallest denomination",
-                            amount
-                        )?;
+                        if *token_address == wormhole_ldo_token::id() {
+                            // If the token happens to be Wormhole LDO, then we can format it better
+                            // by placing the decimal point and by clarifying the token.
+                            // TODO(#485): Use the impl_token! macro to make a type for wLDO,
+                            // then use that to format here.
+                            writeln!(
+                                f,
+                                "    Amount:        {}.{:>08} wLDO (Wormhole-wrapped Lido DAO token)",
+                                amount / 1_0000_0000,
+                                amount % 1_0000_0000,
+                            )?;
+                        } else {
+                            writeln!(
+                                f,
+                                "    Amount:        {}, of the token's smallest denomination",
+                                amount
+                            )?;
+                        }
                     }
                     TokenInstruction::Unsupported => {
                         writeln!(f, "The instruction is currently unsupported.")?;
@@ -1238,7 +1258,6 @@ fn approve_batch(
     opts: &ApproveBatchOpts,
 ) -> std::result::Result<(), crate::Error> {
     use crate::config::OutputMode;
-    use std::str::FromStr;
 
     match config.output_mode {
         OutputMode::Json => {
