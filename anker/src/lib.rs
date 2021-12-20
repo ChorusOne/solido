@@ -43,6 +43,10 @@ pub fn find_instance_address(anker_program_id: &Pubkey, solido_instance: &Pubkey
     Pubkey::find_program_address(&[solido_instance.as_ref()], anker_program_id)
 }
 
+// TODO(ruuda): Use this below.
+#[repr(transparent)]
+struct AnkerAddress(Pubkey);
+
 /// Return the owner of the stSOL and UST reserve account, and bump seed.
 pub fn find_reserve_authority(anker_program_id: &Pubkey, anker_instance: &Pubkey) -> (Pubkey, u8) {
     Pubkey::find_program_address(

@@ -449,6 +449,13 @@ accounts_struct! {
             is_signer: false,
             is_writable: true,
         },
+        // Wormhole program-derived account that will sign the SPL
+        // token transfer out of the source account. This means we will need
+        // to call spl_token::approve before we can send.
+        pub authority_signer_key {
+            is_signer: false,
+            is_writable: false,
+        },
         // The "custody key" account is an SPL token account that will hold the
         // tokens after sending them "through" wormhole; they stay in the custody
         // account on the Solana side. It's a single account (per mint) for all

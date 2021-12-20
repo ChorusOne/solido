@@ -215,8 +215,8 @@ impl fmt::Display for ShowAnkerOutput {
         writeln!(f, "bSOL mint:             {}", self.b_sol_mint)?;
         writeln!(f, "bSOL mint authority:   {}", self.b_sol_mint_authority)?;
         writeln!(f, "bSOL supply:           {}", self.b_sol_supply)?;
-        writeln!(f, "Reserve authority:     {}", self.st_sol_reserve)?;
-        writeln!(f, "stSOL reserve address: {}", self.reserve_authority)?;
+        writeln!(f, "Reserve authority:     {}", self.reserve_authority)?;
+        writeln!(f, "stSOL reserve address: {}", self.st_sol_reserve)?;
         writeln!(f, "stSOL reserve balance: {}", self.st_sol_reserve_balance)?;
         write!(f, "stSOL reserve value:   ")?;
         match self.st_sol_reserve_value {

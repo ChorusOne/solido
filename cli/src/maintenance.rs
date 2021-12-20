@@ -515,10 +515,14 @@ impl SolidoState {
         let anker_state = if anker_program_id == &Pubkey::default() {
             None
         } else {
+            let (anker_address, _bump_seed) = anker::find_instance_address(
+                anker_program_id,
+                solido_address,
+            );
             Some(AnkerState::new(
                 config,
-                *anker_program_id,
-                solido_address,
+                anker_program_id,
+                &anker_address,
                 &solido,
             )?)
         };
@@ -789,10 +793,12 @@ impl SolidoState {
 
         let ust_amount = anker_state.ust_reserve_balance;
         let output = MaintenanceOutput::SendRewards { ust_amount };
+        println!("Trying to send rewards: {:?}", &output);
         let mut maintenance_instruction = MaintenanceInstruction::new(instruction, output);
         maintenance_instruction
             .additional_signers
             .push(additional_signer);
+
 
         Some(maintenance_instruction)
     }
