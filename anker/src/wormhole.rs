@@ -172,8 +172,10 @@ impl WormholeTransferArgs {
         message: Pubkey,
     ) -> Self {
         let (config_key, _) = Pubkey::find_program_address(&[b"config"], &token_bridge_program_id);
-        let (wrapped_meta_key, _) =
-            Pubkey::find_program_address(&[&wrapped_mint_key.to_bytes()], &token_bridge_program_id);
+        let (wrapped_meta_key, _) = Pubkey::find_program_address(
+            &[b"meta", &wrapped_mint_key.to_bytes()],
+            &token_bridge_program_id,
+        );
         let (authority_signer_key, _) =
             Pubkey::find_program_address(&[b"authority_signer"], &token_bridge_program_id);
         let (bridge_config, _) =
