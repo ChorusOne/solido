@@ -151,16 +151,8 @@ impl AnkerState {
         let (ust_reserve_account, _ust_reserve_bump_seed) =
             find_ust_reserve_account(&self.anker_program_id, &anker_instance);
 
-        let (st_sol_reserve_account, _st_sol_reserve_bump_seed) =
-            find_st_sol_reserve_account(&self.anker_program_id, &solido_address);
-
         let (reserve_authority, _reserve_authority_bump_seed) =
             find_reserve_authority(&self.anker_program_id, &solido_address);
-
-        let (token_pool_authority, _authority_bump_seed) = Pubkey::find_program_address(
-            &[&self.anker.token_swap_pool.to_bytes()[..]],
-            &anker::orca_token_swap_v2::id(),
-        );
 
         // Wormhole requires allocating a new "message" account for every
         // Wormhole transaction.
@@ -169,33 +161,34 @@ impl AnkerState {
         // The maintainer who is submitting this transaction pays for the Wormhole fees.
         let payer = maintainer_address;
 
+        let transfer_args = anker::wormhole::WormholeTransferArgs::new(
+            self.anker.wormhole_parameters.token_bridge_program_id,
+            self.anker.wormhole_parameters.core_bridge_program_id,
+            self.ust_mint,
+            payer,
+            ust_reserve_account,
+            message.pubkey(),
+        );
+
         let instruction = anker::instruction::send_rewards(
             &self.anker_program_id,
             &anker::instruction::SendRewardsAccountsMeta {
                 anker: anker_instance,
                 solido: solido_address,
                 reserve_authority,
-                wormhole_token_bridge_program_id: self
-                    .anker
-                    .wormhole_parameters
-                    .token_bridge_program_id,
-                wormhole_core_bridge_program_id: self
-                    .anker
-                    .wormhole_parameters
-                    .core_bridge_program_id,
-                payer,
-                config_key: unimplemented!("TODO: Get Wormhole 'config_key'"),
+                wormhole_token_bridge_program_id: transfer_args.token_bridge_program_id,
+                wormhole_core_bridge_program_id: transfer_args.core_bridge_program_id,
+                payer: transfer_args.payer,
+                config_key: transfer_args.config_key,
                 ust_reserve_account,
                 ust_mint: self.ust_mint,
-                custody_key: unimplemented!(
-                    "TODO: Put this in the config, or is it program-derived?"
-                ),
-                custody_signer_key: unimplemented!("TODO: Get owner of custody_key."),
-                bridge_config: unimplemented!("TODO: Get wormhole 'bridge_config'"),
+                custody_key: transfer_args.custody_key,
+                custody_signer_key: transfer_args.custody_signer_key,
+                bridge_config: transfer_args.bridge_config,
                 message: message.pubkey(),
-                emitter_key: unimplemented!(),
-                sequence_key: unimplemented!(),
-                fee_collector_key: unimplemented!(),
+                emitter_key: transfer_args.emitter_key,
+                sequence_key: transfer_args.sequence_key,
+                fee_collector_key: transfer_args.fee_collector_key,
             },
             wormhole_nonce,
         );
