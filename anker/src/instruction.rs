@@ -449,24 +449,15 @@ accounts_struct! {
             is_signer: false,
             is_writable: true,
         },
+        // Program-derived address derived from the mint address.
+        pub wrapped_meta_key {
+            is_signer: false,
+            is_writable: true,
+        },
         // Wormhole program-derived account that will sign the SPL
         // token transfer out of the source account. This means we will need
         // to call spl_token::approve before we can send.
         pub authority_signer_key {
-            is_signer: false,
-            is_writable: false,
-        },
-        // The "custody key" account is an SPL token account that will hold the
-        // tokens after sending them "through" wormhole; they stay in the custody
-        // account on the Solana side. It's a single account (per mint) for all
-        // of Wormhole's transfers. The token account owner must be the
-        // `custody_signer_key`.
-        pub custody_key {
-            is_signer: false,
-            is_writable: true,
-        },
-        // The owner of the `custody_key`.
-        pub custody_signer_key {
             is_signer: false,
             is_writable: false,
         },
@@ -489,6 +480,9 @@ accounts_struct! {
             is_signer: false,
             is_writable: true,
         },
+        // To make a Wormhole transfer, we need to pay a transaction fee (on top
+        // of the Solana transaction fee). The Wormhole program enforces this by
+        // transferring some SOL from the payer account to the fee collector.
         pub fee_collector_key {
             is_signer: false,
             is_writable: true,

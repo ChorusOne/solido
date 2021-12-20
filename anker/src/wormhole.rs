@@ -17,9 +17,9 @@ use crate::{error::AnkerError, token::MicroUst};
 /// Wormhole's Terra chain id.
 pub const WORMHOLE_CHAIN_ID_TERRA: u16 = 3;
 
-/// Position of the native transfer code at the Wormhole project:
-/// https://github.com/certusone/wormhole/blob/05425a96df6e5841f05e7be5e7f4c45be01985a6/solana/modules/token_bridge/program/src/lib.rs
-const WORMHOLE_NATIVE_TRANSFER_CODE: u8 = 5;
+/// The constant is 4, because it is the instruction at index 4, starting from 0.
+/// https://github.com/certusone/wormhole/blob/94695ee125399f67c3a62f26ebd807cf532567c4/solana/modules/token_bridge/program/src/lib.rs#L80
+const WORMHOLE_WRAPPED_TRANSFER_CODE: u8 = 4;
 
 #[repr(C)]
 #[derive(
@@ -145,38 +145,37 @@ pub fn check_wormhole_account(
 }
 
 pub struct WormholeTransferArgs {
-    pub token_bridge_program_id: Pubkey,
-    pub core_bridge_program_id: Pubkey,
     pub payer: Pubkey,
     pub config_key: Pubkey,
     pub from: Pubkey,
-    pub mint: Pubkey,
-    pub custody_key: Pubkey,
+    pub from_owner: Pubkey,
+    pub wrapped_mint_key: Pubkey,
+    pub wrapped_meta_key: Pubkey,
     pub authority_signer_key: Pubkey,
-    pub custody_signer_key: Pubkey,
     pub bridge_config: Pubkey,
     pub message: Pubkey,
     pub emitter_key: Pubkey,
     pub sequence_key: Pubkey,
     pub fee_collector_key: Pubkey,
+    pub core_bridge_program_id: Pubkey,
+    pub token_bridge_program_id: Pubkey,
 }
 
 impl WormholeTransferArgs {
     pub fn new(
         token_bridge_program_id: Pubkey,
         core_bridge_program_id: Pubkey,
-        mint: Pubkey,
+        wrapped_mint_key: Pubkey,
         payer: Pubkey,
         from: Pubkey,
+        from_owner: Pubkey,
         message: Pubkey,
     ) -> Self {
         let (config_key, _) = Pubkey::find_program_address(&[b"config"], &token_bridge_program_id);
-        let (custody_key, _) =
-            Pubkey::find_program_address(&[&mint.to_bytes()], &token_bridge_program_id);
+        let (wrapped_meta_key, _) =
+            Pubkey::find_program_address(&[&wrapped_mint_key.to_bytes()], &token_bridge_program_id);
         let (authority_signer_key, _) =
             Pubkey::find_program_address(&[b"authority_signer"], &token_bridge_program_id);
-        let (custody_signer_key, _) =
-            Pubkey::find_program_address(&[b"custody_signer"], &token_bridge_program_id);
         let (bridge_config, _) =
             Pubkey::find_program_address(&[b"Bridge"], &core_bridge_program_id);
         let (emitter_key, _) =
@@ -189,20 +188,20 @@ impl WormholeTransferArgs {
             Pubkey::find_program_address(&[b"fee_collector"], &core_bridge_program_id);
 
         WormholeTransferArgs {
-            token_bridge_program_id,
-            core_bridge_program_id,
+            payer,
             config_key,
-            mint,
-            custody_key,
+            from,
+            from_owner,
+            wrapped_mint_key,
+            wrapped_meta_key,
             authority_signer_key,
-            custody_signer_key,
             bridge_config,
+            message,
             emitter_key,
             sequence_key,
             fee_collector_key,
-            payer,
-            from,
-            message,
+            core_bridge_program_id,
+            token_bridge_program_id,
         }
     }
 }
@@ -218,10 +217,10 @@ pub fn get_wormhole_transfer_instruction(
             AccountMeta::new(wormhole_transfer_args.payer, true),
             AccountMeta::new_readonly(wormhole_transfer_args.config_key, false),
             AccountMeta::new(wormhole_transfer_args.from, false),
-            AccountMeta::new(wormhole_transfer_args.mint, false),
-            AccountMeta::new(wormhole_transfer_args.custody_key, false),
+            AccountMeta::new_readonly(wormhole_transfer_args.from_owner, true),
+            AccountMeta::new(wormhole_transfer_args.wrapped_mint_key, false),
+            AccountMeta::new_readonly(wormhole_transfer_args.wrapped_meta_key, false),
             AccountMeta::new_readonly(wormhole_transfer_args.authority_signer_key, false),
-            AccountMeta::new_readonly(wormhole_transfer_args.custody_signer_key, false),
             AccountMeta::new(wormhole_transfer_args.bridge_config, false),
             AccountMeta::new(wormhole_transfer_args.message, true),
             AccountMeta::new_readonly(wormhole_transfer_args.emitter_key, false),
@@ -235,7 +234,7 @@ pub fn get_wormhole_transfer_instruction(
             AccountMeta::new_readonly(wormhole_transfer_args.core_bridge_program_id, false),
             AccountMeta::new_readonly(spl_token::id(), false),
         ],
-        data: (WORMHOLE_NATIVE_TRANSFER_CODE, payload)
+        data: (WORMHOLE_WRAPPED_TRANSFER_CODE, payload)
             .try_to_vec()
             .unwrap(),
     }

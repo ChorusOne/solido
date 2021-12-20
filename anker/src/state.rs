@@ -526,6 +526,7 @@ impl Anker {
             *accounts.ust_mint.key,
             *accounts.payer.key,
             *accounts.ust_reserve_account.key,
+            *accounts.reserve_authority.key,
             *accounts.message.key,
         );
 
@@ -535,14 +536,9 @@ impl Anker {
             accounts.config_key.key,
         )?;
         check_wormhole_account(
-            "custody key",
-            &wormhole_transfer_args.custody_key,
-            accounts.custody_key.key,
-        )?;
-        check_wormhole_account(
-            "custody signer key",
-            &wormhole_transfer_args.custody_signer_key,
-            accounts.custody_signer_key.key,
+            "wrapped meta key",
+            &wormhole_transfer_args.wrapped_meta_key,
+            accounts.wrapped_meta_key.key,
         )?;
         check_wormhole_account(
             "bridge config",

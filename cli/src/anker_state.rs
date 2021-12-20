@@ -142,8 +142,12 @@ impl AnkerState {
         wormhole_nonce: u32,
     ) -> (Instruction, Keypair) {
         // TODO(ruuda): In our test transaction [1], before the call to Wormhole,
-        // there is a transfer of 0.000_000_010 SOL to _some_ account ... is that
-        // to cover Wormhole transaction fees? Will it work without this?
+        // there is a transfer of 0.000_000_010 SOL to _some_ account ... but
+        // then the Wormhole call also transfers that amount. So it seems the
+        // first one is a kind of tip? Can we skip it?
+        // Also, we shouldn't transfer out of an account which may have more
+        // balance than we need to spend, because Wormhole may steal it.
+        // [1]: https://explorer.solana.com/tx/5tSRA1CYLd51sjf7Dd2ZRkLspcqiR8NH51oTd3K34sNc3PZG9uF7euE2AHE95KurrcfKYf2sCQqsEbSRmzQq8oDg?cluster=devnet
         let (anker_instance, _anker_bump_seed) =
             find_instance_address(&self.anker_program_id, &solido_address);
 
@@ -166,6 +170,7 @@ impl AnkerState {
             self.ust_mint,
             payer,
             ust_reserve_account,
+            reserve_authority,
             message.pubkey(),
         );
 
@@ -180,10 +185,9 @@ impl AnkerState {
                 payer: transfer_args.payer,
                 config_key: transfer_args.config_key,
                 ust_reserve_account,
+                wrapped_meta_key: transfer_args.wrapped_meta_key,
                 ust_mint: self.ust_mint,
                 authority_signer_key: transfer_args.authority_signer_key,
-                custody_key: transfer_args.custody_key,
-                custody_signer_key: transfer_args.custody_signer_key,
                 bridge_config: transfer_args.bridge_config,
                 message: message.pubkey(),
                 emitter_key: transfer_args.emitter_key,
