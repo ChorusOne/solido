@@ -29,6 +29,7 @@ class Entry(NamedTuple):
 # fmt: off
 entries = [
     # December 2021
+    Entry('2021-12-17', 'Saber',     'stSOL-SOL',      40_000, '3ccNd9MxfroqQ9gmaGQFTt1U65yRsUyiJi1oJhGwaz8E'),
     Entry('2021-12-15', 'Mercurial', 'stSOL-SOL',      40_000, 'FuoT4Yi2YMYwEyuFkBaQ36FARYDNVwjPp8dymB6mAizJ'),
     Entry('2021-12-15', 'Orca',      'stSOL-USDC',     60_000, 'JB92vLZuRj7t9cYRi2j4TnKoRPjdJNHJZepiFd7GQHD3'),
     Entry('2021-12-15', 'Orca',      'stSOL-wstETH',   10_000, 'FJTfrRt6xfYyR8mx4aQEQ3raBPi2vwcuyKtvSRLZBhxH'),
