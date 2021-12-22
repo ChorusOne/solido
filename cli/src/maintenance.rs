@@ -725,21 +725,20 @@ impl SolidoState {
             .solido
             .exchange_rate
             .exchange_sol(Lamports(anker_state.b_sol_total_supply_amount.0))
-            .unwrap();
-        if let Ok(rewards) = reserve_st_sol - st_sol_amount {
-            if rewards > StLamports(0) {
-                Some((
-                    anker_state
-                        .get_sell_rewards_instruction(self.solido_address, self.solido.st_sol_mint),
-                    MaintenanceOutput::SellRewards {
-                        st_sol_amount: anker_state.st_sol_reserve_balance,
-                    },
-                ))
-            } else {
-                None
-            }
-        } else {
+            .expect("It will not overflow because we always have less than the total amount of minted Sol.");
+
+        let rewards = (reserve_st_sol - st_sol_amount).ok()?;
+        // We should not call the instruction if the rewards are 0.
+        if rewards == StLamports(0) {
             None
+        } else {
+            Some((
+                anker_state
+                    .get_sell_rewards_instruction(self.solido_address, self.solido.st_sol_mint),
+                MaintenanceOutput::SellRewards {
+                    st_sol_amount: anker_state.st_sol_reserve_balance,
+                },
+            ))
         }
     }
 
