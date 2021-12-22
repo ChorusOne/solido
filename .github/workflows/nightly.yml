@@ -23,15 +23,15 @@ jobs:
         path: |
           target
           multisig/target
-        key: cargo-bpf-1.7.8-${{ hashFiles('Cargo.lock') }}
+        key: cargo-bpf-1.7.15-${{ hashFiles('Cargo.lock') }}
         restore-keys: |
-          cargo-bpf-1.7.8
+          cargo-bpf-1.7.15
 
     - name: Install dependencies
       run: |
         sudo apt update
         sudo apt-get install -y libudev-dev
-        sh -c "$(curl -sSfL https://release.solana.com/v1.7.8/install)"
+        sh -c "$(curl -sSfL https://release.solana.com/v1.7.15/install)"
 
     - name: Build on-chain BPF programs
       run: |
