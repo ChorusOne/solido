@@ -60,25 +60,19 @@ impl AnkerState {
         let b_sol_mint_account = config.client.get_spl_token_mint(&anker.b_sol_mint)?;
         let b_sol_total_supply_amount = BLamports(b_sol_mint_account.supply);
 
-        let (swap_ust_account, swap_st_sol_account) =
+        let (pool_ust_account, pool_st_sol_account) =
             if token_swap.token_a_mint == solido.st_sol_mint {
-                (
-                    token_swap.token_b,
-                    token_swap.token_a,
-                )
+                (token_swap.token_b, token_swap.token_a)
             } else {
-                (
-                    token_swap.token_a,
-                    token_swap.token_b,
-                )
+                (token_swap.token_a, token_swap.token_b)
             };
 
         Ok(AnkerState {
             anker_program_id: anker_program_id.clone(),
             anker,
             b_sol_total_supply_amount,
-            pool_st_sol_account: swap_st_sol_account,
-            pool_ust_account: swap_ust_account,
+            pool_st_sol_account,
+            pool_ust_account,
             ust_mint: ust_account.mint,
             pool_mint: token_swap.pool_mint,
             pool_fee_account: token_swap.pool_fee_account,
@@ -140,11 +134,11 @@ impl AnkerState {
         maintainer_address: Pubkey,
         wormhole_nonce: u32,
     ) -> (Instruction, Keypair) {
-        // TODO(ruuda): In our test transaction [1], before the call to Wormhole,
+        // In our test transaction [1], before the call to Wormhole,
         // there is a transfer of 0.000_000_010 SOL to _some_ account ... but
         // then the Wormhole call also transfers that amount. So it seems the
         // first one is a kind of tip? Can we skip it?
-        // Also, we shouldn't transfer out of an account which may have more
+        // TODO(#489): // Also, we shouldn't transfer out of an account which may have more
         // balance than we need to spend, because Wormhole may steal it.
         // [1]: https://explorer.solana.com/tx/5tSRA1CYLd51sjf7Dd2ZRkLspcqiR8NH51oTd3K34sNc3PZG9uF7euE2AHE95KurrcfKYf2sCQqsEbSRmzQq8oDg?cluster=devnet
         let (anker_instance, _anker_bump_seed) =

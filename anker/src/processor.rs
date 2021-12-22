@@ -494,9 +494,6 @@ fn process_send_rewards(
         accounts.wormhole_core_bridge_program_id.clone(),
         accounts.spl_token.clone(),
     ];
-    /*for (x, y) in accounts[6..].iter().zip(instr.accounts[6..].iter()) {
-        msg!("{} <- {}", y.pubkey, x.key);
-    }*/
     // Send UST tokens via Wormhole 🤞.
     invoke_signed(&instr, &accounts[..], &[&reserve_seeds[..]])
 }
