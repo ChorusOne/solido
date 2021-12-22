@@ -419,8 +419,9 @@ fn process_send_rewards(
     // the stack before we continue the function, because this function is scarce
     // on stack space.
     let reserve_ust_amount = {
-        let ust_reserve_state =
-            spl_token::state::Account::unpack_from_slice(&accounts.ust_reserve_account.data.borrow())?;
+        let ust_reserve_state = spl_token::state::Account::unpack_from_slice(
+            &accounts.ust_reserve_account.data.borrow(),
+        )?;
 
         // Check UST mint.
         if &ust_reserve_state.mint != accounts.ust_mint.key {
@@ -470,7 +471,10 @@ fn process_send_rewards(
 
     // For the order and meaning of the accounts, see also
     // https://github.com/certusone/wormhole/blob/537d56b37aa041a585f2c90515fa3a7ffa5898b5/solana/modules/token_bridge/program/src/instructions.rs#L328-L390.
-    let instr = Box::new(get_wormhole_transfer_instruction(&payload, &wormhole_transfer_args));
+    let instr = Box::new(get_wormhole_transfer_instruction(
+        &payload,
+        &wormhole_transfer_args,
+    ));
     let accounts = vec![
         accounts.payer.clone(),
         accounts.config_key.clone(),
@@ -494,11 +498,7 @@ fn process_send_rewards(
         msg!("{} <- {}", y.pubkey, x.key);
     }*/
     // Send UST tokens via Wormhole 🤞.
-    invoke_signed(
-        &instr,
-        &accounts[..],
-        &[&reserve_seeds[..]],
-    )
+    invoke_signed(&instr, &accounts[..], &[&reserve_seeds[..]])
 }
 
 /// Processes [Instruction](enum.Instruction.html).
