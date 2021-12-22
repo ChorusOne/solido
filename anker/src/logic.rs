@@ -238,10 +238,10 @@ pub fn swap_rewards(
     anker.check_token_swap(program_id, accounts)?;
 
     let swap_instruction = spl_token_swap::instruction::swap(
-        accounts.orca_token_swap_v2.key,
+        accounts.token_swap_program_id.key,
         accounts.spl_token.key,
         accounts.token_swap_pool.key,
-        accounts.token_pool_authority.key,
+        accounts.token_swap_authority.key,
         accounts.reserve_authority.key,
         accounts.st_sol_reserve_account.key,
         accounts.pool_st_sol_account.key,
@@ -267,7 +267,7 @@ pub fn swap_rewards(
         &swap_instruction,
         &[
             accounts.token_swap_pool.clone(),
-            accounts.token_pool_authority.clone(),
+            accounts.token_swap_authority.clone(),
             accounts.reserve_authority.clone(),
             accounts.st_sol_reserve_account.clone(),
             accounts.pool_st_sol_account.clone(),
@@ -276,7 +276,7 @@ pub fn swap_rewards(
             accounts.pool_mint.clone(),
             accounts.pool_fee_account.clone(),
             accounts.spl_token.clone(),
-            accounts.orca_token_swap_v2.clone(),
+            accounts.token_swap_program_id.clone(),
         ],
         &signers,
     )

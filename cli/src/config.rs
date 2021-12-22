@@ -658,7 +658,7 @@ cli_opt_struct! {
 
         /// Address of the Anker program.
         #[clap(long, value_name = "address")]
-        anker_program_id: Pubkey,
+        anker_program_id: Pubkey => Pubkey::default(),
 
         /// Account that stores the data for this Solido instance.
         #[clap(long)]

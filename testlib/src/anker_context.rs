@@ -460,7 +460,7 @@ impl Context {
             find_st_sol_reserve_account(&id(), &self.anker);
         let (reserve_authority, _reserve_authority_bump_seed) =
             find_reserve_authority(&id(), &self.anker);
-        let (token_pool_authority, _token_pool_authority_bump_seed) =
+        let (token_swap_authority, _token_pool_authority_bump_seed) =
             self.token_pool_context.get_token_pool_authority();
 
         let (ust_address, st_sol_address) = self
@@ -485,9 +485,10 @@ impl Context {
                     st_sol_mint: self.solido_context.st_sol_mint,
                     ust_mint: self.token_pool_context.ust_mint_address,
                     pool_fee_account: self.token_pool_context.fee_address,
-                    token_pool_authority,
+                    token_swap_authority,
                     reserve_authority,
                     ust_reserve_account: self.ust_reserve,
+                    token_swap_program_id: anker::orca_token_swap_v2::id(),
                 },
             )],
             vec![],

@@ -15,6 +15,7 @@ use crate::{snapshot::Result, SnapshotConfig};
 pub struct AnkerState {
     pub anker: Anker,
     pub anker_program_id: Pubkey,
+    pub token_swap_program_id: Pubkey,
 
     pub b_sol_total_supply_amount: BLamports,
     pub pool_st_sol_account: Pubkey,
@@ -39,6 +40,7 @@ impl AnkerState {
 
         let token_swap_account = config.client.get_account(&anker.token_swap_pool)?;
         let token_swap = spl_token_swap::state::SwapV1::unpack(token_swap_account.data())?;
+        let token_swap_program_id = token_swap_account.owner;
 
         let (anker_ust_reserve, _anker_ust_reserve_bump_seed) =
             find_ust_reserve_account(&anker_program_id, solido_address);
@@ -53,7 +55,7 @@ impl AnkerState {
         let b_sol_mint_account = config.client.get_spl_token_mint(&anker.b_sol_mint)?;
         let b_sol_total_supply_amount = BLamports(b_sol_mint_account.supply);
 
-        let (ust_account, ust_mint, st_sol_account) =
+        let (swap_ust_account, ust_mint, swap_st_sol_account) =
             if token_swap.token_a_mint == solido.st_sol_mint {
                 (
                     token_swap.token_b,
@@ -72,13 +74,14 @@ impl AnkerState {
             anker_program_id,
             anker,
             b_sol_total_supply_amount,
-            pool_st_sol_account: st_sol_account,
-            pool_ust_account: ust_account,
+            pool_st_sol_account: swap_st_sol_account,
+            pool_ust_account: swap_ust_account,
             ust_mint,
             pool_mint: token_swap.pool_mint,
             pool_fee_account: token_swap.pool_fee_account,
             ust_reserve_balance,
             st_sol_reserve_balance,
+            token_swap_program_id,
         })
     }
 
@@ -98,9 +101,9 @@ impl AnkerState {
         let (reserve_authority, _reserve_authority_bump_seed) =
             find_reserve_authority(&self.anker_program_id, &solido_address);
 
-        let (token_pool_authority, _authority_bump_seed) = Pubkey::find_program_address(
+        let (token_swap_authority, _authority_bump_seed) = Pubkey::find_program_address(
             &[&self.anker.token_swap_pool.to_bytes()[..]],
-            &anker::orca_token_swap_v2::id(),
+            &self.token_swap_program_id,
         );
 
         anker::instruction::sell_rewards(
@@ -118,8 +121,9 @@ impl AnkerState {
                 st_sol_mint,
                 ust_mint: self.ust_mint,
                 pool_fee_account: self.pool_fee_account,
-                token_pool_authority,
+                token_swap_authority,
                 reserve_authority,
+                token_swap_program_id: self.token_swap_program_id,
             },
         )
     }
