@@ -9,6 +9,7 @@ use crate::processor;
 use solana_program::{
     account_info::AccountInfo, entrypoint, entrypoint::ProgramResult, pubkey::Pubkey,
 };
+use crate::state::AnkerProgramId;
 
 entrypoint!(process_instruction);
 fn process_instruction(
@@ -16,9 +17,6 @@ fn process_instruction(
     accounts: &[AccountInfo],
     instruction_data: &[u8],
 ) -> ProgramResult {
-    if let Err(error) = processor::process(program_id, accounts, instruction_data) {
-        Err(error)
-    } else {
-        Ok(())
-    }
+    let anker_program_id = AnkerProgramId(*program_id);
+    processor::process(&anker_program_id, accounts, instruction_data)
 }

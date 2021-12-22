@@ -20,6 +20,7 @@ use crate::{
     instruction::{DepositAccountsInfo, InitializeAccountsInfo, SellRewardsAccountsInfo},
     state::Anker,
 };
+use crate::state::{AnkerAddress, AnkerProgramId};
 
 /// Deserialize the Solido and Anker state.
 ///
@@ -42,15 +43,15 @@ use crate::{
 /// for a given deployment of the Anker program, there exists a unique Anker
 /// instance address per Solido instance.
 pub fn deserialize_anker(
-    anker_program_id: &Pubkey,
+    anker_program_id: &AnkerProgramId,
     anker_account: &AccountInfo,
     solido_account: &AccountInfo,
 ) -> Result<(Lido, Anker), ProgramError> {
-    if anker_account.owner != anker_program_id {
+    if anker_account.owner != anker_program_id.0 {
         msg!(
             "Anker state is owned by {}, but should be owned by the Anker program ({}).",
             anker_account.owner,
-            anker_program_id
+            anker_program_id.0,
         );
         return Err(AnkerError::InvalidOwner.into());
     }
@@ -59,32 +60,32 @@ pub fn deserialize_anker(
 
     anker.check_self_address(anker_program_id, anker_account)?;
 
-    if *solido_account.owner != anker.solido_program_id {
+    if *solido_account.owner != anker.solido_program_id.0 {
         msg!(
             "Anker state is associated with Solido program at {}, but Solido state is owned by {}.",
-            anker.solido_program_id,
+            anker.solido_program_id.0,
             solido_account.owner,
         );
         return Err(AnkerError::InvalidOwner.into());
     }
 
-    if *solido_account.key != anker.solido {
+    if *solido_account.key != anker.solido.0 {
         msg!(
             "Anker state is associated with Solido instance at {}, but found {}.",
-            anker.solido,
+            anker.solido.0,
             solido_account.owner,
         );
         return Err(AnkerError::InvalidSolidoInstance.into());
     }
 
-    let solido = Lido::deserialize_lido(&anker.solido_program_id, solido_account)?;
+    let solido = Lido::deserialize_lido(&anker.solido_program_id.0, solido_account)?;
 
     Ok((solido, anker))
 }
 
 /// Mint the given amount of bSOL and put it in the recipient's account.
 pub fn mint_b_sol_to(
-    anker_program_id: &Pubkey,
+    anker_program_id: &AnkerProgramId,
     anker: &Anker,
     accounts: &DepositAccountsInfo,
     amount: BLamports,
@@ -231,7 +232,7 @@ pub fn initialize_spl_account<'a, 'b>(
 ///
 /// Sends the UST to the `accounts.ust_reserve`
 pub fn swap_rewards(
-    program_id: &Pubkey,
+    anker_program_id: &AnkerProgramId,
     amount: StLamports,
     anker: &Anker,
     accounts: &SellRewardsAccountsInfo,
@@ -240,7 +241,7 @@ pub fn swap_rewards(
         msg!("Anker rewards must be greater than zero to be claimable.");
         return Err(AnkerError::ZeroRewardsToClaim.into());
     }
-    anker.check_token_swap(program_id, accounts)?;
+    anker.check_token_swap(anker_program_id, accounts)?;
 
     let swap_instruction = spl_token_swap::instruction::swap(
         accounts.token_swap_program_id.key,

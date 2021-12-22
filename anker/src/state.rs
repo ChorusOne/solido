@@ -24,6 +24,30 @@ use crate::token::{self, BLamports};
 /// Size of the serialized [`Anker`] struct, in bytes.
 pub const ANKER_LEN: usize = 233;
 
+/// A type-safe wrapper for the address of the Anker instance.
+///
+/// Using this type makes it harder to accidentally mix up the Solido and Anker address.
+#[derive(Clone, Debug, Default, BorshDeserialize, BorshSerialize, BorshSchema, Eq, PartialEq, Serialize)]
+pub struct AnkerAddress(pub Pubkey);
+
+/// A type-safe wrapper for the address of the Anker program.
+///
+/// Using this type makes it harder to accidentally mix up the Solido and Anker program ids.
+#[derive(Clone, Debug, Default, BorshDeserialize, BorshSerialize, BorshSchema, Eq, PartialEq, Serialize)]
+pub struct AnkerProgramId(pub Pubkey);
+
+/// A type-safe wrapper for the address of the Solido instance.
+///
+/// Using this type makes it harder to accidentally mix up the Solido and Anker address.
+#[derive(Clone, Debug, Default, BorshDeserialize, BorshSerialize, BorshSchema, Eq, PartialEq, Serialize)]
+pub struct SolidoAddress(pub Pubkey);
+
+/// A type-safe wrapper for the address of the Solido program.
+///
+/// Using this type makes it harder to accidentally mix up the Solido and Anker program ids.
+#[derive(Clone, Debug, Default, BorshDeserialize, BorshSerialize, BorshSchema, Eq, PartialEq, Serialize)]
+pub struct SolidoProgramId(pub Pubkey);
+
 #[repr(C)]
 #[derive(
     Clone, Debug, Default, BorshDeserialize, BorshSerialize, BorshSchema, Eq, PartialEq, Serialize,
@@ -42,11 +66,11 @@ pub struct WormholeParameters {
 pub struct Anker {
     /// The Solido program that owns the `solido` instance.
     #[serde(serialize_with = "serialize_b58")]
-    pub solido_program_id: Pubkey,
+    pub solido_program_id: SolidoProgramId,
 
     /// The associated Solido instance address.
     #[serde(serialize_with = "serialize_b58")]
-    pub solido: Pubkey,
+    pub solido: SolidoAddress,
 
     /// The SPL Token mint address for bSOL.
     #[serde(serialize_with = "serialize_b58")]
@@ -94,19 +118,19 @@ impl Anker {
     /// Confirm that the account address is the derived address where the Anker instance should live.
     pub fn check_self_address(
         &self,
-        anker_program_id: &Pubkey,
+        anker_program_id: &AnkerProgramId,
         account_info: &AccountInfo,
     ) -> ProgramResult {
         let address = Pubkey::create_program_address(
-            &[self.solido.as_ref(), &[self.self_bump_seed]],
-            anker_program_id,
+            &[self.solido.0.as_ref(), &[self.self_bump_seed]],
+            &anker_program_id.0,
         )
         .expect("Depends only on Anker-controlled values, should not fail.");
 
         if *account_info.key != address {
             msg!(
                 "Expected Anker instance for Solido instance {} to be {}, but found {} instead.",
-                self.solido,
+                self.solido.0,
                 address,
                 account_info.key,
             );
@@ -121,13 +145,13 @@ impl Anker {
         name: &'static str,
         seed: &'static [u8],
         bump_seed: u8,
-        anker_program_id: &Pubkey,
-        anker_instance: &Pubkey,
+        anker_program_id: &AnkerProgramId,
+        anker_instance: &AnkerAddress,
         account_info: &AccountInfo,
     ) -> ProgramResult {
         let address = Pubkey::create_program_address(
             &[anker_instance.as_ref(), seed, &[bump_seed]],
-            anker_program_id,
+            &anker_program_id.0,
         )
         .expect("Depends only on Anker-controlled values, should not fail.");
 
@@ -149,8 +173,8 @@ impl Anker {
     /// This does not check that the stSOL reserve is an stSOL account.
     pub fn check_st_sol_reserve_address(
         &self,
-        anker_program_id: &Pubkey,
-        anker_instance: &Pubkey,
+        anker_program_id: &AnkerProgramId,
+        anker_instance: &AnkerAddress,
         st_sol_reserve_account_info: &AccountInfo,
     ) -> ProgramResult {
         self.check_derived_account_address(
@@ -169,8 +193,8 @@ impl Anker {
     /// This does not check that the UST reserve is an UST account.
     pub fn check_ust_reserve_address(
         &self,
-        anker_program_id: &Pubkey,
-        anker_instance: &Pubkey,
+        anker_program_id: &AnkerProgramId,
+        anker_instance: &AnkerAddress,
         ust_reserve_account_info: &AccountInfo,
     ) -> ProgramResult {
         self.check_derived_account_address(
@@ -186,8 +210,8 @@ impl Anker {
     /// Confirm that the provided reserve authority is the one that belongs to this instance.
     pub fn check_reserve_authority(
         &self,
-        anker_program_id: &Pubkey,
-        anker_instance: &Pubkey,
+        anker_program_id: &AnkerProgramId,
+        anker_instance: &AnkerAddress,
         reserve_authority_info: &AccountInfo,
     ) -> ProgramResult {
         self.check_derived_account_address(
@@ -203,8 +227,8 @@ impl Anker {
     /// Confirm that the provided bSOL mint authority is the one that belongs to this instance.
     pub fn check_mint_authority(
         &self,
-        anker_program_id: &Pubkey,
-        anker_instance: &Pubkey,
+        anker_program_id: &AnkerProgramId,
+        anker_instance: &AnkerAddress,
         mint_authority_info: &AccountInfo,
     ) -> ProgramResult {
         self.check_derived_account_address(
@@ -406,7 +430,7 @@ impl Anker {
     /// Check if the rewards destination is the same as the one stored in Anker.
     pub fn check_token_swap(
         &self,
-        anker_program_id: &Pubkey,
+        anker_program_id: &AnkerProgramId,
         accounts: &SellRewardsAccountsInfo,
     ) -> ProgramResult {
         // Check if the token swap account is the same one as the stored in the instance.

@@ -39,9 +39,10 @@ use crate::{
     state::ExchangeRate,
 };
 use crate::{state::ANKER_LEN, ANKER_RESERVE_AUTHORITY};
+use crate::state::AnkerProgramId;
 
 fn process_initialize(
-    program_id: &Pubkey,
+    program_id: &AnkerProgramId,
     accounts_raw: &[AccountInfo],
     terra_rewards_destination: TerraAddress,
 ) -> ProgramResult {
@@ -50,10 +51,10 @@ fn process_initialize(
 
     let (anker_address, anker_bump_seed) = find_instance_address(program_id, accounts.solido.key);
 
-    if anker_address != *accounts.anker.key {
+    if anker_address.0 != *accounts.anker.key {
         msg!(
             "Expected to initialize instance at {}, but {} was provided.",
-            anker_address,
+            anker_address.0,
             accounts.anker.key,
         );
         return Err(AnkerError::InvalidDerivedAccount.into());
@@ -75,7 +76,7 @@ fn process_initialize(
     // Create an account for the Anker instance.
     let anker_seeds = [accounts.solido.key.as_ref(), &[anker_bump_seed]];
     create_account(
-        program_id,
+        &program_id.0,
         &accounts,
         accounts.anker,
         &rent,
@@ -176,7 +177,7 @@ fn process_initialize(
 
 /// Deposit an amount of StLamports and get bSol in return.
 fn process_deposit(
-    program_id: &Pubkey,
+    program_id: &AnkerProgramId,
     accounts_raw: &[AccountInfo],
     amount: StLamports,
 ) -> ProgramResult {
@@ -231,7 +232,7 @@ fn process_deposit(
 
 /// Sell Anker rewards.
 #[inline(never)]
-fn process_sell_rewards(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> ProgramResult {
+fn process_sell_rewards(program_id: &AnkerProgramId, accounts_raw: &[AccountInfo]) -> ProgramResult {
     let accounts = SellRewardsAccountsInfo::try_from_slice(accounts_raw)?;
     let (solido, mut anker) = deserialize_anker(program_id, accounts.anker, accounts.solido)?;
     anker.check_st_sol_reserve_address(
@@ -271,7 +272,7 @@ fn process_sell_rewards(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> Pr
 
 /// Return some bSOL and get back the underlying stSOL.
 fn process_withdraw(
-    program_id: &Pubkey,
+    program_id: &AnkerProgramId,
     accounts_raw: &[AccountInfo],
     amount: BLamports,
 ) -> ProgramResult {
@@ -366,7 +367,7 @@ fn process_withdraw(
 /// Change the Terra rewards destination.
 /// Solido's manager needs to sign the transaction.
 fn process_change_terra_rewards_destination(
-    program_id: &Pubkey,
+    program_id: &AnkerProgramId,
     accounts_raw: &[AccountInfo],
     terra_rewards_destination: TerraAddress,
 ) -> ProgramResult {
@@ -381,7 +382,7 @@ fn process_change_terra_rewards_destination(
 /// Change the Token Pool instance.
 /// Solido's manager needs to sign the transaction.
 fn process_change_token_swap_pool(
-    program_id: &Pubkey,
+    program_id: &AnkerProgramId,
     accounts_raw: &[AccountInfo],
 ) -> ProgramResult {
     let accounts = ChangeTokenSwapPoolAccountsInfo::try_from_slice(accounts_raw)?;
@@ -402,7 +403,7 @@ fn process_change_token_swap_pool(
 /// Send rewards via Wormhole from the UST reserve address to Terra.
 #[inline(never)]
 fn process_send_rewards(
-    program_id: &Pubkey,
+    program_id: &AnkerProgramId,
     accounts_raw: &[AccountInfo],
     wormhole_nonce: u32,
 ) -> ProgramResult {
@@ -501,7 +502,7 @@ fn process_send_rewards(
 }
 
 /// Processes [Instruction](enum.Instruction.html).
-pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> ProgramResult {
+pub fn process(program_id: &AnkerProgramId, accounts: &[AccountInfo], input: &[u8]) -> ProgramResult {
     let instruction = AnkerInstruction::try_from_slice(input)?;
     match instruction {
         AnkerInstruction::Initialize {

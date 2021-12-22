@@ -37,46 +37,49 @@ pub mod orca_token_swap_v2 {
     declare_id!("9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP");
 }
 
+use state::{AnkerAddress, AnkerProgramId, SolidoAddress, SolidoProgramId};
+
 /// Return the address at which the Anker instance should live that belongs to
 /// the given Solido instance.
-pub fn find_instance_address(anker_program_id: &Pubkey, solido_instance: &Pubkey) -> (Pubkey, u8) {
-    Pubkey::find_program_address(&[solido_instance.as_ref()], anker_program_id)
+pub fn find_instance_address(anker_program_id: &AnkerProgramId, solido_instance: &SolidoAddress) -> (AnkerAddress, u8) {
+    let (addr, bump_seed) = Pubkey::find_program_address(&[solido_instance.0.as_ref()], &anker_program_id.0);
+    (AnkerAddress(addr), bump_seed)
 }
 
 /// Return the owner of the stSOL and UST reserve account, and bump seed.
-pub fn find_reserve_authority(anker_program_id: &Pubkey, anker_instance: &Pubkey) -> (Pubkey, u8) {
+pub fn find_reserve_authority(anker_program_id: &AnkerProgramId, anker_instance: &AnkerAddress) -> (Pubkey, u8) {
     Pubkey::find_program_address(
-        &[anker_instance.as_ref(), ANKER_RESERVE_AUTHORITY],
-        anker_program_id,
+        &[anker_instance.0.as_ref(), ANKER_RESERVE_AUTHORITY],
+        &anker_program_id.0,
     )
 }
 
 /// Return the address of the stSOL reserve account, and bump seed.
 pub fn find_st_sol_reserve_account(
-    anker_program_id: &Pubkey,
-    anker_instance: &Pubkey,
+    anker_program_id: &AnkerProgramId,
+    anker_instance: &AnkerAddress,
 ) -> (Pubkey, u8) {
     Pubkey::find_program_address(
-        &[anker_instance.as_ref(), ANKER_STSOL_RESERVE_ACCOUNT],
-        anker_program_id,
+        &[anker_instance.0.as_ref(), ANKER_STSOL_RESERVE_ACCOUNT],
+        &anker_program_id.0,
     )
 }
 
 /// Return the mint authority for bSOL, and bump seed.
-pub fn find_mint_authority(anker_program_id: &Pubkey, anker_instance: &Pubkey) -> (Pubkey, u8) {
+pub fn find_mint_authority(anker_program_id: &AnkerProgramId, anker_instance: &AnkerAddress) -> (Pubkey, u8) {
     Pubkey::find_program_address(
-        &[anker_instance.as_ref(), ANKER_MINT_AUTHORITY],
-        anker_program_id,
+        &[anker_instance.0.as_ref(), ANKER_MINT_AUTHORITY],
+        &anker_program_id.0,
     )
 }
 
 /// Return the UST reserve account, has the same authority as the stSOL account.
 pub fn find_ust_reserve_account(
-    anker_program_id: &Pubkey,
-    anker_instance: &Pubkey,
+    anker_program_id: &AnkerProgramId,
+    anker_instance: &AnkerAddress,
 ) -> (Pubkey, u8) {
     Pubkey::find_program_address(
-        &[anker_instance.as_ref(), ANKER_UST_RESERVE_ACCOUNT],
-        anker_program_id,
+        &[anker_instance.0.as_ref(), ANKER_UST_RESERVE_ACCOUNT],
+        &anker_program_id.0,
     )
 }
