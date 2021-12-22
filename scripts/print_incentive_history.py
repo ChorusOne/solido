@@ -175,9 +175,7 @@ def main() -> None:
         assert (
             details.amount / 1e8 == entry.amount_ldo
         ), f'Expected amount in script to match transaction for {entry}'
-        assert (
-            details.did_execute
-        ), f'Expected transaction to be executed for {entry}'
+        assert details.did_execute, f'Expected transaction to be executed for {entry}'
 
         if prev_date != entry.date:
             print(f'\n### {entry.date}')
