@@ -39,21 +39,21 @@ impl AnkerState {
         anker_address: &Pubkey,
         solido: &Lido,
     ) -> Result<Self> {
-        let anker = config.client.get_anker(&anker_address)?;
+        let anker = config.client.get_anker(anker_address)?;
 
         let token_swap_account = config.client.get_account(&anker.token_swap_pool)?;
         let token_swap = spl_token_swap::state::SwapV1::unpack(token_swap_account.data())?;
         let token_swap_program_id = token_swap_account.owner;
 
         let (anker_ust_reserve, _anker_ust_reserve_bump_seed) =
-            find_ust_reserve_account(&anker_program_id, anker_address);
+            find_ust_reserve_account(anker_program_id, anker_address);
         let ust_reserve_balance =
             MicroUst(config.client.get_spl_token_balance(&anker_ust_reserve)?);
         let ust_account: spl_token::state::Account =
             config.client.get_unpack(&anker_ust_reserve)?;
 
         let (anker_st_sol_reserve, _anker_st_sol_reserve_bump_seed) =
-            find_st_sol_reserve_account(&anker_program_id, anker_address);
+            find_st_sol_reserve_account(anker_program_id, anker_address);
         let st_sol_reserve_balance =
             StLamports(config.client.get_spl_token_balance(&anker_st_sol_reserve)?);
 
@@ -68,7 +68,7 @@ impl AnkerState {
             };
 
         Ok(AnkerState {
-            anker_program_id: anker_program_id.clone(),
+            anker_program_id: *anker_program_id,
             anker,
             b_sol_total_supply_amount,
             pool_st_sol_account,

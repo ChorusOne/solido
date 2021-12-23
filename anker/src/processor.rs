@@ -454,6 +454,8 @@ fn process_send_rewards(
 
         invoke_signed(
             &instr,
+            // This vec is not useless, we want the data to go on the heap, not on the stack!
+            #[allow(clippy::useless_vec)]
             &vec![
                 accounts.ust_reserve_account.clone(),
                 accounts.authority_signer_key.clone(),
