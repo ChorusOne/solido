@@ -258,6 +258,7 @@ impl fmt::Display for MaintenanceOutput {
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub struct MaintenanceInstruction {
     instruction: Instruction,
     output: MaintenanceOutput,
@@ -1711,7 +1712,7 @@ mod test {
 
         // The first attempt should stake with the first validator.
         assert_eq!(
-            state.try_stake_deposit().unwrap().1,
+            state.try_stake_deposit().unwrap().output,
             MaintenanceOutput::StakeDeposit {
                 validator_vote_account: state.solido.validators.entries[0].pubkey,
                 amount: (MINIMUM_STAKE_ACCOUNT_BALANCE * 2).unwrap(),
@@ -1737,7 +1738,7 @@ mod test {
         // The second attempt should stake with the second validator, and the amount
         // should be the same as before.
         assert_eq!(
-            state.try_stake_deposit().unwrap().1,
+            state.try_stake_deposit().unwrap().output,
             MaintenanceOutput::StakeDeposit {
                 validator_vote_account: state.solido.validators.entries[1].pubkey,
                 amount: (MINIMUM_STAKE_ACCOUNT_BALANCE * 2).unwrap(),
