@@ -29,6 +29,7 @@ use crate::config::*;
 use crate::error::{Abort, CliError, Error};
 use crate::snapshot::{Snapshot, SnapshotClient};
 
+mod anker_state;
 mod commands_anker;
 mod commands_multisig;
 mod commands_solido;

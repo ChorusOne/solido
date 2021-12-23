@@ -307,7 +307,7 @@ accounts_struct! {
             is_signer: false,
             is_writable: true, // Needed to swap tokens.
         },
-        pub token_pool_authority {
+        pub token_swap_authority {
             is_signer: false,
             is_writable: false,
         },
@@ -315,8 +315,11 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
+        pub token_swap_program_id {
+            is_signer: false,
+            is_writable: false,
+        },
         const spl_token = spl_token::id(),
-        const orca_token_swap_v2 = crate::orca_token_swap_v2::id(),
     }
 }
 

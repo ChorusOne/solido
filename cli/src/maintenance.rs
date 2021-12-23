@@ -40,6 +40,7 @@ use lido::{
     MINIMUM_STAKE_ACCOUNT_BALANCE, STAKE_AUTHORITY,
 };
 
+use crate::anker_state::AnkerState;
 use crate::config::StakeTime;
 use crate::error::MaintenanceError;
 use crate::snapshot::Result;
@@ -111,6 +112,10 @@ pub enum MaintenanceOutput {
         validator_vote_account: Pubkey,
     },
     UnstakeFromActiveValidator(Unstake),
+
+    SellRewards {
+        st_sol_amount: StLamports,
+    },
 }
 
 #[derive(Debug, Eq, PartialEq, Serialize)]
@@ -235,6 +240,10 @@ impl fmt::Display for MaintenanceOutput {
                 writeln!(f, "Remove validator")?;
                 writeln!(f, "  Validator vote account: {}", validator_vote_account)?;
             }
+            MaintenanceOutput::SellRewards { st_sol_amount } => {
+                writeln!(f, "Sell stSOL rewards")?;
+                writeln!(f, "  Amount:               {}", st_sol_amount)?;
+            }
         }
         Ok(())
     }
@@ -263,6 +272,9 @@ pub struct SolidoState {
     pub solido_program_id: Pubkey,
     pub solido_address: Pubkey,
     pub solido: Lido,
+
+    /// Anker parameters
+    pub anker_state: Option<AnkerState>,
 
     /// For each validator, in the same order as in `solido.validators`, holds
     /// the stake balance of the derived stake accounts from the begin seed until
@@ -408,6 +420,7 @@ impl SolidoState {
     pub fn new(
         config: &mut SnapshotConfig,
         solido_program_id: &Pubkey,
+        anker_program_id: &Pubkey,
         solido_address: &Pubkey,
         stake_time: StakeTime,
     ) -> Result<SolidoState> {
@@ -474,11 +487,23 @@ impl SolidoState {
         // program does that anyway.
         let maintainer_address = config.signer.pubkey();
 
+        let anker_state = if anker_program_id == &Pubkey::default() {
+            None
+        } else {
+            Some(AnkerState::new(
+                config,
+                *anker_program_id,
+                solido_address,
+                &solido,
+            )?)
+        };
+
         Ok(SolidoState {
             produced_at: SystemTime::now(),
             solido_program_id: *solido_program_id,
             solido_address: *solido_address,
             solido,
+            anker_state,
             validator_stake_accounts,
             validator_unstake_accounts,
             validator_vote_account_balances,
@@ -690,6 +715,31 @@ impl SolidoState {
             ));
         }
         None
+    }
+
+    /// Try to sell the extra stSOL rewards for UST tokens.
+    pub fn try_sell_anker_rewards(&self) -> Option<(Instruction, MaintenanceOutput)> {
+        let anker_state = self.anker_state.as_ref()?;
+        let reserve_st_sol = anker_state.st_sol_reserve_balance;
+        let st_sol_amount = self
+            .solido
+            .exchange_rate
+            .exchange_sol(Lamports(anker_state.b_sol_total_supply_amount.0))
+            .expect("It will not overflow because we always have less than the total amount of minted Sol.");
+
+        let rewards = (reserve_st_sol - st_sol_amount).ok()?;
+        // We should not call the instruction if the rewards are 0.
+        if rewards == StLamports(0) {
+            None
+        } else {
+            Some((
+                anker_state
+                    .get_sell_rewards_instruction(self.solido_address, self.solido.st_sol_mint),
+                MaintenanceOutput::SellRewards {
+                    st_sol_amount: anker_state.st_sol_reserve_balance,
+                },
+            ))
+        }
     }
 
     /// Get an instruction to merge accounts.
@@ -1459,7 +1509,8 @@ pub fn try_perform_maintenance(
         .or_else(|| state.try_stake_deposit())
         .or_else(|| state.try_unstake_from_active_validators())
         .or_else(|| state.try_claim_validator_fee())
-        .or_else(|| state.try_remove_validator());
+        .or_else(|| state.try_remove_validator())
+        .or_else(|| state.try_sell_anker_rewards());
 
     match instruction_output {
         Some((instruction, output)) => {
@@ -1485,6 +1536,7 @@ pub fn run_perform_maintenance(
     let state = SolidoState::new(
         config,
         opts.solido_program_id(),
+        opts.anker_program_id(),
         opts.solido_address(),
         *opts.stake_time(),
     )?;
@@ -1503,6 +1555,7 @@ mod test {
             solido_program_id: Pubkey::new_unique(),
             solido_address: Pubkey::new_unique(),
             solido: Lido::default(),
+            anker_state: Some(AnkerState::default()),
             validator_stake_accounts: vec![],
             validator_unstake_accounts: vec![],
             validator_vote_account_balances: vec![],
