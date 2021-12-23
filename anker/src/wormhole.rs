@@ -251,7 +251,7 @@ fn test_get_wormhole_instruction() {
         TerraAddress::from_str("terra1z7529lza7elcleyhzj2sfq62uk7rtjgnrqeuxr").unwrap();
     let foreign_addr = terra_addr.to_foreign();
 
-    let mut payload = Payload::new(0x28fb, MicroUst(1_000_000), foreign_addr);
+    let payload = Payload::new(0x28fb, MicroUst(1_000_000), foreign_addr);
     let payer = Pubkey::from_str("GUVfssWwwu6oXfKyVQUjKcYxgKDJEPhaEwh16kccZkSq").unwrap();
     let from = Pubkey::from_str("3gHYGmunh7mBWHGQ5YjqgKjy44krwenxNZ5cadZ85DtT").unwrap();
     let from_owner = payer;
