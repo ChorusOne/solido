@@ -369,7 +369,6 @@ pub fn print_pretty_error_code(error_code: u32) {
         }
     }
     match AnkerError::from_u32(error_code) {
-        // TODO(ruuda): Add a constant offset to Anker errors so they don't overlap Solido errors.
         Some(err) => println!("    Anker error {} is {:?}", error_code, err),
         None => println!("    Error {} is not a known Anker error.", error_code),
     }
