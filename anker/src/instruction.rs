@@ -1,5 +1,5 @@
-// TODO(#449): Remove this once Anker functions are all complete.
-#![allow(dead_code)]
+// SPDX-FileCopyrightText: 2021 Chorus One AG
+// SPDX-License-Identifier: GPL-3.0
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use lido::{accounts_struct, accounts_struct_meta, error::LidoError, token::StLamports};
@@ -17,6 +17,7 @@ use crate::{token::BLamports, wormhole::TerraAddress};
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
 pub enum AnkerInstruction {
     Initialize {
+        #[allow(dead_code)] // It is not dead code when compiled for BPF.
         terra_rewards_destination: TerraAddress,
     },
 
@@ -39,13 +40,17 @@ pub enum AnkerInstruction {
 
     /// Sell rewards to the UST reserve.
     SellRewards,
+
     /// Transfer from the UST reserve to terra through Wormhole.
     SendRewards {
-        wormhole_nonce: u32, // Random number used to differentiate similar transaction.
+        /// Random number used to differentiate similar transactions.
+        #[allow(dead_code)] // It is not dead code when compiled for BPF.
+        wormhole_nonce: u32,
     },
     /// Change the Anker's rewards destination address on Terra:
     /// `terra_rewards_destination`.
     ChangeTerraRewardsDestination {
+        #[allow(dead_code)] // It is not dead code when compiled for BPF.
         terra_rewards_destination: TerraAddress,
     },
     /// Change the token pool instance.
@@ -404,6 +409,8 @@ pub fn change_token_swap_pool(
 }
 
 accounts_struct! {
+    // For the Wormhole accounts, see also
+    // https://github.com/certusone/wormhole/blob/537d56b37aa041a585f2c90515fa3a7ffa5898b5/solana/modules/token_bridge/program/src/instructions.rs#L328-L390.
     SendRewardsAccountsMeta, SendRewardsAccountsInfo {
         pub anker {
             is_signer: false,
@@ -442,15 +449,15 @@ accounts_struct! {
             is_signer: false,
             is_writable: true,
         },
-        pub custody_key {
+        // Program-derived address derived from the mint address.
+        pub wrapped_meta_key {
             is_signer: false,
             is_writable: true,
         },
+        // Wormhole program-derived account that will sign the SPL
+        // token transfer out of the source account. This means we will need
+        // to call spl_token::approve before we can send.
         pub authority_signer_key {
-            is_signer: false,
-            is_writable: false,
-        },
-        pub custody_signer_key {
             is_signer: false,
             is_writable: false,
         },
@@ -458,6 +465,9 @@ accounts_struct! {
             is_signer: false,
             is_writable: true,
         },
+        // The message account needs to be a new, uninitialized account, and then
+        // calling Wormhole will initialize it. (This is why it needs to be a
+        // signer.)
         pub message {
             is_signer: true,
             is_writable: true,
@@ -470,6 +480,9 @@ accounts_struct! {
             is_signer: false,
             is_writable: true,
         },
+        // To make a Wormhole transfer, we need to pay a transaction fee (on top
+        // of the Solana transaction fee). The Wormhole program enforces this by
+        // transferring some SOL from the payer account to the fee collector.
         pub fee_collector_key {
             is_signer: false,
             is_writable: true,

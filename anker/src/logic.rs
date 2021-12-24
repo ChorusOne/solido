@@ -205,6 +205,11 @@ pub fn initialize_spl_account<'a, 'b>(
     mint: &'a AccountInfo<'b>,
 ) -> ProgramResult {
     // Initialize the reserve account.
+    msg!(
+        "Initializing SPL token account for mint {} at {} ...",
+        mint.key,
+        account.key
+    );
     invoke_signed(
         &spl_token::instruction::initialize_account(
             &spl_token::id(),

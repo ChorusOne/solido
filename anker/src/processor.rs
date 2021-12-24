@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2021 Chorus One AG
+// SPDX-License-Identifier: GPL-3.0
+
 use borsh::BorshDeserialize;
 use lido::token::Lamports;
 use solana_program::{
@@ -86,6 +89,7 @@ fn process_initialize(
         ANKER_STSOL_RESERVE_ACCOUNT,
         &[st_sol_reserve_account_bump_seed],
     ];
+    msg!("Allocating account for stSOL reserve ...");
     create_account(
         &spl_token::ID,
         &accounts,
@@ -94,6 +98,7 @@ fn process_initialize(
         spl_token::state::Account::LEN,
         &st_sol_reserve_account_seeds,
     )?;
+    msg!("Initializing SPL token account for stSOL reserve ...");
     initialize_spl_account(
         &accounts,
         &st_sol_reserve_account_seeds,
@@ -107,6 +112,7 @@ fn process_initialize(
         ANKER_UST_RESERVE_ACCOUNT,
         &[ust_reserve_account_bump_seed],
     ];
+    msg!("Allocating account for UST reserve ...");
     create_account(
         &spl_token::ID,
         &accounts,
@@ -115,6 +121,7 @@ fn process_initialize(
         spl_token::state::Account::LEN,
         &ust_reserve_account_seeds,
     )?;
+    msg!("Initializing SPL token account for UST reserve ...");
     initialize_spl_account(
         &accounts,
         &ust_reserve_account_seeds,
@@ -223,6 +230,7 @@ fn process_deposit(
 }
 
 /// Sell Anker rewards.
+#[inline(never)]
 fn process_sell_rewards(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> ProgramResult {
     let accounts = SellRewardsAccountsInfo::try_from_slice(accounts_raw)?;
     let (solido, mut anker) = deserialize_anker(program_id, accounts.anker, accounts.solido)?;
@@ -392,63 +400,104 @@ fn process_change_token_swap_pool(
 }
 
 /// Send rewards via Wormhole from the UST reserve address to Terra.
+#[inline(never)]
 fn process_send_rewards(
     program_id: &Pubkey,
     accounts_raw: &[AccountInfo],
     wormhole_nonce: u32,
 ) -> ProgramResult {
     let accounts = SendRewardsAccountsInfo::try_from_slice(accounts_raw)?;
-    let (_solido, anker) = deserialize_anker(program_id, accounts.anker, accounts.solido)?;
+    let anker = deserialize_anker(program_id, accounts.anker, accounts.solido)?.1;
     anker.check_ust_reserve_address(
         program_id,
         accounts.anker.key,
         accounts.ust_reserve_account,
     )?;
     let wormhole_transfer_args = anker.check_send_rewards(&accounts)?;
-    let ust_reserve_state =
-        spl_token::state::Account::unpack_from_slice(&accounts.ust_reserve_account.data.borrow())?;
-    // Check UST mint.
-    if &ust_reserve_state.mint != accounts.ust_mint.key {
-        return Err(AnkerError::InvalidTokenMint.into());
-    }
 
-    let reserve_ust_amount = MicroUst(ust_reserve_state.amount);
-    let payload = crate::wormhole::Payload::new(
-        wormhole_nonce,
-        reserve_ust_amount,
-        anker.terra_rewards_destination.to_foreign(),
-    );
+    // We put the temporaries in a scope here to make sure they are popped from
+    // the stack before we continue the function, because this function is scarce
+    // on stack space.
+    let reserve_ust_amount = {
+        let ust_reserve_state = spl_token::state::Account::unpack_from_slice(
+            &accounts.ust_reserve_account.data.borrow(),
+        )?;
 
-    // Send UST tokens via Wormhole 🤞.
+        // Check UST mint.
+        if &ust_reserve_state.mint != accounts.ust_mint.key {
+            return Err(AnkerError::InvalidTokenMint.into());
+        }
+        MicroUst(ust_reserve_state.amount)
+    };
+
     let reserve_seeds = [
         accounts.anker.key.as_ref(),
         ANKER_RESERVE_AUTHORITY,
         &[anker.reserve_authority_bump_seed],
     ];
 
-    invoke_signed(
-        &get_wormhole_transfer_instruction(&payload, &wormhole_transfer_args),
-        &vec![
-            accounts.payer.clone(),
-            accounts.config_key.clone(),
-            accounts.ust_reserve_account.clone(),
-            accounts.ust_mint.clone(),
-            accounts.custody_key.clone(),
-            accounts.authority_signer_key.clone(),
-            accounts.custody_signer_key.clone(),
-            accounts.bridge_config.clone(),
-            accounts.message.clone(),
-            accounts.emitter_key.clone(),
-            accounts.sequence_key.clone(),
-            accounts.fee_collector_key.clone(),
-            accounts.sysvar_clock.clone(),
-            accounts.sysvar_rent.clone(),
-            accounts.system_program.clone(),
-            accounts.wormhole_core_bridge_program_id.clone(),
-            accounts.spl_token.clone(),
-        ],
-        &[&reserve_seeds[..]],
-    )
+    // Stack space is scarce in this function, so we put as many things as we can
+    // in a scope to make sure the stack space of the temporaries is reclaimed.
+    {
+        // Wormhole signs the SPL token transfer with its "authority signer key",
+        // which means we need to authorize that key to modify our UST reserve.
+        let instr = Box::new(spl_token::instruction::approve(
+            accounts.spl_token.key,
+            accounts.ust_reserve_account.key,
+            accounts.authority_signer_key.key,
+            accounts.reserve_authority.key,
+            // The next argument is "signers", which is only relevant for this SPL
+            // token multisig feature, which we do not use.
+            &[],
+            reserve_ust_amount.0,
+        )?);
+
+        invoke_signed(
+            &instr,
+            // This vec is not useless, we want the data to go on the heap, not on the stack!
+            #[allow(clippy::useless_vec)]
+            &vec![
+                accounts.ust_reserve_account.clone(),
+                accounts.authority_signer_key.clone(),
+                accounts.reserve_authority.clone(),
+            ],
+            &[&reserve_seeds[..]],
+        )?;
+    }
+
+    let payload = crate::wormhole::Payload::new(
+        wormhole_nonce,
+        reserve_ust_amount,
+        anker.terra_rewards_destination.to_foreign(),
+    );
+
+    // For the order and meaning of the accounts, see also
+    // https://github.com/certusone/wormhole/blob/537d56b37aa041a585f2c90515fa3a7ffa5898b5/solana/modules/token_bridge/program/src/instructions.rs#L328-L390.
+    let instr = Box::new(get_wormhole_transfer_instruction(
+        &payload,
+        &wormhole_transfer_args,
+    ));
+    let accounts = vec![
+        accounts.payer.clone(),
+        accounts.config_key.clone(),
+        accounts.ust_reserve_account.clone(),
+        accounts.reserve_authority.clone(),
+        accounts.ust_mint.clone(),
+        accounts.wrapped_meta_key.clone(),
+        accounts.authority_signer_key.clone(),
+        accounts.bridge_config.clone(),
+        accounts.message.clone(),
+        accounts.emitter_key.clone(),
+        accounts.sequence_key.clone(),
+        accounts.fee_collector_key.clone(),
+        accounts.sysvar_clock.clone(),
+        accounts.sysvar_rent.clone(),
+        accounts.system_program.clone(),
+        accounts.wormhole_core_bridge_program_id.clone(),
+        accounts.spl_token.clone(),
+    ];
+    // Send UST tokens via Wormhole 🤞.
+    invoke_signed(&instr, &accounts[..], &[&reserve_seeds[..]])
 }
 
 /// Processes [Instruction](enum.Instruction.html).

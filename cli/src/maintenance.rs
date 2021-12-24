@@ -24,10 +24,12 @@ use solana_program::{
 };
 use solana_sdk::account::ReadableAccount;
 use solana_sdk::fee_calculator::DEFAULT_TARGET_LAMPORTS_PER_SIGNATURE;
+use solana_sdk::signer::{keypair::Keypair, Signer};
 use solana_sdk::{account::Account, instruction::Instruction};
 use solana_vote_program::vote_state::VoteState;
 use spl_token::state::Mint;
 
+use anker::token::MicroUst;
 use lido::token::StLamports;
 use lido::{account_map::PubkeyAndEntry, stake_account::StakeAccount, MINT_AUTHORITY};
 use lido::{
@@ -115,6 +117,9 @@ pub enum MaintenanceOutput {
 
     SellRewards {
         st_sol_amount: StLamports,
+    },
+    SendRewards {
+        ust_amount: MicroUst,
     },
 }
 
@@ -244,8 +249,29 @@ impl fmt::Display for MaintenanceOutput {
                 writeln!(f, "Sell stSOL rewards")?;
                 writeln!(f, "  Amount:               {}", st_sol_amount)?;
             }
+            MaintenanceOutput::SendRewards { ust_amount } => {
+                writeln!(f, "Sent Anker UST rewards through Wormhole.")?;
+                writeln!(f, "  Amount: {}", ust_amount)?;
+            }
         }
         Ok(())
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct MaintenanceInstruction {
+    instruction: Instruction,
+    output: MaintenanceOutput,
+    additional_signers: Vec<Keypair>,
+}
+
+impl MaintenanceInstruction {
+    pub fn new(instruction: Instruction, output: MaintenanceOutput) -> MaintenanceInstruction {
+        MaintenanceInstruction {
+            instruction,
+            output,
+            additional_signers: Vec::new(),
+        }
     }
 }
 
@@ -490,10 +516,12 @@ impl SolidoState {
         let anker_state = if anker_program_id == &Pubkey::default() {
             None
         } else {
+            let (anker_address, _bump_seed) =
+                anker::find_instance_address(anker_program_id, solido_address);
             Some(AnkerState::new(
                 config,
-                *anker_program_id,
-                solido_address,
+                anker_program_id,
+                &anker_address,
                 &solido,
             )?)
         };
@@ -534,7 +562,7 @@ impl SolidoState {
     }
 
     /// If there is a deposit that can be staked, return the instructions to do so.
-    pub fn try_stake_deposit(&self) -> Option<(Instruction, MaintenanceOutput)> {
+    pub fn try_stake_deposit(&self) -> Option<MaintenanceInstruction> {
         self.confirm_should_stake_unstake_in_current_slot()?;
         // We can only stake if there is an active validator. If there is none,
         // this will short-circuit and return None.
@@ -613,7 +641,7 @@ impl SolidoState {
             amount: amount_to_deposit,
             stake_account: stake_account_end,
         };
-        Some((instruction, task))
+        Some(MaintenanceInstruction::new(instruction, task))
     }
 
     /// Returns a tuple with the unstake account address and the instruction to
@@ -649,7 +677,7 @@ impl SolidoState {
     }
 
     /// If there is a validator being deactivated, try to unstake its funds.
-    pub fn try_unstake_from_inactive_validator(&self) -> Option<(Instruction, MaintenanceOutput)> {
+    pub fn try_unstake_from_inactive_validator(&self) -> Option<MaintenanceInstruction> {
         for (validator, stake_accounts) in self
             .solido
             .validators
@@ -687,13 +715,13 @@ impl SolidoState {
                 amount: stake_account_balance.balance.total(),
             });
 
-            return Some((unstake_instruction, task));
+            return Some(MaintenanceInstruction::new(unstake_instruction, task));
         }
         None
     }
 
     /// If there is a validator ready for removal, try to remove it.
-    pub fn try_remove_validator(&self) -> Option<(Instruction, MaintenanceOutput)> {
+    pub fn try_remove_validator(&self) -> Option<MaintenanceInstruction> {
         for validator in &self.solido.validators.entries {
             // We are only interested in validators that can be removed.
             if validator.entry.check_can_be_removed().is_err() {
@@ -703,22 +731,20 @@ impl SolidoState {
                 validator_vote_account: validator.pubkey,
             };
 
-            return Some((
-                lido::instruction::remove_validator(
-                    &self.solido_program_id,
-                    &lido::instruction::RemoveValidatorMeta {
-                        lido: self.solido_address,
-                        validator_vote_account_to_remove: validator.pubkey,
-                    },
-                ),
-                task,
-            ));
+            let instruction = lido::instruction::remove_validator(
+                &self.solido_program_id,
+                &lido::instruction::RemoveValidatorMeta {
+                    lido: self.solido_address,
+                    validator_vote_account_to_remove: validator.pubkey,
+                },
+            );
+            return Some(MaintenanceInstruction::new(instruction, task));
         }
         None
     }
 
     /// Try to sell the extra stSOL rewards for UST tokens.
-    pub fn try_sell_anker_rewards(&self) -> Option<(Instruction, MaintenanceOutput)> {
+    pub fn try_sell_anker_rewards(&self) -> Option<MaintenanceInstruction> {
         let anker_state = self.anker_state.as_ref()?;
         let reserve_st_sol = anker_state.st_sol_reserve_balance;
         let st_sol_amount = self
@@ -732,7 +758,7 @@ impl SolidoState {
         if rewards == StLamports(0) {
             None
         } else {
-            Some((
+            Some(MaintenanceInstruction::new(
                 anker_state
                     .get_sell_rewards_instruction(self.solido_address, self.solido.st_sol_mint),
                 MaintenanceOutput::SellRewards {
@@ -740,6 +766,38 @@ impl SolidoState {
                 },
             ))
         }
+    }
+
+    pub fn try_send_anker_rewards(&self) -> Option<MaintenanceInstruction> {
+        let anker_state = self.anker_state.as_ref()?;
+
+        if anker_state.ust_reserve_balance == MicroUst(0) {
+            return None;
+        }
+
+        // Use the low 32 bits of the current slot as the nonce. This ensures
+        // that we don't repeat the nonce for at least 2^32 slots, which is 327
+        // years even if the block times were 100ms, but in practice block times
+        // are 600-700ms, so it’s even longer. Do we never send multiple
+        // transactions based on the same slot though? If we do, then the state
+        // we observe should also be identical, and only one of the transactions
+        // should succeed.
+        let wormhole_nonce = (self.clock.slot & 0xffff_ffff) as u32;
+
+        let (instruction, additional_signer) = anker_state.get_send_rewards_instruction(
+            self.solido_address,
+            self.maintainer_address,
+            wormhole_nonce,
+        );
+
+        let ust_amount = anker_state.ust_reserve_balance;
+        let output = MaintenanceOutput::SendRewards { ust_amount };
+        let mut maintenance_instruction = MaintenanceInstruction::new(instruction, output);
+        maintenance_instruction
+            .additional_signers
+            .push(additional_signer);
+
+        Some(maintenance_instruction)
     }
 
     /// Get an instruction to merge accounts.
@@ -777,7 +835,7 @@ impl SolidoState {
 
     // Tries to merge accounts from the beginning of the validator's
     // stake accounts.  May return None or one instruction.
-    pub fn try_merge_on_all_stakes(&self) -> Option<(Instruction, MaintenanceOutput)> {
+    pub fn try_merge_on_all_stakes(&self) -> Option<MaintenanceInstruction> {
         for (validator, stake_accounts) in self
             .solido
             .validators
@@ -799,7 +857,7 @@ impl SolidoState {
                         from_stake_seed: from_stake.1.seed,
                         to_stake_seed: to_stake.1.seed,
                     };
-                    return Some((instruction, task));
+                    return Some(MaintenanceInstruction::new(instruction, task));
                 }
             }
         }
@@ -807,7 +865,7 @@ impl SolidoState {
     }
 
     /// If a new epoch started, and we haven't updated the exchange rate yet, do so.
-    pub fn try_update_exchange_rate(&self) -> Option<(Instruction, MaintenanceOutput)> {
+    pub fn try_update_exchange_rate(&self) -> Option<MaintenanceInstruction> {
         if self.solido.exchange_rate.computed_in_epoch >= self.clock.epoch {
             // The exchange rate has already been updated in this epoch, nothing to do.
             return None;
@@ -823,7 +881,7 @@ impl SolidoState {
         );
         let task = MaintenanceOutput::UpdateExchangeRate;
 
-        Some((instruction, task))
+        Some(MaintenanceInstruction::new(instruction, task))
     }
 
     /// Check if any validator's balance is outdated, and if so, update it.
@@ -831,7 +889,7 @@ impl SolidoState {
     /// Merging stakes generates inactive stake that could be withdrawn with this transaction,
     /// or if some joker donates to one of the stake accounts we can use the same function
     /// to claim these rewards back to the reserve account so they can be re-staked.
-    pub fn try_withdraw_inactive_stake(&self) -> Option<(Instruction, MaintenanceOutput)> {
+    pub fn try_withdraw_inactive_stake(&self) -> Option<MaintenanceInstruction> {
         for (validator, stake_accounts, unstake_accounts) in izip!(
             self.solido.validators.entries.iter(),
             self.validator_stake_accounts.iter(),
@@ -887,7 +945,7 @@ impl SolidoState {
                     expected_difference_stake,
                     unstake_withdrawn_to_reserve: removed_unstake,
                 };
-                return Some((instruction, task));
+                return Some(MaintenanceInstruction::new(instruction, task));
             }
         }
 
@@ -900,7 +958,7 @@ impl SolidoState {
     /// As validator's vote accounts accumulate rewards, at the beginning of
     /// every epoch, they should be collected and the fees they've generated
     /// should be spread to the Solido participants.
-    pub fn try_collect_validator_fee(&self) -> Option<(Instruction, MaintenanceOutput)> {
+    pub fn try_collect_validator_fee(&self) -> Option<MaintenanceInstruction> {
         for (validator, vote_account_balance) in self
             .solido
             .validators
@@ -928,7 +986,7 @@ impl SolidoState {
                     validator_vote_account: validator.pubkey,
                     fee_rewards: *vote_account_balance,
                 };
-                return Some((instruction, task));
+                return Some(MaintenanceInstruction::new(instruction, task));
             }
         }
 
@@ -937,7 +995,7 @@ impl SolidoState {
 
     /// Checks if any of the validators has unclaimed fees in stSOL. If so,
     /// claims it on behalf of the validator.
-    pub fn try_claim_validator_fee(&self) -> Option<(Instruction, MaintenanceOutput)> {
+    pub fn try_claim_validator_fee(&self) -> Option<MaintenanceInstruction> {
         for validator in self.solido.validators.entries.iter() {
             if validator.entry.fee_credit == StLamports(0) {
                 continue;
@@ -957,14 +1015,14 @@ impl SolidoState {
                 fee_rewards: validator.entry.fee_credit,
             };
 
-            return Some((instruction, task));
+            return Some(MaintenanceInstruction::new(instruction, task));
         }
 
         None
     }
 
     /// Unstake from active validators in order to rebalance validators.
-    pub fn try_unstake_from_active_validators(&self) -> Option<(Instruction, MaintenanceOutput)> {
+    pub fn try_unstake_from_active_validators(&self) -> Option<MaintenanceInstruction> {
         self.confirm_should_stake_unstake_in_current_slot()?;
         // Return None if there's no active validator to unstake from.
         self.solido.validators.iter_active().next()?;
@@ -1008,7 +1066,7 @@ impl SolidoState {
             to_unstake_seed: validator.entry.unstake_seeds.end,
             amount,
         });
-        Some((instruction, task))
+        Some(MaintenanceInstruction::new(instruction, task))
     }
 
     /// Write metrics about the current Solido instance in Prometheus format.
@@ -1494,7 +1552,7 @@ pub fn try_perform_maintenance(
 
     // Try all of these operations one by one, and select the first one that
     // produces an instruction.
-    let instruction_output: Option<(Instruction, MaintenanceOutput)> = None
+    let instruction_output: Option<MaintenanceInstruction> = None
         // Merging stake accounts goes before updating validator balance, to
         // ensure that the balance update needs to reference as few accounts
         // as possible.
@@ -1510,14 +1568,19 @@ pub fn try_perform_maintenance(
         .or_else(|| state.try_unstake_from_active_validators())
         .or_else(|| state.try_claim_validator_fee())
         .or_else(|| state.try_remove_validator())
-        .or_else(|| state.try_sell_anker_rewards());
+        .or_else(|| state.try_sell_anker_rewards())
+        .or_else(|| state.try_send_anker_rewards());
 
     match instruction_output {
-        Some((instruction, output)) => {
-            // For maintenance operations, the maintainer is the only signer,
-            // and that should be sufficient.
-            config.sign_and_send_transaction(&[instruction], &[config.signer])?;
-            Ok(Some(output))
+        Some(maintenance_instruction) => {
+            // Usually the maintainer is the only signer, but in some cases we
+            // need to generate a new fresh keypair, which then also is a signer.
+            let mut signers: Vec<&dyn Signer> = vec![config.signer];
+            for keypair in &maintenance_instruction.additional_signers {
+                signers.push(keypair);
+            }
+            config.sign_and_send_transaction(&[maintenance_instruction.instruction], &signers)?;
+            Ok(Some(maintenance_instruction.output))
         }
         None => Ok(None),
     }
@@ -1648,7 +1711,7 @@ mod test {
 
         // The first attempt should stake with the first validator.
         assert_eq!(
-            state.try_stake_deposit().unwrap().1,
+            state.try_stake_deposit().unwrap().output,
             MaintenanceOutput::StakeDeposit {
                 validator_vote_account: state.solido.validators.entries[0].pubkey,
                 amount: (MINIMUM_STAKE_ACCOUNT_BALANCE * 2).unwrap(),
@@ -1674,7 +1737,7 @@ mod test {
         // The second attempt should stake with the second validator, and the amount
         // should be the same as before.
         assert_eq!(
-            state.try_stake_deposit().unwrap().1,
+            state.try_stake_deposit().unwrap().output,
             MaintenanceOutput::StakeDeposit {
                 validator_vote_account: state.solido.validators.entries[1].pubkey,
                 amount: (MINIMUM_STAKE_ACCOUNT_BALANCE * 2).unwrap(),
