@@ -541,6 +541,11 @@ impl Anker {
             accounts.wrapped_meta_key.key,
         )?;
         check_wormhole_account(
+            "authority signer key",
+            &wormhole_transfer_args.authority_signer_key,
+            accounts.authority_signer_key.key,
+        )?;
+        check_wormhole_account(
             "bridge config",
             &wormhole_transfer_args.bridge_config,
             accounts.bridge_config.key,
