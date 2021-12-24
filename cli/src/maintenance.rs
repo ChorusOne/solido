@@ -792,7 +792,6 @@ impl SolidoState {
 
         let ust_amount = anker_state.ust_reserve_balance;
         let output = MaintenanceOutput::SendRewards { ust_amount };
-        println!("Trying to send rewards: {:?}", &output);
         let mut maintenance_instruction = MaintenanceInstruction::new(instruction, output);
         maintenance_instruction
             .additional_signers
