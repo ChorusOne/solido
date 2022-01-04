@@ -10,13 +10,17 @@ use lido::token::{Lamports, StLamports};
 use lido::util::serialize_b58;
 use serde::Serialize;
 use solana_program::pubkey::Pubkey;
+use solana_program::system_instruction;
+use solana_sdk::signature::Keypair;
 use solana_sdk::signer::Signer;
+use spl_token_swap::curve::base::{CurveType, SwapCurve};
+use spl_token_swap::curve::constant_product::ConstantProductCurve;
 
-use crate::config::{ConfigFile, CreateAnkerOpts, ShowAnkerOpts};
+use crate::config::{ConfigFile, CreateAnkerOpts, CreateTokenPoolOpts, ShowAnkerOpts};
 use crate::error::Abort;
 use crate::serialization_utils::serialize_bech32;
 use crate::snapshot::Result;
-use crate::spl_token_utils::push_create_spl_token_mint;
+use crate::spl_token_utils::{push_create_spl_token_account, push_create_spl_token_mint};
 use crate::{print_output, SnapshotClientConfig, SnapshotConfig};
 
 #[derive(Clap, Debug)]
@@ -26,6 +30,9 @@ enum SubCommand {
 
     /// Display the details of an Anker instance.
     Show(ShowAnkerOpts),
+
+    /// Create an SPL token swap pool for testing purposes.
+    CreateTokenPool(CreateTokenPoolOpts),
 }
 
 #[derive(Clap, Debug)]
@@ -39,6 +46,9 @@ impl AnkerOpts {
         match &mut self.subcommand {
             SubCommand::Create(opts) => opts.merge_with_config_and_environment(config_file),
             SubCommand::Show(opts) => opts.merge_with_config_and_environment(config_file),
+            SubCommand::CreateTokenPool(opts) => {
+                opts.merge_with_config_and_environment(config_file)
+            }
         }
     }
 }
@@ -53,6 +63,11 @@ pub fn main(config: &mut SnapshotClientConfig, anker_opts: &AnkerOpts) {
         SubCommand::Show(opts) => {
             let result = config.with_snapshot(|config| command_show_anker(config, opts));
             let output = result.ok_or_abort_with("Failed to show Anker instance.");
+            print_output(config.output_mode, &output);
+        }
+        SubCommand::CreateTokenPool(opts) => {
+            let result = config.with_snapshot(|config| command_create_token_pool(config, opts));
+            let output = result.ok_or_abort_with("Failed to create Token Pool instance.");
             print_output(config.output_mode, &output);
         }
     }
@@ -281,4 +296,134 @@ fn command_show_anker(
     };
 
     Ok(result)
+}
+
+#[derive(Serialize)]
+struct CreateTokenPoolOutput {
+    #[serde(serialize_with = "serialize_b58")]
+    pool_address: Pubkey,
+    #[serde(serialize_with = "serialize_b58")]
+    pool_authority: Pubkey,
+}
+
+impl fmt::Display for CreateTokenPoolOutput {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        writeln!(f, "Pool address:         {}", self.pool_address)?;
+        writeln!(f, "Pool authority:       {}", self.pool_authority)?;
+        Ok(())
+    }
+}
+
+/// Create a Token Pool. Used for testing purposes only.
+///
+/// The pool is created with 0 fees.
+/// The pool is `ConstantProduct`, i.e., `token_a * token_b = C`, with C a
+/// constant.
+fn command_create_token_pool(
+    config: &mut SnapshotConfig,
+    opts: &CreateTokenPoolOpts,
+) -> Result<CreateTokenPoolOutput> {
+    let client = &mut config.client;
+    let mut instructions = Vec::new();
+
+    let token_pool_account = Keypair::new();
+    let rent = client.get_rent()?;
+
+    let rent_lamports = rent.minimum_balance(spl_token_swap::state::SwapVersion::LATEST_LEN);
+    instructions.push(system_instruction::create_account(
+        &config.signer.pubkey(),
+        &token_pool_account.pubkey(),
+        rent_lamports,
+        spl_token_swap::state::SwapVersion::LATEST_LEN as u64,
+        opts.token_swap_program_id(),
+    ));
+
+    let (authority_pubkey, authority_bump_seed) = Pubkey::find_program_address(
+        &[&token_pool_account.pubkey().to_bytes()[..]],
+        opts.token_swap_program_id(),
+    );
+
+    let pool_mint_keypair =
+        push_create_spl_token_mint(config, &mut instructions, &authority_pubkey)?;
+    let pool_mint_pubkey = pool_mint_keypair.pubkey();
+    let pool_fee_keypair = push_create_spl_token_account(
+        config,
+        &mut instructions,
+        &pool_mint_pubkey,
+        &config.signer.pubkey(),
+    )?;
+    let pool_token_keypair = push_create_spl_token_account(
+        config,
+        &mut instructions,
+        &pool_mint_pubkey,
+        &config.signer.pubkey(),
+    )?;
+
+    // Change the token owner to the pool's authority.
+    instructions.push(spl_token::instruction::set_authority(
+        &spl_token::id(),
+        opts.st_sol_account(),
+        Some(&authority_pubkey),
+        spl_token::instruction::AuthorityType::AccountOwner,
+        &config.signer.pubkey(),
+        &[],
+    )?);
+
+    // Change the token owner to the pool's authority.
+    instructions.push(spl_token::instruction::set_authority(
+        &spl_token::id(),
+        opts.ust_account(),
+        Some(&authority_pubkey),
+        spl_token::instruction::AuthorityType::AccountOwner,
+        &config.signer.pubkey(),
+        &[],
+    )?);
+
+    let signers = vec![
+        config.signer,
+        &token_pool_account,
+        &pool_mint_keypair,
+        &pool_fee_keypair,
+        &pool_token_keypair,
+    ];
+
+    let fees = spl_token_swap::curve::fees::Fees {
+        trade_fee_numerator: 0,
+        trade_fee_denominator: 10,
+        owner_trade_fee_numerator: 0,
+        owner_trade_fee_denominator: 10,
+        owner_withdraw_fee_numerator: 0,
+        owner_withdraw_fee_denominator: 10,
+        host_fee_numerator: 0,
+        host_fee_denominator: 10,
+    };
+
+    let swap_curve = SwapCurve {
+        curve_type: CurveType::ConstantProduct,
+        calculator: Box::new(ConstantProductCurve),
+    };
+
+    let initialize_pool_instruction = spl_token_swap::instruction::initialize(
+        opts.token_swap_program_id(),
+        &spl_token::id(),
+        &token_pool_account.pubkey(),
+        &authority_pubkey,
+        opts.st_sol_account(),
+        opts.ust_account(),
+        &pool_mint_pubkey,
+        &pool_fee_keypair.pubkey(),
+        &pool_token_keypair.pubkey(),
+        authority_bump_seed,
+        fees,
+        swap_curve,
+    )
+    .expect("Failed to create token pool initialization instruction.");
+    instructions.push(initialize_pool_instruction);
+
+    config.sign_and_send_transaction(&instructions[..], &signers)?;
+
+    Ok(CreateTokenPoolOutput {
+        pool_address: token_pool_account.pubkey(),
+        pool_authority: authority_pubkey,
+    })
 }
