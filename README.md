@@ -20,15 +20,22 @@ Lido for Solana gives you:
 
 Further resources:
 
-   <!-- TODO: Update link to staking page once we are live on mainnet. -->
- * [Staking page for end users (devnet)][stake]
+ * [Staking page for end users][stake]
  * [Documentation][documentation]
  * [Blog][blog]
 
 [lido]:          https://lido.fi
-[stake]:         https://solana-dev.testnet.lido.fi/
-[documentation]: https://chorusone.github.io/solido/
+[stake]:         https://solana.lido.fi/
+[documentation]: https://docs.solana.lido.fi/
 [blog]:          https://medium.com/chorus-one
+
+## Deployments
+
+We continuously develop on the `main` branch in this repository, the code in the
+`main` branch may not reflect what is deployed on-chain. Please check the
+[deployments docs](https://docs.solana.lido.fi/deployments) for the currently
+deployed version, and see [the changelog](changelog.md) for which versions are
+intended for deployment.
 
 ## Repository layout
 
@@ -56,7 +63,7 @@ and documentation, are in a different repository, which is not yet public.
 
 ## Building
 
-The on-chain program and `solido` utility are written in Rust. To build them,
+The on-chain programs and `solido` utility are written in Rust. To build them,
 you need:
 
  * An x86_64 Linux machine. Mac should work too, but for reproducibility we
