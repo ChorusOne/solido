@@ -34,7 +34,7 @@ Further resources:
 We continuously develop on the `main` branch in this repository, the code in the
 `main` branch may not reflect what is deployed on-chain. Please check the
 [deployments docs](https://docs.solana.lido.fi/deployments) for the currently
-deployed version, and see [the changelog](changelog.md) for which versions are
+deployed version, and see [the changelog](CHANGELOG.md) for which versions are
 intended for deployment.
 
 ## Repository layout
