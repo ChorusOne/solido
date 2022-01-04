@@ -31,7 +31,7 @@ enum SubCommand {
     /// Display the details of an Anker instance.
     Show(ShowAnkerOpts),
 
-    /// Create Token Pool instance.
+    /// Create an SPL token swap pool for testing purposes.
     CreateTokenPool(CreateTokenPoolOpts),
 }
 
