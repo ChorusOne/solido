@@ -21,6 +21,7 @@ from util import (
     solana,
     solido,
     multisig,
+    get_approve_and_execute,
     get_solido_program_path,
 )
 
@@ -87,28 +88,11 @@ st_sol_mint_account = result['st_sol_mint_address']
 
 print(f'> Created instance at {solido_address}')
 
-
-def approve_and_execute(transaction_address: str) -> None:
-    multisig(
-        'approve',
-        '--multisig-program-id',
-        multisig_program_id,
-        '--multisig-address',
-        multisig_instance,
-        '--transaction-address',
-        transaction_address,
-        keypair_path=maintainer.keypair_path,
-    )
-    multisig(
-        'execute-transaction',
-        '--multisig-program-id',
-        multisig_program_id,
-        '--multisig-address',
-        multisig_instance,
-        '--transaction-address',
-        transaction_address,
-        keypair_path=maintainer.keypair_path,
-    )
+approve_and_execute = get_approve_and_execute(
+    multisig_program_id=multisig_program_id,
+    multisig_instance=multisig_instance,
+    signer_keypair_paths=[maintainer.keypair_path],
+)
 
 
 def add_validator(index: int, vote_account: Optional[str]) -> str:

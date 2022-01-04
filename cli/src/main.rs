@@ -5,8 +5,6 @@ use std::fmt;
 use std::path::PathBuf;
 
 use clap::Clap;
-use helpers::command_show_solido_authorities;
-use helpers::command_withdraw;
 use serde::Serialize;
 use solana_client::rpc_client::RpcClient;
 use solana_remote_wallet::locator::Locator;
@@ -20,22 +18,27 @@ use solana_sdk::signer::Signer;
 use solana_sdk::signers::Signers;
 use solana_sdk::transaction::Transaction;
 
-use crate::config::*;
-use crate::error::{Abort, CliError, Error};
-use crate::helpers::{
+use crate::commands_anker::AnkerOpts;
+use crate::commands_multisig::MultisigOpts;
+use crate::commands_solido::{
     command_add_maintainer, command_add_validator, command_create_solido,
     command_deactivate_validator, command_deposit, command_remove_maintainer, command_show_solido,
+    command_show_solido_authorities, command_withdraw,
 };
-use crate::multisig::MultisigOpts;
+use crate::config::*;
+use crate::error::{Abort, CliError, Error};
 use crate::snapshot::{Snapshot, SnapshotClient};
 
+mod anker_state;
+mod commands_anker;
+mod commands_multisig;
+mod commands_solido;
 mod config;
 mod daemon;
 mod error;
-mod helpers;
 mod maintenance;
-mod multisig;
 mod prometheus;
+mod serialization_utils;
 mod snapshot;
 mod spl_token_utils;
 mod validator_info_utils;
@@ -202,6 +205,9 @@ REWARDS
 
     /// Interact with a deployed Multisig program for governance tasks.
     Multisig(MultisigOpts),
+
+    /// Interact with the Anker (Anchor Protocol integration) program.
+    Anker(AnkerOpts),
 }
 
 /// Determines which network to connect to, and who pays the fees.
@@ -347,12 +353,13 @@ fn main() {
 
     merge_with_config_and_environment(&mut opts.subcommand, config_file.as_ref());
     match opts.subcommand {
+        SubCommand::Anker(cmd_opts) => commands_anker::main(&mut config, &cmd_opts),
         SubCommand::CreateSolido(cmd_opts) => {
             let result = config.with_snapshot(|config| command_create_solido(config, &cmd_opts));
             let output = result.ok_or_abort_with("Failed to create Solido instance.");
             print_output(output_mode, &output);
         }
-        SubCommand::Multisig(cmd_opts) => multisig::main(&mut config, cmd_opts),
+        SubCommand::Multisig(cmd_opts) => commands_multisig::main(&mut config, cmd_opts),
         SubCommand::PerformMaintenance(cmd_opts) => {
             // This command only performs one iteration, `RunMaintainer` runs continuously.
             let result = config
@@ -422,6 +429,7 @@ fn merge_with_config_and_environment(
     config_file: Option<&ConfigFile>,
 ) {
     match subcommand {
+        SubCommand::Anker(opts) => opts.merge_with_config_and_environment(config_file),
         SubCommand::CreateSolido(opts) => opts.merge_with_config_and_environment(config_file),
         SubCommand::AddValidator(opts) => opts.merge_with_config_and_environment(config_file),
         SubCommand::DeactivateValidator(opts) => {

@@ -1,8 +1,6 @@
 // SPDX-FileCopyrightText: 2021 Chorus One AG
 // SPDX-License-Identifier: GPL-3.0
 
-#![cfg(feature = "test-bpf")]
-
 //! This module tests our assumptions about how Solana works.
 //!
 //! In some places the Solana documentation is absent or incomplete, so we test
@@ -18,7 +16,7 @@ use lido::{
 };
 use solana_vote_program::vote_instruction;
 
-use crate::context::{send_transaction, Context};
+use testlib::solido_context::{send_transaction, Context};
 
 /// Test that `solana_program::stake::instruction::merge` is symmetric.
 ///

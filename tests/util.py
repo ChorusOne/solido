@@ -256,3 +256,41 @@ def multisig(*args: str, keypair_path: Optional[str] = None) -> Any:
             print('Failed to decode output as json, output was:')
             print(output)
             raise
+
+
+def get_approve_and_execute(
+    *,
+    multisig_program_id: str,
+    multisig_instance: str,
+    signer_keypair_paths: List[str],
+) -> Callable[[str], None]:
+    """
+    Return a function, `approve_and_execute`, which approves and executes the
+    given multisig transaction.
+    """
+
+    def approve_and_execute(transaction_address: str) -> None:
+        for keypair_path in signer_keypair_paths:
+            multisig(
+                'approve',
+                '--multisig-program-id',
+                multisig_program_id,
+                '--multisig-address',
+                multisig_instance,
+                '--transaction-address',
+                transaction_address,
+                keypair_path=keypair_path,
+            )
+
+        multisig(
+            'execute-transaction',
+            '--multisig-program-id',
+            multisig_program_id,
+            '--multisig-address',
+            multisig_instance,
+            '--transaction-address',
+            transaction_address,
+            keypair_path=signer_keypair_paths[0],
+        )
+
+    return approve_and_execute

@@ -6,9 +6,9 @@ use solana_program::program_option::COption;
 use solana_program::program_pack::Pack;
 use solana_program::stake::state::StakeAuthorize;
 use solana_program::{
-    account_info::AccountInfo, borsh::try_from_slice_unchecked, msg, program::invoke,
-    program::invoke_signed, program_error::ProgramError, pubkey::Pubkey, rent::Rent,
-    stake as stake_program, system_instruction,
+    account_info::AccountInfo, msg, program::invoke, program::invoke_signed,
+    program_error::ProgramError, pubkey::Pubkey, rent::Rent, stake as stake_program,
+    system_instruction,
 };
 
 use crate::processor::StakeType;
@@ -510,19 +510,6 @@ pub fn split_stake_account(
         ]],
     )?;
     Ok(())
-}
-
-pub fn deserialize_lido(program_id: &Pubkey, lido: &AccountInfo) -> Result<Lido, ProgramError> {
-    if lido.owner != program_id {
-        msg!(
-            "Lido state is owned by {}, but should be owned by the Lido program ({}).",
-            lido.owner,
-            program_id
-        );
-        return Err(LidoError::InvalidOwner.into());
-    }
-    let lido = try_from_slice_unchecked::<Lido>(&lido.data.borrow())?;
-    Ok(lido)
 }
 
 #[cfg(test)]

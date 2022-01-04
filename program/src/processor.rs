@@ -14,9 +14,9 @@ use crate::{
     },
     logic::{
         burn_st_sol, check_mint, check_rent_exempt, check_unstake_accounts,
-        create_account_even_if_funded, deserialize_lido, distribute_fees,
-        initialize_stake_account_undelegated, mint_st_sol_to, split_stake_account,
-        transfer_stake_authority, CreateAccountOptions, SplitStakeAccounts,
+        create_account_even_if_funded, distribute_fees, initialize_stake_account_undelegated,
+        mint_st_sol_to, split_stake_account, transfer_stake_authority, CreateAccountOptions,
+        SplitStakeAccounts,
     },
     metrics::Metrics,
     process_management::{
@@ -149,7 +149,7 @@ pub fn process_deposit(
         return Err(ProgramError::InvalidArgument);
     }
 
-    let mut lido = deserialize_lido(program_id, accounts.lido)?;
+    let mut lido = Lido::deserialize_lido(program_id, accounts.lido)?;
     lido.check_reserve_account(program_id, accounts.lido.key, accounts.reserve_account)?;
 
     invoke(
@@ -193,7 +193,7 @@ pub fn process_stake_deposit(
 ) -> ProgramResult {
     let accounts = StakeDepositAccountsInfo::try_from_slice(raw_accounts)?;
 
-    let mut lido = deserialize_lido(program_id, accounts.lido)?;
+    let mut lido = Lido::deserialize_lido(program_id, accounts.lido)?;
 
     lido.check_maintainer(accounts.maintainer)?;
     lido.check_reserve_account(program_id, accounts.lido.key, accounts.reserve)?;
@@ -407,7 +407,7 @@ pub fn process_unstake(
     raw_accounts: &[AccountInfo],
 ) -> ProgramResult {
     let accounts = UnstakeAccountsInfo::try_from_slice(raw_accounts)?;
-    let mut lido = deserialize_lido(program_id, accounts.lido)?;
+    let mut lido = Lido::deserialize_lido(program_id, accounts.lido)?;
     lido.check_maintainer(accounts.maintainer)?;
     lido.check_stake_authority(program_id, accounts.lido.key, accounts.stake_authority)?;
     let destination_bump_seed = check_unstake_accounts(program_id, &lido, &accounts)?;
@@ -519,7 +519,7 @@ pub fn process_update_exchange_rate(
     raw_accounts: &[AccountInfo],
 ) -> ProgramResult {
     let accounts = UpdateExchangeRateAccountsInfo::try_from_slice(raw_accounts)?;
-    let mut lido = deserialize_lido(program_id, accounts.lido)?;
+    let mut lido = Lido::deserialize_lido(program_id, accounts.lido)?;
     lido.check_reserve_account(program_id, accounts.lido.key, accounts.reserve)?;
 
     let clock = Clock::from_account_info(accounts.sysvar_clock)?;
@@ -656,7 +656,7 @@ pub fn process_withdraw_inactive_stake(
     raw_accounts: &[AccountInfo],
 ) -> ProgramResult {
     let accounts = WithdrawInactiveStakeInfo::try_from_slice(raw_accounts)?;
-    let mut lido = deserialize_lido(program_id, accounts.lido)?;
+    let mut lido = Lido::deserialize_lido(program_id, accounts.lido)?;
     let stake_history = StakeHistory::from_account_info(accounts.sysvar_stake_history)?;
     let clock = Clock::from_account_info(accounts.sysvar_clock)?;
     let rent = Rent::from_account_info(accounts.sysvar_rent)?;
@@ -832,7 +832,7 @@ pub fn process_collect_validator_fee(
     raw_accounts: &[AccountInfo],
 ) -> ProgramResult {
     let accounts = CollectValidatorFeeInfo::try_from_slice(raw_accounts)?;
-    let mut lido = deserialize_lido(program_id, accounts.lido)?;
+    let mut lido = Lido::deserialize_lido(program_id, accounts.lido)?;
     let rent = Rent::from_account_info(accounts.sysvar_rent)?;
 
     // Confirm that the passed accounts are the ones configured in the state,
@@ -899,7 +899,7 @@ pub fn process_withdraw(
     raw_accounts: &[AccountInfo],
 ) -> ProgramResult {
     let accounts = WithdrawAccountsInfo::try_from_slice(raw_accounts)?;
-    let mut lido = deserialize_lido(program_id, accounts.lido)?;
+    let mut lido = Lido::deserialize_lido(program_id, accounts.lido)?;
     let clock = Clock::from_account_info(accounts.sysvar_clock)?;
     lido.check_exchange_rate_last_epoch(&clock, "Withdraw")?;
 

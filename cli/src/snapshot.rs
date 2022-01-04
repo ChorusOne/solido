@@ -44,6 +44,7 @@ use solana_sdk::sysvar::{
 use solana_sdk::transaction::Transaction;
 use solana_vote_program::vote_state::VoteState;
 
+use anker::state::Anker;
 use lido::state::Lido;
 use lido::token::Lamports;
 use spl_token::solana_program::hash::Hash;
@@ -325,10 +326,34 @@ impl<'a> Snapshot<'a> {
         }
     }
 
+    /// Read the account and deserialize the Anker struct.
+    pub fn get_anker(&mut self, anker_address: &Pubkey) -> Result<Anker> {
+        let account = self.get_account(anker_address)?;
+        match try_from_slice_unchecked::<Anker>(&account.data) {
+            Ok(anker) => Ok(anker),
+            Err(err) => {
+                let error: Error = Box::new(SerializationError {
+                    cause: Some(err.into()),
+                    address: *anker_address,
+                    context: format!(
+                        "Failed to deserialize Anker struct, data length is {} bytes.",
+                        account.data.len()
+                    ),
+                });
+                Err(error.into())
+            }
+        }
+    }
+
     /// Return the amount in an SPL token account.
     pub fn get_spl_token_balance(&mut self, address: &Pubkey) -> Result<u64> {
         let account: spl_token::state::Account = self.get_unpack(address)?;
         Ok(account.amount)
+    }
+
+    /// Return the supply of an SPL token, in units of its smallest denomination.
+    pub fn get_spl_token_mint(&mut self, mint_address: &Pubkey) -> Result<spl_token::state::Mint> {
+        self.get_unpack(mint_address)
     }
 
     /// Send a transaction without printing to stdout.

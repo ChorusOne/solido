@@ -10,5 +10,7 @@
 // * Rather verbose test output, with one section per binary.
 //
 // By putting everything in a single module, we sidestep this problem.
-pub mod context;
 pub mod tests;
+
+#[macro_use]
+extern crate testlib;

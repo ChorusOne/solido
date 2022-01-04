@@ -1,16 +1,14 @@
 // SPDX-FileCopyrightText: 2021 Chorus One AG
 // SPDX-License-Identifier: GPL-3.0
 
-#![cfg(feature = "test-bpf")]
-
 use solana_program_test::tokio;
 use solana_sdk::signature::Signer;
 
 use lido::error::LidoError;
 use lido::state::{FeeRecipients, RewardDistribution};
 
-use crate::assert_solido_error;
-use crate::context::Context;
+use testlib::assert_solido_error;
+use testlib::solido_context::Context;
 
 #[tokio::test]
 async fn test_successful_change_reward_distribution() {

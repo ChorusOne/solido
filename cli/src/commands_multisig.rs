@@ -52,6 +52,12 @@ pub struct MultisigOpts {
     subcommand: SubCommand,
 }
 
+#[derive(Clap, Debug)]
+pub struct TokenOpts {
+    #[clap(subcommand)]
+    subcommand: TokenSubCommand,
+}
+
 impl MultisigOpts {
     pub fn merge_with_config_and_environment(&mut self, config_file: Option<&ConfigFile>) {
         match &mut self.subcommand {

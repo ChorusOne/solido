@@ -6,6 +6,7 @@ use std::{
     str::FromStr,
 };
 
+use anker::wormhole::TerraAddress;
 use clap::Clap;
 use serde::Deserialize;
 use serde_json::Value;
@@ -445,6 +446,10 @@ cli_opt_struct! {
         #[clap(long, value_name = "address")]
         solido_program_id: Pubkey,
 
+        /// Address of the Anker program.
+        #[clap(long, value_name = "address")]
+        anker_program_id: Pubkey => Pubkey::default(),
+
         /// Account that stores the data for this Solido instance.
         #[clap(long, value_name = "address")]
         solido_address: Pubkey,
@@ -651,6 +656,10 @@ cli_opt_struct! {
         #[clap(long)]
         solido_program_id: Pubkey,
 
+        /// Address of the Anker program.
+        #[clap(long, value_name = "address")]
+        anker_program_id: Pubkey => Pubkey::default(),
+
         /// Account that stores the data for this Solido instance.
         #[clap(long)]
         solido_address: Pubkey,
@@ -706,5 +715,81 @@ cli_opt_struct! {
         /// Amount to be transferred in the smallest token denomination.
         #[clap(long)]
         amount: u64
+    }
+}
+
+cli_opt_struct! {
+    CreateAnkerOpts {
+        /// Address of the Solido program.
+        #[clap(long, value_name = "address")]
+        solido_program_id: Pubkey,
+
+        /// Account that stores the data for the underlying Solido instance.
+        #[clap(long, value_name = "address")]
+        solido_address: Pubkey,
+
+        /// Address of the Anker program.
+        #[clap(long, value_name = "address")]
+        anker_program_id: Pubkey,
+
+        /// Address of the Wormhole core bridge program.
+        #[clap(long, value_name = "address")]
+        wormhole_core_bridge_program_id: Pubkey,
+
+        /// Address of the Wormhole token bridge program.
+        #[clap(long, value_name = "address")]
+        wormhole_token_bridge_program_id: Pubkey,
+
+        /// Optionally the bSOL mint address. If not passed a random one will be created.
+        #[clap(long, value_name = "address")]
+        b_sol_mint_address: Pubkey => Pubkey::default(),
+
+        /// The UST mint address.
+        ///
+        /// The mainnet address of Wormhole-v2 wrapped UST is
+        /// 9vMJfxuKxXBoEa7rM12mYLMwTacLMLDJqHozw96WQL8i.
+        #[clap(long, value_name = "address")]
+        ust_mint_address: Pubkey,
+
+        /// Orca (or other SPL token swap) pool used for stSOL/UST swap.
+        #[clap(long, value_name = "address")]
+        token_swap_pool: Pubkey,
+
+        /// Terra address that will receive the UST rewards.
+        ///
+        /// Must be provided in the usual Terra bech32 encoding.
+        #[clap(long, value_name = "terra_address")]
+        terra_rewards_address: TerraAddress,
+    }
+}
+
+cli_opt_struct! {
+    ShowAnkerOpts {
+        /// Address of the Anker instance.
+        #[clap(long, value_name = "address")]
+        anker_address: Pubkey,
+    }
+}
+
+cli_opt_struct! {
+    CreateTokenPoolOpts {
+        /// Program id of the token swap program.
+        #[clap(long, value_name = "address")]
+        token_swap_program_id: Pubkey,
+
+        /// The UST mint address.
+        ///
+        /// The mainnet address of Wormhole-v2 wrapped UST is
+        /// 9vMJfxuKxXBoEa7rM12mYLMwTacLMLDJqHozw96WQL8i.
+        #[clap(long, value_name = "address")]
+        ust_mint_address: Pubkey,
+
+        /// stSOL account for the token swap, should be funded.
+        #[clap(long, value_name = "address")]
+        st_sol_account: Pubkey,
+
+        /// UST account for the token swap, should be funded.
+        #[clap(long, value_name = "address")]
+        ust_account: Pubkey,
     }
 }

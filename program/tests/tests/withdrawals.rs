@@ -1,8 +1,6 @@
 // SPDX-FileCopyrightText: 2021 Chorus One AG
 // SPDX-License-Identifier: GPL-3.0
 
-#![cfg(feature = "test-bpf")]
-
 use bincode::deserialize;
 use solana_program::stake::state::StakeState;
 use solana_program_test::tokio;
@@ -12,14 +10,14 @@ use solana_sdk::signature::Keypair;
 use solana_sdk::signer::Signer;
 use solana_sdk::transport;
 
-use crate::{
-    assert_solido_error,
-    context::{send_transaction, Context, StakeDeposit},
-};
 use lido::{
     error::LidoError,
     token::{Lamports, StLamports},
     MINIMUM_STAKE_ACCOUNT_BALANCE,
+};
+use testlib::{
+    assert_solido_error,
+    solido_context::{send_transaction, Context, StakeDeposit},
 };
 
 /// Shared context for tests where a given amount has been deposited and staked.
