@@ -58,6 +58,12 @@ print('\nUploading Anker program ...')
 anker_program_id = solana_program_deploy(get_solido_program_path() + '/anker.so')
 print(f'> Anker program id is {anker_program_id}.')
 
+print('\nDeploying Orca Token Swap program ...')
+orca_token_swap_program_id = solana_program_deploy(
+    get_solido_program_path() + '/orca_token_swap_v2.so'
+)
+print(f'> Orca program id is {orca_token_swap_program_id}.')
+
 print('\nCreating new multisig ...')
 multisig_data = multisig(
     'create-multisig',
@@ -141,10 +147,6 @@ print(' > Transfering to pool\'s stSOL account.')
 spl_token('transfer', st_sol_mint_address, '1', st_sol_pool_account)
 print(' > Minting to pool\'s UST account.')
 spl_token('mint', ust_mint_address.pubkey, '1', ust_pool_account)
-
-orca_token_swap_program_id = solana_program_deploy(
-    get_solido_program_path() + '/orca_token_swap_v2.so'
-)
 
 print('\nCreating token pool instance ...')
 result = solido(
