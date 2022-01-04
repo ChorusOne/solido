@@ -1,5 +1,29 @@
 # Changelog
 
+## v1.2.0 (unreleased)
+
+There are no functional changes to the on-chain Solido program in this release.
+The on-chain Solido program remains functionally unchanged since v1.0.0.
+
+**Compatibility**:
+
+ * The interface of the Solido program remains unchanged.
+ * This version of the `solido` program is backwards compatible, only new
+   options were added.
+
+New features:
+
+ * `solido multisig show-transaction` now recognizes wLDO token transfers and
+   will display them in a more readable manner.
+
+Feature previews:
+
+ * Add the Anker program, which implements integration with the Anchor protocol
+   on the Terra blockchain, and is responsible for minting bSOL.
+ * This release is an internal milestone intended to aid auditing.
+ * The `solido` CLI program gained an `anker` subcommand for interacting with
+   the Anker program.
+
 ## v1.1.0
 
 Released 2021-10-06.
