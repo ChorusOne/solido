@@ -11,7 +11,6 @@ use solana_program::{
     program_error::ProgramError,
     program_option::COption,
     program_pack::Pack,
-    pubkey::Pubkey,
     rent::Rent,
     sysvar::Sysvar,
 };
@@ -39,7 +38,7 @@ use crate::{
     state::ExchangeRate,
 };
 use crate::{state::ANKER_LEN, ANKER_RESERVE_AUTHORITY};
-use crate::state::AnkerProgramId;
+use crate::state::{AnkerAddress, AnkerProgramId, SolidoAddress, SolidoProgramId};
 
 fn process_initialize(
     program_id: &AnkerProgramId,
@@ -47,9 +46,10 @@ fn process_initialize(
     terra_rewards_destination: TerraAddress,
 ) -> ProgramResult {
     let accounts = InitializeAccountsInfo::try_from_slice(accounts_raw)?;
+    let solido_address = SolidoAddress(*accounts.solido.key);
     let rent = Rent::from_account_info(accounts.sysvar_rent)?;
 
-    let (anker_address, anker_bump_seed) = find_instance_address(program_id, accounts.solido.key);
+    let (anker_address, anker_bump_seed) = find_instance_address(program_id, &solido_address);
 
     if anker_address.0 != *accounts.anker.key {
         msg!(
@@ -86,7 +86,7 @@ fn process_initialize(
 
     // Create and initialize an stSOL SPL token account for the reserve.
     let st_sol_reserve_account_seeds = [
-        anker_address.as_ref(),
+        anker_address.0.as_ref(),
         ANKER_STSOL_RESERVE_ACCOUNT,
         &[st_sol_reserve_account_bump_seed],
     ];
@@ -109,7 +109,7 @@ fn process_initialize(
 
     // Create and initialize an UST SPL token account for the reserve
     let ust_reserve_account_seeds = [
-        anker_address.as_ref(),
+        anker_address.0.as_ref(),
         ANKER_UST_RESERVE_ACCOUNT,
         &[ust_reserve_account_bump_seed],
     ];
@@ -132,8 +132,8 @@ fn process_initialize(
 
     let anker = Anker {
         b_sol_mint: *accounts.b_sol_mint.key,
-        solido_program_id: *accounts.solido_program.key,
-        solido: *accounts.solido.key,
+        solido_program_id: SolidoProgramId(*accounts.solido_program.key),
+        solido: solido_address,
         token_swap_pool: *accounts.token_swap_pool.key,
         terra_rewards_destination,
         wormhole_parameters: WormholeParameters {
@@ -191,7 +191,7 @@ fn process_deposit(
     let (solido, anker) = deserialize_anker(program_id, accounts.anker, accounts.solido)?;
     anker.check_st_sol_reserve_address(
         program_id,
-        accounts.anker.key,
+        &AnkerAddress(*accounts.anker.key),
         accounts.to_reserve_account,
     )?;
     anker.check_is_st_sol_account(&solido, accounts.to_reserve_account)?;
@@ -237,7 +237,7 @@ fn process_sell_rewards(program_id: &AnkerProgramId, accounts_raw: &[AccountInfo
     let (solido, mut anker) = deserialize_anker(program_id, accounts.anker, accounts.solido)?;
     anker.check_st_sol_reserve_address(
         program_id,
-        accounts.anker.key,
+        &AnkerAddress(*accounts.anker.key),
         accounts.st_sol_reserve_account,
     )?;
     anker.check_is_st_sol_account(&solido, accounts.st_sol_reserve_account)?;
@@ -277,13 +277,14 @@ fn process_withdraw(
     amount: BLamports,
 ) -> ProgramResult {
     let accounts = WithdrawAccountsInfo::try_from_slice(accounts_raw)?;
+    let anker_address = AnkerAddress(*accounts.anker.key);
 
     let (solido, anker) = deserialize_anker(program_id, accounts.anker, accounts.solido)?;
     anker.check_is_st_sol_account(&solido, accounts.reserve_account)?;
     anker.check_mint(accounts.b_sol_mint)?;
 
     anker.check_mint(accounts.b_sol_mint)?;
-    anker.check_reserve_authority(program_id, accounts.anker.key, accounts.reserve_authority)?;
+    anker.check_reserve_authority(program_id, &anker_address, accounts.reserve_authority)?;
 
     let mint = match spl_token::state::Mint::unpack_from_slice(&accounts.b_sol_mint.data.borrow()) {
         Ok(mint) => mint,
@@ -328,7 +329,7 @@ fn process_withdraw(
 
     // Transfer the stSOL back to the user.
     let reserve_seeds = [
-        accounts.anker.key.as_ref(),
+        anker_address.0.as_ref(),
         ANKER_RESERVE_AUTHORITY,
         &[anker.reserve_authority_bump_seed],
     ];
@@ -411,7 +412,7 @@ fn process_send_rewards(
     let anker = deserialize_anker(program_id, accounts.anker, accounts.solido)?.1;
     anker.check_ust_reserve_address(
         program_id,
-        accounts.anker.key,
+        &AnkerAddress(*accounts.anker.key),
         accounts.ust_reserve_account,
     )?;
     let wormhole_transfer_args = anker.check_send_rewards(&accounts)?;

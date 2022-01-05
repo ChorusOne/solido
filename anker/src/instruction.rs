@@ -12,6 +12,7 @@ use solana_program::{
 };
 
 use crate::{token::BLamports, wormhole::TerraAddress};
+use crate::state::AnkerProgramId;
 
 #[repr(C)]
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
@@ -131,7 +132,7 @@ accounts_struct! {
 }
 
 pub fn initialize(
-    program_id: &Pubkey,
+    program_id: &AnkerProgramId,
     accounts: &InitializeAccountsMeta,
     terra_rewards_destination: TerraAddress,
 ) -> Instruction {
@@ -139,7 +140,7 @@ pub fn initialize(
         terra_rewards_destination,
     };
     Instruction {
-        program_id: *program_id,
+        program_id: program_id.0,
         accounts: accounts.to_vec(),
         data: data.to_vec(),
     }
@@ -189,13 +190,13 @@ accounts_struct! {
 }
 
 pub fn deposit(
-    program_id: &Pubkey,
+    program_id: &AnkerProgramId,
     accounts: &DepositAccountsMeta,
     amount: StLamports,
 ) -> Instruction {
     let data = AnkerInstruction::Deposit { amount };
     Instruction {
-        program_id: *program_id,
+        program_id: program_id.0,
         accounts: accounts.to_vec(),
         data: data.to_vec(),
     }
@@ -247,13 +248,13 @@ accounts_struct! {
 }
 
 pub fn withdraw(
-    program_id: &Pubkey,
+    program_id: &AnkerProgramId,
     accounts: &WithdrawAccountsMeta,
     amount: BLamports,
 ) -> Instruction {
     let data = AnkerInstruction::Withdraw { amount };
     Instruction {
-        program_id: *program_id,
+        program_id: program_id.0,
         accounts: accounts.to_vec(),
         data: data.to_vec(),
     }
@@ -328,10 +329,10 @@ accounts_struct! {
     }
 }
 
-pub fn sell_rewards(program_id: &Pubkey, accounts: &SellRewardsAccountsMeta) -> Instruction {
+pub fn sell_rewards(program_id: &AnkerProgramId, accounts: &SellRewardsAccountsMeta) -> Instruction {
     let data = AnkerInstruction::SellRewards;
     Instruction {
-        program_id: *program_id,
+        program_id: program_id.0,
         accounts: accounts.to_vec(),
         data: data.to_vec(),
     }
@@ -356,7 +357,7 @@ accounts_struct! {
 }
 
 pub fn change_terra_rewards_destination(
-    program_id: &Pubkey,
+    program_id: &AnkerProgramId,
     accounts: &ChangeTerraRewardsDestinationAccountsMeta,
     terra_rewards_destination: TerraAddress,
 ) -> Instruction {
@@ -364,7 +365,7 @@ pub fn change_terra_rewards_destination(
         terra_rewards_destination,
     };
     Instruction {
-        program_id: *program_id,
+        program_id: program_id.0,
         accounts: accounts.to_vec(),
         data: data.to_vec(),
     }
@@ -397,12 +398,12 @@ accounts_struct! {
 }
 
 pub fn change_token_swap_pool(
-    program_id: &Pubkey,
+    program_id: &AnkerProgramId,
     accounts: &ChangeTokenSwapPoolAccountsMeta,
 ) -> Instruction {
     let data = AnkerInstruction::ChangeTokenSwapPool;
     Instruction {
-        program_id: *program_id,
+        program_id: program_id.0,
         accounts: accounts.to_vec(),
         data: data.to_vec(),
     }
@@ -495,13 +496,13 @@ accounts_struct! {
 }
 
 pub fn send_rewards(
-    program_id: &Pubkey,
+    program_id: &AnkerProgramId,
     accounts: &SendRewardsAccountsMeta,
     wormhole_nonce: u32,
 ) -> Instruction {
     let data = AnkerInstruction::SendRewards { wormhole_nonce };
     Instruction {
-        program_id: *program_id,
+        program_id: program_id.0,
         accounts: accounts.to_vec(),
         data: data.to_vec(),
     }

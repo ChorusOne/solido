@@ -40,13 +40,19 @@ pub struct AnkerProgramId(pub Pubkey);
 ///
 /// Using this type makes it harder to accidentally mix up the Solido and Anker address.
 #[derive(Clone, Debug, Default, BorshDeserialize, BorshSerialize, BorshSchema, Eq, PartialEq, Serialize)]
-pub struct SolidoAddress(pub Pubkey);
+pub struct SolidoAddress(
+    #[serde(serialize_with = "serialize_b58")]
+    pub Pubkey
+);
 
 /// A type-safe wrapper for the address of the Solido program.
 ///
 /// Using this type makes it harder to accidentally mix up the Solido and Anker program ids.
 #[derive(Clone, Debug, Default, BorshDeserialize, BorshSerialize, BorshSchema, Eq, PartialEq, Serialize)]
-pub struct SolidoProgramId(pub Pubkey);
+pub struct SolidoProgramId(
+    #[serde(serialize_with = "serialize_b58")]
+    pub Pubkey
+);
 
 #[repr(C)]
 #[derive(
@@ -65,11 +71,9 @@ pub struct WormholeParameters {
 )]
 pub struct Anker {
     /// The Solido program that owns the `solido` instance.
-    #[serde(serialize_with = "serialize_b58")]
     pub solido_program_id: SolidoProgramId,
 
     /// The associated Solido instance address.
-    #[serde(serialize_with = "serialize_b58")]
     pub solido: SolidoAddress,
 
     /// The SPL Token mint address for bSOL.
@@ -150,7 +154,7 @@ impl Anker {
         account_info: &AccountInfo,
     ) -> ProgramResult {
         let address = Pubkey::create_program_address(
-            &[anker_instance.as_ref(), seed, &[bump_seed]],
+            &[anker_instance.0.as_ref(), seed, &[bump_seed]],
             &anker_program_id.0,
         )
         .expect("Depends only on Anker-controlled values, should not fail.");
@@ -440,7 +444,7 @@ impl Anker {
         // Check UST token accounts.
         self.check_ust_reserve_address(
             anker_program_id,
-            accounts.anker.key,
+            &AnkerAddress(*accounts.anker.key),
             accounts.ust_reserve_account,
         )?;
 

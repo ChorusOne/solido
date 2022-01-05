@@ -37,7 +37,7 @@ pub mod orca_token_swap_v2 {
     declare_id!("9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP");
 }
 
-use state::{AnkerAddress, AnkerProgramId, SolidoAddress, SolidoProgramId};
+use state::{AnkerAddress, AnkerProgramId, SolidoAddress};
 
 /// Return the address at which the Anker instance should live that belongs to
 /// the given Solido instance.

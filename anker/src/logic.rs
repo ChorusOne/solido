@@ -47,7 +47,7 @@ pub fn deserialize_anker(
     anker_account: &AccountInfo,
     solido_account: &AccountInfo,
 ) -> Result<(Lido, Anker), ProgramError> {
-    if anker_account.owner != anker_program_id.0 {
+    if *anker_account.owner != anker_program_id.0 {
         msg!(
             "Anker state is owned by {}, but should be owned by the Anker program ({}).",
             anker_account.owner,
@@ -94,7 +94,7 @@ pub fn mint_b_sol_to(
     anker.check_mint(accounts.b_sol_mint)?;
     anker.check_mint_authority(
         anker_program_id,
-        accounts.anker.key,
+        &AnkerAddress(*accounts.anker.key),
         accounts.b_sol_mint_authority,
     )?;
 

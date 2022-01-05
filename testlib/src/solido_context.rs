@@ -260,7 +260,7 @@ impl Context {
         );
         program_test.add_program(
             "anker",
-            crate::anker_context::id(),
+            crate::anker_context::id().0,
             processor!(anker::processor::process),
         );
 

@@ -20,9 +20,13 @@ use spl_token_swap::instruction::Swap;
 use crate::solido_context::send_transaction;
 use crate::solido_context::{self};
 use anker::{find_reserve_authority, find_st_sol_reserve_account, wormhole::TerraAddress};
+use anker::state::{AnkerAddress, AnkerProgramId, SolidoAddress, SolidoProgramId};
 
 // Program id for the Anker program. Only used for tests.
-solana_program::declare_id!("Anker111111111111111111111111111111111111117");
+pub fn id() -> AnkerProgramId {
+    solana_program::declare_id!("Anker111111111111111111111111111111111111117");
+    AnkerProgramId(id())
+}
 
 pub struct TokenPoolContext {
     pub swap_account: Keypair,
@@ -178,7 +182,7 @@ impl TokenPoolContext {
 
 pub struct Context {
     pub solido_context: solido_context::Context,
-    pub anker: Pubkey,
+    pub anker: AnkerAddress,
     pub b_sol_mint: Pubkey,
     pub b_sol_mint_authority: Pubkey,
     pub st_sol_reserve: Pubkey,
@@ -192,10 +196,20 @@ pub struct Context {
 
 const INITIAL_DEPOSIT: Lamports = Lamports(1_000_000_000);
 
+pub fn solido_program_id() -> SolidoProgramId {
+    SolidoProgramId(solido_context::id())
+}
+
+impl solido_context::Context {
+    pub fn solido_address(&self) -> SolidoAddress {
+        SolidoAddress(self.solido.pubkey())
+    }
+}
+
 impl Context {
     pub async fn new() -> Self {
         let mut solido_context = solido_context::Context::new_with_maintainer().await;
-        let (anker, _seed) = anker::find_instance_address(&id(), &solido_context.solido.pubkey());
+        let (anker, _seed) = anker::find_instance_address(&id(), &solido_context.solido_address());
 
         let (st_sol_reserve, _seed) = anker::find_st_sol_reserve_account(&id(), &anker);
         let (ust_reserve, _seed) = anker::find_ust_reserve_account(&id(), &anker);
@@ -217,7 +231,7 @@ impl Context {
                 &id(),
                 &instruction::InitializeAccountsMeta {
                     fund_rent_from: payer,
-                    anker,
+                    anker: anker.0,
                     solido: solido_context.solido.pubkey(),
                     solido_program: solido_context::id(),
                     wormhole_core_bridge_program_id: Pubkey::new_unique(),
@@ -307,7 +321,7 @@ impl Context {
             &[instruction::deposit(
                 &id(),
                 &instruction::DepositAccountsMeta {
-                    anker: self.anker,
+                    anker: self.anker.0,
                     solido: self.solido_context.solido.pubkey(),
                     from_account: from_st_sol,
                     user_authority: user.pubkey(),
@@ -367,7 +381,7 @@ impl Context {
             &[instruction::withdraw(
                 &id(),
                 &instruction::WithdrawAccountsMeta {
-                    anker: self.anker,
+                    anker: self.anker.0,
                     solido: self.solido_context.solido.pubkey(),
                     from_b_sol_account: b_sol_account,
                     from_b_sol_authority: user.pubkey(),
@@ -474,7 +488,7 @@ impl Context {
             &[instruction::sell_rewards(
                 &id(),
                 &instruction::SellRewardsAccountsMeta {
-                    anker: self.anker,
+                    anker: self.anker.0,
                     solido: self.solido_context.solido.pubkey(),
                     st_sol_reserve_account,
                     b_sol_mint: self.b_sol_mint,
