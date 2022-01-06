@@ -166,6 +166,7 @@ token_pool_address = result['pool_address']
 print(f'> Created instance at {token_pool_address}.')
 
 print('\nCreating Anker instance ...')
+terra_rewards_address = 'terra18aqm668ygwppxnmkmjn4wrtgdweq5ay7rs42ch'
 result = solido(
     'anker',
     'create',
@@ -186,7 +187,7 @@ result = solido(
     # Wormhole's testnet address. TODO: Replace with a new localhost program instance.
     'DZnkkTmCiFWfYTfT41X3Rd1kDgozqzxWaHqsw6W4x2oe',
     '--terra-rewards-address',
-    'terra18aqm668ygwppxnmkmjn4wrtgdweq5ay7rs42ch',
+    terra_rewards_address,
 )
 # TODO: Also provide --mint-address, we need to be sure that that one works.
 anker_address = result['anker_address']
@@ -194,3 +195,35 @@ anker_st_sol_reserve_account = result['st_sol_reserve_account']
 anker_ust_reserve_account = result['ust_reserve_account']
 b_sol_mint_address = result['b_sol_mint_address']
 print(f'> Created instance at {anker_address}.')
+
+
+print('\nVerifying Anker instance with `solido anker show` ...')
+result = solido(
+    'anker',
+    'show',
+    '--anker-address', anker_address
+)
+
+# Some addresses are generated and it's tedious here in this test to know what
+# they are ahead of time, so we don't check those against a reference, instead
+# we store them so we can use them later in this test.
+reserve_authority = result.pop('reserve_authority')
+b_sol_mint_authority = result.pop('b_sol_mint_authority')
+st_sol_reserve = result.pop('st_sol_reserve')
+ust_reserve = result.pop('ust_reserve')
+
+# We do check the remaining fields.
+expected_result = {
+    'anker_address': anker_address,
+    'anker_program_id': anker_program_id,
+    'solido_address': solido_address,
+    'solido_program_id': solido_program_id,
+    'b_sol_mint': b_sol_mint_address,
+    'terra_rewards_destination': terra_rewards_address,
+    'ust_reserve_balance_micro_ust': 0,
+    'st_sol_reserve_balance_st_lamports': 0,
+    'st_sol_reserve_value_lamports': None,
+    'b_sol_supply_b_lamports': 0,
+}
+assert result == expected_result, f'Expected {result} to be {expected_result}'
+print('> Instance parameters are as expected.')
