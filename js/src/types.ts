@@ -17,7 +17,7 @@ export interface ProgramAddresses {
 export class Lamports {
   lamports: BN;
 
-  constructor(lamports: number | string) {
+  constructor(lamports: number | string | BN) {
     this.lamports = new BN(lamports);
   }
 }
@@ -28,7 +28,7 @@ export class Lamports {
 export class StLamports {
   stLamports: BN;
 
-  constructor(stLamports: number | string) {
+  constructor(stLamports: number | string | BN) {
     this.stLamports = new BN(stLamports);
   }
 }
