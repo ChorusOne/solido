@@ -454,16 +454,10 @@ cli_opt_struct! {
         #[clap(long, value_name = "address")]
         solido_address: Pubkey,
 
-        /// Vote account that the maintainer tries to claim validator's fees
-        /// from. If none is set, the validator will ignore the instruction to
-        /// claim fees.
-        #[clap(long)]
-        validator_vote_account : Pubkey => Pubkey::default(),
-
-        /// Try to do stake and unstake operations any time if set to
-        /// `StakeTime::Anytime`. If set to `StakeTime::OnlyNearEpochEnd`, will
-        /// try to stake/unstake only at the end of the epoch. Defaults to
-        /// `StakeTime::OnlyNearEpochEnd`.
+        /// Try to do stake and unstake operations any time if set to "anytime".
+        /// If set to "only-near-epoch-end", will try to stake/unstake only at
+        /// the end of the epoch. Defaults to "only-near-epoch-end". The
+        /// "anytime" option is only intended for testing purposes.
         #[clap(long, value_name = "anytime/only-near-epoch-end")]
         stake_time: StakeTime => StakeTime::OnlyNearEpochEnd,
     }
@@ -675,10 +669,10 @@ cli_opt_struct! {
         #[clap(long)]
         max_poll_interval_seconds: u64 => 30,
 
-        /// Try to do stake and unstake operations any time if set to
-        /// `StakeTime::Anytime`. If set to `StakeTime::OnlyNearEpochEnd`, will
-        /// try to stake/unstake only at the end of the epoch. Defaults to
-        /// `StakeTime::OnlyNearEpochEnd`.
+        /// Try to do stake and unstake operations any time if set to "anytime".
+        /// If set to "only-near-epoch-end", will try to stake/unstake only at
+        /// the end of the epoch. Defaults to "only-near-epoch-end". The
+        /// "anytime" option is only intended for testing purposes.
         #[clap(long, value_name = "anytime/only-near-epoch-end")]
         stake_time: StakeTime => StakeTime::OnlyNearEpochEnd,
     }
