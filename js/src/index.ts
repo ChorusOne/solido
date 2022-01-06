@@ -1,4 +1,4 @@
-export { getSnapshot, getSolido } from './snapshot';
+export { Solido, getSnapshot, getSolido } from './snapshot';
 export {
   getTotalValueLocked,
   getStSolSupply,
@@ -12,3 +12,5 @@ export { MAINNET_PROGRAM_ADDRESSES } from './constants';
 export { getDepositInstruction } from './instructions/deposit';
 export { getWithdrawInstruction } from './instructions/withdraw';
 export { getATAInitializeInstruction } from './instructions/utils';
+
+export * from './types';
