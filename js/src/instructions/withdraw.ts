@@ -20,7 +20,7 @@ import {
  * Generates the instructions to unstake from the Solido Program
  * @param snapshot Snapshot of the Solido stats
  * @param programAddresses Program addresses for the deployed Solido Program
- * @param stSolAccountOwnerAddress Address of the owner of the sender's stSOL Account
+ * @param senderStSolAccountOwnerAddress Address of the owner of the sender's stSOL Account
  * @param senderStSolAccountAddress Address of the stSOL Account to be unstaked
  * @param recipientStakeAccountAddress Address of the NEW Account
  * @param amount Amount of stSOL to unstake
@@ -29,7 +29,7 @@ import {
 export const getWithdrawInstruction = async (
   snapshot: Snapshot,
   programAddresses: ProgramAddresses,
-  stSolAccountOwnerAddress: PublicKey,
+  senderStSolAccountOwnerAddress: PublicKey,
   senderStSolAccountAddress: PublicKey,
   recipientStakeAccountAddress: PublicKey,
   amount: StLamports
@@ -73,7 +73,11 @@ export const getWithdrawInstruction = async (
       isSigner: false,
       isWritable: true,
     },
-    { pubkey: stSolAccountOwnerAddress, isSigner: true, isWritable: false },
+    {
+      pubkey: senderStSolAccountOwnerAddress,
+      isSigner: true,
+      isWritable: false,
+    },
     {
       pubkey: senderStSolAccountAddress,
       isSigner: false,
