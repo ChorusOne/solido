@@ -19,7 +19,6 @@ import {
 /**
  * Generates the instructions to unstake from the Solido Program
  * @param snapshot Snapshot of the Solido stats
- * @param programAddresses Program addresses for the deployed Solido Program
  * @param senderStSolAccountOwnerAddress Address of the owner of the sender's stSOL Account
  * @param senderStSolAccountAddress Address of the stSOL Account to be unstaked
  * @param recipientStakeAccountAddress Address of the NEW Account
@@ -28,14 +27,13 @@ import {
  */
 export const getWithdrawInstruction = async (
   snapshot: Snapshot,
-  programAddresses: ProgramAddresses,
   senderStSolAccountOwnerAddress: PublicKey,
   senderStSolAccountAddress: PublicKey,
   recipientStakeAccountAddress: PublicKey,
   amount: StLamports
 ) => {
   const stakeAuthorityAddress = await findAuthorityProgramAddress(
-    programAddresses,
+    snapshot.programAddresses,
     'stake_authority'
   );
   const heaviestValidatorStakeAccount =
@@ -69,7 +67,7 @@ export const getWithdrawInstruction = async (
 
   const keys = [
     {
-      pubkey: programAddresses.solidoProgramId,
+      pubkey: snapshot.programAddresses.solidoProgramId,
       isSigner: false,
       isWritable: true,
     },
@@ -84,7 +82,7 @@ export const getWithdrawInstruction = async (
       isWritable: true,
     },
     {
-      pubkey: programAddresses.stSolMintAddress,
+      pubkey: snapshot.programAddresses.stSolMintAddress,
       isSigner: false,
       isWritable: true,
     },
@@ -128,6 +126,6 @@ export const getWithdrawInstruction = async (
   return new TransactionInstruction({
     keys,
     data,
-    programId: programAddresses.solidoProgramId,
+    programId: snapshot.programAddresses.solidoProgramId,
   });
 };

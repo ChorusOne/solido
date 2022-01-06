@@ -46,6 +46,7 @@ export interface ExchangeRate {
  */
 export interface Snapshot {
   solido: Solido;
+  programAddresses: ProgramAddresses;
   reserveAccountBalance: Lamports;
   stSolSupply: StLamports;
   stakeAccountRentExemptionBalance: Lamports;

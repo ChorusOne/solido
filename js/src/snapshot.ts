@@ -442,6 +442,7 @@ export const getSnapshot = async (
 
   return {
     solido,
+    programAddresses,
     reserveAccountBalance: reserveAccountBalance,
     stSolSupply: stSolSupply,
     stakeAccountRentExemptionBalance: {
