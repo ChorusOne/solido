@@ -8,12 +8,21 @@ import {
 import { Lamports, ProgramAddresses } from '../types';
 import { findAuthorityProgramAddress } from '../utils';
 
+/**
+ * Generates the instructions to stake SOL in the Solido Program
+ * @param senderAddress Address of the sender
+ * @param recipientStSolAddress Address of the recipient stSOL Account
+ * @param programAddresses Program addresses for the deployed Solido Program
+ * @param amount Amount of SOL to deposit
+ * @returns Instructions to stake SOL
+ */
 export const getDepositInstruction = async (
   senderAddress: PublicKey,
   recipientStSolAddress: PublicKey,
   programAddresses: ProgramAddresses,
   amount: Lamports
 ) => {
+  // Reference: Deposit instruction at https://github.com/ChorusOne/solido/blob/main/program/src/instruction.rs#L37-L43
   const dataLayout = BufferLayout.struct([
     BufferLayout.u8('instruction'),
     BufferLayout.nu64('amount'),

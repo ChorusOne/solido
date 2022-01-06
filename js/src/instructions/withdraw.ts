@@ -14,6 +14,16 @@ import {
   getHeaviestValidatorStakeAccount,
 } from '../utils';
 
+/**
+ * Generates the instructions to unstake from the Solido Program
+ * @param snapshot Snapshot of the Solido stats
+ * @param programAddresses Program addresses for the deployed Solido Program
+ * @param stSolAccountOwnerAddress Address of the owner of the sender's stSOL Account
+ * @param senderStSolAccountAddress Address of the stSOL Account to be unstaked
+ * @param recipientStakeAccountAddress Address of the NEW Account
+ * @param amount Amount of stSOL to unstake
+ * @returns Instructions to unstake stSOL
+ */
 export const getWithdrawInstruction = async (
   snapshot: Snapshot,
   programAddresses: ProgramAddresses,
@@ -80,6 +90,7 @@ export const getWithdrawInstruction = async (
     { pubkey: StakeProgram.programId, isSigner: false, isWritable: false },
   ];
 
+  // Reference: Withdraw instruction at https://github.com/ChorusOne/solido/blob/main/program/src/instruction.rs#L45-L52
   const dataLayout = BufferLayout.struct([
     BufferLayout.u8('instruction'),
     BufferLayout.nu64('amount'),

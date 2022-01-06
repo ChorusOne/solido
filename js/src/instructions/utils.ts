@@ -5,6 +5,12 @@ import {
 } from '@solana/spl-token';
 import { PublicKey, TransactionInstruction } from '@solana/web3.js';
 
+/**
+ * Generates the instruction to create the Associated Token Account for the given mint address
+ * @param mintAddress Mint address of the token
+ * @param ownerAddress Address of the owner of the token
+ * @returns Instruction to create the Associated Token Account
+ */
 export const getATAInitializeInstruction = async (
   mintAddress: PublicKey,
   ownerAddress: PublicKey
