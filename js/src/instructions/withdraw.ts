@@ -1,6 +1,7 @@
 import * as BufferLayout from '@solana/buffer-layout';
 import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import {
+  LAMPORTS_PER_SOL,
   PublicKey,
   StakeProgram,
   SystemProgram,
@@ -8,7 +9,8 @@ import {
   TransactionInstruction,
 } from '@solana/web3.js';
 import BN from 'bn.js';
-import type { Lamports, ProgramAddresses, Snapshot } from '../types';
+import { StLamports, Lamports } from '../types';
+import type { ProgramAddresses, Snapshot } from '../types';
 import {
   findAuthorityProgramAddress,
   getHeaviestValidatorStakeAccount,
@@ -30,7 +32,7 @@ export const getWithdrawInstruction = async (
   stSolAccountOwnerAddress: PublicKey,
   senderStSolAccountAddress: PublicKey,
   recipientStakeAccountAddress: PublicKey,
-  amount: Lamports
+  amount: StLamports
 ) => {
   const stakeAuthorityAddress = await findAuthorityProgramAddress(
     programAddresses,
@@ -39,15 +41,29 @@ export const getWithdrawInstruction = async (
   const heaviestValidatorStakeAccount =
     getHeaviestValidatorStakeAccount(snapshot);
 
-  if (amount.lamports.lte(snapshot.stakeAccountRentExemptionBalance.lamports)) {
+  const { exchange_rate } = snapshot.solido;
+
+  const withdrawAmountInSol = new Lamports(
+    amount.stLamports.mul(
+      exchange_rate.sol_balance.div(exchange_rate.st_sol_supply)
+    )
+  );
+
+  if (
+    withdrawAmountInSol.lamports.lte(
+      snapshot.stakeAccountRentExemptionBalance.lamports
+    )
+  ) {
     throw new Error('Amount must be greater than the rent exemption balance');
   }
 
-  const maxWithdrawAmount = heaviestValidatorStakeAccount.balance.lamports
-    .div(new BN(10))
-    .add(new BN(10));
+  const maxWithdrawAmount = new Lamports(
+    heaviestValidatorStakeAccount.balance.lamports
+      .div(new BN(10))
+      .add(new BN(10 * LAMPORTS_PER_SOL))
+  );
 
-  if (amount.lamports.gte(maxWithdrawAmount)) {
+  if (withdrawAmountInSol.lamports.gte(maxWithdrawAmount.lamports)) {
     throw new Error('Amount must be less than the maximum withdrawal amount');
   }
 
@@ -100,7 +116,7 @@ export const getWithdrawInstruction = async (
   dataLayout.encode(
     {
       instruction: 2,
-      amount: amount.lamports,
+      amount: amount.stLamports,
     },
     data
   );
