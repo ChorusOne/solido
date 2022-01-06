@@ -198,11 +198,7 @@ print(f'> Created instance at {anker_address}.')
 
 
 print('\nVerifying Anker instance with `solido anker show` ...')
-result = solido(
-    'anker',
-    'show',
-    '--anker-address', anker_address
-)
+result = solido('anker', 'show', '--anker-address', anker_address)
 
 # Some addresses are generated and it's tedious here in this test to know what
 # they are ahead of time, so we don't check those against a reference, instead
