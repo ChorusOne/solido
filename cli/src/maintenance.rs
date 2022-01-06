@@ -754,8 +754,16 @@ impl SolidoState {
             .expect("It will not overflow because we always have less than the total amount of minted Sol.");
 
         let rewards = (reserve_st_sol - st_sol_amount).ok()?;
-        // We should not call the instruction if the rewards are 0.
-        if rewards == StLamports(0) {
+
+        let min_rewards_to_sell = self
+            .solido
+            .exchange_rate
+            .exchange_sol(Self::MINIMUM_WITHDRAW_AMOUNT)
+            .expect("The price of a signature should be small enough that it doesn't overflow.");
+
+        // We should not call the instruction if the rewards are 0, or if the rewards are so small
+        // that the transaction cost is a significant portion of the rewards.
+        if rewards < min_rewards_to_sell {
             None
         } else {
             Some(MaintenanceInstruction::new(
@@ -771,7 +779,10 @@ impl SolidoState {
     pub fn try_send_anker_rewards(&self) -> Option<MaintenanceInstruction> {
         let anker_state = self.anker_state.as_ref()?;
 
-        if anker_state.ust_reserve_balance == MicroUst(0) {
+        // If there are no rewards to send, or if there are some, but it's less
+        // than 10 cent, then don't send the rewards, because the transaction
+        // cost would be significant with respect to the amount we send.
+        if anker_state.ust_reserve_balance < MicroUst(100_000) {
             return None;
         }
 
