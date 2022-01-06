@@ -209,8 +209,6 @@ result = solido(
 # we store them so we can use them later in this test.
 reserve_authority = result.pop('reserve_authority')
 b_sol_mint_authority = result.pop('b_sol_mint_authority')
-st_sol_reserve = result.pop('st_sol_reserve')
-ust_reserve = result.pop('ust_reserve')
 
 # We do check the remaining fields.
 expected_result = {
@@ -219,6 +217,8 @@ expected_result = {
     'solido_address': solido_address,
     'solido_program_id': solido_program_id,
     'b_sol_mint': b_sol_mint_address,
+    'st_sol_reserve': anker_st_sol_reserve_account,
+    'ust_reserve': anker_ust_reserve_account,
     'terra_rewards_destination': terra_rewards_address,
     'ust_reserve_balance_micro_ust': 0,
     'st_sol_reserve_balance_st_lamports': 0,
