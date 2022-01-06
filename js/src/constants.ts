@@ -1,6 +1,9 @@
 import { PublicKey } from '@solana/web3.js';
 import { ProgramAddresses } from './types';
 
+/**
+ * Program addresses for the program deployment on mainnet
+ */
 export const MAINNET_PROGRAM_ADDRESSES: ProgramAddresses = {
   solidoProgramId: new PublicKey(
     'CrX7kMhLC3cSsXJdT7JDgqrRVWGnUpX3gfEfxxU2NVLi'

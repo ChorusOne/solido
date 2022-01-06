@@ -5,6 +5,9 @@ import { deserializeUnchecked } from 'borsh';
 import { Lamports, ProgramAddresses, Snapshot, StLamports } from './types';
 import { calculateStakeAccountAddress } from './utils';
 
+/**
+ * Solido Program State
+ */
 export class Solido {
   exchange_rate: ExchangeRate;
   fee_recipients: FeeRecipients;
