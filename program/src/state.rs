@@ -165,7 +165,6 @@ impl ExchangeRate {
     pub fn exchange_st_sol(&self, amount: StLamports) -> Result<Lamports, LidoError> {
         // If there is no stSOL in existence, it cannot be exchanged.
         if self.st_sol_supply == StLamports(0) {
-            msg!("Cannot exchange stSOL for SOL, because no stSTOL has been minted.");
             return Err(LidoError::InvalidAmount);
         }
 
