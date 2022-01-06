@@ -116,9 +116,11 @@ pub enum MaintenanceOutput {
     UnstakeFromActiveValidator(Unstake),
 
     SellRewards {
+        #[serde(rename = "st_sol_amount_st_lamports")]
         st_sol_amount: StLamports,
     },
     SendRewards {
+        #[serde(rename = "ust_amount_micro_ust")]
         ust_amount: MicroUst,
     },
 }
