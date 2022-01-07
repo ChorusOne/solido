@@ -22,6 +22,7 @@ from util import (
     solana_program_deploy,
     solido,
     spl_token,
+    spl_token_balance,
     create_spl_token_account,
 )
 
@@ -229,10 +230,14 @@ print('> Instance parameters are as expected.')
 def perform_maintenance() -> Optional[Dict[str, Any]]:
     return solido(
         'perform-maintenance',
-        '--solido-program-id', solido_program_id,
-        '--solido-address', solido_address,
-        '--anker-program-id', anker_program_id,
-        '--stake-time', 'anytime'
+        '--solido-program-id',
+        solido_program_id,
+        '--solido-address',
+        solido_address,
+        '--anker-program-id',
+        anker_program_id,
+        '--stake-time',
+        'anytime',
     )
 
 
@@ -240,20 +245,36 @@ def perform_maintenance() -> Optional[Dict[str, Any]]:
 result = perform_maintenance()
 assert result is None, f'Did not expect maintenance here, but got {result}'
 
+
+def deposit_solido_sol(amount_sol: float) -> str:
+    """
+    Deposit SOL to Solido to get stSOL, return the recipient address.
+    """
+    deposit_result = solido(
+        'deposit',
+        '--solido-address',
+        solido_address,
+        '--solido-program-id',
+        solido_program_id,
+        '--amount-sol',
+        str(amount_sol),
+    )
+    recipient: str = deposit_result['recipient']
+    return recipient
+
+
 # However, if we donate some stSOL to the reserve, then we should be able to
 # sell that.
 print('\nDonating 1 stSOL to the Anker reserve ...')
-deposit_result = solido(
-    'deposit',
-    '--solido-address',
-    solido_address,
-    '--solido-program-id',
-    solido_program_id,
-    '--amount-sol',
-    '1.0'
+st_sol_account = deposit_solido_sol(1.0)
+spl_token(
+    'transfer',
+    st_sol_mint_address,
+    '1',
+    anker_st_sol_reserve_account,
+    '--from',
+    st_sol_account,
 )
-st_sol_account = deposit_result['recipient']
-spl_token('transfer', st_sol_mint_address, '1', anker_st_sol_reserve_account, '--from', st_sol_account)
 
 result = solido('anker', 'show', '--anker-address', anker_address)
 assert result['st_sol_reserve_balance_st_lamports'] == 1_000_000_000
@@ -274,3 +295,23 @@ assert result['st_sol_reserve_balance_st_lamports'] == 0
 # 0.5 UST went to Anker.
 assert result['ust_reserve_balance_micro_ust'] == 500_000
 print('> Anker stSOL reserve now contains 0.5 UST.')
+
+
+print('\nDepositing 1 stSOL to Anker ...')
+st_sol_account = deposit_solido_sol(1.0)
+result = solido(
+    'anker',
+    'deposit',
+    '--anker-address',
+    anker_address,
+    '--from-st-sol-address',
+    st_sol_account,
+    '--amount-st-sol',
+    '1.0',
+)
+b_sol_account: str = result['b_sol_account']
+assert result['created_associated_b_sol_account'] == True
+
+b_sol_balance = spl_token_balance(b_sol_account)
+assert b_sol_balance.balance_raw == 1_000_000_000
+print(f'> We now have 1 bSOL in account {b_sol_account}.')

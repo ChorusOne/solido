@@ -473,9 +473,21 @@ fn command_deposit(config: &mut SnapshotConfig, opts: &AnkerDepositOpts) -> Resu
     let anker_account = client.get_account(opts.anker_address())?;
     let anker_program_id = anker_account.owner;
     let anker = client.get_anker(opts.anker_address())?;
+    let solido = client.get_solido(&anker.solido)?;
 
     let mut instructions = Vec::new();
     let mut created_recipient = false;
+
+    // The user can pass in a particular SPL token account to send from, but if
+    // none is provided, we use the associated token account of the signer.
+    let sender = if opts.from_st_sol_address() == &Pubkey::default() {
+        spl_associated_token_account::get_associated_token_address(
+            &config.signer.pubkey(),
+            &solido.st_sol_mint,
+        )
+    } else {
+        *opts.from_st_sol_address()
+    };
 
     let recipient = spl_associated_token_account::get_associated_token_address(
         &config.signer.pubkey(),
@@ -502,7 +514,7 @@ fn command_deposit(config: &mut SnapshotConfig, opts: &AnkerDepositOpts) -> Resu
         &anker::instruction::DepositAccountsMeta {
             anker: *opts.anker_address(),
             solido: anker.solido,
-            from_account: config.signer.pubkey(),
+            from_account: sender,
             user_authority: config.signer.pubkey(),
             to_reserve_account: st_sol_reserve_account,
             b_sol_user_account: recipient,

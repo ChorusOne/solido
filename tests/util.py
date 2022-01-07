@@ -107,6 +107,34 @@ def spl_token(*args: str) -> str:
     return run('spl-token', '--url', get_network(), *args)
 
 
+class SplTokenBalance(NamedTuple):
+    # The raw amount is the amount in the smallest denomination of the token
+    # (i.e. the number of Lamports for wrapped SOL), the UI amount is a float
+    # of `amount_raw` divided by `10^num_decimals`.
+    balance_raw: int
+    balance_ui: float
+
+
+def spl_token_balance(address: str) -> SplTokenBalance:
+    """
+    Run 'spl_token' against network.
+    """
+    result = run(
+        'spl-token',
+        '--url',
+        get_network(),
+        'balance',
+        '--address',
+        address,
+        '--output',
+        'json',
+    )
+    data = json.loads(result)
+    amount_raw = int(data['amount'])
+    amount_ui = data('uiAmount')
+    return SplTokenBalance(amount_raw, amount_ui)
+
+
 def solana_program_deploy(fname: str) -> str:
     """
     Deploy a .so file, return its program id.
