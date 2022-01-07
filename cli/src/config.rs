@@ -787,3 +787,15 @@ cli_opt_struct! {
         ust_account: Pubkey,
     }
 }
+
+cli_opt_struct! {
+    AnkerDepositOpts {
+        /// Address of the Anker instance.
+        #[clap(long, value_name = "address")]
+        anker_address: Pubkey,
+
+        /// Amount to deposit, in stSOL, using . as decimal separator.
+        #[clap(long, value_name = "sol")]
+        amount_st_sol: StLamports,
+    }
+}
