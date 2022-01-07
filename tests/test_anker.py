@@ -316,3 +316,8 @@ assert result['created_associated_b_sol_account'] == True
 b_sol_balance = spl_token_balance(b_sol_account)
 assert b_sol_balance.balance_raw == 1_000_000_000
 print(f'> We now have 1 bSOL in account {b_sol_account}.')
+
+result = solido('anker', 'show', '--anker-address', anker_address)
+assert result['st_sol_reserve_balance_st_lamports'] == 1_000_000_000
+assert result['b_sol_supply_b_lamports'] == 1_000_000_000
+print(f'> Anker reserve has 1 stSOL, the bSOL mint has a supply of 1 bSOL.')
