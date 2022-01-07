@@ -13,9 +13,9 @@ aside from sending rewards can be tested locally though.
 
 import json
 import os
+import subprocess
 import sys
 
-from typing import Optional, Dict, Any
 from uuid import uuid4
 
 from util import (
@@ -25,6 +25,7 @@ from util import (
     get_solido_program_path,
     multisig,
     rpc_get_account_info,
+    solana,
     solana_program_deploy,
     solido,
     spl_token,
@@ -43,6 +44,10 @@ test_dir = f'tests/.keys/{run_id}'
 os.makedirs(test_dir, exist_ok=True)
 print(f'Keys directory: {test_dir}')
 
+# Before we start, check our current balance. We also do this at the end,
+# and then we know how much the deployment cost.
+sol_balance_pre = float(solana('balance').split(' ')[0])
+
 # Start with the UST accounts, because on devnet we can't create UST, we need to
 # receive it externally, and if we don't have the UST yet, then don't waste time
 # by uploading programs (which is slow) and only later failing, we can fail fast.
@@ -59,10 +64,18 @@ else:
     ust_mint_address = DEVNET_WORMHOLE_UST_MINT
 print(f'> UST mint is {ust_mint_address}.')
 
-ust_account_info_json = spl_token(
-    'create-account', ust_mint_address, '--output', 'json'
-)
-ust_account_info_dict = json.loads(ust_account_info_json)
+try:
+    ust_account_info_json = spl_token(
+        'create-account', ust_mint_address, '--output', 'json'
+    )
+except subprocess.CalledProcessError:
+    # "spl-token create-account" fails if the associated token account exists
+    # already. It would be nice to check whether it exists before we try to
+    # create it, but unfortunately there appears to be no way to get the address
+    # of the associated token account, either through the Solana RPC, or through
+    # one of the command-line tools. The associated token account address remains
+    # implicit everywhere :/
+    pass
 
 # If we control the UST mint (on a local test validator), we can mint ourselves
 # 0.1 UST. But if we don't control the mint, then we need to be sure that we have
@@ -76,10 +89,13 @@ else:
     ust_balance_micro_ust = int(ust_balance_dict['amount'])
     if ust_balance_micro_ust < 100_000:
         print('Please ensure that your associated token account has at least 0.1 UST.')
+        owner_addr = solana('address').strip()
+        print(f'It should go into the associated token account of {owner_addr}.')
         sys.exit(1)
     else:
         print(
-            f'> We have sufficient UST to proceed: {ust_balance_micro_ust / 1e6:.6f}.'
+            '> We have sufficient UST to proceed: '
+            f'{ust_balance_micro_ust / 1e6:.6f} >= 0.1.'
         )
 
 print('\nUploading Multisig program ...')
@@ -239,6 +255,10 @@ result = solido(
 )
 anker_address = result['anker_address']
 print(f'> Created instance at {anker_address}.')
+
+sol_balance_post = float(solana('balance').split(' ')[0])
+total_cost_sol = sol_balance_pre - sol_balance_post
+print(f'\nDeployment cost {total_cost_sol:.3f} SOL.')
 
 # Save the configuration to a file, to make it easier to run the maintainer
 # and other commands later.
