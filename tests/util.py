@@ -129,9 +129,9 @@ def spl_token_balance(address: str) -> SplTokenBalance:
         '--output',
         'json',
     )
-    data = json.loads(result)
+    data: Dict[str, Any] = json.loads(result)
     amount_raw = int(data['amount'])
-    amount_ui = data('uiAmount')
+    amount_ui: float = data['uiAmount']
     return SplTokenBalance(amount_raw, amount_ui)
 
 

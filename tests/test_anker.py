@@ -228,7 +228,7 @@ print('> Instance parameters are as expected.')
 
 
 def perform_maintenance() -> Optional[Dict[str, Any]]:
-    return solido(
+    result: Optional[Dict[str, Any]] = solido(
         'perform-maintenance',
         '--solido-program-id',
         solido_program_id,
@@ -239,6 +239,7 @@ def perform_maintenance() -> Optional[Dict[str, Any]]:
         '--stake-time',
         'anytime',
     )
+    return result
 
 
 # There shouldn't be any maintenance to perform at this point.
