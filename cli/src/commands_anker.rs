@@ -601,23 +601,23 @@ fn command_withdraw(
     // Also for the recipient, we use the associated token account of the signer
     // if the user did not specify an account.
     let recipient = if opts.to_st_sol_address() == &Pubkey::default() {
-        spl_associated_token_account::get_associated_token_address(
-            &config.signer.pubkey(),
-            &solido.st_sol_mint,
-        )
-    } else {
-        *opts.to_st_sol_address()
-    };
-
-    if !config.client.account_exists(&recipient)? {
-        let instr = spl_associated_token_account::create_associated_token_account(
-            &config.signer.pubkey(),
+        let recipient = spl_associated_token_account::get_associated_token_address(
             &config.signer.pubkey(),
             &solido.st_sol_mint,
         );
-        instructions.push(instr);
-        created_recipient = true;
-    }
+        if !config.client.account_exists(&recipient)? {
+            let instr = spl_associated_token_account::create_associated_token_account(
+                &config.signer.pubkey(),
+                &config.signer.pubkey(),
+                &solido.st_sol_mint,
+            );
+            instructions.push(instr);
+            created_recipient = true;
+        }
+        recipient
+    } else {
+        *opts.to_st_sol_address()
+    };
 
     let (st_sol_reserve_account, _bump_seed) =
         anker::find_st_sol_reserve_account(&anker_program_id, opts.anker_address());
