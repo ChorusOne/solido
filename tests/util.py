@@ -117,7 +117,7 @@ class SplTokenBalance(NamedTuple):
 
 def spl_token_balance(address: str) -> SplTokenBalance:
     """
-    Run 'spl_token' against network.
+    Return the balance of an SPL token account.
     """
     result = run(
         'spl-token',
