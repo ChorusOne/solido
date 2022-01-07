@@ -77,7 +77,7 @@ pub fn main(config: &mut SnapshotClientConfig, anker_opts: &AnkerOpts) {
             print_output(config.output_mode, &output);
         }
         SubCommand::Deposit(opts) => {
-            let result = command_deposit(config, opts);
+            let result = config.with_snapshot(|config| command_deposit(config, opts));
             let output = result.ok_or_abort_with("Failed to deposit.");
             print_output(config.output_mode, &output);
         }
@@ -468,62 +468,52 @@ impl fmt::Display for DepositOutput {
     }
 }
 
-fn command_deposit(
-    config: &mut SnapshotClientConfig,
-    opts: &AnkerDepositOpts,
-) -> std::result::Result<DepositOutput, crate::error::Error> {
-    let (recipient, created_recipient) = config.with_snapshot(|config| {
-        let client = &mut config.client;
-        let anker = client.get_anker(opts.anker_address())?;
+fn command_deposit(config: &mut SnapshotConfig, opts: &AnkerDepositOpts) -> Result<DepositOutput> {
+    let client = &mut config.client;
+    let anker_account = client.get_account(opts.anker_address())?;
+    let anker_program_id = anker_account.owner;
+    let anker = client.get_anker(opts.anker_address())?;
 
-        let recipient = spl_associated_token_account::get_associated_token_address(
+    let mut instructions = Vec::new();
+    let mut created_recipient = false;
+
+    let recipient = spl_associated_token_account::get_associated_token_address(
+        &config.signer.pubkey(),
+        &anker.b_sol_mint,
+    );
+
+    if !config.client.account_exists(&recipient)? {
+        let instr = spl_associated_token_account::create_associated_token_account(
+            &config.signer.pubkey(),
             &config.signer.pubkey(),
             &anker.b_sol_mint,
         );
+        instructions.push(instr);
+        created_recipient = true;
+    }
 
-        if !config.client.account_exists(&recipient)? {
-            let instr = spl_associated_token_account::create_associated_token_account(
-                &config.signer.pubkey(),
-                &config.signer.pubkey(),
-                &anker.b_sol_mint,
-            );
+    let (st_sol_reserve_account, _bump_seed) =
+        anker::find_st_sol_reserve_account(&anker_program_id, opts.anker_address());
+    let (b_sol_mint_authority, _bump_seed) =
+        anker::find_mint_authority(&anker_program_id, opts.anker_address());
 
-            config.sign_and_send_transaction(&[instr], &[config.signer])?;
+    let instr = anker::instruction::deposit(
+        &anker_program_id,
+        &anker::instruction::DepositAccountsMeta {
+            anker: *opts.anker_address(),
+            solido: anker.solido,
+            from_account: config.signer.pubkey(),
+            user_authority: config.signer.pubkey(),
+            to_reserve_account: st_sol_reserve_account,
+            b_sol_user_account: recipient,
+            b_sol_mint: anker.b_sol_mint,
+            b_sol_mint_authority,
+        },
+        *opts.amount_st_sol(),
+    );
+    instructions.push(instr);
 
-            Ok((recipient, true))
-        } else {
-            Ok((recipient, false))
-        }
-    })?;
-
-    config.with_snapshot(|config| {
-        let client = &mut config.client;
-        let anker_account = client.get_account(opts.anker_address())?;
-        let anker_program_id = anker_account.owner;
-        let anker = client.get_anker(opts.anker_address())?;
-
-        let (st_sol_reserve_account, _bump_seed) =
-            anker::find_st_sol_reserve_account(&anker_program_id, opts.anker_address());
-        let (b_sol_mint_authority, _bump_seed) =
-            anker::find_mint_authority(&anker_program_id, opts.anker_address());
-
-        let instr = anker::instruction::deposit(
-            &anker_program_id,
-            &anker::instruction::DepositAccountsMeta {
-                anker: *opts.anker_address(),
-                solido: anker.solido,
-                from_account: config.signer.pubkey(),
-                user_authority: config.signer.pubkey(),
-                to_reserve_account: st_sol_reserve_account,
-                b_sol_user_account: recipient,
-                b_sol_mint: anker.b_sol_mint,
-                b_sol_mint_authority,
-            },
-            *opts.amount_st_sol(),
-        );
-
-        config.sign_and_send_transaction(&[instr], &[config.signer])
-    })?;
+    config.sign_and_send_transaction(&instructions[..], &[config.signer])?;
 
     let result = DepositOutput {
         created_associated_b_sol_account: created_recipient,
