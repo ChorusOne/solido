@@ -321,3 +321,46 @@ result = solido('anker', 'show', '--anker-address', anker_address)
 assert result['st_sol_reserve_balance_st_lamports'] == 1_000_000_000
 assert result['b_sol_supply_b_lamports'] == 1_000_000_000
 print(f'> Anker reserve has 1 stSOL, the bSOL mint has a supply of 1 bSOL.')
+
+# We donate some stSOL once more, to check that when we withdraw, the user does
+# not get more stSOL than they put in.
+print('\nDonating 1 stSOL to the Anker reserve ...')
+st_sol_account = deposit_solido_sol(1.0)
+spl_token(
+    'transfer',
+    st_sol_mint_address,
+    '1',
+    anker_st_sol_reserve_account,
+    '--from',
+    st_sol_account,
+)
+
+print('Withdrawing 1 bSOL from Anker ...')
+result = solido(
+    'anker',
+    'withdraw',
+    '--anker-address',
+    anker_address,
+    '--from-b-sol-address',
+    b_sol_account,
+    '--to-st-sol-address',
+    st_sol_account,
+    '--amount-b-sol',
+    '1.0',
+)
+assert result['from_b_sol_account'] == b_sol_account
+assert result['to_st_sol_account'] == st_sol_account
+assert result['created_associated_st_sol_account'] == False
+
+b_sol_balance = spl_token_balance(b_sol_account)
+assert b_sol_balance.balance_raw == 0
+print(f'> bSOL balance of {b_sol_account} is now 0 again.')
+
+st_sol_balance = spl_token_balance(st_sol_account)
+assert st_sol_balance.balance_raw == 1_000_000_000
+print(f'> stSOL balance of {st_sol_account} is now 1.0 stSOL again.')
+
+result = solido('anker', 'show', '--anker-address', anker_address)
+assert result['st_sol_reserve_balance_st_lamports'] == 1_000_000_000
+assert result['b_sol_supply_b_lamports'] == 0
+print(f'> Anker reserve has 1 stSOL, the bSOL mint has a supply of 0 bSOL.')
