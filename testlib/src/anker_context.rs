@@ -193,7 +193,7 @@ pub struct Context {
 const INITIAL_DEPOSIT: Lamports = Lamports(1_000_000_000);
 
 impl Context {
-    pub async fn new() -> Self {
+    pub async fn new_with_undefined_exchange_rate() -> Self {
         let mut solido_context = solido_context::Context::new_with_maintainer().await;
         let (anker, _seed) = anker::find_instance_address(&id(), &solido_context.solido.pubkey());
 
@@ -237,10 +237,6 @@ impl Context {
         .await
         .expect("Failed to initialize Anker instance.");
 
-        solido_context.deposit(INITIAL_DEPOSIT).await;
-        solido_context.advance_to_normal_epoch(0);
-        solido_context.update_exchange_rate().await;
-
         Self {
             solido_context,
             anker,
@@ -253,6 +249,18 @@ impl Context {
             terra_rewards_destination,
             reserve_authority,
         }
+    }
+
+    /// Create a new test context, where Solido has some balance, and the exchange
+    /// rate has been updated once.
+    pub async fn new() -> Self {
+        let mut ctx = Context::new_with_undefined_exchange_rate().await;
+
+        ctx.solido_context.deposit(INITIAL_DEPOSIT).await;
+        ctx.solido_context.advance_to_normal_epoch(0);
+        ctx.solido_context.update_exchange_rate().await;
+
+        ctx
     }
 
     // Start a new Anker context with `amount` Lamports donated to Solido's

@@ -10,7 +10,7 @@ use crate::{
 };
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use lido::state::Lido;
-use lido::token::{Rational, StLamports};
+use lido::token::{Lamports, Rational, StLamports};
 use lido::util::serialize_b58;
 use serde::Serialize;
 use solana_program::program_error::ProgramError;
@@ -598,10 +598,25 @@ pub struct ExchangeRate {
 impl ExchangeRate {
     /// Return the bSOL/stSOL rate that ensures that 1 bSOL = 1 SOL.
     pub fn from_solido_pegged(solido: &Lido) -> ExchangeRate {
-        ExchangeRate {
-            st_sol_amount: solido.exchange_rate.st_sol_supply,
-            // By definition here, we set 1 bSOL equal to 1 SOL.
-            b_sol_amount: BLamports(solido.exchange_rate.sol_balance.0),
+        // On mainnet, the Solido instance exists for a while already, and its
+        // stSOL supply and SOL balance are nonzero. But for local testing, in
+        // the first epoch, the exchange rate stored in the Solido instance is
+        // 0 stSOL = 0 SOL. To still enable Anker deposits during that first
+        // epoch, we define the initial exchange rate to be 1 stSOL = 1 bSOL,
+        // because Solido initially uses 1 SOL = 1 stSOL if the balance is zero.
+        if solido.exchange_rate.st_sol_supply == StLamports(0)
+            && solido.exchange_rate.sol_balance == Lamports(0)
+        {
+            ExchangeRate {
+                st_sol_amount: StLamports(1),
+                b_sol_amount: BLamports(1),
+            }
+        } else {
+            ExchangeRate {
+                st_sol_amount: solido.exchange_rate.st_sol_supply,
+                // By definition here, we set 1 bSOL equal to 1 SOL.
+                b_sol_amount: BLamports(solido.exchange_rate.sol_balance.0),
+            }
         }
     }
 

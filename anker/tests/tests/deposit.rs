@@ -13,7 +13,24 @@ use testlib::assert_solido_error;
 const TEST_DEPOSIT_AMOUNT: StLamports = StLamports(1_000_000_000);
 
 #[tokio::test]
-async fn test_successful_deposit() {
+async fn test_successful_deposit_during_first_epoch() {
+    let mut context = Context::new_with_undefined_exchange_rate().await;
+    let (_owner, recipient) = context.deposit(Lamports(TEST_DEPOSIT_AMOUNT.0)).await;
+
+    let reserve_balance = context
+        .solido_context
+        .get_st_sol_balance(context.st_sol_reserve)
+        .await;
+    let recipient_balance = context.get_b_sol_balance(recipient).await;
+
+    // If there is no deposit yet, the exchange rate is defined to be 1:1,
+    // so the amounts in SOL, stSOL, and bSOL are all equal.
+    assert_eq!(reserve_balance, TEST_DEPOSIT_AMOUNT);
+    assert_eq!(recipient_balance, BLamports(TEST_DEPOSIT_AMOUNT.0));
+}
+
+#[tokio::test]
+async fn test_successful_deposit_after_first_epoch() {
     let mut context = Context::new().await;
     let (_owner, recipient) = context.deposit(Lamports(TEST_DEPOSIT_AMOUNT.0)).await;
 
