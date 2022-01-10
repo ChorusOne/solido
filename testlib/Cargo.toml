@@ -3,7 +3,7 @@ authors = ["Chorus One <techops@chorus.one>"]
 license = "GPL-3.0"
 edition = "2018"
 name = "testlib"
-version = "1.1.0"
+version = "1.2.0"
 
 [dependencies]
 anker = { path = "../anker" }
