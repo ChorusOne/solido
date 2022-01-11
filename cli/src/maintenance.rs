@@ -761,9 +761,25 @@ impl SolidoState {
             .exchange_sol(Self::MINIMUM_WITHDRAW_AMOUNT)
             .expect("The price of a signature should be small enough that it doesn't overflow.");
 
+        // Estimate the amount of UST that we will get when swapping against the constant product
+        // pool. This is only an approximation because it doesn’t uphold the constant product
+        // invariant, but this is a reasonable approximation when the rewards to sell are small
+        // compared to the pool balance. Also, this ignores swap fees. It would have been nice
+        // to use the actual `spl_token_swap::state::SwapV1` instance, but it is not `Send`, so
+        // we can’t store it in our state.
+        let ust_per_st_sol = Rational {
+            numerator: anker_state.pool_ust_balance.0,
+            denominator: anker_state.pool_st_sol_balance.0,
+        };
+        let expected_proceeds = (rewards * ust_per_st_sol)
+            .map(|x| MicroUst(x.0))
+            .unwrap_or(MicroUst(0));
+        // We want at least 0.01 UST out if we are going to do the swap at all.
+        let min_proceeds = MicroUst(10_000);
+
         // We should not call the instruction if the rewards are 0, or if the rewards are so small
         // that the transaction cost is a significant portion of the rewards.
-        if rewards < min_rewards_to_sell {
+        if rewards < min_rewards_to_sell || expected_proceeds < min_proceeds {
             None
         } else {
             Some(MaintenanceInstruction::new(

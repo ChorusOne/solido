@@ -25,6 +25,9 @@ pub struct AnkerState {
     pub b_sol_total_supply_amount: BLamports,
     pub pool_st_sol_account: Pubkey,
     pub pool_ust_account: Pubkey,
+    pub pool_st_sol_balance: StLamports,
+    pub pool_ust_balance: MicroUst,
+
     pub ust_mint: Pubkey,
     pub pool_mint: Pubkey,
     pub pool_fee_account: Pubkey,
@@ -67,12 +70,18 @@ impl AnkerState {
                 (token_swap.token_a, token_swap.token_b)
             };
 
+        let pool_st_sol_balance =
+            StLamports(config.client.get_spl_token_balance(&pool_st_sol_account)?);
+        let pool_ust_balance = MicroUst(config.client.get_spl_token_balance(&pool_ust_account)?);
+
         Ok(AnkerState {
             anker_program_id: *anker_program_id,
             anker,
             b_sol_total_supply_amount,
             pool_st_sol_account,
             pool_ust_account,
+            pool_st_sol_balance,
+            pool_ust_balance,
             ust_mint: ust_account.mint,
             pool_mint: token_swap.pool_mint,
             pool_fee_account: token_swap.pool_fee_account,
