@@ -14,6 +14,7 @@ use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signer::keypair::Keypair;
 use solana_sdk::signer::Signer;
 
+use crate::error::{Error, SerializationError};
 use crate::{snapshot::Result, SnapshotConfig};
 
 #[derive(Default)]
@@ -45,7 +46,17 @@ impl AnkerState {
         let anker = config.client.get_anker(anker_address)?;
 
         let token_swap_account = config.client.get_account(&anker.token_swap_pool)?;
-        let token_swap = spl_token_swap::state::SwapV1::unpack(token_swap_account.data())?;
+        let token_swap_version = token_swap_account.data()[0];
+        if token_swap_version != 1 {
+            let error: Error = Box::new(SerializationError {
+                context: "Expected the token swap version to be 1, but found something else."
+                    .to_string(),
+                cause: None,
+                address: anker.token_swap_pool,
+            });
+            return Err(error.into());
+        }
+        let token_swap = spl_token_swap::state::SwapV1::unpack(&token_swap_account.data()[1..])?;
         let token_swap_program_id = token_swap_account.owner;
 
         let (anker_ust_reserve, _anker_ust_reserve_bump_seed) =

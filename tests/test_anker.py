@@ -12,6 +12,7 @@ default localhost port, and it expects a keypair at ~/.config/solana/id.json
 that corresponds to a sufficiently funded account.
 """
 import os
+from typing import Any, Dict, Optional
 
 from util import (
     create_test_account,
@@ -41,7 +42,7 @@ print(f'> Developer fee account owner: {developer_account_owner}')
 
 print('\nSetting up UST mint ...')
 ust_mint_address = create_test_account('tests/.keys/ust_mint_address.json', fund=False)
-spl_token('create-token', 'tests/.keys/ust_mint_address.json')
+spl_token('create-token', 'tests/.keys/ust_mint_address.json', '--decimals', '6')
 print(f'> UST mint is {ust_mint_address.pubkey}.')
 
 print('\nUploading Multisig program ...')
@@ -223,3 +224,53 @@ expected_result = {
 }
 assert result == expected_result, f'Expected {result} to be {expected_result}'
 print('> Instance parameters are as expected.')
+
+
+def perform_maintenance() -> Optional[Dict[str, Any]]:
+    return solido(
+        'perform-maintenance',
+        '--solido-program-id', solido_program_id,
+        '--solido-address', solido_address,
+        '--anker-program-id', anker_program_id,
+        '--stake-time', 'anytime'
+    )
+
+
+# There shouldn't be any maintenance to perform at this point.
+result = perform_maintenance()
+assert result is None, f'Did not expect maintenance here, but got {result}'
+
+# However, if we donate some stSOL to the reserve, then we should be able to
+# sell that.
+print('\nDonating 1 stSOL to the Anker reserve ...')
+deposit_result = solido(
+    'deposit',
+    '--solido-address',
+    solido_address,
+    '--solido-program-id',
+    solido_program_id,
+    '--amount-sol',
+    '1.0'
+)
+st_sol_account = deposit_result['recipient']
+spl_token('transfer', st_sol_mint_address, '1', anker_st_sol_reserve_account, '--from', st_sol_account)
+
+result = solido('anker', 'show', '--anker-address', anker_address)
+assert result['st_sol_reserve_balance_st_lamports'] == 1_000_000_000
+print('> Anker stSOL reserve now contains 1 SOL.')
+
+print('\nPerforming maintenance to swap that stSOL for UST ...')
+result = perform_maintenance()
+assert result == {
+    'SellRewards': {
+        'st_sol_amount_st_lamports': 1_000_000_000,
+    }
+}, f'Expected SellRewards, but got {result}'
+
+result = solido('anker', 'show', '--anker-address', anker_address)
+assert result['st_sol_reserve_balance_st_lamports'] == 0
+# The pool contained 1 stSOL and 1 UST, we doubled the amount of stSOL, so to
+# keep the product constant, there is now 0.5 UST in the pool, and the other
+# 0.5 UST went to Anker.
+assert result['ust_reserve_balance_micro_ust'] == 500_000
+print('> Anker stSOL reserve now contains 0.5 UST.')
