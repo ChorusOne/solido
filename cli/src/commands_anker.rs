@@ -16,7 +16,9 @@ use solana_sdk::signer::Signer;
 use spl_token_swap::curve::base::{CurveType, SwapCurve};
 use spl_token_swap::curve::constant_product::ConstantProductCurve;
 
-use crate::config::{ConfigFile, CreateAnkerOpts, CreateTokenPoolOpts, ShowAnkerOpts};
+use crate::config::{
+    AnkerDepositOpts, ConfigFile, CreateAnkerOpts, CreateTokenPoolOpts, ShowAnkerOpts,
+};
 use crate::error::Abort;
 use crate::serialization_utils::serialize_bech32;
 use crate::snapshot::Result;
@@ -33,6 +35,9 @@ enum SubCommand {
 
     /// Create an SPL token swap pool for testing purposes.
     CreateTokenPool(CreateTokenPoolOpts),
+
+    /// Deposit stSOL to Anker to obtain bSOL.
+    Deposit(AnkerDepositOpts),
 }
 
 #[derive(Clap, Debug)]
@@ -49,6 +54,7 @@ impl AnkerOpts {
             SubCommand::CreateTokenPool(opts) => {
                 opts.merge_with_config_and_environment(config_file)
             }
+            SubCommand::Deposit(opts) => opts.merge_with_config_and_environment(config_file),
         }
     }
 }
@@ -68,6 +74,11 @@ pub fn main(config: &mut SnapshotClientConfig, anker_opts: &AnkerOpts) {
         SubCommand::CreateTokenPool(opts) => {
             let result = config.with_snapshot(|config| command_create_token_pool(config, opts));
             let output = result.ok_or_abort_with("Failed to create Token Pool instance.");
+            print_output(config.output_mode, &output);
+        }
+        SubCommand::Deposit(opts) => {
+            let result = config.with_snapshot(|config| command_deposit(config, opts));
+            let output = result.ok_or_abort_with("Failed to deposit.");
             print_output(config.output_mode, &output);
         }
     }
@@ -433,4 +444,92 @@ fn command_create_token_pool(
         pool_address: token_pool_account.pubkey(),
         pool_authority: authority_pubkey,
     })
+}
+
+#[derive(Serialize)]
+struct DepositOutput {
+    /// Recipient account that holds the bSOL.
+    #[serde(serialize_with = "serialize_b58")]
+    pub b_sol_account: Pubkey,
+
+    /// Whether we had to create the associated bSOL account. False if one existed already.
+    pub created_associated_b_sol_account: bool,
+}
+
+impl fmt::Display for DepositOutput {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if self.created_associated_b_sol_account {
+            writeln!(f, "Created recipient bSOL account, it did not yet exist.")?;
+        } else {
+            writeln!(f, "Recipient bSOL account existed already before deposit.")?;
+        }
+        writeln!(f, "Recipient bSOL account: {}", self.b_sol_account)?;
+        Ok(())
+    }
+}
+
+fn command_deposit(config: &mut SnapshotConfig, opts: &AnkerDepositOpts) -> Result<DepositOutput> {
+    let client = &mut config.client;
+    let anker_account = client.get_account(opts.anker_address())?;
+    let anker_program_id = anker_account.owner;
+    let anker = client.get_anker(opts.anker_address())?;
+    let solido = client.get_solido(&anker.solido)?;
+
+    let mut instructions = Vec::new();
+    let mut created_recipient = false;
+
+    // The user can pass in a particular SPL token account to send from, but if
+    // none is provided, we use the associated token account of the signer.
+    let sender = if opts.from_st_sol_address() == &Pubkey::default() {
+        spl_associated_token_account::get_associated_token_address(
+            &config.signer.pubkey(),
+            &solido.st_sol_mint,
+        )
+    } else {
+        *opts.from_st_sol_address()
+    };
+
+    let recipient = spl_associated_token_account::get_associated_token_address(
+        &config.signer.pubkey(),
+        &anker.b_sol_mint,
+    );
+
+    if !config.client.account_exists(&recipient)? {
+        let instr = spl_associated_token_account::create_associated_token_account(
+            &config.signer.pubkey(),
+            &config.signer.pubkey(),
+            &anker.b_sol_mint,
+        );
+        instructions.push(instr);
+        created_recipient = true;
+    }
+
+    let (st_sol_reserve_account, _bump_seed) =
+        anker::find_st_sol_reserve_account(&anker_program_id, opts.anker_address());
+    let (b_sol_mint_authority, _bump_seed) =
+        anker::find_mint_authority(&anker_program_id, opts.anker_address());
+
+    let instr = anker::instruction::deposit(
+        &anker_program_id,
+        &anker::instruction::DepositAccountsMeta {
+            anker: *opts.anker_address(),
+            solido: anker.solido,
+            from_account: sender,
+            user_authority: config.signer.pubkey(),
+            to_reserve_account: st_sol_reserve_account,
+            b_sol_user_account: recipient,
+            b_sol_mint: anker.b_sol_mint,
+            b_sol_mint_authority,
+        },
+        *opts.amount_st_sol(),
+    );
+    instructions.push(instr);
+
+    config.sign_and_send_transaction(&instructions[..], &[config.signer])?;
+
+    let result = DepositOutput {
+        created_associated_b_sol_account: created_recipient,
+        b_sol_account: recipient,
+    };
+    Ok(result)
 }

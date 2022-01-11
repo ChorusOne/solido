@@ -787,3 +787,22 @@ cli_opt_struct! {
         ust_account: Pubkey,
     }
 }
+
+cli_opt_struct! {
+    AnkerDepositOpts {
+        /// Address of the Anker instance.
+        #[clap(long, value_name = "address")]
+        anker_address: Pubkey,
+
+        /// stSOL SPL token account to send from.
+        ///
+        /// By default, the stSOL associated token account of the signer is used.
+        /// In any case, the signer must own this account.
+        #[clap(long, value_name = "address")]
+        from_st_sol_address: Pubkey => Pubkey::default(),
+
+        /// Amount to deposit, in stSOL, using . as decimal separator.
+        #[clap(long, value_name = "amount")]
+        amount_st_sol: StLamports,
+    }
+}
