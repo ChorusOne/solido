@@ -210,9 +210,16 @@ struct ShowAnkerOutput {
     #[serde(serialize_with = "serialize_b58")]
     ust_reserve: Pubkey,
 
+    #[serde(rename = "ust_reserve_balance_micro_ust")]
     ust_reserve_balance: MicroUst,
+
+    #[serde(rename = "st_sol_reserve_balance_st_lamports")]
     st_sol_reserve_balance: StLamports,
+
+    #[serde(rename = "st_sol_reserve_value_lamports")]
     st_sol_reserve_value: Option<Lamports>,
+
+    #[serde(rename = "b_sol_supply_b_lamports")]
     b_sol_supply: BLamports,
 }
 

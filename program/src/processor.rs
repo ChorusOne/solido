@@ -947,7 +947,13 @@ pub fn process_withdraw(
     }
 
     // Reduce validator's balance
-    let sol_to_withdraw = lido.exchange_rate.exchange_st_sol(amount)?;
+    let sol_to_withdraw = match lido.exchange_rate.exchange_st_sol(amount) {
+        Ok(amount) => amount,
+        Err(err) => {
+            msg!("Cannot exchange stSOL for SOL, because no stSTOL has been minted.");
+            return Err(err.into());
+        }
+    };
     let provided_validator = lido
         .validators
         .get_mut(accounts.validator_vote_account.key)?;
