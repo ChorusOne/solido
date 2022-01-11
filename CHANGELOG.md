@@ -2,7 +2,7 @@
 
 ## v1.2.0
 
-Released 2022-01-10.
+Released 2022-01-11.
 
 There are no functional changes to the on-chain Solido program in this release.
 The on-chain Solido program remains functionally unchanged since v1.0.0.
