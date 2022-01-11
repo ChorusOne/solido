@@ -17,7 +17,8 @@ use spl_token_swap::curve::base::{CurveType, SwapCurve};
 use spl_token_swap::curve::constant_product::ConstantProductCurve;
 
 use crate::config::{
-    AnkerDepositOpts, ConfigFile, CreateAnkerOpts, CreateTokenPoolOpts, ShowAnkerOpts,
+    AnkerDepositOpts, AnkerWithdrawOpts, ConfigFile, CreateAnkerOpts, CreateTokenPoolOpts,
+    ShowAnkerOpts,
 };
 use crate::error::Abort;
 use crate::serialization_utils::serialize_bech32;
@@ -38,6 +39,9 @@ enum SubCommand {
 
     /// Deposit stSOL to Anker to obtain bSOL.
     Deposit(AnkerDepositOpts),
+
+    /// Return bSOL to Anker to redeem stSOL.
+    Withdraw(AnkerWithdrawOpts),
 }
 
 #[derive(Clap, Debug)]
@@ -55,6 +59,7 @@ impl AnkerOpts {
                 opts.merge_with_config_and_environment(config_file)
             }
             SubCommand::Deposit(opts) => opts.merge_with_config_and_environment(config_file),
+            SubCommand::Withdraw(opts) => opts.merge_with_config_and_environment(config_file),
         }
     }
 }
@@ -78,7 +83,12 @@ pub fn main(config: &mut SnapshotClientConfig, anker_opts: &AnkerOpts) {
         }
         SubCommand::Deposit(opts) => {
             let result = config.with_snapshot(|config| command_deposit(config, opts));
-            let output = result.ok_or_abort_with("Failed to deposit.");
+            let output = result.ok_or_abort_with("Failed to deposit into Anker.");
+            print_output(config.output_mode, &output);
+        }
+        SubCommand::Withdraw(opts) => {
+            let result = config.with_snapshot(|config| command_withdraw(config, opts));
+            let output = result.ok_or_abort_with("Failed to withdraw from Anker.");
             print_output(config.output_mode, &output);
         }
     }
@@ -530,6 +540,112 @@ fn command_deposit(config: &mut SnapshotConfig, opts: &AnkerDepositOpts) -> Resu
     let result = DepositOutput {
         created_associated_b_sol_account: created_recipient,
         b_sol_account: recipient,
+    };
+    Ok(result)
+}
+
+#[derive(Serialize)]
+struct WithdrawOutput {
+    /// Sender account whose bSOL balance was decreased.
+    #[serde(serialize_with = "serialize_b58")]
+    pub from_b_sol_account: Pubkey,
+
+    /// Recipient account whose stSOL balance was increased.
+    #[serde(serialize_with = "serialize_b58")]
+    pub to_st_sol_account: Pubkey,
+
+    /// Whether we had to create the associated stSOL account. False if one existed already.
+    pub created_associated_st_sol_account: bool,
+}
+
+impl fmt::Display for WithdrawOutput {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if self.created_associated_st_sol_account {
+            writeln!(f, "Created recipient stSOL account, it did not yet exist.")?;
+        } else {
+            writeln!(
+                f,
+                "Recipient stSOL account existed already before withdraw."
+            )?;
+        }
+        writeln!(f, "Sender bSOL account:     {}", self.from_b_sol_account)?;
+        writeln!(f, "Recipient stSOL account: {}", self.to_st_sol_account)?;
+        Ok(())
+    }
+}
+
+fn command_withdraw(
+    config: &mut SnapshotConfig,
+    opts: &AnkerWithdrawOpts,
+) -> Result<WithdrawOutput> {
+    let client = &mut config.client;
+    let anker_account = client.get_account(opts.anker_address())?;
+    let anker_program_id = anker_account.owner;
+    let anker = client.get_anker(opts.anker_address())?;
+    let solido = client.get_solido(&anker.solido)?;
+
+    let mut instructions = Vec::new();
+    let mut created_recipient = false;
+
+    // The user can pass in a particular SPL token account to send from, but if
+    // none is provided, we use the associated token account of the signer.
+    let sender = if opts.from_b_sol_address() == &Pubkey::default() {
+        spl_associated_token_account::get_associated_token_address(
+            &config.signer.pubkey(),
+            &anker.b_sol_mint,
+        )
+    } else {
+        *opts.from_b_sol_address()
+    };
+
+    // Also for the recipient, we use the associated token account of the signer
+    // if the user did not specify an account.
+    let recipient = if opts.to_st_sol_address() == &Pubkey::default() {
+        let recipient = spl_associated_token_account::get_associated_token_address(
+            &config.signer.pubkey(),
+            &solido.st_sol_mint,
+        );
+        if !config.client.account_exists(&recipient)? {
+            let instr = spl_associated_token_account::create_associated_token_account(
+                &config.signer.pubkey(),
+                &config.signer.pubkey(),
+                &solido.st_sol_mint,
+            );
+            instructions.push(instr);
+            created_recipient = true;
+        }
+        recipient
+    } else {
+        *opts.to_st_sol_address()
+    };
+
+    let (st_sol_reserve_account, _bump_seed) =
+        anker::find_st_sol_reserve_account(&anker_program_id, opts.anker_address());
+    let (reserve_authority, _bump_seed) =
+        anker::find_reserve_authority(&anker_program_id, opts.anker_address());
+
+    let instr = anker::instruction::withdraw(
+        &anker_program_id,
+        &anker::instruction::WithdrawAccountsMeta {
+            anker: *opts.anker_address(),
+            solido: anker.solido,
+            from_b_sol_account: sender,
+            from_b_sol_authority: config.signer.pubkey(),
+            to_st_sol_account: recipient,
+            reserve_account: st_sol_reserve_account,
+            reserve_authority,
+            b_sol_mint: anker.b_sol_mint,
+        },
+        *opts.amount_b_sol(),
+    );
+    instructions.push(instr);
+
+    config.sign_and_send_transaction(&instructions[..], &[config.signer])?;
+
+    let result = WithdrawOutput {
+        created_associated_st_sol_account: created_recipient,
+        from_b_sol_account: sender,
+        to_st_sol_account: recipient,
     };
     Ok(result)
 }

@@ -6,12 +6,13 @@ use std::{
     str::FromStr,
 };
 
-use anker::wormhole::TerraAddress;
 use clap::Clap;
 use serde::Deserialize;
 use serde_json::Value;
 use solana_sdk::pubkey::{ParsePubkeyError, Pubkey};
 
+use anker::token::BLamports;
+use anker::wormhole::TerraAddress;
 use lido::token::Lamports;
 use lido::token::StLamports;
 
@@ -804,5 +805,30 @@ cli_opt_struct! {
         /// Amount to deposit, in stSOL, using . as decimal separator.
         #[clap(long, value_name = "amount")]
         amount_st_sol: StLamports,
+    }
+}
+
+cli_opt_struct! {
+    AnkerWithdrawOpts {
+        /// Address of the Anker instance.
+        #[clap(long, value_name = "address")]
+        anker_address: Pubkey,
+
+        /// bSOL SPL token account from where we will remove the bSOL.
+        ///
+        /// By default, the bSOL associated token account of the signer is used.
+        /// In any case, the signer must own this account.
+        #[clap(long, value_name = "address")]
+        from_b_sol_address: Pubkey => Pubkey::default(),
+
+        /// stSOL SPL token account that will receive the stSOL.
+        ///
+        /// By default, the stSOL associated token account of the signer is used.
+        #[clap(long, value_name = "address")]
+        to_st_sol_address: Pubkey => Pubkey::default(),
+
+        /// Amount to withdraw, in bSOL, using . as decimal separator.
+        #[clap(long, value_name = "amount")]
+        amount_b_sol: BLamports,
     }
 }
