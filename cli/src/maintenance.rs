@@ -754,8 +754,32 @@ impl SolidoState {
             .expect("It will not overflow because we always have less than the total amount of minted Sol.");
 
         let rewards = (reserve_st_sol - st_sol_amount).ok()?;
-        // We should not call the instruction if the rewards are 0.
-        if rewards == StLamports(0) {
+
+        let min_rewards_to_sell = self
+            .solido
+            .exchange_rate
+            .exchange_sol(Self::MINIMUM_WITHDRAW_AMOUNT)
+            .expect("The price of a signature should be small enough that it doesn't overflow.");
+
+        // Estimate the amount of UST that we will get when swapping against the constant product
+        // pool. This is only an approximation because it doesn’t uphold the constant product
+        // invariant, but this is a reasonable approximation when the rewards to sell are small
+        // compared to the pool balance. Also, this ignores swap fees. It would have been nice
+        // to use the actual `spl_token_swap::state::SwapV1` instance, but it is not `Send`, so
+        // we can’t store it in our state.
+        let ust_per_st_sol = Rational {
+            numerator: anker_state.pool_ust_balance.0,
+            denominator: anker_state.pool_st_sol_balance.0,
+        };
+        let expected_proceeds = (rewards * ust_per_st_sol)
+            .map(|x| MicroUst(x.0))
+            .unwrap_or(MicroUst(0));
+        // We want at least 0.01 UST out if we are going to do the swap at all.
+        let min_proceeds = MicroUst(10_000);
+
+        // We should not call the instruction if the rewards are 0, or if the rewards are so small
+        // that the transaction cost is a significant portion of the rewards.
+        if rewards < min_rewards_to_sell || expected_proceeds < min_proceeds {
             None
         } else {
             Some(MaintenanceInstruction::new(
@@ -771,7 +795,10 @@ impl SolidoState {
     pub fn try_send_anker_rewards(&self) -> Option<MaintenanceInstruction> {
         let anker_state = self.anker_state.as_ref()?;
 
-        if anker_state.ust_reserve_balance == MicroUst(0) {
+        // If there are no rewards to send, or if there are some, but it's less
+        // than 10 cent, then don't send the rewards, because the transaction
+        // cost would be significant with respect to the amount we send.
+        if anker_state.ust_reserve_balance < MicroUst(100_000) {
             return None;
         }
 
