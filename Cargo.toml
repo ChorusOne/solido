@@ -4,6 +4,7 @@ members = [
     "anker",
     "cli/maintainer",
     "cli/common",
+    "cli/listener",
     "multisig/programs/multisig",
     "program",
     "testlib",
