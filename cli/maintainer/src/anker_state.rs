@@ -13,9 +13,10 @@ use solana_sdk::account::ReadableAccount;
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signer::keypair::Keypair;
 use solana_sdk::signer::Signer;
-
-use crate::error::{Error, SerializationError};
-use crate::{snapshot::Result, SnapshotConfig};
+use solido_cli_common::{
+    error::{Error, SerializationError},
+    snapshot::SnapshotConfig,
+};
 
 #[derive(Default)]
 pub struct AnkerState {
@@ -42,7 +43,7 @@ impl AnkerState {
         anker_program_id: &Pubkey,
         anker_address: &Pubkey,
         solido: &Lido,
-    ) -> Result<Self> {
+    ) -> solido_cli_common::Result<Self> {
         let anker = config.client.get_anker(anker_address)?;
 
         let token_swap_account = config.client.get_account(&anker.token_swap_pool)?;

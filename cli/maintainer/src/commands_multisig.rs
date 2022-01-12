@@ -29,16 +29,19 @@ use lido::{
     state::{FeeRecipients, Lido, RewardDistribution},
     util::{serialize_b58, serialize_b58_slice},
 };
+use solido_cli_common::error::Abort;
+use solido_cli_common::snapshot::SnapshotError;
+use solido_cli_common::{
+    snapshot::{SnapshotClientConfig, SnapshotConfig},
+    Result,
+};
 
 use crate::config::{
     ApproveBatchOpts, ApproveOpts, ConfigFile, CreateMultisigOpts, ExecuteTransactionOpts,
     ProposeChangeMultisigOpts, ProposeUpgradeOpts, ShowMultisigOpts, ShowTransactionOpts,
     TransferTokenOpts,
 };
-use crate::error::{Abort, AsPrettyError};
 use crate::print_output;
-use crate::snapshot::{Result, SnapshotError};
-use crate::{SnapshotClientConfig, SnapshotConfig};
 
 /// The address of Wormhole-wrapped Lido DAO token (wLDO) on mainnet-beta.
 mod wormhole_ldo_token {
@@ -1257,7 +1260,7 @@ fn approve_batch(
     config: &mut SnapshotClientConfig,
     opts: &ApproveBatchOpts,
 ) -> std::result::Result<(), crate::Error> {
-    use crate::config::OutputMode;
+    use solido_cli_common::snapshot::OutputMode;
 
     match config.output_mode {
         OutputMode::Json => {

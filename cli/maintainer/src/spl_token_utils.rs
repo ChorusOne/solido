@@ -6,9 +6,7 @@ use solana_sdk::{
     instruction::Instruction,
     signature::{Keypair, Signer},
 };
-
-use crate::snapshot::Result;
-use crate::SnapshotConfig;
+use solido_cli_common::{snapshot::SnapshotConfig, Result};
 
 /// Push instructions to create and initialize and SPL token mint.
 ///

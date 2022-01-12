@@ -17,14 +17,14 @@ use std::time::{Duration, Instant};
 
 use rand::{rngs::ThreadRng, Rng};
 use solana_sdk::clock::{Clock, Slot};
+use solido_cli_common::snapshot::SnapshotClientConfig;
+use solido_cli_common::snapshot::SnapshotError;
 use tiny_http::{Header, Request, Response, Server};
 
 use crate::config::RunMaintainerOpts;
-use crate::error::{AsPrettyError, Error};
 use crate::maintenance::{try_perform_maintenance, MaintenanceOutput, SolidoState};
 use crate::prometheus::{write_metric, Metric, MetricFamily};
-use crate::snapshot::SnapshotError;
-use crate::SnapshotClientConfig;
+use solido_cli_common::error::{AsPrettyError, Error};
 
 /// Metrics counters that track how many maintenance operations we performed.
 #[derive(Clone)]

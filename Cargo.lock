@@ -3890,11 +3890,34 @@ dependencies = [
  "solana-sdk",
  "solana-stake-program 1.7.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "solana-vote-program 1.7.8 (registry+https://github.com/rust-lang/crates.io-index)",
+ "solido-cli-common",
  "spl-associated-token-account",
  "spl-token",
  "spl-token-swap",
  "tiny_http",
  "uriparse",
+]
+
+[[package]]
+name = "solido-cli-common"
+version = "1.2.0"
+dependencies = [
+ "anchor-lang",
+ "anker",
+ "bincode",
+ "lido",
+ "num-traits",
+ "serde",
+ "serde_json",
+ "serum-multisig",
+ "solana-account-decoder",
+ "solana-client",
+ "solana-config-program 1.7.8 (registry+https://github.com/rust-lang/crates.io-index)",
+ "solana-program",
+ "solana-sdk",
+ "solana-stake-program 1.7.8 (registry+https://github.com/rust-lang/crates.io-index)",
+ "solana-vote-program 1.7.8 (registry+https://github.com/rust-lang/crates.io-index)",
+ "spl-token",
 ]
 
 [[package]]
