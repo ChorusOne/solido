@@ -151,7 +151,9 @@ if __name__ == '__main__':
     clean_old_profdata()
 
     binaries = [
-        *build_binaries(['test', '--no-run', '--manifest-path', 'cli/Cargo.toml']),
+        *build_binaries(
+            ['test', '--no-run', '--manifest-path', 'cli/maintainer/Cargo.toml']
+        ),
         *build_binaries(['test', '--no-run', '--manifest-path', 'program/Cargo.toml']),
         *build_binaries(['test', '--no-run', '--manifest-path', 'anker/Cargo.toml']),
         *build_binaries(['build']),

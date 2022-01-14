@@ -42,7 +42,7 @@ done
 
 ## b. cli
 echo -e  "\nCopying cli and hash to build"
-docker cp $CON_ID:$SOLIPATH/cli/solido ./build/solido
-docker cp $CON_ID:$SOLIPATH/cli/solido.hash ./build/solido.hash
+docker cp $CON_ID:$SOLIPATH/cli/maintainer/solido ./build/solido
+docker cp $CON_ID:$SOLIPATH/cli/maintainer/solido.hash ./build/solido.hash
 
 echo "All build artefacts copied to ./build. Associated container will exit shortly."

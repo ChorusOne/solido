@@ -23,7 +23,7 @@ RUN cp -rf  /solido-build/target/release/* $SOLIDOPATH
 COPY LICENSE $SOLIDOPATH
 COPY docker/LICENSE $SOLIDOPATH/LICENSE-DEPENDENCIES
 RUN cd $SOLIDOBUILDPATH \
-    && cargo license --manifest-path cli/Cargo.toml --avoid-dev-deps --avoid-build-deps \
+    && cargo license --manifest-path cli/maintainer/Cargo.toml --avoid-dev-deps --avoid-build-deps \
     >> $SOLIDOPATH/LICENSE-DEPENDENCIES
 
 COPY docker/setup.sh $SOLIDOPATH

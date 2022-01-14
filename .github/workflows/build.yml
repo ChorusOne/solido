@@ -72,7 +72,8 @@ jobs:
       run: |
         cargo test --manifest-path program/Cargo.toml
         cargo test --manifest-path anker/Cargo.toml
-        cargo test --manifest-path cli/Cargo.toml
+        cargo test --manifest-path cli/maintainer/Cargo.toml
+        cargo test --manifest-path cli/common/Cargo.toml
 
     - name: Build on-chain BPF programs
       run: |
@@ -171,7 +172,8 @@ jobs:
     - name: Run Clippy
       run: |
         cargo clippy --manifest-path anker/Cargo.toml -- --deny warnings
-        cargo clippy --manifest-path cli/Cargo.toml -- --deny warnings
+        cargo clippy --manifest-path cli/maintainer/Cargo.toml -- --deny warnings
+        cargo clippy --manifest-path cli/common/Cargo.toml -- --deny warnings
         cargo clippy --manifest-path program/Cargo.toml -- --deny warnings
         cargo clippy --manifest-path testlib/Cargo.toml -- --deny warnings
 
