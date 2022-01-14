@@ -20,22 +20,23 @@ use lido::{
     util::serialize_b58,
     MINT_AUTHORITY, RESERVE_ACCOUNT, REWARDS_WITHDRAW_AUTHORITY, STAKE_AUTHORITY,
 };
+use solido_cli_common::{
+    error::{CliError, Error},
+    snapshot::{SnapshotClientConfig, SnapshotConfig},
+    validator_info_utils::ValidatorInfo,
+};
 
 use crate::{
     commands_multisig::{
         get_multisig_program_address, propose_instruction, ProposeInstructionOutput,
     },
-    snapshot::Result,
     spl_token_utils::{push_create_spl_token_account, push_create_spl_token_mint},
-    validator_info_utils::ValidatorInfo,
-    SnapshotClientConfig, SnapshotConfig,
 };
 use crate::{
     config::{
         AddRemoveMaintainerOpts, AddValidatorOpts, CreateSolidoOpts, DeactivateValidatorOpts,
         DepositOpts, ShowSolidoAuthoritiesOpts, ShowSolidoOpts, WithdrawOpts,
     },
-    error::CliError,
     get_signer_from_path,
 };
 
@@ -106,7 +107,7 @@ impl fmt::Display for CreateSolidoOutput {
 pub fn command_create_solido(
     config: &mut SnapshotConfig,
     opts: &CreateSolidoOpts,
-) -> Result<CreateSolidoOutput> {
+) -> solido_cli_common::Result<CreateSolidoOutput> {
     let lido_signer = {
         if opts.solido_key_path() != &PathBuf::default() {
             // If we've been given a solido private key, use it to create the solido instance.
@@ -235,7 +236,7 @@ pub fn command_create_solido(
 pub fn command_add_validator(
     config: &mut SnapshotConfig,
     opts: &AddValidatorOpts,
-) -> Result<ProposeInstructionOutput> {
+) -> solido_cli_common::Result<ProposeInstructionOutput> {
     let (multisig_address, _) =
         get_multisig_program_address(opts.multisig_program_id(), opts.multisig_address());
 
@@ -260,7 +261,7 @@ pub fn command_add_validator(
 pub fn command_deactivate_validator(
     config: &mut SnapshotConfig,
     opts: &DeactivateValidatorOpts,
-) -> Result<ProposeInstructionOutput> {
+) -> solido_cli_common::Result<ProposeInstructionOutput> {
     let (multisig_address, _) =
         get_multisig_program_address(opts.multisig_program_id(), opts.multisig_address());
 
@@ -284,7 +285,7 @@ pub fn command_deactivate_validator(
 pub fn command_add_maintainer(
     config: &mut SnapshotConfig,
     opts: &AddRemoveMaintainerOpts,
-) -> Result<ProposeInstructionOutput> {
+) -> solido_cli_common::Result<ProposeInstructionOutput> {
     let (multisig_address, _) =
         get_multisig_program_address(opts.multisig_program_id(), opts.multisig_address());
     let instruction = lido::instruction::add_maintainer(
@@ -307,7 +308,7 @@ pub fn command_add_maintainer(
 pub fn command_remove_maintainer(
     config: &mut SnapshotConfig,
     opts: &AddRemoveMaintainerOpts,
-) -> Result<ProposeInstructionOutput> {
+) -> solido_cli_common::Result<ProposeInstructionOutput> {
     let (multisig_address, _) =
         get_multisig_program_address(opts.multisig_program_id(), opts.multisig_address());
     let instruction = lido::instruction::remove_maintainer(
@@ -581,7 +582,7 @@ impl fmt::Display for ShowSolidoOutput {
 pub fn command_show_solido(
     config: &mut SnapshotConfig,
     opts: &ShowSolidoOpts,
-) -> Result<ShowSolidoOutput> {
+) -> solido_cli_common::Result<ShowSolidoOutput> {
     let lido = config.client.get_solido(opts.solido_address())?;
     let reserve_account =
         lido.get_reserve_account(opts.solido_program_id(), opts.solido_address())?;
@@ -651,7 +652,7 @@ impl fmt::Display for ShowSolidoAuthorities {
 
 pub fn command_show_solido_authorities(
     opts: &ShowSolidoAuthoritiesOpts,
-) -> Result<ShowSolidoAuthorities> {
+) -> solido_cli_common::Result<ShowSolidoAuthorities> {
     let (reserve_account, _) = find_authority_program_address(
         opts.solido_program_id(),
         opts.solido_address(),
@@ -729,7 +730,7 @@ impl fmt::Display for DepositOutput {
 pub fn command_deposit(
     config: &mut SnapshotClientConfig,
     opts: &DepositOpts,
-) -> std::result::Result<DepositOutput, crate::error::Error> {
+) -> std::result::Result<DepositOutput, Error> {
     let (recipient, created_recipient) = config.with_snapshot(|config| {
         let solido = config.client.get_solido(opts.solido_address())?;
 
@@ -832,7 +833,7 @@ impl fmt::Display for WithdrawOutput {
 pub fn command_withdraw(
     config: &mut SnapshotClientConfig,
     opts: &WithdrawOpts,
-) -> std::result::Result<WithdrawOutput, crate::error::Error> {
+) -> std::result::Result<WithdrawOutput, Error> {
     let (st_sol_address, new_stake_account) = config.with_snapshot(|config| {
         let solido = config.client.get_solido(opts.solido_address())?;
 

@@ -76,7 +76,7 @@ def main() -> None:
 
     # Get the dependencies of the on-chain program, and of the CLI binary.
     deps_on_chain = get_deps('program/Cargo.toml')
-    deps_cli = get_deps('cli/Cargo.toml')
+    deps_cli = get_deps('cli/maintainer/Cargo.toml')
     deps = deps_on_chain + deps_cli
 
     for dep in deps:

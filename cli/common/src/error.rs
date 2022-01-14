@@ -21,12 +21,12 @@ use lido::error::LidoError;
 ///
 /// We observed one case on testnet where the RPC returned:
 ///
-///     Solana RPC client returned an error:
+/// Solana RPC client returned an error:
 ///
-///      Request:    None
-///      Kind:       RPC error for user
-///      unable to confirm transaction. This can happen in situations such as
-///      transaction expiration and insufficient fee-payer funds
+///  Request:    None
+///  Kind:       RPC error for user
+///  unable to confirm transaction. This can happen in situations such as
+///  transaction expiration and insufficient fee-payer funds
 ///
 /// But the transaction had been executed nonetheless. I suspect what happened
 /// is that sending the transaction succeeded, but something went wrong when

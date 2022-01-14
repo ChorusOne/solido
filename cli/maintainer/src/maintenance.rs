@@ -27,6 +27,8 @@ use solana_sdk::fee_calculator::DEFAULT_TARGET_LAMPORTS_PER_SIGNATURE;
 use solana_sdk::signer::{keypair::Keypair, Signer};
 use solana_sdk::{account::Account, instruction::Instruction};
 use solana_vote_program::vote_state::VoteState;
+use solido_cli_common::error::MaintenanceError;
+use solido_cli_common::{snapshot::SnapshotConfig, validator_info_utils::ValidatorInfo, Result};
 use spl_token::state::Mint;
 
 use anker::token::MicroUst;
@@ -43,11 +45,8 @@ use lido::{
 };
 
 use crate::anker_state::AnkerState;
+use crate::config::PerformMaintenanceOpts;
 use crate::config::StakeTime;
-use crate::error::MaintenanceError;
-use crate::snapshot::Result;
-use crate::validator_info_utils::ValidatorInfo;
-use crate::{config::PerformMaintenanceOpts, SnapshotConfig};
 
 /// A brief description of the maintenance performed. Not relevant functionally,
 /// but helpful for automated testing, and just for info.

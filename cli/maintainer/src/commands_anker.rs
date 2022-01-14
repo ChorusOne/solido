@@ -13,6 +13,8 @@ use solana_program::pubkey::Pubkey;
 use solana_program::system_instruction;
 use solana_sdk::signature::Keypair;
 use solana_sdk::signer::Signer;
+use solido_cli_common::error::Abort;
+use solido_cli_common::snapshot::{SnapshotClientConfig, SnapshotConfig};
 use spl_token_swap::curve::base::{CurveType, SwapCurve};
 use spl_token_swap::curve::constant_product::ConstantProductCurve;
 
@@ -20,11 +22,9 @@ use crate::config::{
     AnkerDepositOpts, AnkerWithdrawOpts, ConfigFile, CreateAnkerOpts, CreateTokenPoolOpts,
     ShowAnkerOpts,
 };
-use crate::error::Abort;
+use crate::print_output;
 use crate::serialization_utils::serialize_bech32;
-use crate::snapshot::Result;
 use crate::spl_token_utils::{push_create_spl_token_account, push_create_spl_token_mint};
-use crate::{print_output, SnapshotClientConfig, SnapshotConfig};
 
 #[derive(Clap, Debug)]
 enum SubCommand {
@@ -131,7 +131,7 @@ impl fmt::Display for CreateAnkerOutput {
 fn command_create_anker(
     config: &mut SnapshotConfig,
     opts: &CreateAnkerOpts,
-) -> Result<CreateAnkerOutput> {
+) -> solido_cli_common::Result<CreateAnkerOutput> {
     let solido = config.client.get_solido(opts.solido_address())?;
 
     let (anker_address, _bump_seed) =
@@ -154,14 +154,14 @@ fn command_create_anker(
             let mut instructions = Vec::new();
             let b_sol_mint_keypair =
                 push_create_spl_token_mint(config, &mut instructions, &mint_authority)?;
-            let signers = &[&b_sol_mint_keypair, config.signer];
+            let signers = [&b_sol_mint_keypair, config.signer];
 
             // Ideally we would set up the entire instance in a single transaction, but
             // Solana transaction size limits are so low that we need to break our
             // instructions down into multiple transactions. So set up the mint first,
             // then continue.
             eprintln!("Initializing a new SPL token mint for bSOL.");
-            config.sign_and_send_transaction(&instructions[..], signers)?;
+            config.sign_and_send_transaction(&instructions[..], &signers)?;
             eprintln!("Initialized the bSOL token mint.");
             b_sol_mint_keypair.pubkey()
         }
@@ -275,7 +275,7 @@ impl fmt::Display for ShowAnkerOutput {
 fn command_show_anker(
     config: &mut SnapshotConfig,
     opts: &ShowAnkerOpts,
-) -> Result<ShowAnkerOutput> {
+) -> solido_cli_common::Result<ShowAnkerOutput> {
     let client = &mut config.client;
     let anker_account = client.get_account(opts.anker_address())?;
     let anker_program_id = anker_account.owner;
@@ -350,7 +350,7 @@ impl fmt::Display for CreateTokenPoolOutput {
 fn command_create_token_pool(
     config: &mut SnapshotConfig,
     opts: &CreateTokenPoolOpts,
-) -> Result<CreateTokenPoolOutput> {
+) -> solido_cli_common::Result<CreateTokenPoolOutput> {
     let client = &mut config.client;
     let mut instructions = Vec::new();
 
@@ -478,7 +478,10 @@ impl fmt::Display for DepositOutput {
     }
 }
 
-fn command_deposit(config: &mut SnapshotConfig, opts: &AnkerDepositOpts) -> Result<DepositOutput> {
+fn command_deposit(
+    config: &mut SnapshotConfig,
+    opts: &AnkerDepositOpts,
+) -> solido_cli_common::Result<DepositOutput> {
     let client = &mut config.client;
     let anker_account = client.get_account(opts.anker_address())?;
     let anker_program_id = anker_account.owner;
@@ -577,7 +580,7 @@ impl fmt::Display for WithdrawOutput {
 fn command_withdraw(
     config: &mut SnapshotConfig,
     opts: &AnkerWithdrawOpts,
-) -> Result<WithdrawOutput> {
+) -> solido_cli_common::Result<WithdrawOutput> {
     let client = &mut config.client;
     let anker_account = client.get_account(opts.anker_address())?;
     let anker_program_id = anker_account.owner;

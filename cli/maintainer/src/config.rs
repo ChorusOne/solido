@@ -15,6 +15,7 @@ use anker::token::BLamports;
 use anker::wormhole::TerraAddress;
 use lido::token::Lamports;
 use lido::token::StLamports;
+use solido_cli_common::snapshot::OutputMode;
 
 pub fn get_option_from_config<T: FromStr>(
     name: &'static str,
@@ -190,27 +191,6 @@ pub fn read_config(config_path: &Path) -> ConfigFile {
     let file_content = std::fs::read(config_path).expect("Failed to open config file.");
     let values: Value = serde_json::from_slice(&file_content).expect("Error while reading config.");
     ConfigFile { values }
-}
-
-#[derive(Copy, Clone, Debug)]
-pub enum OutputMode {
-    /// Output human-readable text to stdout.
-    Text,
-
-    /// Output machine-readable json to stdout.
-    Json,
-}
-
-impl FromStr for OutputMode {
-    type Err = &'static str;
-
-    fn from_str(s: &str) -> Result<OutputMode, &'static str> {
-        match s {
-            "text" => Ok(OutputMode::Text),
-            "json" => Ok(OutputMode::Json),
-            _ => Err("Invalid output mode, expected 'text' or 'json'."),
-        }
-    }
 }
 
 /// Resolve ~/.config/solana/id.json.

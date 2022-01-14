@@ -23,6 +23,7 @@
 //! rare, and when they do happen, they shouldn’t happen repeatedly.
 
 use std::collections::{HashMap, HashSet};
+use std::str::FromStr;
 use std::time::Duration;
 
 use anchor_lang::AccountDeserialize;
@@ -30,12 +31,15 @@ use solana_client::client_error::{ClientError, ClientErrorKind};
 use solana_client::rpc_client::RpcClient;
 use solana_client::rpc_config::RpcSendTransactionConfig;
 use solana_client::rpc_request::RpcError;
+use solana_program::instruction::Instruction;
 use solana_sdk::account::{Account, ReadableAccount};
 use solana_sdk::borsh::try_from_slice_unchecked;
 use solana_sdk::commitment_config::CommitmentLevel;
 use solana_sdk::program_pack::{IsInitialized, Pack};
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::Signature;
+use solana_sdk::signer::Signer;
+use solana_sdk::signers::Signers;
 use solana_sdk::sysvar::stake_history::StakeHistory;
 use solana_sdk::sysvar::{
     self, clock::Clock, epoch_schedule::EpochSchedule, recent_blockhashes::RecentBlockhashes,
@@ -49,7 +53,9 @@ use lido::state::Lido;
 use lido::token::Lamports;
 use spl_token::solana_program::hash::Hash;
 
-use crate::error::{Error, MissingAccountError, MissingValidatorInfoError, SerializationError};
+use crate::error::{
+    self, Error, MissingAccountError, MissingValidatorInfoError, SerializationError,
+};
 use crate::validator_info_utils::ValidatorInfo;
 
 pub enum SnapshotError {
@@ -82,13 +88,17 @@ where
     }
 }
 
-pub type Result<T> = std::result::Result<T, SnapshotError>;
-
 /// A set that preserves insertion order.
 pub struct OrderedSet<T> {
     // Invariant: the vec and set contain the same elements.
     pub elements_vec: Vec<T>,
     pub elements_set: HashSet<T>,
+}
+
+impl<T: std::hash::Hash + Copy + Eq> Default for OrderedSet<T> {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl<T: std::hash::Hash + Copy + Eq> OrderedSet<T> {
@@ -173,7 +183,7 @@ pub struct Snapshot<'a> {
 
 impl<'a> Snapshot<'a> {
     /// Return whether an account with the given address exists.
-    pub fn account_exists(&mut self, address: &Pubkey) -> Result<bool> {
+    pub fn account_exists(&mut self, address: &Pubkey) -> crate::Result<bool> {
         self.accounts_referenced.push(*address);
         match self.accounts.get(address) {
             // The account was included in the snapshot, and if it is Some, it
@@ -188,7 +198,7 @@ impl<'a> Snapshot<'a> {
     /// Return the account at the given address.
     ///
     /// Fails with `MissingAccountError` if the account does not exist.
-    pub fn get_account(&mut self, address: &Pubkey) -> Result<&'a Account> {
+    pub fn get_account(&mut self, address: &Pubkey) -> crate::Result<&'a Account> {
         self.accounts_referenced.push(*address);
         match self.accounts.get(address) {
             Some(Some(account)) => Ok(account),
@@ -206,7 +216,7 @@ impl<'a> Snapshot<'a> {
     }
 
     /// Read an account and immediately bincode-deserialize it.
-    pub fn get_bincode<T: Sysvar>(&mut self, address: &Pubkey) -> Result<T> {
+    pub fn get_bincode<T: Sysvar>(&mut self, address: &Pubkey) -> crate::Result<T> {
         let account = self.get_account(address)?;
         let result = bincode::deserialize(&account.data)?;
         Ok(result)
@@ -216,7 +226,7 @@ impl<'a> Snapshot<'a> {
     pub fn get_account_deserialize<T: AccountDeserialize>(
         &mut self,
         address: &Pubkey,
-    ) -> Result<T> {
+    ) -> crate::Result<T> {
         let account = self.get_account(address)?;
         let mut data_ref = &account.data[..];
         let result = T::try_deserialize(&mut data_ref)?;
@@ -224,46 +234,46 @@ impl<'a> Snapshot<'a> {
     }
 
     /// Read an account, deserialize it with `solana_program_pack`.
-    pub fn get_unpack<T: Pack + IsInitialized>(&mut self, address: &Pubkey) -> Result<T> {
+    pub fn get_unpack<T: Pack + IsInitialized>(&mut self, address: &Pubkey) -> crate::Result<T> {
         let account = self.get_account(address)?;
         let result = T::unpack(&account.data[..])?;
         Ok(result)
     }
 
     /// Read `sysvar::rent`.
-    pub fn get_rent(&mut self) -> Result<Rent> {
+    pub fn get_rent(&mut self) -> crate::Result<Rent> {
         self.get_bincode(&sysvar::rent::id())
     }
 
     /// Read `sysvar::clock`.
-    pub fn get_clock(&mut self) -> Result<Clock> {
+    pub fn get_clock(&mut self) -> crate::Result<Clock> {
         self.get_bincode(&sysvar::clock::id())
     }
 
     /// Read `sysvar::epoch_schedule`.
-    pub fn get_epoch_schedule(&mut self) -> Result<EpochSchedule> {
+    pub fn get_epoch_schedule(&mut self) -> crate::Result<EpochSchedule> {
         self.get_bincode(&sysvar::epoch_schedule::id())
     }
 
     /// Read `sysvar::stake_history`.
-    pub fn get_stake_history(&mut self) -> Result<StakeHistory> {
+    pub fn get_stake_history(&mut self) -> crate::Result<StakeHistory> {
         self.get_bincode(&sysvar::stake_history::id())
     }
 
     /// Read `sysvar::recent_blockhashes`.
-    pub fn get_recent_blockhashes(&mut self) -> Result<RecentBlockhashes> {
+    pub fn get_recent_blockhashes(&mut self) -> crate::Result<RecentBlockhashes> {
         self.get_bincode(&sysvar::recent_blockhashes::id())
     }
 
     /// Return the most recent block hash at the time of the snapshot.
-    pub fn get_recent_blockhash(&mut self) -> Result<Hash> {
+    pub fn get_recent_blockhash(&mut self) -> crate::Result<Hash> {
         let blockhashes = self.get_recent_blockhashes()?;
         // The blockhashes are ordered from most recent to least recent.
         Ok(blockhashes[0].blockhash)
     }
 
     /// Read and parse the vote account at the given address.
-    pub fn get_vote_account(&mut self, address: &Pubkey) -> Result<VoteState> {
+    pub fn get_vote_account(&mut self, address: &Pubkey) -> crate::Result<VoteState> {
         let vote_account = self.get_account(address)?;
         let vote_state = VoteState::deserialize(vote_account.data()).map_err(|err| {
             let wrapped_err = SerializationError {
@@ -278,13 +288,19 @@ impl<'a> Snapshot<'a> {
     }
 
     /// Return the minimum rent-exempt balance for an account with `data_len` bytes of data.
-    pub fn get_minimum_balance_for_rent_exemption(&mut self, data_len: usize) -> Result<Lamports> {
+    pub fn get_minimum_balance_for_rent_exemption(
+        &mut self,
+        data_len: usize,
+    ) -> crate::Result<Lamports> {
         let rent = self.get_rent()?;
         Ok(Lamports(rent.minimum_balance(data_len)))
     }
 
     /// Return the metadata of the validator with the given identity account.
-    pub fn get_validator_info(&mut self, validator_identity: &Pubkey) -> Result<ValidatorInfo> {
+    pub fn get_validator_info(
+        &mut self,
+        validator_identity: &Pubkey,
+    ) -> crate::Result<ValidatorInfo> {
         let config_addr = match self.validator_info_addrs.get(validator_identity) {
             Some(addr) => addr,
             None => return Err(SnapshotError::MissingValidatorIdentity(*validator_identity)),
@@ -308,7 +324,7 @@ impl<'a> Snapshot<'a> {
     }
 
     /// Read the account and deserialize the Solido struct.
-    pub fn get_solido(&mut self, solido_address: &Pubkey) -> Result<Lido> {
+    pub fn get_solido(&mut self, solido_address: &Pubkey) -> crate::Result<Lido> {
         let account = self.get_account(solido_address)?;
         match try_from_slice_unchecked::<Lido>(&account.data) {
             Ok(solido) => Ok(solido),
@@ -327,7 +343,7 @@ impl<'a> Snapshot<'a> {
     }
 
     /// Read the account and deserialize the Anker struct.
-    pub fn get_anker(&mut self, anker_address: &Pubkey) -> Result<Anker> {
+    pub fn get_anker(&mut self, anker_address: &Pubkey) -> crate::Result<Anker> {
         let account = self.get_account(anker_address)?;
         match try_from_slice_unchecked::<Anker>(&account.data) {
             Ok(anker) => Ok(anker),
@@ -346,13 +362,16 @@ impl<'a> Snapshot<'a> {
     }
 
     /// Return the amount in an SPL token account.
-    pub fn get_spl_token_balance(&mut self, address: &Pubkey) -> Result<u64> {
+    pub fn get_spl_token_balance(&mut self, address: &Pubkey) -> crate::Result<u64> {
         let account: spl_token::state::Account = self.get_unpack(address)?;
         Ok(account.amount)
     }
 
     /// Return the supply of an SPL token, in units of its smallest denomination.
-    pub fn get_spl_token_mint(&mut self, mint_address: &Pubkey) -> Result<spl_token::state::Mint> {
+    pub fn get_spl_token_mint(
+        &mut self,
+        mint_address: &Pubkey,
+    ) -> crate::Result<spl_token::state::Mint> {
         self.get_unpack(mint_address)
     }
 
@@ -576,7 +595,7 @@ impl SnapshotClient {
     /// than to create a new one all the time.
     pub fn with_snapshot<T, F>(&mut self, mut f: F) -> std::result::Result<T, crate::error::Error>
     where
-        F: FnMut(Snapshot) -> Result<T>,
+        F: FnMut(Snapshot) -> crate::Result<T>,
     {
         loop {
             let account_values = self.get_multiple_accounts_chunked()?;
@@ -659,5 +678,120 @@ impl SnapshotClient {
                 }
             }
         }
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum OutputMode {
+    /// Output human-readable text to stdout.
+    Text,
+
+    /// Output machine-readable json to stdout.
+    Json,
+}
+
+impl FromStr for OutputMode {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> std::result::Result<OutputMode, &'static str> {
+        match s {
+            "text" => Ok(OutputMode::Text),
+            "json" => Ok(OutputMode::Json),
+            _ => Err("Invalid output mode, expected 'text' or 'json'."),
+        }
+    }
+}
+
+/// Determines which network to connect to, and who pays the fees.
+pub struct Config<'a, T> {
+    /// RPC client augmented with snapshot functionality.
+    pub client: T,
+    /// Reference to a signer, can be a keypair or ledger device.
+    pub signer: &'a dyn Signer,
+    /// output mode, can be json or text.
+    pub output_mode: OutputMode,
+}
+
+/// Program configuration, and a snapshot of accounts.
+///
+/// Accept this in functions that just want to read from a consistent chain
+/// state, without handling retry logic.
+pub type SnapshotConfig<'a> = Config<'a, Snapshot<'a>>;
+
+/// Program configuration, and a client for making snapshots.
+///
+/// Accept this in functions that need to take a snapshot of the on-chain state
+/// at different times. In practice, that's only the long-running maintenance
+/// daemon.
+pub type SnapshotClientConfig<'a> = Config<'a, SnapshotClient>;
+
+impl<'a> SnapshotClientConfig<'a> {
+    pub fn with_snapshot<F, T>(&mut self, mut f: F) -> std::result::Result<T, Error>
+    where
+        F: FnMut(&mut SnapshotConfig) -> crate::Result<T>,
+    {
+        let signer = self.signer;
+        let output_mode = self.output_mode;
+        self.client.with_snapshot(|snapshot| {
+            let mut config = SnapshotConfig {
+                client: snapshot,
+                signer,
+                output_mode,
+            };
+            f(&mut config)
+        })
+    }
+}
+
+impl<'a> SnapshotConfig<'a> {
+    pub fn sign_transaction<T: Signers>(
+        &mut self,
+        instructions: &[Instruction],
+        signers: &T,
+    ) -> crate::Result<Transaction> {
+        let mut tx = Transaction::new_with_payer(instructions, Some(&self.signer.pubkey()));
+        let recent_blockhash = self.client.get_recent_blockhash()?;
+        tx.try_sign(signers, recent_blockhash).map_err(|err| {
+            let boxed_error: Error = Box::new(err);
+            boxed_error
+        })?;
+        Ok(tx)
+    }
+
+    pub fn sign_and_send_transaction<T: Signers>(
+        &mut self,
+        instructions: &[Instruction],
+        signers: &T,
+    ) -> crate::Result<Signature> {
+        let transaction = self.sign_transaction(instructions, signers)?;
+        let signature_result = match self.output_mode {
+            OutputMode::Text => {
+                // In text mode, we can display a spinner.
+                self.client
+                    .send_and_confirm_transaction_with_spinner(&transaction)
+            }
+            OutputMode::Json => {
+                // In json mode, printing a spinner to stdout would break the
+                // json that we also print to stdout, so opt for the silent
+                // version.
+                self.client.send_and_confirm_transaction(&transaction)
+            }
+        };
+
+        // Warn the user for one particular footgun.
+        match signature_result {
+            Err(ref err) if error::might_have_executed(err) => {
+                eprintln!(
+                    "Warning: The RPC returned an error, but the transaction \
+                     might still have been executed. Check the signer's address \
+                     on a block explorer before continuing. Beware that timestamps \
+                     shown on explorer.solana.com can be off by weeks, check the slot \
+                     number to confirm whether a transaction is recent."
+                );
+            }
+            _ => {}
+        }
+
+        Ok(signature_result?)
     }
 }

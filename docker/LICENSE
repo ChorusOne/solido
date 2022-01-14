@@ -1,7 +1,7 @@
 This file lists the dependencies of the "solido" command-line program, and their
 licenses. An up to date list can be generated with
 
-    cargo license --manifest-path cli/Cargo.toml --avoid-dev-deps --avoid-build-deps
+    cargo license --manifest-path cli/maintainer/Cargo.toml --avoid-dev-deps --avoid-build-deps
 
 Solido itself is licensed under the GNU Public License version 3. The situation
 for "ring" is more subtle, see its license file at [1] (this is a permalink).

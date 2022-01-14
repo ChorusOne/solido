@@ -2,7 +2,8 @@
 resolver = "2"
 members = [
     "anker",
-    "cli",
+    "cli/maintainer",
+    "cli/common",
     "multisig/programs/multisig",
     "program",
     "testlib",

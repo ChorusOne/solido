@@ -12,11 +12,10 @@ use solana_remote_wallet::remote_keypair::generate_remote_keypair;
 use solana_remote_wallet::remote_wallet::maybe_wallet_manager;
 use solana_sdk::commitment_config::CommitmentConfig;
 use solana_sdk::derivation_path::DerivationPath;
-use solana_sdk::instruction::Instruction;
-use solana_sdk::signature::{read_keypair, read_keypair_file, Signature};
+use solana_sdk::signature::{read_keypair, read_keypair_file};
 use solana_sdk::signer::Signer;
-use solana_sdk::signers::Signers;
-use solana_sdk::transaction::Transaction;
+use solido_cli_common::error::{Abort, CliError, Error};
+use solido_cli_common::snapshot::{Config, OutputMode, SnapshotClient};
 
 use crate::commands_anker::AnkerOpts;
 use crate::commands_multisig::MultisigOpts;
@@ -26,8 +25,6 @@ use crate::commands_solido::{
     command_show_solido_authorities, command_withdraw,
 };
 use crate::config::*;
-use crate::error::{Abort, CliError, Error};
-use crate::snapshot::{Snapshot, SnapshotClient};
 
 mod anker_state;
 mod commands_anker;
@@ -35,13 +32,10 @@ mod commands_multisig;
 mod commands_solido;
 mod config;
 mod daemon;
-mod error;
 mod maintenance;
 mod prometheus;
 mod serialization_utils;
-mod snapshot;
 mod spl_token_utils;
-mod validator_info_utils;
 
 /// Solido -- Interact with Lido for Solana.
 // While it is nice to have Clap handle all inputs, we also want to read
@@ -208,100 +202,6 @@ REWARDS
 
     /// Interact with the Anker (Anchor Protocol integration) program.
     Anker(AnkerOpts),
-}
-
-/// Determines which network to connect to, and who pays the fees.
-pub struct Config<'a, T> {
-    /// RPC client augmented with snapshot functionality.
-    client: T,
-    /// Reference to a signer, can be a keypair or ledger device.
-    signer: &'a dyn Signer,
-    /// output mode, can be json or text.
-    output_mode: OutputMode,
-}
-
-/// Program configuration, and a snapshot of accounts.
-///
-/// Accept this in functions that just want to read from a consistent chain
-/// state, without handling retry logic.
-pub type SnapshotConfig<'a> = Config<'a, Snapshot<'a>>;
-
-/// Program configuration, and a client for making snapshots.
-///
-/// Accept this in functions that need to take a snapshot of the on-chain state
-/// at different times. In practice, that's only the long-running maintenance
-/// daemon.
-pub type SnapshotClientConfig<'a> = Config<'a, SnapshotClient>;
-
-impl<'a> SnapshotClientConfig<'a> {
-    pub fn with_snapshot<F, T>(&mut self, mut f: F) -> Result<T, Error>
-    where
-        F: FnMut(&mut SnapshotConfig) -> snapshot::Result<T>,
-    {
-        let signer = self.signer;
-        let output_mode = self.output_mode;
-        self.client.with_snapshot(|snapshot| {
-            let mut config = SnapshotConfig {
-                client: snapshot,
-                signer,
-                output_mode,
-            };
-            f(&mut config)
-        })
-    }
-}
-
-impl<'a> SnapshotConfig<'a> {
-    pub fn sign_transaction<T: Signers>(
-        &mut self,
-        instructions: &[Instruction],
-        signers: &T,
-    ) -> snapshot::Result<Transaction> {
-        let mut tx = Transaction::new_with_payer(instructions, Some(&self.signer.pubkey()));
-        let recent_blockhash = self.client.get_recent_blockhash()?;
-        tx.try_sign(signers, recent_blockhash).map_err(|err| {
-            let boxed_error: Error = Box::new(err);
-            boxed_error
-        })?;
-        Ok(tx)
-    }
-
-    pub fn sign_and_send_transaction<T: Signers>(
-        &mut self,
-        instructions: &[Instruction],
-        signers: &T,
-    ) -> snapshot::Result<Signature> {
-        let transaction = self.sign_transaction(instructions, signers)?;
-        let signature_result = match self.output_mode {
-            OutputMode::Text => {
-                // In text mode, we can display a spinner.
-                self.client
-                    .send_and_confirm_transaction_with_spinner(&transaction)
-            }
-            OutputMode::Json => {
-                // In json mode, printing a spinner to stdout would break the
-                // json that we also print to stdout, so opt for the silent
-                // version.
-                self.client.send_and_confirm_transaction(&transaction)
-            }
-        };
-
-        // Warn the user for one particular footgun.
-        match signature_result {
-            Err(ref err) if error::might_have_executed(err) => {
-                eprintln!(
-                    "Warning: The RPC returned an error, but the transaction \
-                     might still have been executed. Check the signer's address \
-                     on a block explorer before continuing. Beware that timestamps \
-                     shown on explorer.solana.com can be off by weeks, check the slot \
-                     number to confirm whether a transaction is recent."
-                );
-            }
-            _ => {}
-        }
-
-        Ok(signature_result?)
-    }
 }
 
 fn print_output<Output: fmt::Display + Serialize>(mode: OutputMode, output: &Output) {
