@@ -95,6 +95,12 @@ pub struct OrderedSet<T> {
     pub elements_set: HashSet<T>,
 }
 
+impl<T: std::hash::Hash + Copy + Eq> Default for OrderedSet<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<T: std::hash::Hash + Copy + Eq> OrderedSet<T> {
     pub fn new() -> OrderedSet<T> {
         OrderedSet {
