@@ -64,7 +64,7 @@ impl Div for Rational {
 
 impl Rational {
     pub fn to_f64(&self) -> f64 {
-        return self.numerator as f64 / self.denominator as f64;
+        self.numerator as f64 / self.denominator as f64
     }
 }
 

@@ -1,5 +1,3 @@
-use std::time::SystemTime;
-
 use chrono::TimeZone;
 use clap::Clap;
 use lido::{
