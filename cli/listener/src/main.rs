@@ -1,5 +1,11 @@
+use std::time::SystemTime;
+
+use chrono::TimeZone;
 use clap::Clap;
-use lido::state::Lido;
+use lido::{
+    state::Lido,
+    token::{ArithmeticError, Rational},
+};
 use rusqlite::{params, Connection, Row};
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::{
@@ -28,9 +34,9 @@ pub struct Opts {
     #[clap(long, default_value = "solido")]
     pool: String,
 
-    /// Poll frequency in seconds, defaults to 86400s = 1 day.
-    #[clap(long, default_value = "86400")]
-    poll_frequency: u64,
+    /// Poll frequency in seconds, defaults to 5 minutes.
+    #[clap(long, default_value = "300")]
+    poll_frequency_seconds: u32,
 
     /// Location of the SQLite DB file.
     #[clap(long, default_value = "listener.db")]
@@ -54,22 +60,28 @@ impl State {
 
 #[derive(Debug)]
 pub struct ExchangeRate {
+    /// Id of the data point.
+    id: i32,
     /// Unix timestamp when the data point was logged.
-    timestamp: u64,
+    timestamp: chrono::DateTime<chrono::Utc>,
     /// Slot when the data point was logged.
     slot: Slot,
     /// Epoch when the data point was logged.
     epoch: Epoch,
     /// Pool identifier, e.g. for Solido would be "solido".
     pool: String,
+    /// Token_a price.
     token_a: u64,
+    /// Token_b price.
     token_b: u64,
 }
 
 pub fn create_db(conn: &Connection) -> rusqlite::Result<()> {
+    // The timestamp is stored in ISO-8601 format.
     conn.execute(
         "CREATE TABLE IF NOT EXISTS exchange_rate (
-                timestamp   INTEGER PRIMARY KEY,
+                id          INTEGER PRIMARY KEY,
+                timestamp   TEXT,
                 slot        INTEGER NOT NULL,
                 epoch       INTEGER NOT NULL,
                 pool        TEXT NOT NULL,
@@ -81,57 +93,105 @@ pub fn create_db(conn: &Connection) -> rusqlite::Result<()> {
     Ok(())
 }
 
-pub fn get_average_apy(conn: &Connection, opts: &Opts) -> rusqlite::Result<Option<f32>> {
+pub struct IntervalPrices {
+    t0: chrono::DateTime<chrono::Utc>,
+    t1: chrono::DateTime<chrono::Utc>,
+    epoch0: Epoch,
+    epoch1: Epoch,
+    price0_lamports: Rational,
+    price1_lamports: Rational,
+}
+
+impl IntervalPrices {
+    pub fn duration_wall_time(&self) -> chrono::Duration {
+        self.t1 - self.t0
+    }
+    pub fn duration_epochs(&self) -> u64 {
+        self.epoch1 - self.epoch0
+    }
+    pub fn growth_factor(&self) -> std::result::Result<Rational, ArithmeticError> {
+        self.price1_lamports / self.price0_lamports
+    }
+    pub fn annual_growth_factor(&self) -> f64 {
+        let year = chrono::Duration::days(365);
+        self.growth_factor()
+            .expect("Overflow happened when calculating growth factor.")
+            .to_f64()
+            .powf(year.num_seconds() as f64 / self.duration_wall_time().num_seconds() as f64)
+    }
+    pub fn annual_percentage_rate(&self) -> f64 {
+        self.annual_growth_factor().mul_add(100.0, -100.0)
+    }
+}
+
+pub fn get_apy_for_period(
+    conn: &Connection,
+    opts: &Opts,
+    from_time: chrono::DateTime<chrono::Utc>,
+    to_time: chrono::DateTime<chrono::Utc>,
+) -> rusqlite::Result<Option<f64>> {
     let row_map = |row: &Row| {
+        let timestamp_iso8601: String = row.get(1)?;
         Ok(ExchangeRate {
-            timestamp: row.get(0)?,
-            slot: row.get(1)?,
-            epoch: row.get(2)?,
-            pool: row.get(3)?,
-            token_a: row.get(4)?,
-            token_b: row.get(5)?,
+            id: row.get(0)?,
+            timestamp: timestamp_iso8601
+                .parse()
+                .expect("Invalid timestamp format."),
+            slot: row.get(2)?,
+            epoch: row.get(3)?,
+            pool: row.get(4)?,
+            token_a: row.get(5)?,
+            token_b: row.get(6)?,
         })
     };
 
-    // Get first logged entry by timestamp.
+    // Get first logged minimal logged data based on timestamp that is greater than `from_time`.
     let mut stmt_first = conn.prepare(
-            "SELECT timestamp, slot, epoch, pool, token_a, token_b FROM exchange_rate WHERE pool = :pool ORDER BY timestamp ASC LIMIT 1",
-        )?;
-    let mut row_iter = stmt_first.query_map([opts.pool.clone()], row_map)?;
+        "SELECT *, MIN(timestamp) FROM exchange_rate WHERE pool = :pool AND timestamp > :t",
+    )?;
+    let mut row_iter = stmt_first.query_map([opts.pool.clone(), from_time.to_string()], row_map)?;
     let first = row_iter.next();
 
-    // Get last logged entry by timestamp.
+    // Get first logged maximal logged data based on timestamp that is smaller than `to_time`.
     let mut stmt_last = conn.prepare(
-            "SELECT timestamp, slot, epoch, pool, token_a, token_b FROM exchange_rate WHERE pool = :pool ORDER BY timestamp DESC LIMIT 1",
-        )?;
-    let mut row_iter = stmt_last.query_map([opts.pool.clone()], row_map)?;
+        "SELECT *, MAX(timestamp) FROM exchange_rate WHERE pool = :pool AND timestamp < :t",
+    )?;
+    let mut row_iter = stmt_last.query_map([opts.pool.clone(), to_time.to_string()], row_map)?;
     let last = row_iter.next();
 
     match (first, last) {
         (Some(first), Some(last)) => {
-            let exchange_rate_first = first?;
-            let exchange_rate_last = last?;
+            let first = first?;
+            let last = last?;
             // Not enough data, need at least two data points.
-            if exchange_rate_first.timestamp == exchange_rate_last.timestamp {
+            if first.id == last.id {
                 Ok(None)
             } else {
-                let seconds_in_year = 31536000f32;
-                // Will not underflow because we order them in the query.
-                let duration = exchange_rate_last.timestamp - exchange_rate_first.timestamp;
-                let fraction_of_year = duration as f32 / seconds_in_year;
-                let p0 = exchange_rate_first.token_a as f32 / exchange_rate_first.token_b as f32;
-                let p1 = exchange_rate_last.token_a as f32 / exchange_rate_last.token_b as f32;
-                let apy = (p1 / p0).powf(1. / (fraction_of_year));
-                Ok(Some((apy - 1f32) * 100f32))
+                let interval_prices = IntervalPrices {
+                    t0: first.timestamp,
+                    t1: last.timestamp,
+                    epoch0: first.epoch,
+                    epoch1: last.epoch,
+                    price0_lamports: Rational {
+                        numerator: first.token_a,
+                        denominator: first.token_b,
+                    },
+                    price1_lamports: Rational {
+                        numerator: last.token_a,
+                        denominator: last.token_b,
+                    },
+                };
+                Ok(Some(interval_prices.annual_percentage_rate()))
             }
         }
         _ => Ok(None),
     }
+    // Ok(Some(1.0))
 }
 
-pub fn log_price(conn: &Connection, exchange_rate: ExchangeRate) -> rusqlite::Result<()> {
+pub fn insert_price(conn: &Connection, exchange_rate: ExchangeRate) -> rusqlite::Result<()> {
     conn.execute("INSERT INTO exchange_rate (timestamp, slot, epoch, pool, token_a, token_b) VALUES (?1, ?2, ?3, ?4, ?5, ?6)", 
-    params![exchange_rate.timestamp, exchange_rate.slot, exchange_rate.epoch, exchange_rate.pool, exchange_rate.token_a, exchange_rate.token_b])?;
+    params![exchange_rate.timestamp.to_string(), exchange_rate.slot, exchange_rate.epoch, exchange_rate.pool, exchange_rate.token_a, exchange_rate.token_b])?;
     Ok(())
 }
 
@@ -162,29 +222,37 @@ fn test_get_average_apy() {
         cluster: "http://127.0.0.1:8899".to_owned(),
         output_mode: None,
         pool: "solido".to_owned(),
-        poll_frequency: 1,
+        poll_frequency_seconds: 1,
         db_path: "listener".to_owned(),
     };
     let conn = Connection::open_in_memory().expect("Failed to open sqlite connection.");
     create_db(&conn).unwrap();
     let exchange_rate = ExchangeRate {
-        timestamp: 1627839324,
+        id: 0,
+        timestamp: chrono::Utc.ymd(2020, 8, 8).and_hms(0, 0, 0),
         slot: 1,
         epoch: 1,
         pool: opts.pool.clone(),
         token_a: 1,
         token_b: 1,
     };
-    log_price(&conn, exchange_rate).unwrap();
+    insert_price(&conn, exchange_rate).unwrap();
     let exchange_rate = ExchangeRate {
-        timestamp: 1642008924,
+        id: 0,
+        timestamp: chrono::Utc.ymd(2021, 1, 8).and_hms(0, 0, 0),
         slot: 2,
         epoch: 2,
         pool: opts.pool.clone(),
         token_a: 1394458971361025,
         token_b: 1367327673971744,
     };
-    log_price(&conn, exchange_rate).unwrap();
-    let apy = get_average_apy(&conn, &opts).unwrap();
-    assert_eq!(apy, Some(4.469979));
+    insert_price(&conn, exchange_rate).unwrap();
+    let apy = get_apy_for_period(
+        &conn,
+        &opts,
+        chrono::Utc.ymd(2020, 7, 7).and_hms(0, 0, 0),
+        chrono::Utc.ymd(2021, 7, 8).and_hms(0, 0, 0),
+    )
+    .expect("Failed when getting APY for period");
+    assert_eq!(apy, Some(4.7989255185326485));
 }

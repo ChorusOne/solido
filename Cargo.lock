@@ -1935,6 +1935,7 @@ checksum = "7fb9b38af92608140b86b693604b9ffcc5824240a484d1ecd4795bacb2fe88f3"
 name = "listener"
 version = "1.2.0"
 dependencies = [
+ "chrono",
  "clap 3.0.0-beta.2",
  "lido",
  "rusqlite",
