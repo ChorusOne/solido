@@ -1,10 +1,15 @@
-use chrono::TimeZone;
-use clap::Clap;
-use lido::{
-    state::Lido,
-    token::{ArithmeticError, Rational},
+use std::{
+    fmt,
+    sync::{Arc, Mutex},
+    thread::JoinHandle,
+    time::{Duration, Instant},
 };
+
+use clap::Clap;
+use lido::token::Rational;
+use rand::{rngs::ThreadRng, Rng};
 use rusqlite::{params, Connection, Row};
+use serde::Serialize;
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::{
     clock::{Epoch, Slot},
@@ -12,21 +17,25 @@ use solana_sdk::{
     pubkey::Pubkey,
     signature::Keypair,
 };
-use solido_cli_common::snapshot::{
-    Config, OutputMode, SnapshotClient, SnapshotConfig, SnapshotError,
+use solido_cli_common::{
+    error::Error,
+    snapshot::{Config, OutputMode, SnapshotClient, SnapshotClientConfig},
 };
+use tiny_http::{Header, Request, Response, Server};
 
 #[derive(Clap, Debug)]
 pub struct Opts {
+    /// Solido's instance address
+    #[clap(long)]
+    solido_address: Pubkey,
+
     /// URL of cluster to connect to (e.g., https://api.devnet.solana.com for solana devnet)
-    // Overwritten by `GeneralOpts` if None.
     #[clap(long, default_value = "http://127.0.0.1:8899")]
     cluster: String,
 
     /// Whether to output text or json. [default: "text"]
-    // Overwritten by `GeneralOpts` if None.
     #[clap(long = "output", possible_values = &["text", "json"])]
-    output_mode: Option<OutputMode>,
+    output_mode: OutputMode,
 
     /// Unique name for identifying
     #[clap(long, default_value = "solido")]
@@ -36,24 +45,13 @@ pub struct Opts {
     #[clap(long, default_value = "300")]
     poll_frequency_seconds: u32,
 
-    /// Location of the SQLite DB file.
+    /// Location of the SQLite DB file, defaults to "listener.db".
     #[clap(long, default_value = "listener.db")]
     db_path: String,
-}
 
-struct State {
-    pub solido: Lido,
-}
-
-impl State {
-    pub fn new(
-        config: &mut SnapshotConfig,
-        solido_program_id: &Pubkey,
-        solido_address: &Pubkey,
-    ) -> Result<Self, SnapshotError> {
-        let solido = config.client.get_solido(solido_address)?;
-        Ok(State { solido })
-    }
+    /// Listen address and port for the http server that serves a /metrics endpoint. Defaults to 0.0.0.0:8923.
+    #[clap(long, default_value = "0.0.0.0:8923")]
+    listen: String,
 }
 
 #[derive(Debug)]
@@ -220,18 +218,285 @@ pub fn insert_price(conn: &Connection, exchange_rate: ExchangeRate) -> rusqlite:
     Ok(())
 }
 
+struct Daemon<'a, 'b> {
+    config: &'a mut SnapshotClientConfig<'b>,
+    opts: &'a Opts,
+
+    /// Mutex where we publish the latest snapshot for use by the webserver.
+    snapshot_mutex: Arc<SnapshotMutex>,
+
+    /// Metrics counters to track status.
+    metrics: Metrics,
+
+    /// Random number generator used for exponential backoff with jitter on errors.
+    rng: ThreadRng,
+
+    /// The instant after we successfully queried the on-chain state for the last time.
+    last_read_success: Instant,
+}
+
+impl<'a, 'b> Daemon<'a, 'b> {
+    pub fn new(config: &'a mut SnapshotClientConfig<'b>, opts: &'a Opts) -> Self {
+        Daemon {
+            config,
+            opts,
+            snapshot_mutex: Arc::new(Mutex::new(None)),
+            metrics: Metrics {
+                polls: 0,
+                errors: 0,
+            },
+            rng: rand::thread_rng(),
+            last_read_success: Instant::now(),
+        }
+    }
+
+    fn run(mut self) -> ! {
+        loop {
+            self.metrics.polls += 1;
+            match get_exchange_rate(self.config, self.opts) {
+                ListenerResult::ErrSnapshot(err) => {
+                    println!("Error while obtaining on-chain state.");
+                    err.print_pretty();
+                    self.metrics.errors += 1;
+                    self.publish_snapshot(None);
+                    self.sleep_after_error();
+                }
+                ListenerResult::OkListener(state, output) => {
+                    println!("{}", output);
+                    self.publish_snapshot(Some(state));
+                    self.sleep();
+                }
+            }
+        }
+    }
+
+    fn sleep_after_error(&mut self) {
+        // For the sleep time we use exponential backoff with jitter [1]. By taking
+        // the time since the last success as the target sleep time, we get
+        // exponential backoff. We clamp this to ensure we don't wait indefinitely.
+        // 1: https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/
+        let time_since_last_success = self.last_read_success.elapsed();
+        let min_sleep_time = Duration::from_secs_f32(0.2);
+        let max_sleep_time = Duration::from_secs_f32(300.0);
+        let target_sleep_time = time_since_last_success.clamp(min_sleep_time, max_sleep_time);
+        let sleep_time = self
+            .rng
+            .gen_range(Duration::from_secs(0)..target_sleep_time);
+        println!("Sleeping {:?} after error ...", sleep_time);
+        std::thread::sleep(sleep_time);
+    }
+
+    /// Publish a new snapshot that from now on will be served by the http server.
+    ///
+    /// This also updates the block time estimator, if applicable.
+    fn publish_snapshot(&mut self, exchange_rate: Option<ExchangeRate>) {
+        let now = Instant::now();
+
+        if let Some(_exchange_rate) = exchange_rate.as_ref() {
+            self.last_read_success = now;
+        }
+
+        let snapshot = Snapshot {
+            metrics: self.metrics.clone(),
+            exchange_rate,
+        };
+        self.snapshot_mutex
+            .lock()
+            .unwrap()
+            .replace(Arc::new(snapshot));
+    }
+
+    pub fn sleep(&self) {
+        // Sleep until is time to get the next exchange rate.
+        let sleep_time = std::time::Duration::from_secs(self.opts.poll_frequency_seconds as u64);
+        println!(
+            "Sleeping for {:?} after getting the Solido exchange rate",
+            sleep_time
+        );
+        std::thread::sleep(sleep_time);
+    }
+}
+
+#[derive(Clone)]
+struct Metrics {
+    /// Number of times that we checked the price.
+    polls: u64,
+
+    /// Number of times that we tried to get the exchange rate, but encountered an error.
+    errors: u64,
+}
+
+impl Metrics {
+    pub fn write_prometheus<W: std::io::Write>(&self, out: &mut W) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+struct Snapshot {
+    /// Metrics about what the daemon has done so far.
+    metrics: Metrics,
+
+    /// The current state of on-chain accounts, and the time at which we obtained
+    /// that data.
+    exchange_rate: Option<ExchangeRate>,
+}
+type SnapshotMutex = Mutex<Option<Arc<Snapshot>>>;
+
+fn serve_request(request: Request, snapshot_mutex: &SnapshotMutex) -> Result<(), std::io::Error> {
+    // Take the current snapshot. This only holds the lock briefly, and does
+    // not prevent other threads from updating the snapshot while this request
+    // handler is running.
+    let option_snapshot = snapshot_mutex.lock().unwrap().clone();
+
+    // It might be that no snapshot is available yet. This happens when we just
+    // started the server, and the main loop has not yet queried the RPC for the
+    // latest state.
+    let snapshot = match option_snapshot {
+        Some(arc_snapshot) => arc_snapshot,
+        None => {
+            return request.respond(
+                Response::from_string(
+                    "Service Unavailable\n\nServer is still starting, try again shortly.",
+                )
+                .with_status_code(503),
+            );
+        }
+    };
+
+    // We don't even look at the request, for now we always serve the metrics.
+
+    let mut out: Vec<u8> = Vec::new();
+    let is_ok = snapshot.metrics.write_prometheus(&mut out).is_ok();
+
+    if is_ok {
+        // text/plain with version=0.0.4 is what Prometheus expects as the content type,
+        // see also https://prometheus.io/docs/instrumenting/exposition_formats/.
+        // We add the charset so you can view the metrics in a browser too when it
+        // contains non-ascii bytes.
+        let content_type = Header::from_bytes(
+            &b"Content-Type"[..],
+            &b"text/plain; version=0.0.4; charset=UTF-8"[..],
+        )
+        .expect("Static header value, does not fail at runtime.");
+        request.respond(Response::from_data(out).with_header(content_type))
+    } else {
+        request.respond(Response::from_string("error").with_status_code(500))
+    }
+}
+
+/// Spawn threads that run the http server.
+fn start_http_server(opts: &Opts, snapshot_mutex: Arc<SnapshotMutex>) -> Vec<JoinHandle<()>> {
+    let server = match Server::http(opts.listen.clone()) {
+        Ok(server) => Arc::new(server),
+        Err(err) => {
+            eprintln!(
+                "Error: {}\nFailed to start http server on {}. Is the daemon already running?",
+                err, &opts.listen,
+            );
+            std::process::exit(1);
+        }
+    };
+
+    println!("Http server listening on {}", &opts.listen);
+
+    // Spawn a number of http handler threads, so we can handle requests in
+    // parallel. This server is only used to serve metrics, it can be super basic,
+    // but some degree of parallelism is nice in case a client is slow to send
+    // its request or something like that.
+    (0..num_cpus::get())
+        .map(|i| {
+            let server_clone = server.clone();
+            let snapshot_mutex_clone = snapshot_mutex.clone();
+            std::thread::Builder::new()
+                .name(format!("http_handler_{}", i))
+                .spawn(move || {
+                    for request in server_clone.incoming_requests() {
+                        // Ignore any errors; if we fail to respond, then there's little
+                        // we can do about it here ... the client should just retry.
+                        let _ = serve_request(request, &*snapshot_mutex_clone);
+                    }
+                })
+                .expect("Failed to spawn http handler thread.")
+        })
+        .collect()
+}
+
+enum ListenerResult {
+    /// We failed to obtain a snapshot of the on-chain state at all, possibly a connectivity problem.
+    ErrSnapshot(Error),
+
+    /// We have a state snapshot, and we got the price.
+    OkListener(ExchangeRate, ListenerOutput),
+}
+
+#[derive(Debug, PartialEq, Serialize)]
+pub enum ListenerOutput {
+    SolidoExchangeRate {
+        price_lamports_numerator: u64,
+        price_lamports_denominator: u64,
+    },
+}
+
+impl fmt::Display for ListenerOutput {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ListenerOutput::SolidoExchangeRate {
+                price_lamports_numerator,
+                price_lamports_denominator,
+            } => {
+                writeln!(f, "Got Solido exchange rate.")?;
+                writeln!(
+                    f,
+                    "  Ratio: {}/{} = {}",
+                    price_lamports_numerator,
+                    price_lamports_denominator,
+                    (*price_lamports_numerator as f32 / *price_lamports_denominator as f32)
+                )
+            }
+        }
+    }
+}
+
+fn get_exchange_rate(config: &mut SnapshotClientConfig, opts: &Opts) -> ListenerResult {
+    let result = config.with_snapshot(|config| {
+        let solido = config.client.get_solido(&opts.solido_address)?;
+        let clock = config.client.get_clock()?;
+        Ok(ExchangeRate {
+            id: 0,
+            timestamp: chrono::Utc::now(),
+            slot: clock.slot,
+            epoch: clock.epoch,
+            pool: opts.pool.clone(),
+            price_lamports_numerator: solido.exchange_rate.sol_balance.0,
+            price_lamports_denominator: solido.exchange_rate.st_sol_supply.0,
+        })
+    });
+
+    match result {
+        Err(err) => ListenerResult::ErrSnapshot(err),
+        Ok(exchange_rate) => {
+            let output = ListenerOutput::SolidoExchangeRate {
+                price_lamports_numerator: exchange_rate.price_lamports_numerator,
+                price_lamports_denominator: exchange_rate.price_lamports_denominator,
+            };
+            ListenerResult::OkListener(exchange_rate, output)
+        }
+    }
+}
+
 fn main() {
     let opts = Opts::parse();
     solana_logger::setup_with_default("solana=info");
-    let rpc_client = RpcClient::new_with_commitment(opts.cluster, CommitmentConfig::confirmed());
+    let rpc_client =
+        RpcClient::new_with_commitment(opts.cluster.clone(), CommitmentConfig::confirmed());
     let snapshot_client = SnapshotClient::new(rpc_client);
 
-    let output_mode = opts.output_mode.unwrap();
+    let output_mode = opts.output_mode;
 
     // Our config has a signer, which for this program we will not use, since we
     // only observe information from the Solana blockchain.
     let signer = Keypair::new();
-    let config = Config {
+    let mut config = Config {
         client: snapshot_client,
         signer: &signer,
         output_mode,
@@ -239,16 +504,23 @@ fn main() {
 
     let conn = Connection::open(&opts.db_path).expect("Failed to open sqlite connection.");
     create_db(&conn).expect("Failed to create database.");
+
+    let daemon = Daemon::new(&mut config, &opts);
+    let _http_threads = start_http_server(&opts, daemon.snapshot_mutex.clone());
+    daemon.run()
 }
 
 #[test]
 fn test_get_average_apy() {
+    use chrono::TimeZone;
     let opts = Opts {
+        solido_address: Pubkey::new_unique(),
         cluster: "http://127.0.0.1:8899".to_owned(),
-        output_mode: None,
+        output_mode: OutputMode::Text,
         pool: "solido".to_owned(),
         poll_frequency_seconds: 1,
         db_path: "listener".to_owned(),
+        listen: "0.0.0.0:8923".to_owned(),
     };
     let mut conn = Connection::open_in_memory().expect("Failed to open sqlite connection.");
     create_db(&conn).unwrap();
