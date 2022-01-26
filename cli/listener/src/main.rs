@@ -182,7 +182,6 @@ pub fn get_apy_for_period(
         let last = row_iter.next();
         (first, last)
     };
-    tx.commit()?;
 
     match (first, last) {
         (Some(first), Some(last)) => {
