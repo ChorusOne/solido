@@ -365,14 +365,14 @@ impl Metrics {
         write_metric(
             out,
             &MetricFamily {
-                name: "listener_maintenance_polls_total",
+                name: "solido_pricedb_polls_total",
                 help: "Number of times we polled the exchange rate, since launch.",
                 type_: "counter",
                 metrics: vec![Metric::new(self.polls)],
             },
         )?;
         write_metric(out, &MetricFamily {
-            name: "listener_maintenance_errors_total",
+            name: "solido_pricedb_errors_total",
             help: "Number of times we encountered an error while trying to get the exchange rate, since launch.",
             type_: "counter",
             metrics: vec![Metric::new(self.errors)]
