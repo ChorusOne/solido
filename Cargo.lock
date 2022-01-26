@@ -3985,6 +3985,7 @@ dependencies = [
  "bincode",
  "lido",
  "num-traits",
+ "rusqlite",
  "serde",
  "serde_json",
  "serum-multisig",

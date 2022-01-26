@@ -23,8 +23,10 @@ use tiny_http::{Header, Request, Response, Server};
 
 use crate::config::RunMaintainerOpts;
 use crate::maintenance::{try_perform_maintenance, MaintenanceOutput, SolidoState};
-use crate::prometheus::{write_metric, Metric, MetricFamily};
-use solido_cli_common::error::{AsPrettyError, Error};
+use solido_cli_common::{
+    error::{AsPrettyError, Error},
+    prometheus::{write_metric, Metric, MetricFamily},
+};
 
 /// Metrics counters that track how many maintenance operations we performed.
 #[derive(Clone)]

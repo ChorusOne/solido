@@ -1,5 +1,4 @@
 use std::{
-    fmt,
     sync::{Arc, Mutex},
     thread::JoinHandle,
     time::{Duration, Instant},
@@ -9,7 +8,6 @@ use clap::Clap;
 use lido::token::Rational;
 use rand::{rngs::ThreadRng, Rng};
 use rusqlite::{params, Connection, Row};
-use serde::Serialize;
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::{
     clock::{Epoch, Slot},
@@ -18,7 +16,8 @@ use solana_sdk::{
     signature::Keypair,
 };
 use solido_cli_common::{
-    error::Error,
+    error::{AsPrettyError, Error},
+    prometheus::{write_metric, Metric, MetricFamily},
     snapshot::{Config, OutputMode, SnapshotClient, SnapshotClientConfig},
 };
 use tiny_http::{Header, Request, Response, Server};
@@ -33,10 +32,6 @@ pub struct Opts {
     #[clap(long, default_value = "http://127.0.0.1:8899")]
     cluster: String,
 
-    /// Whether to output text or json. [default: "text"]
-    #[clap(long = "output", possible_values = &["text", "json"])]
-    output_mode: OutputMode,
-
     /// Unique name for identifying
     #[clap(long, default_value = "solido")]
     pool: String,
@@ -46,11 +41,11 @@ pub struct Opts {
     poll_frequency_seconds: u32,
 
     /// Location of the SQLite DB file, defaults to "listener.db".
-    #[clap(long, default_value = "listener.db")]
+    #[clap(long, default_value = "listener.sqlite3")]
     db_path: String,
 
     /// Listen address and port for the http server that serves a /metrics endpoint. Defaults to 0.0.0.0:8923.
-    #[clap(long, default_value = "0.0.0.0:8923")]
+    #[clap(long, default_value = "0.0.0.0:8929")]
     listen: String,
 }
 
@@ -90,6 +85,7 @@ pub fn create_db(conn: &Connection) -> rusqlite::Result<()> {
     Ok(())
 }
 
+#[derive(Clone, Debug)]
 pub struct IntervalPrices {
     t0: chrono::DateTime<chrono::Utc>,
     t1: chrono::DateTime<chrono::Utc>,
@@ -120,6 +116,20 @@ impl IntervalPrices {
     }
 }
 
+impl std::fmt::Display for IntervalPrices {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(
+            f,
+            "Interval price:\n  From: {} (epoch {})\n  To  : {} (epoch {})\n  Average APY: {}",
+            self.t0,
+            self.epoch0,
+            self.t1,
+            self.epoch1,
+            self.annual_percentage_rate()
+        )
+    }
+}
+
 pub fn get_apy_for_period(
     tx: rusqlite::Transaction,
     opts: &Opts,
@@ -143,6 +153,8 @@ pub fn get_apy_for_period(
 
     let (first, last) = {
         // Get first logged minimal logged data based on timestamp that is greater than `from_time`.
+        // TODO: Do not limit the query below, but select the first data point
+        // that is offset by 200 data points from the selected epoch
         let stmt_first = &mut tx.prepare(
             "WITH prices_epoch AS (
                 SELECT *
@@ -211,19 +223,20 @@ pub fn get_apy_for_period(
     // Ok(Some(1.0))
 }
 
-pub fn insert_price(conn: &Connection, exchange_rate: ExchangeRate) -> rusqlite::Result<()> {
+pub fn insert_price(conn: &Connection, exchange_rate: &ExchangeRate) -> rusqlite::Result<()> {
     conn.execute("INSERT INTO exchange_rate (timestamp, slot, epoch, pool, price_lamports_numerator, price_lamports_denominator) VALUES (?1, ?2, ?3, ?4, ?5, ?6)", 
     params![exchange_rate.timestamp.to_string(), exchange_rate.slot, exchange_rate.epoch, exchange_rate.pool,
         exchange_rate.price_lamports_numerator, exchange_rate.price_lamports_denominator])?;
     Ok(())
 }
 
+type MetricsMutex = Mutex<Arc<Metrics>>;
 struct Daemon<'a, 'b> {
     config: &'a mut SnapshotClientConfig<'b>,
     opts: &'a Opts,
 
-    /// Mutex where we publish the latest snapshot for use by the webserver.
-    snapshot_mutex: Arc<SnapshotMutex>,
+    /// Mutex where we publish the latest metrics for use by the webserver.
+    metrics_snapshot: Arc<MetricsMutex>,
 
     /// Metrics counters to track status.
     metrics: Metrics,
@@ -233,44 +246,82 @@ struct Daemon<'a, 'b> {
 
     /// The instant after we successfully queried the on-chain state for the last time.
     last_read_success: Instant,
+
+    /// Database connection
+    db_connection: &'a Connection,
 }
 
 impl<'a, 'b> Daemon<'a, 'b> {
-    pub fn new(config: &'a mut SnapshotClientConfig<'b>, opts: &'a Opts) -> Self {
+    pub fn new(
+        config: &'a mut SnapshotClientConfig<'b>,
+        opts: &'a Opts,
+        db_connection: &'a Connection,
+    ) -> Self {
         Daemon {
             config,
             opts,
-            snapshot_mutex: Arc::new(Mutex::new(None)),
+            metrics_snapshot: Arc::new(Mutex::new(Arc::new(Metrics {
+                polls: 0,
+                errors: 0,
+                solido_average_interval_price: None,
+            }))),
             metrics: Metrics {
                 polls: 0,
                 errors: 0,
+                solido_average_interval_price: None,
             },
             rng: rand::thread_rng(),
             last_read_success: Instant::now(),
+            db_connection,
         }
     }
 
     fn run(mut self) -> ! {
         loop {
             self.metrics.polls += 1;
-            match get_exchange_rate(self.config, self.opts) {
-                ListenerResult::ErrSnapshot(err) => {
-                    println!("Error while obtaining on-chain state.");
-                    err.print_pretty();
-                    self.metrics.errors += 1;
-                    self.publish_snapshot(None);
-                    self.sleep_after_error();
-                }
-                ListenerResult::OkListener(state, output) => {
-                    println!("{}", output);
-                    self.publish_snapshot(Some(state));
-                    self.sleep();
-                }
-            }
+            let sleep_time =
+                match get_and_save_exchange_rate(self.config, self.opts, self.db_connection) {
+                    ListenerResult::ErrSnapshot(err) => {
+                        println!("Error while obtaining on-chain state.");
+                        err.print_pretty();
+                        self.metrics.errors += 1;
+                        self.get_sleep_time_after_error()
+                    }
+                    ListenerResult::OkListener(exchange_rate, interval_prices_option) => {
+                        println!(
+                            "Got exchange rate: {}/{}: {} at slot {} and epoch {}.",
+                            exchange_rate.price_lamports_numerator,
+                            exchange_rate.price_lamports_denominator,
+                            exchange_rate.price_lamports_numerator as f32
+                                / exchange_rate.price_lamports_denominator as f32,
+                            exchange_rate.slot,
+                            exchange_rate.epoch,
+                        );
+
+                        match interval_prices_option {
+                            None => println!(
+                                "No interval price could be produced, awaiting more data points"
+                            ),
+                            Some(interval_prices) => {
+                                println!("{}", interval_prices);
+                                self.metrics.solido_average_interval_price = Some(interval_prices);
+                            }
+                        }
+                        self.get_sleep_time()
+                    }
+                    ListenerResult::ErrListener(err) => {
+                        println!("Error in listener.");
+                        err.print_pretty();
+                        self.get_sleep_time_after_error()
+                    }
+                };
+            // Update metrics snapshot.
+            *self.metrics_snapshot.lock().unwrap() = Arc::new(self.metrics.clone());
+            std::thread::sleep(sleep_time);
         }
     }
 
-    fn sleep_after_error(&mut self) {
+    fn get_sleep_time_after_error(&mut self) -> Duration {
         // For the sleep time we use exponential backoff with jitter [1]. By taking
         // the time since the last success as the target sleep time, we get
         // exponential backoff. We clamp this to ensure we don't wait indefinitely.
@@ -283,37 +334,17 @@ impl<'a, 'b> Daemon<'a, 'b> {
             .rng
             .gen_range(Duration::from_secs(0)..target_sleep_time);
         println!("Sleeping {:?} after error ...", sleep_time);
-        std::thread::sleep(sleep_time);
+        sleep_time
     }
 
-    /// Publish a new snapshot that from now on will be served by the http server.
-    ///
-    /// This also updates the block time estimator, if applicable.
-    fn publish_snapshot(&mut self, exchange_rate: Option<ExchangeRate>) {
-        let now = Instant::now();
-
-        if let Some(_exchange_rate) = exchange_rate.as_ref() {
-            self.last_read_success = now;
-        }
-
-        let snapshot = Snapshot {
-            metrics: self.metrics.clone(),
-            exchange_rate,
-        };
-        self.snapshot_mutex
-            .lock()
-            .unwrap()
-            .replace(Arc::new(snapshot));
-    }
-
-    pub fn sleep(&self) {
+    pub fn get_sleep_time(&self) -> Duration {
         // Sleep until is time to get the next exchange rate.
         let sleep_time = std::time::Duration::from_secs(self.opts.poll_frequency_seconds as u64);
         println!(
             "Sleeping for {:?} after getting the Solido exchange rate",
             sleep_time
         );
-        std::thread::sleep(sleep_time);
+        sleep_time
     }
 }
 
@@ -324,49 +355,55 @@ struct Metrics {
 
     /// Number of times that we tried to get the exchange rate, but encountered an error.
     errors: u64,
+
+    /// Solido's maximum price interval.
+    solido_average_interval_price: Option<IntervalPrices>,
 }
 
 impl Metrics {
     pub fn write_prometheus<W: std::io::Write>(&self, out: &mut W) -> std::io::Result<()> {
+        write_metric(
+            out,
+            &MetricFamily {
+                name: "listener_maintenance_polls_total",
+                help: "Number of times we polled the exchange rate, since launch.",
+                type_: "counter",
+                metrics: vec![Metric::new(self.polls)],
+            },
+        )?;
+        write_metric(out, &MetricFamily {
+            name: "listener_maintenance_errors_total",
+            help: "Number of times we encountered an error while trying to get the exchange rate, since launch.",
+            type_: "counter",
+            metrics: vec![Metric::new(self.errors)]
+        })?;
+        if let Some(interval_price) = &self.solido_average_interval_price {
+            write_metric(
+                out,
+                &MetricFamily {
+                    name: "average_apy",
+                    help: "Average APY",
+                    type_: "counter",
+                    metrics: vec![Metric::new(interval_price.annual_percentage_rate())
+                        .with_label("solido", "APY".to_string())],
+                },
+            )?;
+        }
+
         Ok(())
     }
 }
 
-struct Snapshot {
-    /// Metrics about what the daemon has done so far.
-    metrics: Metrics,
-
-    /// The current state of on-chain accounts, and the time at which we obtained
-    /// that data.
-    exchange_rate: Option<ExchangeRate>,
-}
-type SnapshotMutex = Mutex<Option<Arc<Snapshot>>>;
-
-fn serve_request(request: Request, snapshot_mutex: &SnapshotMutex) -> Result<(), std::io::Error> {
+fn serve_request(request: Request, metrics_mutex: &MetricsMutex) -> Result<(), std::io::Error> {
     // Take the current snapshot. This only holds the lock briefly, and does
     // not prevent other threads from updating the snapshot while this request
     // handler is running.
-    let option_snapshot = snapshot_mutex.lock().unwrap().clone();
-
-    // It might be that no snapshot is available yet. This happens when we just
-    // started the server, and the main loop has not yet queried the RPC for the
-    // latest state.
-    let snapshot = match option_snapshot {
-        Some(arc_snapshot) => arc_snapshot,
-        None => {
-            return request.respond(
-                Response::from_string(
-                    "Service Unavailable\n\nServer is still starting, try again shortly.",
-                )
-                .with_status_code(503),
-            );
-        }
-    };
+    let metrics = metrics_mutex.lock().unwrap().clone();
 
     // We don't even look at the request, for now we always serve the metrics.
 
     let mut out: Vec<u8> = Vec::new();
-    let is_ok = snapshot.metrics.write_prometheus(&mut out).is_ok();
+    let is_ok = metrics.write_prometheus(&mut out).is_ok();
 
     if is_ok {
         // text/plain with version=0.0.4 is what Prometheus expects as the content type,
@@ -385,7 +422,7 @@ fn serve_request(request: Request, snapshot_mutex: &SnapshotMutex) -> Result<(),
 }
 
 /// Spawn threads that run the http server.
-fn start_http_server(opts: &Opts, snapshot_mutex: Arc<SnapshotMutex>) -> Vec<JoinHandle<()>> {
+fn start_http_server(opts: &Opts, metrics_mutex: Arc<MetricsMutex>) -> Vec<JoinHandle<()>> {
     let server = match Server::http(opts.listen.clone()) {
         Ok(server) => Arc::new(server),
         Err(err) => {
@@ -406,7 +443,7 @@ fn start_http_server(opts: &Opts, snapshot_mutex: Arc<SnapshotMutex>) -> Vec<Joi
     (0..num_cpus::get())
         .map(|i| {
             let server_clone = server.clone();
-            let snapshot_mutex_clone = snapshot_mutex.clone();
+            let snapshot_mutex_clone = metrics_mutex.clone();
             std::thread::Builder::new()
                 .name(format!("http_handler_{}", i))
                 .spawn(move || {
@@ -425,39 +462,18 @@ enum ListenerResult {
     /// We failed to obtain a snapshot of the on-chain state at all, possibly a connectivity problem.
     ErrSnapshot(Error),
 
-    /// We have a state snapshot, and we got the price.
-    OkListener(ExchangeRate, ListenerOutput),
+    /// We have a snapshot, and we got the price.
+    OkListener(ExchangeRate, Option<IntervalPrices>),
+
+    /// We have a snapshot, but failed in-between, e.g. when inserting in database.
+    ErrListener(Error),
 }
 
-#[derive(Debug, PartialEq, Serialize)]
-pub enum ListenerOutput {
-    SolidoExchangeRate {
-        price_lamports_numerator: u64,
-        price_lamports_denominator: u64,
-    },
-}
-
-impl fmt::Display for ListenerOutput {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            ListenerOutput::SolidoExchangeRate {
-                price_lamports_numerator,
-                price_lamports_denominator,
-            } => {
-                writeln!(f, "Got Solido exchange rate.")?;
-                writeln!(
-                    f,
-                    "  Ratio: {}/{} = {}",
-                    price_lamports_numerator,
-                    price_lamports_denominator,
-                    (*price_lamports_numerator as f32 / *price_lamports_denominator as f32)
-                )
-            }
-        }
-    }
-}
-
-fn get_exchange_rate(config: &mut SnapshotClientConfig, opts: &Opts) -> ListenerResult {
+fn get_and_save_exchange_rate(
+    config: &mut SnapshotClientConfig,
+    opts: &Opts,
+    db_connection: &Connection,
+) -> ListenerResult {
     let result = config.with_snapshot(|config| {
         let solido = config.client.get_solido(&opts.solido_address)?;
         let clock = config.client.get_clock()?;
@@ -475,13 +491,26 @@ fn get_exchange_rate(config: &mut SnapshotClientConfig, opts: &Opts) -> Listener
     match result {
         Err(err) => ListenerResult::ErrSnapshot(err),
         Ok(exchange_rate) => {
-            let output = ListenerOutput::SolidoExchangeRate {
-                price_lamports_numerator: exchange_rate.price_lamports_numerator,
-                price_lamports_denominator: exchange_rate.price_lamports_denominator,
-            };
-            ListenerResult::OkListener(exchange_rate, output)
+            match insert_price_and_query_price_interval(db_connection, opts, &exchange_rate) {
+                Ok(interval_prices) => ListenerResult::OkListener(exchange_rate, interval_prices),
+                Err(error) => ListenerResult::ErrListener(Box::new(error)),
+            }
         }
     }
+}
+
+fn insert_price_and_query_price_interval(
+    db_connection: &Connection,
+    opts: &Opts,
+    exchange_rate: &ExchangeRate,
+) -> Result<Option<IntervalPrices>, rusqlite::Error> {
+    insert_price(db_connection, exchange_rate)?;
+    let tx = db_connection.unchecked_transaction()?;
+    // FIXME: chrono::MIN_DATETIME and chrono::MAX_DATETIME include a sign in
+    // front of the ISO 8601 date time format.  It makes it hard to compare as a
+    // string in the database, especially the MAX_DATETIME.
+    let interval_prices = get_apy_for_period(tx, opts, chrono::MIN_DATETIME, chrono::Utc::now())?;
+    Ok(interval_prices)
 }
 
 fn main() {
@@ -491,22 +520,20 @@ fn main() {
         RpcClient::new_with_commitment(opts.cluster.clone(), CommitmentConfig::confirmed());
     let snapshot_client = SnapshotClient::new(rpc_client);
 
-    let output_mode = opts.output_mode;
-
     // Our config has a signer, which for this program we will not use, since we
     // only observe information from the Solana blockchain.
     let signer = Keypair::new();
     let mut config = Config {
         client: snapshot_client,
         signer: &signer,
-        output_mode,
+        output_mode: OutputMode::Text,
     };
 
     let conn = Connection::open(&opts.db_path).expect("Failed to open sqlite connection.");
     create_db(&conn).expect("Failed to create database.");
 
-    let daemon = Daemon::new(&mut config, &opts);
-    let _http_threads = start_http_server(&opts, daemon.snapshot_mutex.clone());
+    let daemon = Daemon::new(&mut config, &opts, &conn);
+    let _http_threads = start_http_server(&opts, daemon.metrics_snapshot.clone());
     daemon.run()
 }
 
@@ -516,13 +543,12 @@ fn test_get_average_apy() {
     let opts = Opts {
         solido_address: Pubkey::new_unique(),
         cluster: "http://127.0.0.1:8899".to_owned(),
-        output_mode: OutputMode::Text,
         pool: "solido".to_owned(),
         poll_frequency_seconds: 1,
         db_path: "listener".to_owned(),
         listen: "0.0.0.0:8923".to_owned(),
     };
-    let mut conn = Connection::open_in_memory().expect("Failed to open sqlite connection.");
+    let conn = Connection::open_in_memory().expect("Failed to open sqlite connection.");
     create_db(&conn).unwrap();
     let exchange_rate = ExchangeRate {
         id: 0,
@@ -533,7 +559,7 @@ fn test_get_average_apy() {
         price_lamports_numerator: 1,
         price_lamports_denominator: 1,
     };
-    insert_price(&conn, exchange_rate).unwrap();
+    insert_price(&conn, &exchange_rate).unwrap();
     let exchange_rate = ExchangeRate {
         id: 0,
         timestamp: chrono::Utc.ymd(2021, 1, 8).and_hms(0, 0, 0),
@@ -543,9 +569,9 @@ fn test_get_average_apy() {
         price_lamports_numerator: 1394458971361025,
         price_lamports_denominator: 1367327673971744,
     };
-    insert_price(&conn, exchange_rate).unwrap();
+    insert_price(&conn, &exchange_rate).unwrap();
     let apy = get_apy_for_period(
-        conn.transaction().unwrap(),
+        conn.unchecked_transaction().unwrap(),
         &opts,
         chrono::Utc.ymd(2020, 7, 7).and_hms(0, 0, 0),
         chrono::Utc.ymd(2021, 7, 8).and_hms(0, 0, 0),

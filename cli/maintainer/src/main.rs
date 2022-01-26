@@ -33,7 +33,6 @@ mod commands_solido;
 mod config;
 mod daemon;
 mod maintenance;
-mod prometheus;
 mod serialization_utils;
 mod spl_token_utils;
 
