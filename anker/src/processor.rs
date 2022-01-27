@@ -1,10 +1,13 @@
 // SPDX-FileCopyrightText: 2021 Chorus One AG
 // SPDX-License-Identifier: GPL-3.0
 
+use std::convert::TryFrom;
+
 use borsh::BorshDeserialize;
-use lido::token::Lamports;
+use lido::token::{ArithmeticError, Lamports};
 use solana_program::{
     account_info::AccountInfo,
+    clock::Clock,
     entrypoint::ProgramResult,
     msg,
     program::{invoke, invoke_signed},
@@ -15,17 +18,21 @@ use solana_program::{
     rent::Rent,
     sysvar::Sysvar,
 };
+use spl_token_swap::curve::calculator::TradeDirection;
+use spl_token_swap::state::SwapState;
 
 use lido::{state::Lido, token::StLamports};
 
+use crate::state::{HistoricalStSolPrice, POOL_PRICE_MIN_SAMPLE_DISTANCE, POOL_PRICE_NUM_SAMPLES};
 use crate::{
     error::AnkerError,
     find_instance_address, find_mint_authority, find_reserve_authority,
     find_st_sol_reserve_account,
     instruction::{
         AnkerInstruction, ChangeTerraRewardsDestinationAccountsInfo,
-        ChangeTokenSwapPoolAccountsInfo, DepositAccountsInfo, InitializeAccountsInfo,
-        SellRewardsAccountsInfo, SendRewardsAccountsInfo, WithdrawAccountsInfo,
+        ChangeTokenSwapPoolAccountsInfo, DepositAccountsInfo, FetchPoolPriceAccountsInfo,
+        InitializeAccountsInfo, SellRewardsAccountsInfo, SendRewardsAccountsInfo,
+        WithdrawAccountsInfo,
     },
     logic::{burn_b_sol, deserialize_anker, mint_b_sol_to},
     metrics::Metrics,
@@ -141,6 +148,16 @@ fn process_initialize(
             token_bridge_program_id: *accounts.wormhole_token_bridge_program_id.key,
         },
         metrics: Metrics::new(),
+        historical_st_sol_prices: [
+            // At initialization, we fill the historical prices with a dummy
+            // price of 1 UST per stSOL recorded at slot 0. Because we require
+            // these prices to be recent at `SellRewards` time, these dummy
+            // values are never used.
+            HistoricalStSolPrice {
+                slot: 0,
+                st_sol_price_in_ust: MicroUst(1_000_000),
+            }; 5
+        ],
         self_bump_seed: anker_bump_seed,
         mint_authority_bump_seed: mint_bump_seed,
         reserve_authority_bump_seed,
@@ -228,6 +245,81 @@ fn process_deposit(
     );
 
     Ok(())
+}
+
+/// Sample the current pool price, used later to limit slippage in `sell_rewards`.
+#[inline(never)]
+fn process_fetch_pool_price(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> ProgramResult {
+    let accounts = FetchPoolPriceAccountsInfo::try_from_slice(accounts_raw)?;
+    let (solido, mut anker) = deserialize_anker(program_id, accounts.anker, accounts.solido)?;
+
+    // Check that the accounts passed to this instruction are the same as those
+    // stored in the pool. That alone would still enable swapping the stSOL and
+    // UST accounts though, so also confirm the stSOL mint on one.
+    anker.check_token_swap_before_fetch_price(&accounts)?;
+    anker.check_is_st_sol_account(&solido, accounts.pool_st_sol_account)?;
+
+    let token_swap_program_id = accounts.token_swap_pool.owner;
+    let swap_pool =
+        anker.get_token_swap_instance(accounts.token_swap_pool, token_swap_program_id)?;
+    let pool_ust_balance = MicroUst(Anker::get_token_amount(accounts.pool_ust_account)?);
+    let pool_st_sol_balance = StLamports(Anker::get_token_amount(accounts.pool_st_sol_account)?);
+
+    let clock = Clock::from_account_info(accounts.sysvar_clock)?;
+
+    // The price samples must be spaced at least some distance apart.
+    let most_recent_sample = anker.historical_st_sol_prices[POOL_PRICE_NUM_SAMPLES - 1];
+    let slots_elapsed = clock.slot.saturating_sub(most_recent_sample.slot);
+    if slots_elapsed < POOL_PRICE_MIN_SAMPLE_DISTANCE {
+        msg!(
+            "The previous stSOL/UST price was sampled at slot {}. \
+            A new sample cannot be added until slot {}.",
+            most_recent_sample.slot,
+            most_recent_sample.slot + POOL_PRICE_MIN_SAMPLE_DISTANCE,
+        );
+        return Err(AnkerError::FetchPoolPriceTooEarly.into());
+    }
+
+    // To sample the price, we go from stSOL to UST.
+    let trade_direction = if swap_pool.token_a == *accounts.pool_ust_account.key {
+        TradeDirection::BtoA
+    } else {
+        TradeDirection::AtoB
+    };
+
+    // Check how much UST we get out, if we put in 1 stSOL. With a constant-product
+    // pool, the amount we get out depends not only on the state of the pool, but
+    // also on the amount we put in. We pick 1 stSOL here because it should be
+    // large enough that we don't lose precision in the output, but small enough
+    // to not move the price by a lot if we did swap that amount.
+    let one_st_sol = StLamports(1_000_000_000);
+    let swap_result = swap_pool
+        .swap_curve()
+        .calculator
+        .swap_without_fees(
+            one_st_sol.0 as u128,
+            pool_st_sol_balance.0 as u128,
+            pool_ust_balance.0 as u128,
+            trade_direction,
+        )
+        .ok_or(AnkerError::PoolPriceUndefined)?;
+    assert_eq!(swap_result.source_amount_swapped, one_st_sol.0 as u128);
+    let st_sol_price_in_ust = MicroUst(
+        u64::try_from(swap_result.destination_amount_swapped).map_err(|_| ArithmeticError)?,
+    );
+
+    // Maintain the invariant that samples are sorted by ascending slot number.
+    // The sample at index 0 is the oldest, so we remove it (well, move it to the
+    // end to be overwritten), and move everything else closer to the beginning
+    // of the array. Then we overwrite the last element with the current price
+    // and slot number, and we confirmed above that that slot number is larger
+    // than the slot number of the sample before it.
+    anker.historical_st_sol_prices.rotate_left(1);
+    anker.historical_st_sol_prices[POOL_PRICE_NUM_SAMPLES - 1].slot = clock.slot;
+    anker.historical_st_sol_prices[POOL_PRICE_NUM_SAMPLES - 1].st_sol_price_in_ust =
+        st_sol_price_in_ust;
+
+    anker.save(accounts.anker)
 }
 
 /// Sell Anker rewards.
@@ -533,6 +625,7 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
         } => process_initialize(program_id, accounts, terra_rewards_destination),
         AnkerInstruction::Deposit { amount } => process_deposit(program_id, accounts, amount),
         AnkerInstruction::Withdraw { amount } => process_withdraw(program_id, accounts, amount),
+        AnkerInstruction::FetchPoolPrice => process_fetch_pool_price(program_id, accounts),
         AnkerInstruction::SellRewards => process_sell_rewards(program_id, accounts),
         AnkerInstruction::ChangeTerraRewardsDestination {
             terra_rewards_destination,

@@ -38,6 +38,10 @@ pub enum AnkerInstruction {
         amount: BLamports,
     },
 
+    /// Record the current stSOL/UST exchange rate, which is later used to limit
+    /// slippage in `SellRewards`.
+    FetchPoolPrice,
+
     /// Sell rewards to the UST reserve.
     SellRewards,
 
@@ -47,12 +51,14 @@ pub enum AnkerInstruction {
         #[allow(dead_code)] // It is not dead code when compiled for BPF.
         wormhole_nonce: u32,
     },
+
     /// Change the Anker's rewards destination address on Terra:
     /// `terra_rewards_destination`.
     ChangeTerraRewardsDestination {
         #[allow(dead_code)] // It is not dead code when compiled for BPF.
         terra_rewards_destination: TerraAddress,
     },
+
     /// Change the token pool instance.
     ChangeTokenSwapPool,
 }
@@ -256,6 +262,36 @@ pub fn withdraw(
         program_id: *program_id,
         accounts: accounts.to_vec(),
         data: data.to_vec(),
+    }
+}
+
+accounts_struct! {
+    FetchPoolPriceAccountsMeta, FetchPoolPriceAccountsInfo {
+        pub anker {
+            is_signer: false,
+            // Writable because we store the price in the instance.
+            is_writable: true,
+        },
+        pub solido {
+            is_signer: false,
+            is_writable: false,
+        },
+
+        // Accounts for token swap
+        pub token_swap_pool {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub pool_st_sol_account {
+            is_signer: false,
+            is_writable: true, // Needed to swap tokens.
+        },
+        pub pool_ust_account {
+            is_signer: false,
+            is_writable: true, // Needed to swap tokens.
+        },
+
+        const sysvar_clock = sysvar::clock::id(),
     }
 }
 

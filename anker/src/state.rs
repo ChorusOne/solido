@@ -1,7 +1,9 @@
 // SPDX-FileCopyrightText: 2021 Chorus One AG
 // SPDX-License-Identifier: GPL-3.0
 
-use crate::instruction::{SellRewardsAccountsInfo, SendRewardsAccountsInfo};
+use crate::instruction::{
+    FetchPoolPriceAccountsInfo, SellRewardsAccountsInfo, SendRewardsAccountsInfo,
+};
 use crate::metrics::Metrics;
 use crate::wormhole::{check_wormhole_account, TerraAddress, WormholeTransferArgs};
 use crate::{
@@ -15,15 +17,45 @@ use lido::util::serialize_b58;
 use serde::Serialize;
 use solana_program::program_error::ProgramError;
 use solana_program::{
-    account_info::AccountInfo, entrypoint::ProgramResult, msg, program_pack::Pack, pubkey::Pubkey,
+    account_info::AccountInfo, clock::Slot, entrypoint::ProgramResult, msg, program_pack::Pack,
+    pubkey::Pubkey,
 };
 use spl_token_swap::state::SwapV1;
 
-use crate::token::{self, BLamports};
+use crate::token::{self, BLamports, MicroUst};
 
 /// Size of the serialized [`Anker`] struct, in bytes.
 pub const ANKER_LEN: usize = 234;
 pub const ANKER_VERSION: u8 = 0;
+
+// Next are three constants related to stored stSOL/UST prices. Because Anker is
+// permissionless, everybody can call `SellRewards` if there are rewards to sell.
+// This means that the caller could sandwich the `SellRewards` between two
+// instructions that swap against the same stSOL/UST pool that Anker uses, to
+// give us a bad price, and take the difference. To mitigate this risk, we set a
+// `min_out` on the swap instruction, but in order to do so, we need a "fair"
+// price. For that, we sample 5 past prices, at least some number of slots apart
+// (enough that they are produced by different leaders), but also not too old,
+// to make sure the price is still fresh. Then we take the median of that as a
+// "fair" price and set `min_out` based on that. Now if anybody is trying to
+// sandwich us, they would also have to sandwich 3 of those 5 times where we sample
+// the price (and they pay swap fees), and they are competing with our honest
+// maintenance bot for that (and possibly with others). Also, having a recent
+// price ensures that we don't sell rewards at times of extreme volatility.
+
+/// The number of historical stSOL/UST exchange rates we store.
+pub const POOL_PRICE_NUM_SAMPLES: usize = 5;
+
+/// The minimum number of slots that must elapse after the most recent stSOL/UST price sample,
+/// before we can store a new sample.
+pub const POOL_PRICE_MIN_SAMPLE_DISTANCE: Slot = 100;
+
+/// The maximum age of the oldest stSOL/UST price sample where we still allow `SellRewards`.
+///
+/// This value should be larger than `POOL_PRICE_NUM_SAMPLES * POOL_PRICE_MIN_SAMPLE_DISTANCE`.
+///
+/// At ~550 ms per slot, 1000 slots is roughly 9 minutes.
+pub const POOL_PRICE_MAX_SAMPLE_AGE: Slot = 1000;
 
 #[repr(C)]
 #[derive(
@@ -34,6 +66,28 @@ pub struct WormholeParameters {
     pub core_bridge_program_id: Pubkey,
     /// The Wormhole program for token transfers associated with this instance.
     pub token_bridge_program_id: Pubkey,
+}
+
+/// The price of 1 stSOL expressed in UST, as observed from the pool in a particular slot.
+#[repr(C)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    BorshDeserialize,
+    BorshSerialize,
+    BorshSchema,
+    Eq,
+    PartialEq,
+    Serialize,
+)]
+pub struct HistoricalStSolPrice {
+    /// The slot in which this price was observed.
+    pub slot: Slot,
+
+    /// The price of 1 stSOL (1e9 stLamports).
+    pub st_sol_price_in_ust: MicroUst,
 }
 
 #[repr(C)]
@@ -68,6 +122,12 @@ pub struct Anker {
 
     /// Metrics for informational purposes.
     pub metrics: Metrics,
+
+    /// Historical stSOL prices, used to prevent sandwiching when we sell rewards.
+    ///
+    /// Invariant: entries are sorted by ascending slot number (so the oldest
+    /// entry is at index 0).
+    pub historical_st_sol_prices: [HistoricalStSolPrice; POOL_PRICE_NUM_SAMPLES],
 
     /// Bump seed for the derived address that this Anker instance should live at.
     pub self_bump_seed: u8,
@@ -416,12 +476,59 @@ impl Anker {
         Ok(())
     }
 
+    /// Confirm that the passed accounts match those stored in the pool.
+    pub fn check_token_swap_before_fetch_price(
+        &self,
+        accounts: &FetchPoolPriceAccountsInfo,
+    ) -> ProgramResult {
+        // Check if the token swap account is the same one as the stored in the instance.
+        let token_swap_program_id = accounts.token_swap_pool.owner;
+        let token_swap =
+            self.get_token_swap_instance(accounts.token_swap_pool, token_swap_program_id)?;
+
+        // Check that the pool still has token
+        let (pool_st_sol_account, pool_ust_account) = if &token_swap.token_a
+            == accounts.pool_st_sol_account.key
+        {
+            Ok((token_swap.token_a, token_swap.token_b))
+        } else if &token_swap.token_a == accounts.pool_ust_account.key {
+            Ok((token_swap.token_b, token_swap.token_a))
+        } else {
+            msg!(
+                    "Could not find a match for token swap account {}, candidates were the stSol account {} or UST account {}",
+                    token_swap.token_a,
+                    accounts.pool_st_sol_account.key,
+                    accounts.pool_ust_account.key
+                );
+            Err(AnkerError::WrongSplTokenSwapParameters)
+        }?;
+
+        if &pool_st_sol_account != accounts.pool_st_sol_account.key {
+            msg!(
+                "Token swap stSol token is different from what is stored in the instance, expected {}, found {}",
+                pool_st_sol_account,
+                accounts.pool_st_sol_account.key
+            );
+            return Err(AnkerError::WrongSplTokenSwapParameters.into());
+        }
+        if &pool_ust_account != accounts.pool_ust_account.key {
+            msg!(
+                "Token swap UST token is different from what is stored in the instance, expected {}, found {}",
+                pool_ust_account,
+                accounts.pool_ust_account.key
+            );
+            return Err(AnkerError::WrongSplTokenSwapParameters.into());
+        }
+
+        Ok(())
+    }
+
     /// Check the if the token swap program is the same as the one stored in the
     /// instance.
     ///
     /// Check all the token swap associated accounts.
     /// Check if the rewards destination is the same as the one stored in Anker.
-    pub fn check_token_swap(
+    pub fn check_token_swap_before_sell(
         &self,
         anker_program_id: &Pubkey,
         accounts: &SellRewardsAccountsInfo,

@@ -235,7 +235,7 @@ pub fn swap_rewards(
         msg!("Anker rewards must be greater than zero to be claimable.");
         return Err(AnkerError::ZeroRewardsToClaim.into());
     }
-    anker.check_token_swap(program_id, accounts)?;
+    anker.check_token_swap_before_sell(program_id, accounts)?;
 
     let swap_instruction = spl_token_swap::instruction::swap(
         accounts.token_swap_program_id.key,
