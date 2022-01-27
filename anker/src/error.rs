@@ -51,6 +51,12 @@ pub enum AnkerError {
 
     /// After swapping, we are left with less stSOL than we intended.
     TokenSwapAmountInvalid = 4012,
+
+    /// The most recent price sample is too recent, we can’t call `FetchPoolPrice` yet.
+    FetchPoolPriceTooEarly = 4013,
+
+    /// We failed to compute the price of stSOL in UST.
+    PoolPriceUndefined = 4014,
 }
 
 // Just reuse the generated Debug impl for Display. It shows the variant names.
