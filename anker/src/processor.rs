@@ -250,10 +250,10 @@ fn process_sell_rewards(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> Pr
         StLamports(Anker::get_token_amount(accounts.st_sol_reserve_account)?);
 
     // Get StLamports corresponding to the amount of b_sol minted.
-    let st_sol_amount = solido.exchange_rate.exchange_sol(Lamports(b_sol_supply))?;
+    let b_sol_supply_value_in_st_sol = solido.exchange_rate.exchange_sol(Lamports(b_sol_supply))?;
 
-    // If `reserve_st_sol` < `st_sol_amount` something went wrong, and we abort the transaction.
-    let rewards = (reserve_st_sol_before - st_sol_amount)?;
+    // If this underflows, something went wrong, and we abort the transaction.
+    let rewards = (reserve_st_sol_before - b_sol_supply_value_in_st_sol)?;
 
     // Get the amount of UST that we had.
     let ust_before = MicroUst(Anker::get_token_amount(accounts.ust_reserve_account)?);
