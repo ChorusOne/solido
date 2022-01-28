@@ -34,7 +34,7 @@ pub enum AnkerError {
     /// An account is not owned by the expected owner.
     InvalidOwner = 4006,
 
-    /// Wrong SPL Token Swap instance.
+    /// Wrong SPL Token Swap instance or program.
     WrongSplTokenSwap = 4007,
 
     /// Wrong parameters for the SPL Token Swap instruction.

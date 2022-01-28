@@ -388,12 +388,19 @@ fn process_change_token_swap_pool(
     let (solido, mut anker) = deserialize_anker(program_id, accounts.anker, accounts.solido)?;
     solido.check_manager(accounts.manager)?;
 
-    let current_token_swap = anker.get_token_swap_instance(accounts.current_token_swap_pool)?;
+    let current_token_swap_program_id = accounts.current_token_swap_pool.owner;
+    let current_token_swap = anker.get_token_swap_instance(
+        accounts.current_token_swap_pool,
+        current_token_swap_program_id,
+    )?;
+
     // `get_token_swap_instance` compares the account to the one stored in
     // `anker.token_swap_pool`. We assign first so we have the correct value to
     // compare. If the check fails, the transaction will revert.
     anker.token_swap_pool = *accounts.new_token_swap_pool.key;
-    let new_token_swap = anker.get_token_swap_instance(accounts.new_token_swap_pool)?;
+    let new_token_swap_program_id = accounts.new_token_swap_pool.owner;
+    let new_token_swap =
+        anker.get_token_swap_instance(accounts.new_token_swap_pool, new_token_swap_program_id)?;
 
     anker.check_change_token_swap_pool(&solido, current_token_swap, new_token_swap)?;
     anker.save(accounts.anker)
