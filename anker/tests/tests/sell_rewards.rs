@@ -20,11 +20,20 @@ async fn test_successful_sell_rewards() {
     assert_eq!(
         anker_after.metrics.swapped_rewards_st_sol_total
             - anker_before.metrics.swapped_rewards_st_sol_total,
-        Ok(StLamports(0_923_076_923))
+        // Solido got initialized with 1 SOL. Then it got 10 stLamports for
+        // initializing the swap pool. Then we deposited 1 more SOL for use with
+        // Anker, and we donated 1 SOL to change the exchange rate.
+        // That would mean we have 13 SOL = 12 stSOL, and that would mean Anker's
+        // excess value is 1/12 = 0.0833 SOL. Converting that to stSOL yields
+        // 1/12 * 12/13 = 1/13 = 0.0769 stSOL.
+        Ok(StLamports(76_923_077))
     );
     assert_eq!(
         anker_after.metrics.swapped_rewards_ust_total
             - anker_before.metrics.swapped_rewards_ust_total,
+        // We started out the constant product pool with 10 stSOL = 10 UST,
+        // and we swapped a relatively small amount, so the amount we got out
+        // here in UST should be close to the amount in stSOL above.
         Ok(MicroUst(76_335_877))
     );
 
