@@ -37,6 +37,15 @@ pub mod orca_token_swap_v2 {
     declare_id!("9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP");
 }
 
+/// A different address that will also contain a deployment of the token swap program.
+///
+/// This is used to test that attackers who upload their own (modified) copy of
+/// the token swap program would not be able to call it.
+pub mod orca_token_swap_v2_fake {
+    use solana_program::declare_id;
+    declare_id!("hackRN3Era2mH2ByBLzGo1EqiGEXFTCAnrJTNxhzU6i");
+}
+
 /// Return the address at which the Anker instance should live that belongs to
 /// the given Solido instance.
 pub fn find_instance_address(anker_program_id: &Pubkey, solido_instance: &Pubkey) -> (Pubkey, u8) {

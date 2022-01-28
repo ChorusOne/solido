@@ -59,7 +59,7 @@ async fn test_successful_sell_rewards_pool_a_b_token_swapped() {
 }
 
 #[tokio::test]
-async fn test_rewards_fail_with_different_reserve() {
+async fn test_sell_rewards_fails_with_different_reserve() {
     let mut context = Context::new().await;
     context
         .initialize_token_pool_and_deposit(Lamports(DEPOSIT_AMOUNT))
@@ -69,4 +69,19 @@ async fn test_rewards_fail_with_different_reserve() {
 
     let result = context.try_sell_rewards().await;
     assert_solido_error!(result, AnkerError::InvalidDerivedAccount);
+}
+
+#[tokio::test]
+async fn test_sell_rewards_fails_with_different_token_swap_program() {
+    let mut context = Context::new().await;
+    context
+        .initialize_token_pool_and_deposit(Lamports(DEPOSIT_AMOUNT))
+        .await;
+
+    // If we try to call `SellRewards`, but the swap program is not the owner of
+    // the pool, that should fail.
+    context.token_swap_program_id = anker::orca_token_swap_v2_fake::id();
+    let result = context.try_sell_rewards().await;
+
+    assert_solido_error!(result, AnkerError::WrongSplTokenSwap);
 }
