@@ -188,6 +188,8 @@ pub struct Context {
     pub rewards_owner: Keypair,
     pub terra_rewards_destination: TerraAddress,
     pub reserve_authority: Pubkey,
+
+    pub token_swap_program_id: Pubkey,
 }
 
 const INITIAL_DEPOSIT: Lamports = Lamports(1_000_000_000);
@@ -248,6 +250,7 @@ impl Context {
             rewards_owner,
             terra_rewards_destination,
             reserve_authority,
+            token_swap_program_id: anker::orca_token_swap_v2::id(),
         }
     }
 
@@ -429,7 +432,7 @@ impl Context {
             .get_ust_stsol_addresses(&mut self.solido_context)
             .await;
         let swap_instruction = spl_token_swap::instruction::swap(
-            &anker::orca_token_swap_v2::id(),
+            &self.token_swap_program_id,
             &spl_token::id(),
             &self.token_pool_context.swap_account.pubkey(),
             &self.token_pool_context.get_token_pool_authority().0,
@@ -496,7 +499,7 @@ impl Context {
                     token_swap_authority,
                     reserve_authority,
                     ust_reserve_account: self.ust_reserve,
-                    token_swap_program_id: anker::orca_token_swap_v2::id(),
+                    token_swap_program_id: self.token_swap_program_id,
                 },
             )],
             vec![],

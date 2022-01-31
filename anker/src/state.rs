@@ -297,12 +297,25 @@ impl Anker {
     pub fn get_token_swap_instance(
         &self,
         token_swap_account: &AccountInfo,
+        token_swap_program_id: &Pubkey,
     ) -> Result<spl_token_swap::state::SwapV1, ProgramError> {
         self.check_token_swap_pool(token_swap_account)?;
+
         // We do not check the owner of the `token_swap_account`. Since we store
         // this address in Anker's state, and we also trust the manager that changes
         // this address, we don't verify the account's owner. This also allows us to
         // test different token swap programs ids on different clusters.
+        // However, we *should* check that the program we are going to call later to
+        // do the token swap, is actually the intended token swap program.
+        if token_swap_account.owner != token_swap_program_id {
+            msg!(
+                "Encountered wrong token swap program; expected {} but found {}.",
+                token_swap_account.owner,
+                token_swap_program_id,
+            );
+            return Err(AnkerError::WrongSplTokenSwap.into());
+        }
+
         // Check that version byte corresponds to V1 version byte.
         if token_swap_account.data.borrow().len() != spl_token_swap::state::SwapVersion::LATEST_LEN
         {
@@ -410,7 +423,10 @@ impl Anker {
         accounts: &SellRewardsAccountsInfo,
     ) -> ProgramResult {
         // Check if the token swap account is the same one as the stored in the instance.
-        let token_swap = self.get_token_swap_instance(accounts.token_swap_pool)?;
+        let token_swap = self.get_token_swap_instance(
+            accounts.token_swap_pool,
+            accounts.token_swap_program_id.key,
+        )?;
 
         // Check token swap instance parameters.
         // Check UST token accounts.

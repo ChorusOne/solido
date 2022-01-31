@@ -34,7 +34,7 @@ pub enum AnkerError {
     /// An account is not owned by the expected owner.
     InvalidOwner = 4006,
 
-    /// Wrong SPL Token Swap instance.
+    /// Wrong SPL Token Swap instance or program.
     WrongSplTokenSwap = 4007,
 
     /// Wrong parameters for the SPL Token Swap instruction.
@@ -48,6 +48,9 @@ pub enum AnkerError {
 
     /// Arguments/Accounts for SendRewards are wrong.
     InvalidSendRewardsParameters = 4011,
+
+    /// After swapping, we are left with less stSOL than we intended.
+    TokenSwapAmountInvalid = 4012,
 }
 
 // Just reuse the generated Debug impl for Display. It shows the variant names.

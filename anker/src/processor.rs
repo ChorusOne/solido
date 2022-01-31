@@ -246,26 +246,42 @@ fn process_sell_rewards(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> Pr
         spl_token::state::Mint::unpack_from_slice(&accounts.b_sol_mint.data.borrow())?;
     let b_sol_supply = token_mint_state.supply;
 
-    let reserve_st_sol = StLamports(Anker::get_token_amount(accounts.st_sol_reserve_account)?);
+    let reserve_st_sol_before =
+        StLamports(Anker::get_token_amount(accounts.st_sol_reserve_account)?);
 
     // Get StLamports corresponding to the amount of b_sol minted.
-    let st_sol_amount = solido.exchange_rate.exchange_sol(Lamports(b_sol_supply))?;
+    let b_sol_supply_value_in_st_sol = solido.exchange_rate.exchange_sol(Lamports(b_sol_supply))?;
 
-    // If `reserve_st_sol` < `st_sol_amount` something went wrong, and we abort the transaction.
-    let rewards = (reserve_st_sol - st_sol_amount)?;
+    // If this underflows, something went wrong, and we abort the transaction.
+    let rewards = (reserve_st_sol_before - b_sol_supply_value_in_st_sol)?;
 
     // Get the amount of UST that we had.
     let ust_before = MicroUst(Anker::get_token_amount(accounts.ust_reserve_account)?);
     swap_rewards(program_id, rewards, &anker, &accounts)?;
     // Get new UST amount.
     let ust_after = MicroUst(Anker::get_token_amount(accounts.ust_reserve_account)?);
+    let reserve_st_sol_after =
+        StLamports(Anker::get_token_amount(accounts.st_sol_reserve_account)?);
     let swapped_ust = (ust_after - ust_before)?;
+    let swapped_st_sol = (reserve_st_sol_before - reserve_st_sol_after)?;
 
-    msg!("Swapped {} for {}.", st_sol_amount, swapped_ust);
+    // The token swap program should not take more stSOL than we told it to swap.
+    // As an extra line of defense, confirm this after the swap is done, and abort
+    // if some stSOL went missing.
+    if swapped_st_sol > rewards {
+        msg!(
+            "Called the token swap program to swap {}, but {} was removed from the reserve!",
+            rewards,
+            swapped_st_sol,
+        );
+        return Err(AnkerError::TokenSwapAmountInvalid.into());
+    }
+
+    msg!("Swapped {} for {}.", swapped_st_sol, swapped_ust);
 
     anker
         .metrics
-        .observe_token_swap(st_sol_amount, swapped_ust)?;
+        .observe_token_swap(swapped_st_sol, swapped_ust)?;
     anker.save(accounts.anker)
 }
 
@@ -388,12 +404,19 @@ fn process_change_token_swap_pool(
     let (solido, mut anker) = deserialize_anker(program_id, accounts.anker, accounts.solido)?;
     solido.check_manager(accounts.manager)?;
 
-    let current_token_swap = anker.get_token_swap_instance(accounts.current_token_swap_pool)?;
+    let current_token_swap_program_id = accounts.current_token_swap_pool.owner;
+    let current_token_swap = anker.get_token_swap_instance(
+        accounts.current_token_swap_pool,
+        current_token_swap_program_id,
+    )?;
+
     // `get_token_swap_instance` compares the account to the one stored in
     // `anker.token_swap_pool`. We assign first so we have the correct value to
     // compare. If the check fails, the transaction will revert.
     anker.token_swap_pool = *accounts.new_token_swap_pool.key;
-    let new_token_swap = anker.get_token_swap_instance(accounts.new_token_swap_pool)?;
+    let new_token_swap_program_id = accounts.new_token_swap_pool.owner;
+    let new_token_swap =
+        anker.get_token_swap_instance(accounts.new_token_swap_pool, new_token_swap_program_id)?;
 
     anker.check_change_token_swap_pool(&solido, current_token_swap, new_token_swap)?;
     anker.save(accounts.anker)

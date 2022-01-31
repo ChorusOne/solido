@@ -268,6 +268,11 @@ impl Context {
         // If we don't have it locally, download it from the chain.
         crate::util::ensure_orca_program_exists();
         program_test.add_program("orca_token_swap_v2", anker::orca_token_swap_v2::id(), None);
+        program_test.add_program(
+            "orca_token_swap_v2",
+            anker::orca_token_swap_v2_fake::id(),
+            None,
+        );
 
         let mut result = Self {
             context: program_test.start_with_context().await,

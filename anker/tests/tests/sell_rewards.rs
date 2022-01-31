@@ -20,11 +20,20 @@ async fn test_successful_sell_rewards() {
     assert_eq!(
         anker_after.metrics.swapped_rewards_st_sol_total
             - anker_before.metrics.swapped_rewards_st_sol_total,
-        Ok(StLamports(0_923_076_923))
+        // Solido got initialized with 1 SOL. Then it got 10 stLamports for
+        // initializing the swap pool. Then we deposited 1 more SOL for use with
+        // Anker, and we donated 1 SOL to change the exchange rate.
+        // That would mean we have 13 SOL = 12 stSOL, and that would mean Anker's
+        // excess value is 1/12 = 0.0833 SOL. Converting that to stSOL yields
+        // 1/12 * 12/13 = 1/13 = 0.0769 stSOL.
+        Ok(StLamports(76_923_077))
     );
     assert_eq!(
         anker_after.metrics.swapped_rewards_ust_total
             - anker_before.metrics.swapped_rewards_ust_total,
+        // We started out the constant product pool with 10 stSOL = 10 UST,
+        // and we swapped a relatively small amount, so the amount we got out
+        // here in UST should be close to the amount in stSOL above.
         Ok(MicroUst(76_335_877))
     );
 
@@ -59,7 +68,7 @@ async fn test_successful_sell_rewards_pool_a_b_token_swapped() {
 }
 
 #[tokio::test]
-async fn test_rewards_fail_with_different_reserve() {
+async fn test_sell_rewards_fails_with_different_reserve() {
     let mut context = Context::new().await;
     context
         .initialize_token_pool_and_deposit(Lamports(DEPOSIT_AMOUNT))
@@ -69,4 +78,19 @@ async fn test_rewards_fail_with_different_reserve() {
 
     let result = context.try_sell_rewards().await;
     assert_solido_error!(result, AnkerError::InvalidDerivedAccount);
+}
+
+#[tokio::test]
+async fn test_sell_rewards_fails_with_different_token_swap_program() {
+    let mut context = Context::new().await;
+    context
+        .initialize_token_pool_and_deposit(Lamports(DEPOSIT_AMOUNT))
+        .await;
+
+    // If we try to call `SellRewards`, but the swap program is not the owner of
+    // the pool, that should fail.
+    context.token_swap_program_id = anker::orca_token_swap_v2_fake::id();
+    let result = context.try_sell_rewards().await;
+
+    assert_solido_error!(result, AnkerError::WrongSplTokenSwap);
 }
