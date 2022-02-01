@@ -6,7 +6,11 @@ export {
   getOwnerTokenAccounts,
   getTotalNumberOfTokenAccounts,
 } from './stats';
-export { findAuthorityProgramAddress } from './utils';
+export {
+  findAuthorityProgramAddress,
+  exchangeSol,
+  exchangeStSol,
+} from './utils';
 export { MAINNET_PROGRAM_ADDRESSES } from './constants';
 
 export { getDepositInstruction } from './instructions/deposit';

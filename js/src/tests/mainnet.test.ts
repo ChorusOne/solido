@@ -118,12 +118,9 @@ describe('Statistics functions', () => {
   });
 
   it('gets exchange rate', async () => {
-    const exchangeRate = await getExchangeRate(snapshotDump);
+    const exchangeRate = getExchangeRate(snapshotDump);
 
-    expect(exchangeRate.solBalance.lamports.toNumber()).toBe(961542925010009);
-    expect(exchangeRate.stSolSupply.stLamports.toNumber()).toBe(
-      947808007179733
-    );
+    expect(exchangeRate).toBe(1.0144912447734487);
   });
 });
 

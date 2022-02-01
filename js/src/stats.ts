@@ -1,6 +1,6 @@
 import { Connection, PublicKey } from '@solana/web3.js';
 import BN from 'bn.js';
-import { ExchangeRate, Lamports, Snapshot, StLamports } from './types';
+import { Lamports, Snapshot, StLamports } from './types';
 
 /**
  * Get total value locked in the solido program
@@ -59,14 +59,11 @@ export const getStSolSupply = (
  * @param snapshot Solido snapshot
  * @returns Exchange rate
  */
-export const getExchangeRate = (snapshot: Snapshot): ExchangeRate => {
+export const getExchangeRate = (snapshot: Snapshot): number => {
   const totalSolInLamports = snapshot.solido.exchange_rate.sol_balance;
-  const stSolSupplyInLamports = snapshot.solido.exchange_rate.st_sol_supply;
+  const stSolSupplyInStLamports = snapshot.solido.exchange_rate.st_sol_supply;
 
-  return {
-    solBalance: { lamports: totalSolInLamports },
-    stSolSupply: { stLamports: stSolSupplyInLamports },
-  };
+  return totalSolInLamports.toNumber() / stSolSupplyInStLamports.toNumber();
 };
 
 /**

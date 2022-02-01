@@ -38,14 +38,6 @@ export class StLamports {
 }
 
 /**
- * Exchange Rate
- */
-export interface ExchangeRate {
-  solBalance: Lamports;
-  stSolSupply: StLamports;
-}
-
-/**
  * Snapshot of the Solido stats
  *
  * Snapshot of all Solido-related accounts at a given slot.

@@ -1,5 +1,7 @@
 import { PublicKey } from '@solana/web3.js';
 import type BN from 'bn.js';
+import { getExchangeRate } from './stats';
+import { Lamports, StLamports } from './types';
 import type { ProgramAddresses, Snapshot } from './types';
 
 /**
@@ -75,4 +77,26 @@ export const getHeaviestValidatorStakeAccount = (
   });
 
   return heaviestValidatorStakeAccount;
+};
+
+/**
+ * Exchange SOL to stSOL
+ * @param snapshot Snapshot of the Solido stats
+ * @param amount SOL to exchange
+ */
+export const exchangeSol = (snapshot: Snapshot, amount: Lamports) => {
+  const exchangeRate = getExchangeRate(snapshot);
+
+  return new StLamports(amount.lamports.toNumber() / exchangeRate);
+};
+
+/**
+ * Exchange stSOL to SOL
+ * @param snapshot Snapshot of the Solido stats
+ * @param amount stSOL to exchange
+ */
+export const exchangeStSol = (snapshot: Snapshot, amount: StLamports) => {
+  const exchangeRate = getExchangeRate(snapshot);
+
+  return new Lamports(amount.stLamports.toNumber() * exchangeRate);
 };
