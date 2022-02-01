@@ -22,6 +22,8 @@ use solido_cli_common::{
 };
 use tiny_http::{Header, Request, Response, Server};
 
+const SOLIDO_ID: &str = "solido";
+
 #[derive(Clap, Debug)]
 pub struct Opts {
     /// Solido's instance address
@@ -31,10 +33,6 @@ pub struct Opts {
     /// URL of cluster to connect to (e.g., https://api.devnet.solana.com for solana devnet)
     #[clap(long, default_value = "http://127.0.0.1:8899")]
     cluster: String,
-
-    /// Unique name for identifying
-    #[clap(long, default_value = "solido")]
-    pool: String,
 
     /// Poll frequency in seconds.
     #[clap(long, default_value = "300")]
@@ -135,6 +133,7 @@ pub fn get_apy_for_period(
     opts: &Opts,
     from_time: chrono::DateTime<chrono::Utc>,
     to_time: chrono::DateTime<chrono::Utc>,
+    pool: String,
 ) -> rusqlite::Result<Option<IntervalPrices>> {
     let row_map = |row: &Row| {
         let timestamp: String = row.get(1)?;
@@ -182,12 +181,10 @@ pub fn get_apy_for_period(
               ORDER BY
                 timestamp ASC
             ")?;
-        let mut row_iter =
-            stmt_first.query_map([opts.pool.clone(), from_time.to_rfc3339()], row_map)?;
+        let mut row_iter = stmt_first.query_map([pool.clone(), from_time.to_rfc3339()], row_map)?;
         let first = row_iter.next();
 
-        let mut row_iter =
-            stmt_last.query_map([opts.pool.clone(), to_time.to_rfc3339()], row_map)?;
+        let mut row_iter = stmt_last.query_map([pool, to_time.to_rfc3339()], row_map)?;
         let last = row_iter.next();
 
         (first, last)
@@ -278,42 +275,46 @@ impl<'a, 'b> Daemon<'a, 'b> {
     fn run(mut self) -> ! {
         loop {
             self.metrics.polls += 1;
-            let sleep_time =
-                match get_and_save_exchange_rate(self.config, self.opts, self.db_connection) {
-                    ListenerResult::ErrSnapshot(err) => {
-                        println!("Error while obtaining on-chain state.");
-                        err.print_pretty();
-                        self.metrics.errors += 1;
-                        self.get_sleep_time_after_error()
-                    }
-                    ListenerResult::OkListener(exchange_rate, interval_prices_option) => {
-                        println!(
-                            "Got exchange rate: {}/{}: {} at slot {} and epoch {}.",
-                            exchange_rate.price_lamports_numerator,
-                            exchange_rate.price_lamports_denominator,
-                            exchange_rate.price_lamports_numerator as f32
-                                / exchange_rate.price_lamports_denominator as f32,
-                            exchange_rate.slot,
-                            exchange_rate.epoch,
-                        );
+            let sleep_time = match get_and_save_exchange_rate(
+                self.config,
+                self.opts,
+                self.db_connection,
+                "solido".to_owned(),
+            ) {
+                ListenerResult::ErrSnapshot(err) => {
+                    println!("Error while obtaining on-chain state.");
+                    err.print_pretty();
+                    self.metrics.errors += 1;
+                    self.get_sleep_time_after_error()
+                }
+                ListenerResult::OkListener(exchange_rate, interval_prices_option) => {
+                    println!(
+                        "Got exchange rate: {}/{}: {} at slot {} and epoch {}.",
+                        exchange_rate.price_lamports_numerator,
+                        exchange_rate.price_lamports_denominator,
+                        exchange_rate.price_lamports_numerator as f32
+                            / exchange_rate.price_lamports_denominator as f32,
+                        exchange_rate.slot,
+                        exchange_rate.epoch,
+                    );
 
-                        match interval_prices_option {
-                            None => println!(
-                                "No interval price could be produced, awaiting more data points"
-                            ),
-                            Some(interval_prices) => {
-                                println!("{}", interval_prices);
-                                self.metrics.solido_average_interval_price = Some(interval_prices);
-                            }
+                    match interval_prices_option {
+                        None => println!(
+                            "No interval price could be produced, awaiting more data points"
+                        ),
+                        Some(interval_prices) => {
+                            println!("{}", interval_prices);
+                            self.metrics.solido_average_interval_price = Some(interval_prices);
                         }
-                        self.get_sleep_time()
                     }
-                    ListenerResult::ErrListener(err) => {
-                        println!("Error in listener.");
-                        err.print_pretty();
-                        self.get_sleep_time_after_error()
-                    }
-                };
+                    self.get_sleep_time()
+                }
+                ListenerResult::ErrListener(err) => {
+                    println!("Error in listener.");
+                    err.print_pretty();
+                    self.get_sleep_time_after_error()
+                }
+            };
             // Update metrics snapshot.
             *self.metrics_snapshot.lock().unwrap() = Arc::new(self.metrics.clone());
             std::thread::sleep(sleep_time);
@@ -472,6 +473,7 @@ fn get_and_save_exchange_rate(
     config: &mut SnapshotClientConfig,
     opts: &Opts,
     db_connection: &Connection,
+    pool: String,
 ) -> ListenerResult {
     let result = config.with_snapshot(|config| {
         let solido = config.client.get_solido(&opts.solido_address)?;
@@ -481,7 +483,7 @@ fn get_and_save_exchange_rate(
             timestamp: chrono::Utc::now().with_timezone(&chrono::FixedOffset::east(0)),
             slot: clock.slot,
             epoch: clock.epoch,
-            pool: opts.pool.clone(),
+            pool: pool.clone(),
             price_lamports_numerator: solido.exchange_rate.sol_balance.0,
             price_lamports_denominator: solido.exchange_rate.st_sol_supply.0,
         })
@@ -508,7 +510,13 @@ fn insert_price_and_query_price_interval(
     // FIXME: chrono::MIN_DATETIME and chrono::MAX_DATETIME include a sign in
     // front of the ISO 8601 date time format.  It makes it hard to compare as a
     // string in the database, especially the MAX_DATETIME.
-    let interval_prices = get_apy_for_period(tx, opts, chrono::MIN_DATETIME, chrono::Utc::now())?;
+    let interval_prices = get_apy_for_period(
+        tx,
+        opts,
+        chrono::MIN_DATETIME,
+        chrono::Utc::now(),
+        SOLIDO_ID.to_owned(),
+    )?;
     Ok(interval_prices)
 }
 
@@ -542,7 +550,6 @@ fn test_get_average_apy() {
     let opts = Opts {
         solido_address: Pubkey::new_unique(),
         cluster: "http://127.0.0.1:8899".to_owned(),
-        pool: "solido".to_owned(),
         poll_frequency_seconds: 1,
         db_path: "listener".to_owned(),
         listen: "0.0.0.0:8923".to_owned(),
@@ -557,7 +564,7 @@ fn test_get_average_apy() {
             .with_timezone(&chrono::FixedOffset::east(0)),
         slot: 1,
         epoch: 1,
-        pool: opts.pool.clone(),
+        pool: SOLIDO_ID.to_owned(),
         price_lamports_numerator: 1,
         price_lamports_denominator: 1,
     };
@@ -570,7 +577,7 @@ fn test_get_average_apy() {
             .with_timezone(&chrono::FixedOffset::east(0)),
         slot: 2,
         epoch: 2,
-        pool: opts.pool.clone(),
+        pool: SOLIDO_ID.to_owned(),
         price_lamports_numerator: 1394458971361025,
         price_lamports_denominator: 1367327673971744,
     };
@@ -580,6 +587,7 @@ fn test_get_average_apy() {
         &opts,
         chrono::Utc.ymd(2020, 7, 7).and_hms(0, 0, 0),
         chrono::Utc.ymd(2021, 7, 8).and_hms(0, 0, 0),
+        SOLIDO_ID.to_owned(),
     )
     .expect("Failed when getting APY for period");
     assert_eq!(apy.unwrap().annual_percentage_rate(), 4.7989255185326485);
