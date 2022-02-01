@@ -127,7 +127,7 @@ impl std::fmt::Display for IntervalPrices {
     }
 }
 
-pub fn get_apy_for_period(
+pub fn get_interval_price_for_period(
     tx: rusqlite::Transaction,
     from_time: chrono::DateTime<chrono::Utc>,
     to_time: chrono::DateTime<chrono::Utc>,
@@ -507,7 +507,7 @@ fn insert_price_and_query_price_interval(
     // FIXME: chrono::MIN_DATETIME and chrono::MAX_DATETIME include a sign in
     // front of the ISO 8601 date time format.  It makes it hard to compare as a
     // string in the database, especially the MAX_DATETIME.
-    let interval_prices = get_apy_for_period(
+    let interval_prices = get_interval_price_for_period(
         tx,
         chrono::MIN_DATETIME,
         chrono::Utc::now(),
@@ -571,7 +571,7 @@ fn test_get_average_apy() {
         price_lamports_denominator: 1367327673971744,
     };
     insert_price(&conn, &exchange_rate).unwrap();
-    let apy = get_apy_for_period(
+    let apy = get_interval_price_for_period(
         conn.unchecked_transaction().unwrap(),
         chrono::Utc.ymd(2020, 7, 7).and_hms(0, 0, 0),
         chrono::Utc.ymd(2021, 7, 8).and_hms(0, 0, 0),
@@ -620,7 +620,7 @@ fn test_rationals_do_not_overflow() {
     };
     insert_price(&conn, &exchange_rate).unwrap();
 
-    let apy = get_apy_for_period(
+    let apy = get_interval_price_for_period(
         conn.unchecked_transaction().unwrap(),
         chrono::Utc.ymd(2020, 7, 7).and_hms(0, 0, 0),
         chrono::Utc.ymd(2022, 7, 8).and_hms(0, 0, 0),
