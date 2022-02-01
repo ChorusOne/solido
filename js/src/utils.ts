@@ -62,14 +62,17 @@ export const calculateStakeAccountAddress = async (
 export const getHeaviestValidatorStakeAccount = (
   snapshot: Snapshot
 ): Snapshot['validatorsStakeAccounts'][0] => {
-  const sortedValidatorStakeAccounts = snapshot.validatorsStakeAccounts.sort(
-    (stakeAccountA, stakeAccountB) =>
-      stakeAccountB.balance.lamports
-        .sub(stakeAccountA.balance.lamports)
-        .toNumber()
-  );
+  let heaviestValidatorStakeAccount = snapshot.validatorsStakeAccounts[0];
 
-  const heaviestValidatorStakeAccount = sortedValidatorStakeAccounts[0];
+  snapshot.validatorsStakeAccounts.forEach((validatorStakeAccount) => {
+    if (
+      validatorStakeAccount.balance.lamports.gt(
+        heaviestValidatorStakeAccount.balance.lamports
+      )
+    ) {
+      heaviestValidatorStakeAccount = validatorStakeAccount;
+    }
+  });
 
   return heaviestValidatorStakeAccount;
 };
