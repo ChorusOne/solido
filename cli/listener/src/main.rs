@@ -130,7 +130,6 @@ impl std::fmt::Display for IntervalPrices {
 
 pub fn get_apy_for_period(
     tx: rusqlite::Transaction,
-    opts: &Opts,
     from_time: chrono::DateTime<chrono::Utc>,
     to_time: chrono::DateTime<chrono::Utc>,
     pool: String,
@@ -492,7 +491,7 @@ fn get_and_save_exchange_rate(
     match result {
         Err(err) => ListenerResult::ErrSnapshot(err),
         Ok(exchange_rate) => {
-            match insert_price_and_query_price_interval(db_connection, opts, &exchange_rate) {
+            match insert_price_and_query_price_interval(db_connection, &exchange_rate) {
                 Ok(interval_prices) => ListenerResult::OkListener(exchange_rate, interval_prices),
                 Err(error) => ListenerResult::ErrListener(Box::new(error)),
             }
@@ -502,7 +501,6 @@ fn get_and_save_exchange_rate(
 
 fn insert_price_and_query_price_interval(
     db_connection: &Connection,
-    opts: &Opts,
     exchange_rate: &ExchangeRate,
 ) -> Result<Option<IntervalPrices>, rusqlite::Error> {
     insert_price(db_connection, exchange_rate)?;
@@ -512,7 +510,6 @@ fn insert_price_and_query_price_interval(
     // string in the database, especially the MAX_DATETIME.
     let interval_prices = get_apy_for_period(
         tx,
-        opts,
         chrono::MIN_DATETIME,
         chrono::Utc::now(),
         SOLIDO_ID.to_owned(),
@@ -584,7 +581,6 @@ fn test_get_average_apy() {
     insert_price(&conn, &exchange_rate).unwrap();
     let apy = get_apy_for_period(
         conn.unchecked_transaction().unwrap(),
-        &opts,
         chrono::Utc.ymd(2020, 7, 7).and_hms(0, 0, 0),
         chrono::Utc.ymd(2021, 7, 8).and_hms(0, 0, 0),
         SOLIDO_ID.to_owned(),
