@@ -41,24 +41,11 @@ impl PartialOrd for Rational {
 }
 
 impl Div for Rational {
-    type Output = Result<Rational>;
+    type Output = f64;
 
     fn div(self, rhs: Self) -> Self::Output {
-        if rhs.numerator == 0 {
-            panic!("Cannot divide by zero-valued `Rational`!");
-        }
-        let numerator = self
-            .numerator
-            .checked_mul(rhs.denominator)
-            .ok_or(ArithmeticError)?;
-        let denominator = self
-            .denominator
-            .checked_mul(rhs.numerator)
-            .ok_or(ArithmeticError)?;
-        Ok(Rational {
-            numerator,
-            denominator,
-        })
+        (self.numerator as f64 * rhs.denominator as f64)
+            / (self.denominator as f64 * rhs.numerator as f64)
     }
 }
 

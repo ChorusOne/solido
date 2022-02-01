@@ -100,13 +100,12 @@ impl IntervalPrices {
     pub fn duration_epochs(&self) -> u64 {
         self.epoch1 - self.epoch0
     }
-    pub fn growth_factor(&self) -> Rational {
-        (self.price1_lamports / self.price0_lamports).expect("Division by 0 cannot happen.")
+    pub fn growth_factor(&self) -> f64 {
+        self.price1_lamports / self.price0_lamports
     }
     pub fn annual_growth_factor(&self) -> f64 {
         let year = chrono::Duration::days(365);
         self.growth_factor()
-            .to_f64()
             .powf(year.num_seconds() as f64 / self.duration_wall_time().num_seconds() as f64)
     }
     pub fn annual_percentage_rate(&self) -> f64 {
@@ -544,13 +543,6 @@ fn main() {
 #[test]
 fn test_get_average_apy() {
     use chrono::TimeZone;
-    let opts = Opts {
-        solido_address: Pubkey::new_unique(),
-        cluster: "http://127.0.0.1:8899".to_owned(),
-        poll_frequency_seconds: 1,
-        db_path: "listener".to_owned(),
-        listen: "0.0.0.0:8923".to_owned(),
-    };
     let conn = Connection::open_in_memory().expect("Failed to open sqlite connection.");
     create_db(&conn).unwrap();
     let exchange_rate = ExchangeRate {
@@ -587,4 +579,53 @@ fn test_get_average_apy() {
     )
     .expect("Failed when getting APY for period");
     assert_eq!(apy.unwrap().annual_percentage_rate(), 4.7989255185326485);
+}
+
+// When computing the APY, we have to call `growth_factor` which divides two
+// Rational numbers. Previously when dividing two rationals our implementation
+// returned another Rational. In other words, for dividing `a/b` by `c/d`, we
+// did `a*d/b*c`. In this case, `a*d` or `b*c` could overflow, we now return an
+// `f64` instead of a Rational and avoid multiplying two large numbers that
+// could overflow.
+#[test]
+fn test_rationals_do_not_overflow() {
+    use chrono::TimeZone;
+    let conn = Connection::open_in_memory().expect("Failed to open sqlite connection.");
+    create_db(&conn).unwrap();
+    let exchange_rate = ExchangeRate {
+        id: 0,
+        timestamp: chrono::Utc
+            .ymd(2022, 01, 28)
+            .and_hms(11, 58, 39)
+            .with_timezone(&chrono::FixedOffset::east(0)),
+        slot: 108837851,
+        epoch: 270,
+        pool: SOLIDO_ID.to_owned(),
+        price_lamports_numerator: 1936245653069130,
+        price_lamports_denominator: 1893971837707973,
+    };
+    insert_price(&conn, &exchange_rate).unwrap();
+
+    let exchange_rate = ExchangeRate {
+        id: 0,
+        timestamp: chrono::Utc
+            .ymd(2022, 02, 28)
+            .and_hms(11, 58, 39)
+            .with_timezone(&chrono::FixedOffset::east(0)),
+        slot: 118837851,
+        epoch: 275,
+        pool: SOLIDO_ID.to_owned(),
+        price_lamports_numerator: 1936245653069130,
+        price_lamports_denominator: 1892971837707973,
+    };
+    insert_price(&conn, &exchange_rate).unwrap();
+
+    let apy = get_apy_for_period(
+        conn.unchecked_transaction().unwrap(),
+        chrono::Utc.ymd(2020, 7, 7).and_hms(0, 0, 0),
+        chrono::Utc.ymd(2022, 7, 8).and_hms(0, 0, 0),
+        SOLIDO_ID.to_owned(),
+    )
+    .expect("Failed when getting APY for period");
+    apy.unwrap().growth_factor();
 }
