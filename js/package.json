@@ -25,6 +25,7 @@
     "build:ts": "npm run test & tsc",
     "prettier": "prettier --write 'src/**/*.{ts,json}'",
     "docs:build": "typedoc src/index.ts",
+    "docs:watch": "typedoc src/index.ts --watch",
     "docs:serve": "npx serve docs -l 8000"
   },
   "dependencies": {
