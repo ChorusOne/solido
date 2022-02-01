@@ -54,7 +54,7 @@ pub struct ExchangeRate {
     /// Id of the data point.
     id: i32,
     /// Time when the data point was logged.
-    timestamp: chrono::DateTime<chrono::Utc>,
+    timestamp: chrono::DateTime<chrono::FixedOffset>,
     /// Slot when the data point was logged.
     slot: Slot,
     /// Epoch when the data point was logged.
@@ -87,8 +87,8 @@ pub fn create_db(conn: &Connection) -> rusqlite::Result<()> {
 
 #[derive(Clone, Debug)]
 pub struct IntervalPrices {
-    t0: chrono::DateTime<chrono::Utc>,
-    t1: chrono::DateTime<chrono::Utc>,
+    t0: chrono::DateTime<chrono::FixedOffset>,
+    t1: chrono::DateTime<chrono::FixedOffset>,
     epoch0: Epoch,
     epoch1: Epoch,
     price0_lamports: Rational,
@@ -137,11 +137,10 @@ pub fn get_apy_for_period(
     to_time: chrono::DateTime<chrono::Utc>,
 ) -> rusqlite::Result<Option<IntervalPrices>> {
     let row_map = |row: &Row| {
-        let timestamp_iso8601: String = row.get(1)?;
+        let timestamp: String = row.get(1)?;
         Ok(ExchangeRate {
             id: row.get(0)?,
-            timestamp: timestamp_iso8601
-                .parse()
+            timestamp: chrono::DateTime::parse_from_rfc3339(&timestamp)
                 .expect("Invalid timestamp format."),
             slot: row.get(2)?,
             epoch: row.get(3)?,
@@ -184,12 +183,13 @@ pub fn get_apy_for_period(
                 timestamp ASC
             ")?;
         let mut row_iter =
-            stmt_first.query_map([opts.pool.clone(), from_time.to_string()], row_map)?;
+            stmt_first.query_map([opts.pool.clone(), from_time.to_rfc3339()], row_map)?;
         let first = row_iter.next();
 
         let mut row_iter =
-            stmt_last.query_map([opts.pool.clone(), to_time.to_string()], row_map)?;
+            stmt_last.query_map([opts.pool.clone(), to_time.to_rfc3339()], row_map)?;
         let last = row_iter.next();
+
         (first, last)
     };
 
@@ -220,12 +220,11 @@ pub fn get_apy_for_period(
         }
         _ => Ok(None),
     }
-    // Ok(Some(1.0))
 }
 
 pub fn insert_price(conn: &Connection, exchange_rate: &ExchangeRate) -> rusqlite::Result<()> {
     conn.execute("INSERT INTO exchange_rate (timestamp, slot, epoch, pool, price_lamports_numerator, price_lamports_denominator) VALUES (?1, ?2, ?3, ?4, ?5, ?6)", 
-    params![exchange_rate.timestamp.to_string(), exchange_rate.slot, exchange_rate.epoch, exchange_rate.pool,
+    params![exchange_rate.timestamp.to_rfc3339(), exchange_rate.slot, exchange_rate.epoch, exchange_rate.pool,
         exchange_rate.price_lamports_numerator, exchange_rate.price_lamports_denominator])?;
     Ok(())
 }
@@ -479,7 +478,7 @@ fn get_and_save_exchange_rate(
         let clock = config.client.get_clock()?;
         Ok(ExchangeRate {
             id: 0,
-            timestamp: chrono::Utc::now(),
+            timestamp: chrono::Utc::now().with_timezone(&chrono::FixedOffset::east(0)),
             slot: clock.slot,
             epoch: clock.epoch,
             pool: opts.pool.clone(),
@@ -552,7 +551,10 @@ fn test_get_average_apy() {
     create_db(&conn).unwrap();
     let exchange_rate = ExchangeRate {
         id: 0,
-        timestamp: chrono::Utc.ymd(2020, 8, 8).and_hms(0, 0, 0),
+        timestamp: chrono::Utc
+            .ymd(2020, 8, 8)
+            .and_hms(0, 0, 0)
+            .with_timezone(&chrono::FixedOffset::east(0)),
         slot: 1,
         epoch: 1,
         pool: opts.pool.clone(),
@@ -562,7 +564,10 @@ fn test_get_average_apy() {
     insert_price(&conn, &exchange_rate).unwrap();
     let exchange_rate = ExchangeRate {
         id: 0,
-        timestamp: chrono::Utc.ymd(2021, 1, 8).and_hms(0, 0, 0),
+        timestamp: chrono::Utc
+            .ymd(2021, 1, 8)
+            .and_hms(0, 0, 0)
+            .with_timezone(&chrono::FixedOffset::east(0)),
         slot: 2,
         epoch: 2,
         pool: opts.pool.clone(),
