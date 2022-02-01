@@ -13,6 +13,8 @@ export interface ProgramAddresses {
 
 /**
  * Balance of SOL account
+ *
+ * 1 lamport = 1e-9 SOL, and is the smallest possible amount of SOL
  */
 export class Lamports {
   lamports: BN;
@@ -24,6 +26,8 @@ export class Lamports {
 
 /**
  * Balance of stSOL account
+ *
+ * 1 stLamport = 1e-9 stSOL, and is the smallest possible amount of stSOL
  */
 export class StLamports {
   stLamports: BN;
@@ -43,6 +47,15 @@ export interface ExchangeRate {
 
 /**
  * Snapshot of the Solido stats
+ *
+ * Snapshot of all Solido-related accounts at a given slot.
+ *
+ * From the snapshot we can query all Solido stats, and it is also the starting point for constructing transactions.
+ *
+ * There are multiple accounts that are relevant to the Solido program, aside from the main instance.
+ * For example, the validators’ stake accounts.
+ * To be able to get a consistent view of those accounts, we read them atomically with the `getMultipleAccounts` RPC call.
+ * The snapshot holds the parsed results.
  */
 export interface Snapshot {
   solido: Solido;

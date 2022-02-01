@@ -25,6 +25,12 @@ export const getTotalValueLocked = (snapshot: Snapshot): Lamports => {
  * Get the total stSOL supply
  * @param snapshot Solido snapshot
  * @param type 'totalcoins' or 'circulating'
+ *
+ * - With type=circulating, we return the stSOL supply according to the SPL token mint. It’s the amount of tokens that exists at the moment, excluding tokens that we already know will be minted in the future, but which haven’t been minted yet at this time.
+ * - With type=totalcoins, we also include fees that have been earned, for which stSOL will be minted soon, but which hasn’t been minted yet at this time.
+ *
+ * In practice, the two values are almost always equal. They can differ briefly at the start of the epoch, when fees are distributed.
+ *
  * @returns stSOL supply
  */
 export const getStSolSupply = (
@@ -64,8 +70,11 @@ export const getExchangeRate = (snapshot: Snapshot): ExchangeRate => {
 };
 
 /**
- * Get the number of all the token accounts exist for the token specified by the mint address
+ * Get the number of  token accounts that exist for the token specified by the mint address
  * @param connection Connection to the cluster
+ *
+ * **Note: RPC node needs to have account indexing enabled for the SPL token mint that we query, and this is not enabled by default**
+ *
  * @param tokenMintAddress Address of the token mint account
  * @param tokenProgramId Address of the Token program
  * @returns Number of token accounts
@@ -92,7 +101,7 @@ export const getTotalNumberOfTokenAccounts = async (
 };
 
 /**
- * Get all the token accounts(specified by the mint address) for the given owner account
+ * Get all the token accounts (specified by the mint address) for the given owner account
  * @param connection Connection to the cluster
  * @param tokenMintAddress Address of the token mint account
  * @param ownerAccountAddress Address of the owner of the token
@@ -102,7 +111,7 @@ export const getOwnerTokenAccounts = async (
   connection: Connection,
   tokenMintAddress: PublicKey,
   ownerAccountAddress: PublicKey
-) => {
+): Promise<{ address: PublicKey; balance: Lamports }[]> => {
   const tokenAccounts: { address: PublicKey; balance: Lamports }[] = [];
 
   const { value } = await connection.getParsedTokenAccountsByOwner(

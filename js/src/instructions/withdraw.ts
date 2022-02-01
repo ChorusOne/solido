@@ -10,7 +10,7 @@ import {
 } from '@solana/web3.js';
 import BN from 'bn.js';
 import { StLamports, Lamports } from '../types';
-import type { ProgramAddresses, Snapshot } from '../types';
+import type { Snapshot } from '../types';
 import {
   findAuthorityProgramAddress,
   getHeaviestValidatorStakeAccount,
@@ -19,10 +19,16 @@ import {
 /**
  * Generates the instructions to unstake from the Solido Program
  * @param snapshot Snapshot of the Solido stats
- * @param senderStSolAccountOwnerAddress Address of the owner of the sender's stSOL Account
- * @param senderStSolAccountAddress Address of the stSOL Account to be unstaked
- * @param recipientStakeAccountAddress Address of the NEW Account
+ * @param senderStSolAccountOwnerAddress Address of the owner of the sender's stSOL SPL token account
+ * @param senderStSolAccountAddress Address of the stSOL SPL token account, whose stSOL balance will be decreased
+ * @param recipientStakeAccountAddress The address of a new, uninitialized account.
+ * The Solido program will initialize a stake account here that holds the SOL that was redeemed.
+ * This address needs to be a signer of the transaction.
  * @param amount Amount of stSOL to unstake
+ *
+ * @throws Error if the amount is less than the rent exempt balance of the new stake account to be created after the unstake
+ * @throws Error if the amount is not less than the maximum withdrawal amount
+ *
  * @returns Instructions to unstake stSOL
  */
 export const getWithdrawInstruction = async (
@@ -31,7 +37,7 @@ export const getWithdrawInstruction = async (
   senderStSolAccountAddress: PublicKey,
   recipientStakeAccountAddress: PublicKey,
   amount: StLamports
-) => {
+): Promise<TransactionInstruction> => {
   const stakeAuthorityAddress = await findAuthorityProgramAddress(
     snapshot.programAddresses,
     'stake_authority'
@@ -108,7 +114,7 @@ export const getWithdrawInstruction = async (
     { pubkey: StakeProgram.programId, isSigner: false, isWritable: false },
   ];
 
-  // Reference: Withdraw instruction at https://github.com/ChorusOne/solido/blob/main/program/src/instruction.rs#L45-L52
+  // Reference: Withdraw instruction at https://github.com/ChorusOne/solido/blob/73040002ddbb62a3cee93107d03871f848ecd1e0/program/src/instruction.rs#L45-L52
   const dataLayout = BufferLayout.struct([
     BufferLayout.u8('instruction'),
     BufferLayout.nu64('amount'),

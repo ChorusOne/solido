@@ -7,6 +7,9 @@ import { calculateStakeAccountAddress } from './utils';
 
 /**
  * Solido Program State
+ *
+ * Reference:
+ * https://github.com/ChorusOne/solido/blob/73040002ddbb62a3cee93107d03871f848ecd1e0/program/src/state.rs#L187
  */
 export class Solido {
   exchange_rate: ExchangeRate;
@@ -34,6 +37,9 @@ export class Solido {
   }
 }
 
+/**
+ * Reference: https://github.com/ChorusOne/solido/blob/73040002ddbb62a3cee93107d03871f848ecd1e0/program/src/state.rs#L656
+ */
 class SeedRange {
   begin: BN;
   end: BN;
@@ -43,6 +49,9 @@ class SeedRange {
   }
 }
 
+/**
+ * Reference: https://github.com/ChorusOne/solido/blob/73040002ddbb62a3cee93107d03871f848ecd1e0/program/src/state.rs#L628
+ */
 class Validator {
   active: number;
   fee_address: PublicKey;
@@ -61,6 +70,9 @@ class Validator {
   }
 }
 
+/**
+ * Reference: https://github.com/ChorusOne/solido/blob/73040002ddbb62a3cee93107d03871f848ecd1e0/program/src/account_map.rs#L17
+ */
 class ValidatorPubKeyAndEntry {
   pubkey: PublicKey;
   entry: Validator;
@@ -87,6 +99,9 @@ class MaintainerPubKeyAndEntry {
   }
 }
 
+/**
+ * Reference: https://github.com/ChorusOne/solido/blob/73040002ddbb62a3cee93107d03871f848ecd1e0/program/src/state.rs#L816
+ */
 class RewardDistribution {
   treasury_fee: number;
   validation_fee: number;
@@ -98,6 +113,9 @@ class RewardDistribution {
   }
 }
 
+/**
+ * Reference: https://github.com/ChorusOne/solido/blob/73040002ddbb62a3cee93107d03871f848ecd1e0/program/src/state.rs#L827
+ */
 class FeeRecipients {
   treasury_account: PublicKey;
   developer_account: PublicKey;
@@ -112,6 +130,9 @@ class FeeRecipients {
   }
 }
 
+/**
+ * Reference: https://github.com/ChorusOne/solido/blob/73040002ddbb62a3cee93107d03871f848ecd1e0/program/src/state.rs#L39
+ */
 class Validators {
   entries: ValidatorPubKeyAndEntry[];
   maximum_entries: number;
@@ -121,6 +142,9 @@ class Validators {
   }
 }
 
+/**
+ * Reference: https://github.com/ChorusOne/solido/blob/73040002ddbb62a3cee93107d03871f848ecd1e0/program/src/state.rs#L50
+ */
 class Maintainers {
   entries: MaintainerPubKeyAndEntry[];
   maximum_entries: number;
@@ -130,6 +154,9 @@ class Maintainers {
   }
 }
 
+/**
+ * Reference: https://github.com/ChorusOne/solido/blob/73040002ddbb62a3cee93107d03871f848ecd1e0/program/src/state.rs#L131
+ */
 class ExchangeRate {
   computed_in_epoch: BN;
   st_sol_supply: BN;
@@ -140,6 +167,9 @@ class ExchangeRate {
   }
 }
 
+/**
+ * Reference: https://github.com/ChorusOne/solido/blob/73040002ddbb62a3cee93107d03871f848ecd1e0/program/src/metrics.rs#L22
+ */
 class Metrics {
   fee_treasury_sol_total: BN;
   fee_validation_sol_total: BN;
@@ -156,6 +186,9 @@ class Metrics {
   }
 }
 
+/**
+ * Reference: https://github.com/ChorusOne/solido/blob/73040002ddbb62a3cee93107d03871f848ecd1e0/program/src/metrics.rs#L157
+ */
 class LamportsHistogram {
   counts1: BN;
   counts2: BN;
@@ -176,6 +209,9 @@ class LamportsHistogram {
   }
 }
 
+/**
+ * Reference: https://github.com/ChorusOne/solido/blob/73040002ddbb62a3cee93107d03871f848ecd1e0/program/src/metrics.rs#L219
+ */
 class WithdrawMetric {
   count: BN;
   total_sol_amount: BN;

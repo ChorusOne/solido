@@ -55,7 +55,7 @@ export const calculateStakeAccountAddress = async (
 };
 
 /**
- * Get the stake account that has the most amount of SOL staked(heaviest)
+ * Get the stake account that has the most amount of SOL staked (heaviest)
  * @param snapshot Snapshot of the Solido stats
  * @returns Heaviest stake account
  */
