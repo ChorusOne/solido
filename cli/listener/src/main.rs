@@ -36,15 +36,15 @@ pub struct Opts {
     #[clap(long, default_value = "solido")]
     pool: String,
 
-    /// Poll frequency in seconds, defaults to 5 minutes.
+    /// Poll frequency in seconds.
     #[clap(long, default_value = "300")]
     poll_frequency_seconds: u32,
 
-    /// Location of the SQLite DB file, defaults to "listener.db".
+    /// Location of the SQLite DB file.
     #[clap(long, default_value = "listener.sqlite3")]
     db_path: String,
 
-    /// Listen address and port for the http server that serves a /metrics endpoint. Defaults to 0.0.0.0:8923.
+    /// Listen address and port for the http server that serves a /metrics endpoint.
     #[clap(long, default_value = "0.0.0.0:8929")]
     listen: String,
 }
