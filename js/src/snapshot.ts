@@ -1,9 +1,16 @@
-import { AccountInfo, PublicKey, StakeProgram } from '@solana/web3.js';
-import { Connection } from '@solana/web3.js';
+import {
+  AccountInfo,
+  Connection,
+  PublicKey,
+  StakeProgram,
+} from '@solana/web3.js';
 import BN from 'bn.js';
 import { deserializeUnchecked } from 'borsh';
 import { Lamports, ProgramAddresses, Snapshot, StLamports } from './types';
-import { calculateStakeAccountAddress } from './utils';
+import {
+  calculateStakeAccountAddress,
+  findAuthorityProgramAddress,
+} from './utils';
 
 /**
  * Solido Program State
@@ -415,75 +422,126 @@ export const getSolido = (solidoInstanceDataBuffer: Buffer) => {
 
 export const getSnapshot = async (
   connection: Connection,
-  solidoInstanceAccountInfo: AccountInfo<Buffer>,
-  reserveAccountInfo: AccountInfo<Buffer>,
   programAddresses: ProgramAddresses
 ): Promise<Snapshot> => {
-  const solido = getSolido(solidoInstanceAccountInfo.data);
-
-  const reserveAccountRentExemptionBalance =
-    await connection.getMinimumBalanceForRentExemption(
-      reserveAccountInfo.data.byteLength
-    );
-
-  const reserveAccountBalance: Lamports = {
-    lamports: new BN(
-      reserveAccountInfo.lamports - reserveAccountRentExemptionBalance
-    ),
+  const accountsInfo: Record<string, AccountInfo<Buffer> | null> = {
+    [programAddresses.stSolMintAddress.toString()]: null,
   };
 
-  const {
-    value: { amount },
-  } = await connection.getTokenSupply(programAddresses.stSolMintAddress);
-  const stSolSupply: StLamports = { stLamports: new BN(amount) };
-
-  const stakeAccountRentExemptionBalance =
-    await connection.getMinimumBalanceForRentExemption(StakeProgram.space);
-
-  const validatorsStakeAccounts: {
-    validatorVoteAddress: PublicKey;
-    address: PublicKey;
-    balance: Lamports;
-  }[] = [];
-
-  for (let i = 0; i < solido.validators.entries.length; i++) {
-    const validator = solido.validators.entries[i];
-
-    const validatorStakeAccountAddress = await calculateStakeAccountAddress(
-      programAddresses.solidoInstanceId,
-      programAddresses.solidoProgramId,
-      validator.pubkey,
-      validator.entry.stake_seeds.begin
-    );
-
-    validatorsStakeAccounts.push({
-      validatorVoteAddress: validator.pubkey,
-      address: validatorStakeAccountAddress,
-      balance: { lamports: new BN(0) },
-    });
-  }
-
-  const validatorStakeAccountBalances =
-    await connection.getMultipleAccountsInfo(
-      validatorsStakeAccounts.map((account) => account.address)
-    );
-
-  validatorsStakeAccounts.forEach((a, i) => {
-    const balance = validatorStakeAccountBalances[i];
-
-    if (balance) {
-      a.balance = { lamports: new BN(balance.lamports) };
-    }
-  });
-
-  return {
-    solido,
+  const reserveAccountAddress = await findAuthorityProgramAddress(
     programAddresses,
-    reserveAccountBalance: reserveAccountBalance,
-    stSolSupply: stSolSupply,
-    stakeAccountRentExemptionBalance: {
-      lamports: new BN(stakeAccountRentExemptionBalance),
-    },
-    validatorsStakeAccounts,
-  };
+    'reserve_account'
+  );
+
+  while (true) {
+    console.log('iteration');
+    const addressesToGetAccountInfoFor = Object.keys(accountsInfo).map(
+      (address) => new PublicKey(address)
+    );
+
+    const multipleAccountInfos = await connection.getMultipleAccountsInfo(
+      addressesToGetAccountInfoFor,
+      { encoding: 'jsonParsed' }
+    );
+
+    multipleAccountInfos.forEach((info, i) => {
+      accountsInfo[addressesToGetAccountInfoFor[i].toString()] =
+        info as AccountInfo<Buffer>;
+    });
+
+    const reserveAccountInfo = accountsInfo[reserveAccountAddress.toString()];
+    const solidoInstanceAccountInfo =
+      accountsInfo[programAddresses.solidoInstanceId.toString()];
+
+    if (!solidoInstanceAccountInfo || !reserveAccountInfo) {
+      accountsInfo[reserveAccountAddress.toString()] = null;
+      accountsInfo[programAddresses.solidoInstanceId.toString()] = null;
+      continue;
+    }
+
+    const solido = getSolido(solidoInstanceAccountInfo.data);
+
+    const reserveAccountRentExemptionBalance =
+      await connection.getMinimumBalanceForRentExemption(
+        reserveAccountInfo.data.byteLength
+      );
+
+    const reserveAccountBalance = new Lamports(
+      reserveAccountInfo.lamports - reserveAccountRentExemptionBalance
+    );
+
+    const stSolMintAccountInfo = accountsInfo[
+      programAddresses.stSolMintAddress.toString()
+    ] as any;
+
+    if (!stSolMintAccountInfo) {
+      accountsInfo[programAddresses.stSolMintAddress.toString()] = null;
+      continue;
+    }
+
+    const amount = stSolMintAccountInfo.data.parsed.info.supply;
+    const stSolSupply = new StLamports(amount);
+
+    const stakeAccountRentExemptionBalance =
+      await connection.getMinimumBalanceForRentExemption(StakeProgram.space);
+
+    const validatorsStakeAccounts: {
+      validatorVoteAddress: PublicKey;
+      address: PublicKey;
+      balance: Lamports;
+    }[] = [];
+
+    for (let i = 0; i < solido.validators.entries.length; i++) {
+      const validator = solido.validators.entries[i];
+
+      const validatorStakeAccountAddress = await calculateStakeAccountAddress(
+        programAddresses.solidoInstanceId,
+        programAddresses.solidoProgramId,
+        validator.pubkey,
+        validator.entry.stake_seeds.begin
+      );
+
+      validatorsStakeAccounts.push({
+        validatorVoteAddress: validator.pubkey,
+        address: validatorStakeAccountAddress,
+        balance: new Lamports(0),
+      });
+    }
+
+    const validatorStakeAccountsInfos = validatorsStakeAccounts.map(
+      (account) => {
+        return accountsInfo[account.address.toString()];
+      }
+    );
+
+    const countOfInfoFetchedStakeAccounts = validatorStakeAccountsInfos.filter(
+      (a) => !!a
+    ).length;
+
+    if (countOfInfoFetchedStakeAccounts < validatorsStakeAccounts.length) {
+      validatorsStakeAccounts.forEach((a) => {
+        accountsInfo[a.address.toString()] = null;
+      });
+      continue;
+    }
+
+    validatorsStakeAccounts.forEach((a, i) => {
+      const validatorStakeAccountInfo = validatorStakeAccountsInfos[i];
+
+      if (validatorStakeAccountInfo) {
+        a.balance = new Lamports(validatorStakeAccountInfo.lamports);
+      }
+    });
+
+    return {
+      solido,
+      programAddresses,
+      reserveAccountBalance: reserveAccountBalance,
+      stSolSupply: stSolSupply,
+      stakeAccountRentExemptionBalance: new Lamports(
+        stakeAccountRentExemptionBalance
+      ),
+      validatorsStakeAccounts,
+    };
+  }
 };
