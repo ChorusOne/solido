@@ -434,7 +434,6 @@ export const getSnapshot = async (
   );
 
   while (true) {
-    console.log('iteration');
     const addressesToGetAccountInfoFor = Object.keys(accountsInfo).map(
       (address) => new PublicKey(address)
     );

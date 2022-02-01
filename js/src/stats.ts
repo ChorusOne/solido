@@ -89,7 +89,8 @@ export const getTotalNumberOfTokenAccounts = async (
   };
   const config = {
     filters: [{ dataSize: 165 }, memcmpFilter],
-    encoding: 'jsonParsed',
+    dataSlice: { offset: 0, length: 0 },
+    encoding: 'base64',
   };
 
   const accounts = await connection.getParsedProgramAccounts(
