@@ -8,6 +8,7 @@ import {
   getTotalValueLocked,
   getWithdrawInstruction,
   MAINNET_PROGRAM_ADDRESSES,
+  StLamports,
 } from '..';
 import {
   calculateStakeAccountAddress,
@@ -136,11 +137,10 @@ describe('Withdraw Instruction', () => {
   it('generates withdraw instruction', async () => {
     const withdrawInstruction = await getWithdrawInstruction(
       snapshotDump,
-      MAINNET_PROGRAM_ADDRESSES,
       senderAddress,
       stSolAccountAddress,
       stakeAccountAddress,
-      { lamports: new BN('1978200000') }
+      new StLamports('1978200000')
     );
     expect(withdrawInstruction.data).toEqual(withdrawInstructionDump.data);
     expect(JSON.stringify(withdrawInstruction.keys)).toContain(
@@ -158,11 +158,10 @@ describe('Withdraw Instruction', () => {
     try {
       await getWithdrawInstruction(
         snapshotDump,
-        MAINNET_PROGRAM_ADDRESSES,
         senderAddress,
         stSolAccountAddress,
         stakeAccountAddress,
-        { lamports: new BN('900000') }
+        new StLamports('900000')
       );
     } catch (error) {
       expect(error.message).toContain('Amount must be greater');
@@ -173,11 +172,10 @@ describe('Withdraw Instruction', () => {
     try {
       await getWithdrawInstruction(
         snapshotDump,
-        MAINNET_PROGRAM_ADDRESSES,
         senderAddress,
         stSolAccountAddress,
         stakeAccountAddress,
-        { lamports: new BN('19782234987239423400000') }
+        new StLamports('19782234987239423400000')
       );
     } catch (error) {
       expect(error.message).toContain('Amount must be less');
