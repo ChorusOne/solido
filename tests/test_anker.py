@@ -190,6 +190,8 @@ result = solido(
     'DZnkkTmCiFWfYTfT41X3Rd1kDgozqzxWaHqsw6W4x2oe',
     '--terra-rewards-address',
     terra_rewards_address,
+    '--sell-rewards-min-out-bps',
+    '9900'
 )
 # TODO: Also provide --mint-address, we need to be sure that that one works.
 anker_address = result['anker_address']
@@ -218,6 +220,7 @@ expected_result = {
     'st_sol_reserve': anker_st_sol_reserve_account,
     'ust_reserve': anker_ust_reserve_account,
     'terra_rewards_destination': terra_rewards_address,
+    'sell_rewards_min_out_bps': 9900,
     'ust_reserve_balance_micro_ust': 0,
     'st_sol_reserve_balance_st_lamports': 0,
     'st_sol_reserve_value_lamports': None,

@@ -185,6 +185,7 @@ fn command_create_anker(
             token_swap_pool: *opts.token_swap_pool(),
         },
         opts.terra_rewards_address().clone(),
+        *opts.sell_rewards_min_out_bps(),
     )];
 
     config.sign_and_send_transaction(&instructions[..], &[config.signer])?;
@@ -222,6 +223,8 @@ struct ShowAnkerOutput {
     #[serde(serialize_with = "serialize_bech32")]
     terra_rewards_destination: TerraAddress,
 
+    sell_rewards_min_out_bps: u64,
+
     #[serde(serialize_with = "serialize_b58")]
     reserve_authority: Pubkey,
 
@@ -255,6 +258,23 @@ impl fmt::Display for ShowAnkerOutput {
             "Rewards destination:   {}",
             self.terra_rewards_destination
         )?;
+        if self.sell_rewards_min_out_bps <= 9999 {
+            writeln!(f,
+                     "Sell rewards min out:  {}.{:>02}% of the expected amount ({}.{:>02}% slippage + fees)",
+                     self.sell_rewards_min_out_bps / 100,
+                     self.sell_rewards_min_out_bps % 100,
+                    (10000 - self.sell_rewards_min_out_bps) / 100,
+                     (10000 - self.sell_rewards_min_out_bps) % 100,
+            )?;
+        } else {
+            writeln!(
+                f,
+                "Sell rewards min out:  {}.{:>02}% of the expected amount \
+                     (Warning! Getting >100% out is unlikely to ever happen.)",
+                self.sell_rewards_min_out_bps / 100,
+                self.sell_rewards_min_out_bps % 100,
+            )?;
+        }
         writeln!(f, "bSOL mint:             {}", self.b_sol_mint)?;
         writeln!(f, "bSOL mint authority:   {}", self.b_sol_mint_authority)?;
         writeln!(f, "bSOL supply:           {}", self.b_sol_supply)?;
@@ -309,6 +329,7 @@ fn command_show_anker(
         solido_program_id: anker.solido_program_id,
 
         terra_rewards_destination: anker.terra_rewards_destination,
+        sell_rewards_min_out_bps: anker.sell_rewards_min_out_bps,
 
         b_sol_mint: anker.b_sol_mint,
         b_sol_mint_authority: mint_authority,

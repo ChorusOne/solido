@@ -19,6 +19,9 @@ pub enum AnkerInstruction {
     Initialize {
         #[allow(dead_code)] // It is not dead code when compiled for BPF.
         terra_rewards_destination: TerraAddress,
+
+        #[allow(dead_code)] // It is not dead code when compiled for BPF.
+        sell_rewards_min_out_bps: u64,
     },
 
     /// Deposit a given amount of StSOL, gets bSOL in return.
@@ -140,9 +143,11 @@ pub fn initialize(
     program_id: &Pubkey,
     accounts: &InitializeAccountsMeta,
     terra_rewards_destination: TerraAddress,
+    sell_rewards_min_out_bps: u64,
 ) -> Instruction {
     let data = AnkerInstruction::Initialize {
         terra_rewards_destination,
+        sell_rewards_min_out_bps,
     };
     Instruction {
         program_id: *program_id,
