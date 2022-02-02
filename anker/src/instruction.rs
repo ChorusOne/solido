@@ -366,6 +366,7 @@ accounts_struct! {
             is_writable: false,
         },
         const spl_token = spl_token::id(),
+        const sysvar_clock = sysvar::clock::id(),
     }
 }
 

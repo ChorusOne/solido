@@ -23,7 +23,7 @@ use spl_token_swap::state::SwapState;
 
 use lido::{state::Lido, token::StLamports};
 
-use crate::state::{HistoricalStSolPrice, POOL_PRICE_MIN_SAMPLE_DISTANCE, POOL_PRICE_NUM_SAMPLES};
+use crate::state::{HistoricalStSolPrice, POOL_PRICE_MAX_SAMPLE_AGE, POOL_PRICE_MIN_SAMPLE_DISTANCE, POOL_PRICE_NUM_SAMPLES};
 use crate::{
     error::AnkerError,
     find_instance_address, find_mint_authority, find_reserve_authority,
@@ -282,7 +282,7 @@ fn process_fetch_pool_price(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -
             most_recent_sample.slot,
             most_recent_sample.slot + POOL_PRICE_MIN_SAMPLE_DISTANCE,
         );
-        return Err(AnkerError::FetchPoolPriceTooEarly.into());
+        return Err(AnkerError::PoolPriceTooRecent.into());
     }
 
     // To sample the price, we go from stSOL to UST.
@@ -343,6 +343,43 @@ fn process_sell_rewards(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> Pr
     let token_mint_state =
         spl_token::state::Mint::unpack_from_slice(&accounts.b_sol_mint.data.borrow())?;
     let b_sol_supply = token_mint_state.supply;
+
+    // When we sell rewards, we set min_out based on our current view of the stSOL/UST
+    // exchange rate. This view needs to be recent enough to be relevant, but old enough
+    // that it was set in a different streak in the leader schedule.
+    let clock = Clock::from_account_info(accounts.sysvar_clock)?;
+    let most_recent_sample = anker.historical_st_sol_prices[POOL_PRICE_NUM_SAMPLES - 1];
+    let slots_elapsed = clock.slot.saturating_sub(most_recent_sample.slot);
+    if slots_elapsed < POOL_PRICE_MIN_SAMPLE_DISTANCE {
+        msg!(
+            "The previous stSOL/UST price was sampled at slot {}. \
+            Rewards cannot be sold until slot {}.",
+            most_recent_sample.slot,
+            most_recent_sample.slot + POOL_PRICE_MIN_SAMPLE_DISTANCE,
+        );
+        return Err(AnkerError::PoolPriceTooRecent.into());
+    }
+    let least_recent_sample = anker.historical_st_sol_prices[0];
+    let slots_elapsed = clock.slot.saturating_sub(most_recent_sample.slot);
+    if slots_elapsed > POOL_PRICE_MAX_SAMPLE_AGE {
+        msg!(
+            "The least recent stSOL/UST price was sampled at slot {}. \
+            We need a more recent sample, from slot {} or later.",
+            least_recent_sample.slot,
+            clock.slot.saturating_sub(POOL_PRICE_MAX_SAMPLE_AGE),
+        );
+        return Err(AnkerError::PoolPriceTooOld.into());
+    }
+    let median_st_sol_price_in_ust = anker
+        .historical_st_sol_prices
+        .iter()
+        .map(|x| x.st_sol_price_in_ust)
+        .sorted()
+        .skip(POOL_PRICE_NUM_SAMPLES / 2)
+        .next()
+        .expect("We have more than half of the samples.");
+
+    println!("Median stSOL price: {}", median_st_sol_price_in_ust);
 
     let reserve_st_sol_before =
         StLamports(Anker::get_token_amount(accounts.st_sol_reserve_account)?);

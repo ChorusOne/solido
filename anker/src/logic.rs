@@ -281,3 +281,60 @@ pub fn swap_rewards(
         &signers,
     )
 }
+
+pub fn median_of_5<T: Ord + Copy>(xs: &[T; 5]) -> T {
+    use std::mem;
+    let mut ys = xs.clone();
+
+    // With a sorting network for 5 elements, we can sort the array and then
+    // take the middle element. One optimal network is this one:
+    //
+    //     0 \ /-\   /---------\ /----------
+    //        x   \ /           x
+    //     1 / \-  x  -\     /-/ \-\ /------
+    //            / \   \   /       x
+    //     2 \ /-/   \---\-/--\ /--/ \-\ /--
+    //        x           x    x        x
+    //     3 / \---------/-\--/ \-\ /--/ \--
+    //                  /   \      x
+    //     4 ----------/     \----/ \-------
+    //
+    // (Based on https://stackoverflow.com/a/3903172.)
+    //
+    // If we go backwards from index 2 at the end,
+
+
+    // [[1 2][3 4]  [1 3] [2 5] [1 2] [3 4] [2 3] [4 5] [3 4]]
+    //
+    //
+
+
+    // Apply a sorting network for 5 elements. Then return the middle element.
+    // Note, we have to run the full sorting
+    let cross = |i, j| {
+        if ys[i] > ys[j] {
+            mem::swap(&mut ys[i], &mut ys[j]);
+        }
+    };
+    cross(0, 1);
+    cross(2, 3);
+    cross(0, 2);
+    cross(1, 4);
+    cross(0, 1);
+    cross(2, 3);
+    cross(1, 2);
+    cross(3, 4);
+    cross(2, 3);
+
+    ys[2]
+}
+
+#[test]
+fn test_median_order {
+    let mut ys = [0, 1, 2, 3, 4, 5];
+    let cross = |i, j| {
+        if ys[i] > ys[j] {
+            mem::swap(&mut ys[i], &mut ys[j]);
+        }
+    };
+}
