@@ -25,7 +25,7 @@ use spl_token_swap::state::SwapV1;
 use crate::token::{self, BLamports, MicroUst};
 
 /// Size of the serialized [`Anker`] struct, in bytes.
-pub const ANKER_LEN: usize = 234;
+pub const ANKER_LEN: usize = 321;
 pub const ANKER_VERSION: u8 = 0;
 
 // Next are three constants related to stored stSOL/UST prices. Because Anker is
@@ -119,6 +119,13 @@ pub struct Anker {
 
     /// Wormhole parameters associated with this instance.
     pub wormhole_parameters: WormholeParameters,
+
+    /// When we sell rewards, we set the minimum out to stSOL amount times the
+    /// median of the recent price samples times a factor alpha. In other words,
+    /// this factor alpha is `1 - max_slippage`. Alpha is defined as
+    /// `sell_rewards_min_out_bps / 1e4`. The `bps` here means "basis points".
+    /// A basis point is 0.01% = 1e-4.)
+    pub sell_rewards_min_out_bps: u64,
 
     /// Metrics for informational purposes.
     pub metrics: Metrics,

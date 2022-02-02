@@ -212,6 +212,10 @@ impl Context {
         let rewards_owner = solido_context.deterministic_keypair.new_keypair();
         let terra_rewards_destination = TerraAddress::default();
 
+        // In the tests, by default we set no bound on slippage when selling rewards.
+        // The min out amount is 0% of the expected amount.
+        let sell_rewards_min_out_bps = 0;
+
         send_transaction(
             &mut solido_context.context,
             &mut solido_context.nonce,
@@ -233,6 +237,7 @@ impl Context {
                     ust_mint: token_pool_context.ust_mint_address,
                 },
                 terra_rewards_destination.clone(),
+                sell_rewards_min_out_bps,
             )],
             vec![],
         )

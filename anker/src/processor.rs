@@ -51,6 +51,7 @@ fn process_initialize(
     program_id: &Pubkey,
     accounts_raw: &[AccountInfo],
     terra_rewards_destination: TerraAddress,
+    sell_rewards_min_out_bps: u64,
 ) -> ProgramResult {
     let accounts = InitializeAccountsInfo::try_from_slice(accounts_raw)?;
     let rent = Rent::from_account_info(accounts.sysvar_rent)?;
@@ -86,7 +87,11 @@ fn process_initialize(
         &accounts,
         accounts.anker,
         &rent,
-        ANKER_LEN,
+        // At the time of writing, Solana accounts cannot be resized. If we ever
+        // need to store more data in the future, we need to create the headroom
+        // for it now (or switch to a different account later). So add 128 bytes
+        // of headroom for future expansion, in case we need it.
+        ANKER_LEN + 128,
         &anker_seeds,
     )?;
 
@@ -147,6 +152,7 @@ fn process_initialize(
             core_bridge_program_id: *accounts.wormhole_core_bridge_program_id.key,
             token_bridge_program_id: *accounts.wormhole_token_bridge_program_id.key,
         },
+        sell_rewards_min_out_bps,
         metrics: Metrics::new(),
         historical_st_sol_prices: [
             // At initialization, we fill the historical prices with a dummy
@@ -622,7 +628,13 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
     match instruction {
         AnkerInstruction::Initialize {
             terra_rewards_destination,
-        } => process_initialize(program_id, accounts, terra_rewards_destination),
+            sell_rewards_min_out_bps,
+        } => process_initialize(
+            program_id,
+            accounts,
+            terra_rewards_destination,
+            sell_rewards_min_out_bps,
+        ),
         AnkerInstruction::Deposit { amount } => process_deposit(program_id, accounts, amount),
         AnkerInstruction::Withdraw { amount } => process_withdraw(program_id, accounts, amount),
         AnkerInstruction::FetchPoolPrice => process_fetch_pool_price(program_id, accounts),
