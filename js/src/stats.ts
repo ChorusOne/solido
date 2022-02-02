@@ -1,3 +1,4 @@
+import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import { Connection, PublicKey } from '@solana/web3.js';
 import BN from 'bn.js';
 import { Lamports, Snapshot, StLamports } from './types';
@@ -73,13 +74,11 @@ export const getExchangeRate = (snapshot: Snapshot): number => {
  * **Note: RPC node needs to have account indexing enabled for the SPL token mint that we query, and this is not enabled by default**
  *
  * @param tokenMintAddress Address of the token mint account
- * @param tokenProgramId Address of the Token program
  * @returns Number of token accounts
  */
 export const getTotalNumberOfTokenAccounts = async (
   connection: Connection,
-  tokenMintAddress: PublicKey,
-  tokenProgramId: PublicKey
+  tokenMintAddress: PublicKey
 ) => {
   const memcmpFilter = {
     memcmp: { bytes: tokenMintAddress.toString(), offset: 0 },
@@ -91,7 +90,7 @@ export const getTotalNumberOfTokenAccounts = async (
   };
 
   const accounts = await connection.getParsedProgramAccounts(
-    tokenProgramId,
+    TOKEN_PROGRAM_ID,
     config
   );
 
@@ -105,7 +104,7 @@ export const getTotalNumberOfTokenAccounts = async (
  * @param ownerAccountAddress Address of the owner of the token
  * @returns List of token accounts
  */
-export const getOwnerTokenAccounts = async (
+export const getTokenAccountsByOwner = async (
   connection: Connection,
   tokenMintAddress: PublicKey,
   ownerAccountAddress: PublicKey

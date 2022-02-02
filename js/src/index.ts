@@ -3,7 +3,7 @@ export {
   getTotalValueLocked,
   getStSolSupply,
   getExchangeRate,
-  getOwnerTokenAccounts,
+  getTokenAccountsByOwner,
   getTotalNumberOfTokenAccounts,
 } from './stats';
 export {
