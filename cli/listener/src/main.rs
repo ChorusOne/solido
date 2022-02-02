@@ -634,8 +634,14 @@ fn test_get_average_apy() {
     insert_price(&conn, &exchange_rate).unwrap();
     let apy = get_interval_price_for_period(
         conn.unchecked_transaction().unwrap(),
-        chrono::Utc.ymd(2020, 7, 7).and_hms(0, 0, 0),
-        chrono::Utc.ymd(2021, 7, 8).and_hms(0, 0, 0),
+        chrono::Utc
+            .ymd(2020, 7, 7)
+            .and_hms(0, 0, 0)
+            .with_timezone(&chrono::FixedOffset::east(0)),
+        chrono::Utc
+            .ymd(2021, 7, 8)
+            .and_hms(0, 0, 0)
+            .with_timezone(&chrono::FixedOffset::east(0)),
         SOLIDO_ID.to_owned(),
     )
     .expect("Failed when getting APY for period");
@@ -677,8 +683,14 @@ fn test_rationals_do_not_overflow() {
 
     let apy = get_interval_price_for_period(
         conn.unchecked_transaction().unwrap(),
-        chrono::Utc.ymd(2020, 7, 7).and_hms(0, 0, 0),
-        chrono::Utc.ymd(2022, 7, 8).and_hms(0, 0, 0),
+        chrono::Utc
+            .ymd(2020, 7, 7)
+            .and_hms(0, 0, 0)
+            .with_timezone(&chrono::FixedOffset::east(0)),
+        chrono::Utc
+            .ymd(2022, 7, 8)
+            .and_hms(0, 0, 0)
+            .with_timezone(&chrono::FixedOffset::east(0)),
         SOLIDO_ID.to_owned(),
     )
     .expect("Failed when getting APY for period");
