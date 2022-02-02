@@ -13,7 +13,14 @@ import {
 } from './utils';
 
 /**
- * Solido Program State
+ * Snapshot of all Solido-related accounts at a given slot.
+ *
+ * From the snapshot we can query all Solido stats, and it is also the starting point for constructing transactions.
+ *
+ * There are multiple accounts that are relevant to the Solido program, aside from the main instance.
+ * For example, the validators’ stake accounts.
+ * To be able to get a consistent view of those accounts, we read them atomically with the getMultipleAccounts RPC call.
+ * The snapshot holds the parsed results.
  *
  * Reference:
  * https://github.com/ChorusOne/solido/blob/73040002ddbb62a3cee93107d03871f848ecd1e0/program/src/state.rs#L187
