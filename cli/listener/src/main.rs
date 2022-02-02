@@ -21,7 +21,7 @@ use solido_cli_common::{
     snapshot::{Config, OutputMode, SnapshotClient, SnapshotClientConfig},
 };
 use std::str::FromStr;
-use tiny_http::{Header, Request, Response, Server};
+use tiny_http::{Header, Request, Response, ResponseBox, Server};
 
 const SOLIDO_ID: &str = "solido";
 
@@ -132,8 +132,8 @@ impl std::fmt::Display for IntervalPrices {
 
 pub fn get_interval_price_for_period(
     tx: rusqlite::Transaction,
-    from_time: chrono::DateTime<chrono::Utc>,
-    to_time: chrono::DateTime<chrono::Utc>,
+    from_time: chrono::DateTime<chrono::FixedOffset>,
+    to_time: chrono::DateTime<chrono::FixedOffset>,
     pool: String,
 ) -> rusqlite::Result<Option<IntervalPrices>> {
     let row_map = |row: &Row| {
@@ -390,6 +390,82 @@ impl Metrics {
 
         Ok(())
     }
+}
+
+/// Returns a tuple (from, to) with the Result from parsing the iso8601 from
+/// `param`. `param` is a vector that must contain two strings with
+/// `from=<from_date>` and `to=<to_date>` in any order.
+fn get_date_params(
+    param: &[&str],
+) -> Option<(
+    chrono::ParseResult<chrono::DateTime<chrono::FixedOffset>>,
+    chrono::ParseResult<chrono::DateTime<chrono::FixedOffset>>,
+)> {
+    let arg = *param.get(0)?;
+    let mut param_format = arg.split('=');
+    let type_param_first = param_format.next()?;
+    let date_str_first = param_format.next()?;
+
+    let arg = *param.get(1)?;
+    let mut param_format = arg.split('=');
+    let type_param_second = param_format.next()?;
+    let date_str_second = param_format.next()?;
+    match (type_param_first, type_param_second) {
+        ("from", "to") => Some((
+            chrono::DateTime::parse_from_rfc3339(date_str_first),
+            chrono::DateTime::parse_from_rfc3339(date_str_second),
+        )),
+        ("to", "from") => Some((
+            chrono::DateTime::parse_from_rfc3339(date_str_second),
+            chrono::DateTime::parse_from_rfc3339(date_str_first),
+        )),
+        _ => None,
+    }
+}
+
+fn get_interval_price_request(tx: rusqlite::Transaction, request: &Request) -> Option<ResponseBox> {
+    let mut request_split = request.url().split('/');
+    // Ignore first string.
+    request_split.next()?;
+    let parameters_result = if let Some(method) = request_split.next() {
+        let vec_parameters = method.split('?').collect::<Vec<&str>>();
+        let method_name = *vec_parameters.get(0)?;
+        let (from_date, to_date) = get_date_params(&vec_parameters)?;
+        if method_name == "interval_price" {
+            Some((from_date, to_date))
+        } else {
+            return Some(
+                Response::from_string(format!(
+                    "Method not supported: {}, \"interval_price?from_date=?to_date=?\"",
+                    method_name
+                ))
+                .with_status_code(500)
+                .boxed(),
+            );
+        }
+    } else {
+        None
+    }?;
+    match parameters_result {
+        (Ok(from), Ok(to)) => {
+            let interval_prices = get_interval_price_for_period(tx, from, to, SOLIDO_ID.to_owned());
+        }
+        errors @ _ => {
+            let (from_res, to_res) = errors;
+            let mut error_str = "Error: ".to_owned();
+            if let Err(from_err) = from_res {
+                error_str = error_str + "parsing \"from\" date: " + &from_err.to_string() + "\n";
+            }
+            if let Err(to_err) = to_res {
+                error_str = error_str + "parsing \"to\" date " + &to_err.to_string();
+            }
+            println!("{}", error_str);
+            Response::from_string(error_str)
+                .with_status_code(500)
+                .boxed();
+        }
+    }
+    todo!()
 }
 
 fn serve_request(request: Request, metrics_mutex: &MetricsMutex) -> Result<(), std::io::Error> {
