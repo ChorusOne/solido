@@ -1,0 +1,17 @@
+[package]
+authors = ["Chorus One <techops@chorus.one>"]
+description = "Solido utility for indexing price data"
+license = "GPL-3.0"
+edition = "2018"
+name = "listener"
+version = "1.2.0"
+
+[dependencies]
+rusqlite = "0.26.3"
+solana-client = "1.7.8"
+solana-sdk = "1.7.8"
+solana-logger = "1.7.8"
+clap = "3.0.0-beta.2"
+chrono = "0.4.19"
+solido-cli-common = { path = "../common" }
+lido = {path = "../../program", features = ["no-entrypoint"]}

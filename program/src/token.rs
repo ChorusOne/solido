@@ -40,6 +40,34 @@ impl PartialOrd for Rational {
     }
 }
 
+impl Div for Rational {
+    type Output = Result<Rational>;
+
+    fn div(self, rhs: Self) -> Self::Output {
+        if rhs.numerator == 0 {
+            panic!("Cannot divide by zero-valued `Rational`!");
+        }
+        let numerator = self
+            .numerator
+            .checked_mul(rhs.denominator)
+            .ok_or(ArithmeticError)?;
+        let denominator = self
+            .denominator
+            .checked_mul(rhs.numerator)
+            .ok_or(ArithmeticError)?;
+        Ok(Rational {
+            numerator,
+            denominator,
+        })
+    }
+}
+
+impl Rational {
+    pub fn to_f64(&self) -> f64 {
+        self.numerator as f64 / self.denominator as f64
+    }
+}
+
 /// Error returned when a calculation in a token type overflows, underflows, or divides by zero.
 #[derive(Debug, Eq, PartialEq)]
 pub struct ArithmeticError;
