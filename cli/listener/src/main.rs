@@ -1,5 +1,4 @@
 use std::{
-    ops::Sub,
     sync::{Arc, Mutex},
     thread::JoinHandle,
     time::{Duration, Instant},
