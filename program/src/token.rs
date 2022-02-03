@@ -22,7 +22,7 @@ use std::{
     ops::{Add, Div, Mul, Sub},
 };
 
-#[derive(Copy, Clone, PartialEq, Debug)]
+#[derive(Copy, Clone, PartialEq, Debug, Serialize)]
 pub struct Rational {
     pub numerator: u64,
     pub denominator: u64,

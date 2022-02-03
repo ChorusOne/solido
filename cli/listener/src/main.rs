@@ -8,6 +8,7 @@ use clap::Clap;
 use lido::token::Rational;
 use rand::{rngs::ThreadRng, Rng};
 use rusqlite::{params, Connection, Row};
+use serde::Serialize;
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::{
     clock::{Epoch, Slot},
@@ -84,13 +85,18 @@ pub fn create_db(conn: &Connection) -> rusqlite::Result<()> {
     Ok(())
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub struct IntervalPrices {
+    #[serde(rename(serialize = "time_first_measured"))]
     t0: chrono::DateTime<chrono::Utc>,
+    #[serde(rename(serialize = "time_last_measured"))]
     t1: chrono::DateTime<chrono::Utc>,
     epoch0: Epoch,
+    #[serde(rename(serialize = "epoch_last_data"))]
     epoch1: Epoch,
+    #[serde(rename(serialize = "price_first_data"))]
     price0_lamports: Rational,
+    #[serde(rename(serialize = "price_last_data"))]
     price1_lamports: Rational,
 }
 
@@ -392,83 +398,173 @@ impl Metrics {
     }
 }
 
-/// Returns a tuple (from, to) with the Result from parsing the iso8601 from
-/// `param`. `param` is a vector that must contain two strings with
-/// `from=<from_date>` and `to=<to_date>` in any order.
-fn get_date_params(
-    param: &[&str],
-) -> Option<(
-    chrono::ParseResult<chrono::DateTime<chrono::FixedOffset>>,
-    chrono::ParseResult<chrono::DateTime<chrono::FixedOffset>>,
-)> {
-    let arg = *param.get(0)?;
-    let mut param_format = arg.split('=');
-    let type_param_first = param_format.next()?;
-    let date_str_first = param_format.next()?;
+#[derive(Serialize)]
+struct ResponseError {
+    error: String,
+}
 
-    let arg = *param.get(1)?;
+#[derive(Serialize)]
+struct ResponseInterval {
+    interval_prices: IntervalPrices,
+    annual_percentage_rate: f64,
+}
+
+struct DateFromTo {
+    from: chrono::ParseResult<chrono::DateTime<chrono::FixedOffset>>,
+    to: chrono::ParseResult<chrono::DateTime<chrono::FixedOffset>>,
+}
+
+/// Returns a tuple (from, to) with the Result from parsing the iso8601 from
+/// `params`. `params` is a vector that must contain two strings with
+/// `from=<from_date>` and `to=<to_date>` in any order.
+fn get_date_params(params: &[&str]) -> Result<DateFromTo, ResponseError> {
+    let arg = *params.get(0).ok_or(ResponseError {
+        error:
+            "No parameters were provided, from_date=<from_date_iso8601>?to_date=<to_date_iso8601> \
+         should be provided"
+                .to_owned(),
+    })?;
     let mut param_format = arg.split('=');
-    let type_param_second = param_format.next()?;
-    let date_str_second = param_format.next()?;
-    match (type_param_first, type_param_second) {
-        ("from", "to") => Some((
-            chrono::DateTime::parse_from_rfc3339(date_str_first),
-            chrono::DateTime::parse_from_rfc3339(date_str_second),
-        )),
-        ("to", "from") => Some((
-            chrono::DateTime::parse_from_rfc3339(date_str_second),
-            chrono::DateTime::parse_from_rfc3339(date_str_first),
-        )),
-        _ => None,
+    let first_key = param_format.next().ok_or(ResponseError {
+        error: "Missing key for first parameter, should be \"from\" or \"to\"".to_owned(),
+    })?;
+    let date_first_value = param_format.next().ok_or(ResponseError {
+        error: "Missing date value for first parameter".to_owned(),
+    })?;
+
+    let arg = *params.get(1).ok_or(ResponseError {
+        error: "Missing second key/value for date".to_owned(),
+    })?;
+    let mut param_format = arg.split('=');
+    let second_key = param_format.next().ok_or(ResponseError {
+        error: "Missing key for second parameter, should be \"from\" or \"to\"".to_owned(),
+    })?;
+    let date_second_value = param_format.next().ok_or(ResponseError {
+        error: "Missing date value for second parameter".to_owned(),
+    })?;
+    match (first_key, second_key) {
+        ("from", "to") => Ok(DateFromTo{
+          from: chrono::DateTime::parse_from_rfc3339(date_first_value),
+          to:   chrono::DateTime::parse_from_rfc3339(date_second_value)
+        }
+        ),
+        ("to", "from") => Ok(DateFromTo{
+          from: chrono::DateTime::parse_from_rfc3339(date_second_value),
+          to:   chrono::DateTime::parse_from_rfc3339(date_first_value),
+        }
+        ),
+        _ => Err(ResponseError {
+            error: format!("Invalid parameters, should be \"to\" or \"from\" in any order, is {} and {} instead", first_key, second_key)
+        }),
     }
 }
 
-fn get_interval_price_request(tx: rusqlite::Transaction, request: &Request) -> Option<ResponseBox> {
+fn get_error_response(err_res: ResponseError) -> ResponseBox {
+    let content_type = Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..])
+        .expect("Static header value, does not fail at runtime.");
+    Response::from_data(serde_json::to_vec(&err_res).expect("Serialization shouldn't fail"))
+        .with_status_code(500)
+        .with_header(content_type)
+        .boxed()
+}
+
+/// Get an interval price, consume it and returns a `ResponseBox` with the
+/// provided interval price and computed annual percentage rate.
+fn get_success_response(interval_prices: IntervalPrices) -> ResponseBox {
+    let response_interval = ResponseInterval {
+        annual_percentage_rate: interval_prices.annual_percentage_rate(),
+        interval_prices,
+    };
+    let content_type = Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..])
+        .expect("Static header value, does not fail at runtime.");
+    Response::from_data(
+        serde_json::to_vec(&response_interval).expect("Serialization shouldn't fail"),
+    )
+    .with_header(content_type)
+    .boxed()
+}
+
+/// Gets a response that will be sent to a requesting client.
+/// Returns None if no method is passed.
+fn get_interval_price_request(
+    db_connection: &Connection,
+    request: &Request,
+) -> Option<ResponseBox> {
     let mut request_split = request.url().split('/');
     // Ignore first string.
     request_split.next()?;
     let parameters_result = if let Some(method) = request_split.next() {
         let vec_parameters = method.split('?').collect::<Vec<&str>>();
         let method_name = *vec_parameters.get(0)?;
-        let (from_date, to_date) = get_date_params(&vec_parameters)?;
         if method_name == "interval_price" {
-            Some((from_date, to_date))
+            match get_date_params(&vec_parameters[1..]) {
+                Ok(res) => Some(res),
+                Err(err) => return Some(get_error_response(err)),
+            }
+        } else if method_name == "" {
+            None
         } else {
-            return Some(
-                Response::from_string(format!(
-                    "Method not supported: {}, \"interval_price?from_date=?to_date=?\"",
-                    method_name
-                ))
-                .with_status_code(500)
-                .boxed(),
-            );
+            return Some(get_error_response(ResponseError {
+                error: format!("Method not supported: {}, use \"interval_price?from_date=<from_date_iso8601>?to_date=<to_date_iso8601>\"", method_name)
+            }));
         }
     } else {
         None
     }?;
-    match parameters_result {
+    match (parameters_result.from, parameters_result.to) {
         (Ok(from), Ok(to)) => {
-            let interval_prices = get_interval_price_for_period(tx, from, to, SOLIDO_ID.to_owned());
+            let interval_prices = get_interval_price_for_period(
+                db_connection
+                    .unchecked_transaction()
+                    .expect("Failed to create sqlite transaction."),
+                from,
+                to,
+                SOLIDO_ID.to_owned(),
+            );
+            let interval_prices = interval_prices;
+            match interval_prices {
+                // Error while getting the interval prices.
+                Err(err) => Some(get_error_response(ResponseError {
+                    error: err.to_string(),
+                })),
+                Ok(interval_prices_opt) => {
+                    if let Some(interval_prices) = interval_prices_opt {
+                        // Got interval prices.
+                        Some(get_success_response(interval_prices))
+                    } else {
+                        // No interval price could be calculated, probably because of few data points.
+                        Some(get_error_response(ResponseError {
+                            error: "Not enough data points for calculating the price interval."
+                                .to_owned(),
+                        }))
+                    }
+                }
+            }
         }
-        errors @ _ => {
+        errors => {
+            // Some errors happened while parsing date.
             let (from_res, to_res) = errors;
-            let mut error_str = "Error: ".to_owned();
+            let mut error_str = "".to_owned();
             if let Err(from_err) = from_res {
-                error_str = error_str + "parsing \"from\" date: " + &from_err.to_string() + "\n";
+                error_str = error_str + "parsing \"from\" date: " + &from_err.to_string();
             }
             if let Err(to_err) = to_res {
                 error_str = error_str + "parsing \"to\" date " + &to_err.to_string();
             }
-            println!("{}", error_str);
-            Response::from_string(error_str)
-                .with_status_code(500)
-                .boxed();
+            Some(get_error_response(ResponseError { error: error_str }))
         }
     }
-    todo!()
 }
 
-fn serve_request(request: Request, metrics_mutex: &MetricsMutex) -> Result<(), std::io::Error> {
+fn serve_request(
+    db_connection: &Connection,
+    request: Request,
+    metrics_mutex: &MetricsMutex,
+) -> Result<(), std::io::Error> {
+    if let Some(res) = get_interval_price_request(db_connection, &request) {
+        return request.respond(res);
+    };
+
     // Take the current snapshot. This only holds the lock briefly, and does
     // not prevent other threads from updating the snapshot while this request
     // handler is running.
@@ -512,6 +608,8 @@ fn start_http_server(opts: &Opts, metrics_mutex: Arc<MetricsMutex>) -> Vec<JoinH
     // parallel.
     (0..num_cpus::get())
         .map(|i| {
+            // Create one db connection per thread.
+            let conn = Connection::open(&opts.db_path).expect("Failed to open sqlite connection.");
             let server_clone = server.clone();
             let snapshot_mutex_clone = metrics_mutex.clone();
             std::thread::Builder::new()
@@ -520,7 +618,7 @@ fn start_http_server(opts: &Opts, metrics_mutex: Arc<MetricsMutex>) -> Vec<JoinH
                     for request in server_clone.incoming_requests() {
                         // Ignore any errors; if we fail to respond, then there's little
                         // we can do about it here ... the client should just retry.
-                        let _ = serve_request(request, &*snapshot_mutex_clone);
+                        let _ = serve_request(&conn, request, &*snapshot_mutex_clone);
                     }
                 })
                 .expect("Failed to spawn http handler thread.")
