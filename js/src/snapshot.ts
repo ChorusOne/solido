@@ -13,14 +13,7 @@ import {
 } from './utils';
 
 /**
- * Snapshot of all Solido-related accounts at a given slot.
- *
- * From the snapshot we can query all Solido stats, and it is also the starting point for constructing transactions.
- *
- * There are multiple accounts that are relevant to the Solido program, aside from the main instance.
- * For example, the validators’ stake accounts.
- * To be able to get a consistent view of those accounts, we read them atomically with the getMultipleAccounts RPC call.
- * The snapshot holds the parsed results.
+ * Solido program state
  *
  * Reference:
  * https://github.com/ChorusOne/solido/blob/73040002ddbb62a3cee93107d03871f848ecd1e0/program/src/state.rs#L187
@@ -431,6 +424,7 @@ export const getSnapshot = async (
   connection: Connection,
   programAddresses: ProgramAddresses
 ): Promise<Snapshot> => {
+  // Record of all the account data required for snapshot
   const accountsInfo: Record<string, AccountInfo<Buffer> | null> = {
     [programAddresses.stSolMintAddress.toString()]: null,
   };
@@ -440,6 +434,9 @@ export const getSnapshot = async (
     'reserve_account'
   );
 
+  // Iterates over all the required accounts data to be fetched and updates the accountsInfo record
+  // Once, all we have the record of all the accounts data, we can create the snapshot
+  // This way, we avoid torn reads, and fetch all the required data in one go with `getMultipleAccountInfo`
   while (true) {
     const addressesToGetAccountInfoFor = Object.keys(accountsInfo).map(
       (address) => new PublicKey(address)
@@ -459,6 +456,7 @@ export const getSnapshot = async (
     const solidoInstanceAccountInfo =
       accountsInfo[programAddresses.solidoInstanceId.toString()];
 
+    // Move to next iteration if we don't have the info already fetched
     if (!solidoInstanceAccountInfo || !reserveAccountInfo) {
       accountsInfo[reserveAccountAddress.toString()] = null;
       accountsInfo[programAddresses.solidoInstanceId.toString()] = null;
@@ -480,6 +478,7 @@ export const getSnapshot = async (
       programAddresses.stSolMintAddress.toString()
     ] as any;
 
+    // Move to next iteration if we don't have the info already fetched
     if (!stSolMintAccountInfo) {
       accountsInfo[programAddresses.stSolMintAddress.toString()] = null;
       continue;
@@ -497,6 +496,7 @@ export const getSnapshot = async (
       balance: Lamports;
     }[] = [];
 
+    // Iterate over the validators and get their stake accounts
     for (let i = 0; i < solido.validators.entries.length; i++) {
       const validator = solido.validators.entries[i];
 
@@ -524,6 +524,7 @@ export const getSnapshot = async (
       (a) => !!a
     ).length;
 
+    // Move to next iteration if we we have any stake account whose account info not fetched
     if (countOfInfoFetchedStakeAccounts < validatorsStakeAccounts.length) {
       validatorsStakeAccounts.forEach((a) => {
         accountsInfo[a.address.toString()] = null;
