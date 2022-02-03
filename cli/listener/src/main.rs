@@ -52,7 +52,7 @@ pub struct ExchangeRate {
     /// Id of the data point.
     id: i32,
     /// Time when the data point was logged.
-    timestamp: chrono::DateTime<chrono::FixedOffset>,
+    timestamp: chrono::DateTime<chrono::Utc>,
     /// Slot when the data point was logged.
     slot: Slot,
     /// Epoch when the data point was logged.
@@ -85,8 +85,8 @@ pub fn create_db(conn: &Connection) -> rusqlite::Result<()> {
 
 #[derive(Clone, Debug)]
 pub struct IntervalPrices {
-    t0: chrono::DateTime<chrono::FixedOffset>,
-    t1: chrono::DateTime<chrono::FixedOffset>,
+    t0: chrono::DateTime<chrono::Utc>,
+    t1: chrono::DateTime<chrono::Utc>,
     epoch0: Epoch,
     epoch1: Epoch,
     price0_lamports: Rational,
@@ -135,10 +135,15 @@ pub fn get_interval_price_for_period(
 ) -> rusqlite::Result<Option<IntervalPrices>> {
     let row_map = |row: &Row| {
         let timestamp: String = row.get(1)?;
+        let timestamp_iso8601 = chrono::DateTime::from_utc(
+            chrono::DateTime::parse_from_rfc3339(&timestamp)
+                .expect("Invalid timestamp format.")
+                .naive_utc(),
+            chrono::Utc,
+        );
         Ok(ExchangeRate {
             id: row.get(0)?,
-            timestamp: chrono::DateTime::parse_from_rfc3339(&timestamp)
-                .expect("Invalid timestamp format."),
+            timestamp: timestamp_iso8601,
             slot: row.get(2)?,
             epoch: row.get(3)?,
             pool: row.get(4)?,
@@ -478,7 +483,7 @@ fn get_and_save_exchange_rate(
         let clock = config.client.get_clock()?;
         Ok(ExchangeRate {
             id: 0,
-            timestamp: chrono::Utc::now().with_timezone(&chrono::FixedOffset::east(0)),
+            timestamp: chrono::Utc::now(),
             slot: clock.slot,
             epoch: clock.epoch,
             pool: pool.clone(),
@@ -547,10 +552,7 @@ fn test_get_average_apy() {
     create_db(&conn).unwrap();
     let exchange_rate = ExchangeRate {
         id: 0,
-        timestamp: chrono::Utc
-            .ymd(2020, 8, 8)
-            .and_hms(0, 0, 0)
-            .with_timezone(&chrono::FixedOffset::east(0)),
+        timestamp: chrono::Utc.ymd(2020, 8, 8).and_hms(0, 0, 0),
         slot: 1,
         epoch: 1,
         pool: SOLIDO_ID.to_owned(),
@@ -560,10 +562,7 @@ fn test_get_average_apy() {
     insert_price(&conn, &exchange_rate).unwrap();
     let exchange_rate = ExchangeRate {
         id: 0,
-        timestamp: chrono::Utc
-            .ymd(2021, 1, 8)
-            .and_hms(0, 0, 0)
-            .with_timezone(&chrono::FixedOffset::east(0)),
+        timestamp: chrono::Utc.ymd(2021, 1, 8).and_hms(0, 0, 0),
         slot: 2,
         epoch: 2,
         pool: SOLIDO_ID.to_owned(),
@@ -594,10 +593,7 @@ fn test_rationals_do_not_overflow() {
     create_db(&conn).unwrap();
     let exchange_rate = ExchangeRate {
         id: 0,
-        timestamp: chrono::Utc
-            .ymd(2022, 01, 28)
-            .and_hms(11, 58, 39)
-            .with_timezone(&chrono::FixedOffset::east(0)),
+        timestamp: chrono::Utc.ymd(2022, 01, 28).and_hms(11, 58, 39),
         slot: 108837851,
         epoch: 270,
         pool: SOLIDO_ID.to_owned(),
@@ -608,10 +604,7 @@ fn test_rationals_do_not_overflow() {
 
     let exchange_rate = ExchangeRate {
         id: 0,
-        timestamp: chrono::Utc
-            .ymd(2022, 02, 28)
-            .and_hms(11, 58, 39)
-            .with_timezone(&chrono::FixedOffset::east(0)),
+        timestamp: chrono::Utc.ymd(2022, 02, 28).and_hms(11, 58, 39),
         slot: 118837851,
         epoch: 275,
         pool: SOLIDO_ID.to_owned(),
