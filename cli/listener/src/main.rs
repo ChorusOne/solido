@@ -384,9 +384,9 @@ impl Metrics {
             write_metric(
                 out,
                 &MetricFamily {
-                    name: "average_apy",
+                    name: "solido_pricedb_average_apy",
                     help: "Average APY",
-                    type_: "counter",
+                    type_: "gauge",
                     metrics: vec![Metric::new(interval_price.annual_percentage_rate())
                         .with_label("solido", "APY".to_string())],
                 },
@@ -440,9 +440,7 @@ fn start_http_server(opts: &Opts, metrics_mutex: Arc<MetricsMutex>) -> Vec<JoinH
     println!("Http server listening on {}", &opts.listen);
 
     // Spawn a number of http handler threads, so we can handle requests in
-    // parallel. This server is only used to serve metrics, it can be super basic,
-    // but some degree of parallelism is nice in case a client is slow to send
-    // its request or something like that.
+    // parallel.
     (0..num_cpus::get())
         .map(|i| {
             let server_clone = server.clone();
