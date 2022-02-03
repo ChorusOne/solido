@@ -501,7 +501,7 @@ fn get_interval_price_request(
                 Ok(res) => Some(res),
                 Err(err) => return Some(get_error_response(err)),
             }
-        } else if method_name == "" {
+        } else if method_name.is_empty() {
             None
         } else {
             return Some(get_error_response(ResponseError {
