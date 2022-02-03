@@ -1,4 +1,5 @@
 use std::{
+    ops::Sub,
     sync::{Arc, Mutex},
     thread::JoinHandle,
     time::{Duration, Instant},
@@ -256,19 +257,16 @@ impl<'a, 'b> Daemon<'a, 'b> {
         opts: &'a Opts,
         db_connection: &'a Connection,
     ) -> Self {
+        let empty_metrics = Metrics {
+            polls: 0,
+            errors: 0,
+            solido_average_30d_interval_price: None,
+        };
         Daemon {
             config,
             opts,
-            metrics_snapshot: Arc::new(Mutex::new(Arc::new(Metrics {
-                polls: 0,
-                errors: 0,
-                solido_average_interval_price: None,
-            }))),
-            metrics: Metrics {
-                polls: 0,
-                errors: 0,
-                solido_average_interval_price: None,
-            },
+            metrics_snapshot: Arc::new(Mutex::new(Arc::new(empty_metrics.clone()))),
+            metrics: empty_metrics,
             rng: rand::thread_rng(),
             last_read_success: Instant::now(),
             db_connection,
@@ -307,7 +305,7 @@ impl<'a, 'b> Daemon<'a, 'b> {
                         ),
                         Some(interval_prices) => {
                             println!("{}", interval_prices);
-                            self.metrics.solido_average_interval_price = Some(interval_prices);
+                            self.metrics.solido_average_30d_interval_price = Some(interval_prices);
                         }
                     }
                     self.get_sleep_time()
@@ -360,7 +358,7 @@ struct Metrics {
     errors: u64,
 
     /// Solido's maximum price interval.
-    solido_average_interval_price: Option<IntervalPrices>,
+    solido_average_30d_interval_price: Option<IntervalPrices>,
 }
 
 impl Metrics {
@@ -380,12 +378,12 @@ impl Metrics {
             type_: "counter",
             metrics: vec![Metric::new(self.errors)]
         })?;
-        if let Some(interval_price) = &self.solido_average_interval_price {
+        if let Some(interval_price) = &self.solido_average_30d_interval_price {
             write_metric(
                 out,
                 &MetricFamily {
-                    name: "solido_pricedb_average_apy",
-                    help: "Average APY",
+                    name: "solido_pricedb_30d_average_apy",
+                    help: "Average 30d APY",
                     type_: "gauge",
                     metrics: vec![Metric::new(interval_price.annual_percentage_rate())
                         .with_label("solido", "APY".to_string())],
@@ -493,7 +491,7 @@ fn get_and_save_exchange_rate(
     match result {
         Err(err) => ListenerResult::ErrSnapshot(err),
         Ok(exchange_rate) => {
-            match insert_price_and_query_price_interval(db_connection, &exchange_rate) {
+            match insert_price_and_query_30d_price_interval(db_connection, &exchange_rate) {
                 Ok(interval_prices) => ListenerResult::OkListener(exchange_rate, interval_prices),
                 Err(error) => ListenerResult::ErrListener(Box::new(error)),
             }
@@ -501,21 +499,16 @@ fn get_and_save_exchange_rate(
     }
 }
 
-fn insert_price_and_query_price_interval(
+fn insert_price_and_query_30d_price_interval(
     db_connection: &Connection,
     exchange_rate: &ExchangeRate,
 ) -> Result<Option<IntervalPrices>, rusqlite::Error> {
     insert_price(db_connection, exchange_rate)?;
     let tx = db_connection.unchecked_transaction()?;
-    // FIXME: chrono::MIN_DATETIME and chrono::MAX_DATETIME include a sign in
-    // front of the ISO 8601 date time format.  It makes it hard to compare as a
-    // string in the database, especially the MAX_DATETIME.
-    let interval_prices = get_interval_price_for_period(
-        tx,
-        chrono::MIN_DATETIME,
-        chrono::Utc::now(),
-        SOLIDO_ID.to_owned(),
-    )?;
+    let now = chrono::Utc::now();
+    let now_minus_30d = now - chrono::Duration::days(30);
+    let interval_prices =
+        get_interval_price_for_period(tx, now_minus_30d, chrono::Utc::now(), SOLIDO_ID.to_owned())?;
     Ok(interval_prices)
 }
 
@@ -618,5 +611,6 @@ fn test_rationals_do_not_overflow() {
         SOLIDO_ID.to_owned(),
     )
     .expect("Failed when getting APY for period");
-    apy.unwrap().growth_factor();
+    let growth_factor = apy.unwrap().growth_factor();
+    assert_eq!(growth_factor, 1.0005282698770684); //  Checked on WA, precision difference in the last digit.
 }
