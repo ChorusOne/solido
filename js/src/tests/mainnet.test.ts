@@ -26,7 +26,7 @@ import solidoInstanceInfoDump from './data/solido_instance_info.json';
 
 describe('Deserializer', () => {
   it('deserializes solido instance from info', () => {
-    const solido = getSolido(Buffer.from(solidoInstanceInfoDump.data.data));
+    const solido = getSolido(Buffer.from(solidoInstanceInfoDump.data));
 
     expect(JSON.stringify(solido)).toEqual(JSON.stringify(snapshotDump.solido));
   });
@@ -82,16 +82,16 @@ describe('Utility functions', () => {
     );
 
     expect(stakeAccountAddress.toString()).toBe(
-      new PublicKey('F7GF79UqF5gRJBTPGdzzF2Bne7sMGdDJGxqEBip1aPqC').toString()
+      new PublicKey('2virNsGL9jhynjcF1QA9k19G82iGDZ9jM9wnEyftFi1h').toString()
     );
   });
 
   it('finds heaviest validator', async () => {
     const { validatorVoteAddress: heaviestValidator } =
-      await getHeaviestValidatorStakeAccount(snapshotDump);
+      getHeaviestValidatorStakeAccount(snapshotDump);
 
     expect(new PublicKey(heaviestValidator).toString()).toBe(
-      '3rV2tk7RANbNU88yNUHKtVpKnniUu6V2XVP8w2AH3mdq'
+      'LidoSPDw5hiraRkqh2uWTxsvao9AGKHJMthB6YFgqVj'
     );
   });
 });
@@ -102,25 +102,25 @@ describe('Statistics functions', () => {
   it('gets total value locked', async () => {
     const tvl = await getTotalValueLocked(snapshotDump);
 
-    expect(tvl.lamports.toNumber()).toBe(958588849714483);
+    expect(tvl.lamports.toNumber()).toBe(1999833612130988);
   });
 
   it('gets total stsol supply', async () => {
-    const stSolSupply = await getStSolSupply(snapshotDump, 'totalcoins');
+    const stSolSupply = getStSolSupply(snapshotDump, 'totalcoins');
 
-    expect(stSolSupply.stLamports.toNumber()).toBe(944449110579506);
+    expect(stSolSupply.stLamports.toNumber()).toBe(1954270411879168);
   });
 
   it('gets circulating stsol supply', async () => {
-    const stSolSupply = await getStSolSupply(snapshotDump, 'circulating');
+    const stSolSupply = getStSolSupply(snapshotDump, 'circulating');
 
-    expect(stSolSupply.stLamports.toNumber()).toBe(944449110579506);
+    expect(stSolSupply.stLamports.toNumber()).toBe(1954270411879168);
   });
 
   it('gets exchange rate', async () => {
     const exchangeRate = getExchangeRate(snapshotDump);
 
-    expect(exchangeRate).toBe(1.0144912447734487);
+    expect(exchangeRate).toBe(1.0228602531211206);
   });
 });
 
