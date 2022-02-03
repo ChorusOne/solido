@@ -154,7 +154,7 @@ pub fn get_interval_price_for_period(
 
     let (first, last) = {
         // Get first logged minimal logged data based on timestamp that is greater than `from_time`.
-        // TODO: Do not limit the query below, but select the first data point
+        // TODO(516): Do not limit the query below, but select the first data point
         // that is offset by 200 data points from the selected epoch
         let stmt_first = &mut tx.prepare(
             "WITH prices_epoch AS (
