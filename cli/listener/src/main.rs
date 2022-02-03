@@ -34,9 +34,9 @@ pub struct Opts {
     #[clap(long, default_value = "http://127.0.0.1:8899")]
     cluster: String,
 
-    /// Poll frequency in seconds.
+    /// Poll interval in seconds.
     #[clap(long, default_value = "300")]
-    poll_frequency_seconds: u32,
+    poll_interval_seconds: u32,
 
     /// Location of the SQLite DB file.
     #[clap(long, default_value = "listener.sqlite3")]
@@ -342,7 +342,7 @@ impl<'a, 'b> Daemon<'a, 'b> {
 
     pub fn get_sleep_time(&self) -> Duration {
         // Sleep until is time to get the next exchange rate.
-        let sleep_time = std::time::Duration::from_secs(self.opts.poll_frequency_seconds as u64);
+        let sleep_time = std::time::Duration::from_secs(self.opts.poll_interval_seconds as u64);
         println!(
             "Sleeping for {:?} after getting the Solido exchange rate",
             sleep_time
