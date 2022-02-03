@@ -42,7 +42,7 @@ pub struct Opts {
     #[clap(long, default_value = "listener.sqlite3")]
     db_path: String,
 
-    /// Listen address and port for the http server that serves a /metrics endpoint.
+    /// Listen address and port for the http server.
     #[clap(long, default_value = "0.0.0.0:8929")]
     listen: String,
 }
