@@ -1,0 +1,9 @@
+# MacOS Specific
+.DS_Store
+
+# Build Files
+dist
+docs
+
+# Dependecies
+node_modules

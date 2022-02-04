@@ -1,0 +1,41 @@
+{
+  "name": "@chorusone/solido.js",
+  "version": "1.0.0",
+  "description": "Typescript SDK for interacting with Solido Program",
+  "types": "dist/index.d.ts",
+  "files": [
+    "/dist"
+  ],
+  "main": "dist/index.js",
+  "author": "Hritique Rungta",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/jest": "^27.0.3",
+    "@types/node": "^16.11.12",
+    "jest": "^27.4.3",
+    "ts-jest": "^27.1.1",
+    "ts-node": "^10.4.0",
+    "typedoc": "^0.22.11",
+    "typescript": "^4.5.2"
+  },
+  "scripts": {
+    "watch:ts": "tsc --watch",
+    "test": "npm run prettier & jest",
+    "watch:test": "jest --watch",
+    "build:ts": "npm run test & tsc",
+    "prettier": "prettier --write 'src/**/*.{ts,json}'",
+    "docs:build": "typedoc src/index.ts",
+    "docs:watch": "typedoc src/index.ts --watch",
+    "docs:serve": "npx serve docs -l 8000",
+    "test:dump-snapshot": "ts-node src/tests/updateSnapshot.ts && prettier --write 'src/tests/data/snapshot.ts'",
+    "test:dump-account-info": "ts-node src/tests/updateAccountDumps.ts && prettier --write 'src/tests/data/solido_instance_info.json'"
+  },
+  "dependencies": {
+    "@solana/buffer-layout": "^3.0.0",
+    "@solana/spl-token": "^0.1.8",
+    "@solana/web3.js": "^1.32.0",
+    "bn.js": "^5.2.0",
+    "borsh": "^0.7.0",
+    "prettier": "^2.5.1"
+  }
+}

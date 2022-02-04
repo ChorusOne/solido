@@ -1,0 +1,7 @@
+{
+  "data": { "type": "Buffer", "data": [] },
+  "executable": false,
+  "lamports": 4639886721158,
+  "owner": { "_bn": "00" },
+  "rentEpoch": 256
+}
