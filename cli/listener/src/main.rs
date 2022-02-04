@@ -315,7 +315,7 @@ impl<'a, 'b> Daemon<'a, 'b> {
                             "No interval price could be produced, awaiting more data points"
                         ),
                         Some(interval_prices) => {
-                            println!("{}", interval_prices);
+                            println!("30d APY: {}", interval_prices);
                             self.metrics.solido_average_30d_interval_price = Some(interval_prices);
                         }
                     }
