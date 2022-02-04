@@ -507,7 +507,7 @@ fn insert_price_and_query_30d_price_interval(
     let now = chrono::Utc::now();
     let now_minus_30d = now - chrono::Duration::days(30);
     let interval_prices =
-        get_interval_price_for_period(tx, now_minus_30d, chrono::Utc::now(), SOLIDO_ID.to_owned())?;
+        get_interval_price_for_period(tx, now_minus_30d, now, SOLIDO_ID.to_owned())?;
     Ok(interval_prices)
 }
 
