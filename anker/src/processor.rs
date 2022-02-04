@@ -29,7 +29,7 @@ use crate::{
     },
     logic::{burn_b_sol, deserialize_anker, mint_b_sol_to},
     metrics::Metrics,
-    state::{Anker, WormholeParameters},
+    state::{Anker, WormholeParameters, ANKER_VERSION},
     token::{BLamports, MicroUst},
     wormhole::{get_wormhole_transfer_instruction, TerraAddress},
 };
@@ -130,6 +130,7 @@ fn process_initialize(
     )?;
 
     let anker = Anker {
+        version: ANKER_VERSION,
         b_sol_mint: *accounts.b_sol_mint.key,
         solido_program_id: *accounts.solido_program.key,
         solido: *accounts.solido.key,
