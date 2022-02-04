@@ -136,19 +136,26 @@ impl std::fmt::Display for IntervalPrices {
     }
 }
 
+fn parse_utc_iso8601(date_str: &str) -> chrono::ParseResult<chrono::DateTime<chrono::Utc>> {
+    Ok(chrono::DateTime::from_utc(
+        chrono::DateTime::parse_from_rfc3339(date_str)?.naive_utc(),
+        chrono::Utc,
+    ))
+}
+
 pub fn get_interval_price_for_period(
     tx: rusqlite::Transaction,
-    from_time: chrono::DateTime<chrono::FixedOffset>,
-    to_time: chrono::DateTime<chrono::FixedOffset>,
+    from_time: chrono::DateTime<chrono::Utc>,
+    to_time: chrono::DateTime<chrono::Utc>,
     pool: String,
 ) -> rusqlite::Result<Option<IntervalPrices>> {
     let row_map = |row: &Row| {
         let timestamp: String = row.get(1)?;
-        let timestamp_iso8601 =
-            chrono::DateTime::from_str(&timestamp).expect("Invalid timestamp format.");
+        let timestamp =
+            chrono::DateTime::from_str(&timestamp).expect("Invalid timestamp format stored in DB.");
         Ok(ExchangeRate {
             id: row.get(0)?,
-            timestamp: timestamp_iso8601,
+            timestamp,
             slot: row.get(2)?,
             epoch: row.get(3)?,
             pool: row.get(4)?,
@@ -410,8 +417,8 @@ struct ResponseInterval {
 }
 
 struct DateFromTo {
-    from: chrono::ParseResult<chrono::DateTime<chrono::FixedOffset>>,
-    to: chrono::ParseResult<chrono::DateTime<chrono::FixedOffset>>,
+    from: chrono::ParseResult<chrono::DateTime<chrono::Utc>>,
+    to: chrono::ParseResult<chrono::DateTime<chrono::Utc>>,
 }
 
 /// Returns a tuple (from, to) with the Result from parsing the iso8601 from
@@ -444,13 +451,13 @@ fn get_date_params(params: &[&str]) -> Result<DateFromTo, ResponseError> {
     })?;
     match (first_key, second_key) {
         ("from", "to") => Ok(DateFromTo{
-          from: chrono::DateTime::parse_from_rfc3339(date_first_value),
-          to:   chrono::DateTime::parse_from_rfc3339(date_second_value)
+          from: parse_utc_iso8601(date_first_value),
+          to:   parse_utc_iso8601(date_second_value)
         }
         ),
         ("to", "from") => Ok(DateFromTo{
-          from: chrono::DateTime::parse_from_rfc3339(date_second_value),
-          to:   chrono::DateTime::parse_from_rfc3339(date_first_value),
+          from: parse_utc_iso8601(date_second_value),
+          to:   parse_utc_iso8601(date_first_value),
         }
         ),
         _ => Err(ResponseError {
@@ -732,14 +739,8 @@ fn test_get_average_apy() {
     insert_price(&conn, &exchange_rate).unwrap();
     let apy = get_interval_price_for_period(
         conn.unchecked_transaction().unwrap(),
-        chrono::Utc
-            .ymd(2020, 7, 7)
-            .and_hms(0, 0, 0)
-            .with_timezone(&chrono::FixedOffset::east(0)),
-        chrono::Utc
-            .ymd(2021, 7, 8)
-            .and_hms(0, 0, 0)
-            .with_timezone(&chrono::FixedOffset::east(0)),
+        chrono::Utc.ymd(2020, 7, 7).and_hms(0, 0, 0),
+        chrono::Utc.ymd(2021, 7, 8).and_hms(0, 0, 0),
         SOLIDO_ID.to_owned(),
     )
     .expect("Failed when getting APY for period");
@@ -781,14 +782,8 @@ fn test_rationals_do_not_overflow() {
 
     let apy = get_interval_price_for_period(
         conn.unchecked_transaction().unwrap(),
-        chrono::Utc
-            .ymd(2020, 7, 7)
-            .and_hms(0, 0, 0)
-            .with_timezone(&chrono::FixedOffset::east(0)),
-        chrono::Utc
-            .ymd(2022, 7, 8)
-            .and_hms(0, 0, 0)
-            .with_timezone(&chrono::FixedOffset::east(0)),
+        chrono::Utc.ymd(2020, 7, 7).and_hms(0, 0, 0),
+        chrono::Utc.ymd(2022, 7, 8).and_hms(0, 0, 0),
         SOLIDO_ID.to_owned(),
     )
     .expect("Failed when getting APY for period");
