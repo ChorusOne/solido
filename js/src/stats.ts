@@ -68,7 +68,7 @@ export const getExchangeRate = (snapshot: Snapshot): number => {
 };
 
 /**
- * Get the number of  token accounts that exist for the token specified by the mint address
+ * Get the number of token accounts that exist for the token specified by the mint address
  * @param connection Connection to the cluster
  *
  * **Note: RPC node needs to have account indexing enabled for the SPL token mint that we query, and this is not enabled by default**
@@ -79,7 +79,7 @@ export const getExchangeRate = (snapshot: Snapshot): number => {
 export const getTotalNumberOfTokenAccounts = async (
   connection: Connection,
   tokenMintAddress: PublicKey
-) => {
+): Promise<number> => {
   const memcmpFilter = {
     memcmp: { bytes: tokenMintAddress.toString(), offset: 0 },
   };

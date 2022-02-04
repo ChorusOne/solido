@@ -83,7 +83,10 @@ export const getHeaviestValidatorStakeAccount = (
  * @param snapshot Snapshot of the Solido stats
  * @param amount SOL to exchange
  */
-export const exchangeSol = (snapshot: Snapshot, amount: Lamports) => {
+export const exchangeSol = (
+  snapshot: Snapshot,
+  amount: Lamports
+): StLamports => {
   const exchangeRate = snapshot.solido.exchange_rate;
 
   // The stSOL/SOL ratio is 1:1 for a fresh deployment(i.e., stSolSupply is 0)
@@ -103,7 +106,10 @@ export const exchangeSol = (snapshot: Snapshot, amount: Lamports) => {
  * @param snapshot Snapshot of the Solido stats
  * @param amount stSOL to exchange
  */
-export const exchangeStSol = (snapshot: Snapshot, amount: StLamports) => {
+export const exchangeStSol = (
+  snapshot: Snapshot,
+  amount: StLamports
+): Lamports => {
   const exchangeRate = snapshot.solido.exchange_rate;
 
   return new Lamports(
