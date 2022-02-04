@@ -1,12 +1,15 @@
-import { Keypair, PublicKey } from '@solana/web3.js';
+import { Keypair, LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js';
 import BN from 'bn.js';
 import {
+  exchangeSol,
+  exchangeStSol,
   getDepositInstruction,
   getExchangeRate,
   getSolido,
   getStSolSupply,
   getTotalValueLocked,
   getWithdrawInstruction,
+  Lamports,
   MAINNET_PROGRAM_ADDRESSES,
   StLamports,
 } from '..';
@@ -93,6 +96,22 @@ describe('Utility functions', () => {
     expect(new PublicKey(heaviestValidator).toString()).toBe(
       'LidoSPDw5hiraRkqh2uWTxsvao9AGKHJMthB6YFgqVj'
     );
+  });
+
+  it('exchanges SOL to get stSOL', async () => {
+    const solToExchange = new Lamports(1 * LAMPORTS_PER_SOL);
+
+    const stSolReceived = exchangeSol(snapshotDump, solToExchange);
+
+    expect(stSolReceived.stLamports.toString()).toBe('977650658');
+  });
+
+  it('exchanges stSOL to get SOL', async () => {
+    const stSolToExchange = new StLamports('977650659');
+
+    const solReceived = exchangeStSol(snapshotDump, stSolToExchange);
+
+    expect(solReceived.lamports.toString()).toBe('1000000000');
   });
 });
 

@@ -1,8 +1,7 @@
 import { PublicKey } from '@solana/web3.js';
 import type BN from 'bn.js';
-import { getExchangeRate } from './stats';
-import { Lamports, StLamports } from './types';
 import type { ProgramAddresses, Snapshot } from './types';
+import { Lamports, StLamports } from './types';
 
 /**
  * Derives the addresses from seed and solido program
@@ -85,9 +84,18 @@ export const getHeaviestValidatorStakeAccount = (
  * @param amount SOL to exchange
  */
 export const exchangeSol = (snapshot: Snapshot, amount: Lamports) => {
-  const exchangeRate = getExchangeRate(snapshot);
+  const exchangeRate = snapshot.solido.exchange_rate;
 
-  return new StLamports(amount.lamports.toNumber() / exchangeRate);
+  // The stSOL/SOL ratio is 1:1 for a fresh deployment(i.e., stSolSupply is 0)
+  // So the user would get same amount of stSOL as SOL deposited
+  if (exchangeRate.st_sol_supply.toString() === '0') {
+    return new StLamports(amount.lamports.toString());
+  }
+
+  return new StLamports(
+    (amount.lamports.toNumber() * exchangeRate.st_sol_supply.toNumber()) /
+      exchangeRate.sol_balance.toNumber()
+  );
 };
 
 /**
@@ -96,7 +104,10 @@ export const exchangeSol = (snapshot: Snapshot, amount: Lamports) => {
  * @param amount stSOL to exchange
  */
 export const exchangeStSol = (snapshot: Snapshot, amount: StLamports) => {
-  const exchangeRate = getExchangeRate(snapshot);
+  const exchangeRate = snapshot.solido.exchange_rate;
 
-  return new Lamports(amount.stLamports.toNumber() * exchangeRate);
+  return new Lamports(
+    (amount.stLamports.toNumber() * exchangeRate.sol_balance.toNumber()) /
+      exchangeRate.st_sol_supply.toNumber()
+  );
 };
