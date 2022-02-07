@@ -22,7 +22,8 @@ use spl_token_swap::state::SwapV1;
 use crate::token::{self, BLamports};
 
 /// Size of the serialized [`Anker`] struct, in bytes.
-pub const ANKER_LEN: usize = 233;
+pub const ANKER_LEN: usize = 234;
+pub const ANKER_VERSION: u8 = 0;
 
 #[repr(C)]
 #[derive(
@@ -40,6 +41,9 @@ pub struct WormholeParameters {
     Clone, Debug, Default, BorshDeserialize, BorshSerialize, BorshSchema, Eq, PartialEq, Serialize,
 )]
 pub struct Anker {
+    /// Version number for Anker.
+    pub version: u8,
+
     /// The Solido program that owns the `solido` instance.
     #[serde(serialize_with = "serialize_b58")]
     pub solido_program_id: Pubkey,
@@ -698,5 +702,24 @@ mod test {
         let mut writer = Vec::new();
         BorshSerialize::serialize(&instance, &mut writer).unwrap();
         assert_eq!(writer.len(), ANKER_LEN);
+    }
+
+    #[test]
+    fn test_version_serialise() {
+        use solana_sdk::borsh::try_from_slice_unchecked;
+
+        for i in 0..=255 {
+            let anker = Anker {
+                version: i,
+                ..Anker::default()
+            };
+            let mut res: Vec<u8> = Vec::new();
+            BorshSerialize::serialize(&anker, &mut res).unwrap();
+
+            assert_eq!(res[0], i);
+
+            let anker_recovered = try_from_slice_unchecked(&res[..]).unwrap();
+            assert_eq!(anker, anker_recovered);
+        }
     }
 }
