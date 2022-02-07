@@ -115,13 +115,15 @@ impl IntervalPrices {
 
 impl std::fmt::Display for IntervalPrices {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let duration = self.t1 - self.t0;
         writeln!(
             f,
-            "Interval price:\n  From: {} (epoch {})\n  To  : {} (epoch {})\n  Average APY: {}",
+            "Interval price:\n  From: {} (epoch {})\n  To  : {} (epoch {})\n  Average {} days APY: {}",
             self.t0,
             self.epoch0,
             self.t1,
             self.epoch1,
+            duration.num_days(),
             self.annual_percentage_rate()
         )
     }
