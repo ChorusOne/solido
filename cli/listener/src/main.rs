@@ -87,28 +87,23 @@ pub fn create_db(conn: &Connection) -> rusqlite::Result<()> {
 
 #[derive(Clone, Debug, Serialize)]
 pub struct IntervalPrices {
-    #[serde(rename(serialize = "time_first_measured"))]
-    t0: chrono::DateTime<chrono::Utc>,
-    #[serde(rename(serialize = "time_last_measured"))]
-    t1: chrono::DateTime<chrono::Utc>,
-    epoch0: Epoch,
-    #[serde(rename(serialize = "epoch_last_data"))]
-    epoch1: Epoch,
-    #[serde(rename(serialize = "price_first_data"))]
-    price0_lamports: Rational,
-    #[serde(rename(serialize = "price_last_data"))]
-    price1_lamports: Rational,
+    begin_datetime: chrono::DateTime<chrono::Utc>,
+    end_datetime: chrono::DateTime<chrono::Utc>,
+    begin_epoch: Epoch,
+    end_epoch: Epoch,
+    begin_token_price_sol: Rational,
+    end_token_price_sol: Rational,
 }
 
 impl IntervalPrices {
     pub fn duration_wall_time(&self) -> chrono::Duration {
-        self.t1 - self.t0
+        self.end_datetime - self.begin_datetime
     }
     pub fn duration_epochs(&self) -> u64 {
-        self.epoch1 - self.epoch0
+        self.end_epoch - self.begin_epoch
     }
     pub fn growth_factor(&self) -> f64 {
-        self.price1_lamports / self.price0_lamports
+        self.end_token_price_sol / self.begin_token_price_sol
     }
     pub fn annual_growth_factor(&self) -> f64 {
         let year = chrono::Duration::days(365);
@@ -122,14 +117,14 @@ impl IntervalPrices {
 
 impl std::fmt::Display for IntervalPrices {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let duration = self.t1 - self.t0;
+        let duration = self.end_datetime - self.begin_datetime;
         writeln!(
             f,
             "Interval price:\n  From: {} (epoch {})\n  To  : {} (epoch {})\n  Average {} days APY: {}",
-            self.t0,
-            self.epoch0,
-            self.t1,
-            self.epoch1,
+            self.begin_datetime,
+            self.begin_epoch,
+            self.end_datetime,
+            self.end_epoch,
             duration.num_days(),
             self.annual_percentage_rate()
         )
@@ -214,15 +209,15 @@ pub fn get_interval_price_for_period(
                 Ok(None)
             } else {
                 let interval_prices = IntervalPrices {
-                    t0: first.timestamp,
-                    t1: last.timestamp,
-                    epoch0: first.epoch,
-                    epoch1: last.epoch,
-                    price0_lamports: Rational {
+                    begin_datetime: first.timestamp,
+                    end_datetime: last.timestamp,
+                    begin_epoch: first.epoch,
+                    end_epoch: last.epoch,
+                    begin_token_price_sol: Rational {
                         numerator: first.price_lamports_numerator,
                         denominator: first.price_lamports_denominator,
                     },
-                    price1_lamports: Rational {
+                    end_token_price_sol: Rational {
                         numerator: last.price_lamports_numerator,
                         denominator: last.price_lamports_denominator,
                     },
