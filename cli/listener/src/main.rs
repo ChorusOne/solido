@@ -1,4 +1,5 @@
 use std::{
+    ops::Range,
     sync::{Arc, Mutex},
     thread::JoinHandle,
     time::{Duration, Instant},
@@ -400,7 +401,7 @@ impl Metrics {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, PartialEq, Debug)]
 struct ResponseError {
     error: String,
 }
@@ -411,61 +412,43 @@ struct ResponseInterval {
     annual_percentage_rate: f64,
 }
 
-struct DateFromTo {
-    from: chrono::ParseResult<chrono::DateTime<chrono::Utc>>,
-    to: chrono::ParseResult<chrono::DateTime<chrono::Utc>>,
-}
+type DateFromTo = Range<chrono::ParseResult<chrono::DateTime<chrono::Utc>>>;
 
-/// Returns a tuple (from, to) with the Result from parsing the iso8601 from
-/// `params`. `params` is a vector that must contain two strings with
-/// `from=<from_date>` and `to=<to_date>` in any order.
-fn get_date_params(params: &[&str]) -> Result<DateFromTo, ResponseError> {
-    let arg = *params.get(0).ok_or(ResponseError {
-        error:
-            "No parameters were provided, from_date=<from_date_iso8601>?to_date=<to_date_iso8601> \
-         should be provided"
-                .to_owned(),
-    })?;
-    let mut param_format = arg.split('=');
-    let first_key = param_format.next().ok_or(ResponseError {
-        error: "Missing key for first parameter, should be \"from\" or \"to\"".to_owned(),
-    })?;
-    let date_first_value = param_format.next().ok_or(ResponseError {
-        error: "Missing date value for first parameter".to_owned(),
-    })?;
+/// Returns a `DateFromTo` with the Result from parsing the iso8601 from
+/// `input`. `input` is the url query in bytes.
+fn get_date_params(input: &[u8]) -> Result<DateFromTo, ResponseError> {
+    let parsed_inputs = form_urlencoded::parse(input).collect::<Vec<_>>();
 
-    let arg = *params.get(1).ok_or(ResponseError {
-        error: "Missing second key/value for date".to_owned(),
+    let (first_k, first_v) = parsed_inputs.get(1).ok_or(ResponseError {
+        error: "First parameter \"from\" or \"to\" not provided.".to_owned(),
     })?;
-    let mut param_format = arg.split('=');
-    let second_key = param_format.next().ok_or(ResponseError {
-        error: "Missing key for second parameter, should be \"from\" or \"to\"".to_owned(),
+    let (second_k, second_v) = parsed_inputs.get(2).ok_or(ResponseError {
+        error: "Second parameter \"from\" or \"to\" not provided.".to_owned(),
     })?;
-    let date_second_value = param_format.next().ok_or(ResponseError {
-        error: "Missing date value for second parameter".to_owned(),
-    })?;
-    match (first_key, second_key) {
-        ("from", "to") => Ok(DateFromTo{
-          from: parse_utc_iso8601(date_first_value),
-          to:   parse_utc_iso8601(date_second_value)
+    match (
+        (first_k.as_ref(), first_v.as_ref()),
+        (second_k.as_ref(), second_v.as_ref()),
+    ) {
+        (("from", from), ("to", to)) | (("to", to), ("from", from)) => {
+            Ok(parse_utc_iso8601(from)..parse_utc_iso8601(to))
         }
-        ),
-        ("to", "from") => Ok(DateFromTo{
-          from: parse_utc_iso8601(date_second_value),
-          to:   parse_utc_iso8601(date_first_value),
-        }
-        ),
         _ => Err(ResponseError {
-            error: format!("Invalid parameters, should be \"to\" or \"from\" in any order, is {} and {} instead", first_key, second_key)
+            error: "Wrong parameters provided, query parameters should be \"from\" and \"to\"."
+                .to_owned(),
         }),
     }
 }
 
+/// Returns a Request response with an error.
+/// With the status code set to 400.
 fn get_error_response(err_res: ResponseError) -> ResponseBox {
-    let content_type = Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..])
-        .expect("Static header value, does not fail at runtime.");
+    let content_type = Header::from_bytes(
+        &b"Content-Type"[..],
+        &b"application/json; charset=UTF-8"[..],
+    )
+    .expect("Static header value, does not fail at runtime.");
     Response::from_data(serde_json::to_vec(&err_res).expect("Serialization shouldn't fail"))
-        .with_status_code(500)
+        .with_status_code(400)
         .with_header(content_type)
         .boxed()
 }
@@ -499,7 +482,7 @@ fn get_interval_price_request(
         let vec_parameters = method.split('?').collect::<Vec<&str>>();
         let method_name = *vec_parameters.get(0)?;
         if method_name == "interval_price" {
-            match get_date_params(&vec_parameters[1..]) {
+            match get_date_params(request.url().as_bytes()) {
                 Ok(res) => Some(res),
                 Err(err) => return Some(get_error_response(err)),
             }
@@ -507,13 +490,13 @@ fn get_interval_price_request(
             None
         } else {
             return Some(get_error_response(ResponseError {
-                error: format!("Method not supported: {}, use \"interval_price?from_date=<from_date_iso8601>?to_date=<to_date_iso8601>\"", method_name)
+                error: format!("Method not supported: {}, use \"interval_price?from_date=<from_date_iso8601>%to_date=<to_date_iso8601>\"", method_name)
             }));
         }
     } else {
         None
     }?;
-    match (parameters_result.from, parameters_result.to) {
+    match (parameters_result.start, parameters_result.end) {
         (Ok(from), Ok(to)) => {
             let interval_prices = get_interval_price_for_period(
                 db_connection
@@ -707,81 +690,102 @@ fn main() {
     daemon.run()
 }
 
-#[test]
-fn test_get_average_apy() {
+#[cfg(test)]
+mod test {
+    use super::*;
     use chrono::TimeZone;
-    let conn = Connection::open_in_memory().expect("Failed to open sqlite connection.");
-    create_db(&conn).unwrap();
-    let exchange_rate = ExchangeRate {
-        id: 0,
-        timestamp: chrono::Utc.ymd(2020, 8, 8).and_hms(0, 0, 0),
-        slot: 1,
-        epoch: 1,
-        pool: SOLIDO_ID.to_owned(),
-        price_lamports_numerator: 1,
-        price_lamports_denominator: 1,
-    };
-    insert_price(&conn, &exchange_rate).unwrap();
-    let exchange_rate = ExchangeRate {
-        id: 0,
-        timestamp: chrono::Utc.ymd(2021, 1, 8).and_hms(0, 0, 0),
-        slot: 2,
-        epoch: 2,
-        pool: SOLIDO_ID.to_owned(),
-        price_lamports_numerator: 1394458971361025,
-        price_lamports_denominator: 1367327673971744,
-    };
-    insert_price(&conn, &exchange_rate).unwrap();
-    let apy = get_interval_price_for_period(
-        conn.unchecked_transaction().unwrap(),
-        chrono::Utc.ymd(2020, 7, 7).and_hms(0, 0, 0),
-        chrono::Utc.ymd(2021, 7, 8).and_hms(0, 0, 0),
-        SOLIDO_ID.to_owned(),
-    )
-    .expect("Failed when getting APY for period");
-    assert_eq!(apy.unwrap().annual_percentage_rate(), 4.7989255185326485);
-}
 
-// When computing the APY, we have to call `growth_factor` which divides two
-// Rational numbers. Previously when dividing two rationals our implementation
-// returned another Rational. In other words, for dividing `a/b` by `c/d`, we
-// did `a*d/b*c`. In this case, `a*d` or `b*c` could overflow, we now return an
-// `f64` instead of a Rational and avoid multiplying two large numbers that
-// could overflow.
-#[test]
-fn test_rationals_do_not_overflow() {
-    use chrono::TimeZone;
-    let conn = Connection::open_in_memory().expect("Failed to open sqlite connection.");
-    create_db(&conn).unwrap();
-    let exchange_rate = ExchangeRate {
-        id: 0,
-        timestamp: chrono::Utc.ymd(2022, 01, 28).and_hms(11, 58, 39),
-        slot: 108837851,
-        epoch: 270,
-        pool: SOLIDO_ID.to_owned(),
-        price_lamports_numerator: 1936245653069130,
-        price_lamports_denominator: 1893971837707973,
-    };
-    insert_price(&conn, &exchange_rate).unwrap();
+    #[test]
+    fn test_get_average_apy() {
+        let conn = Connection::open_in_memory().expect("Failed to open sqlite connection.");
+        create_db(&conn).unwrap();
+        let exchange_rate = ExchangeRate {
+            id: 0,
+            timestamp: chrono::Utc.ymd(2020, 8, 8).and_hms(0, 0, 0),
+            slot: 1,
+            epoch: 1,
+            pool: SOLIDO_ID.to_owned(),
+            price_lamports_numerator: 1,
+            price_lamports_denominator: 1,
+        };
+        insert_price(&conn, &exchange_rate).unwrap();
+        let exchange_rate = ExchangeRate {
+            id: 0,
+            timestamp: chrono::Utc.ymd(2021, 1, 8).and_hms(0, 0, 0),
+            slot: 2,
+            epoch: 2,
+            pool: SOLIDO_ID.to_owned(),
+            price_lamports_numerator: 1394458971361025,
+            price_lamports_denominator: 1367327673971744,
+        };
+        insert_price(&conn, &exchange_rate).unwrap();
+        let apy = get_interval_price_for_period(
+            conn.unchecked_transaction().unwrap(),
+            chrono::Utc.ymd(2020, 7, 7).and_hms(0, 0, 0),
+            chrono::Utc.ymd(2021, 7, 8).and_hms(0, 0, 0),
+            SOLIDO_ID.to_owned(),
+        )
+        .expect("Failed when getting APY for period");
+        assert_eq!(apy.unwrap().annual_percentage_rate(), 4.7989255185326485);
+    }
 
-    let exchange_rate = ExchangeRate {
-        id: 0,
-        timestamp: chrono::Utc.ymd(2022, 02, 28).and_hms(11, 58, 39),
-        slot: 118837851,
-        epoch: 275,
-        pool: SOLIDO_ID.to_owned(),
-        price_lamports_numerator: 1936245653069130,
-        price_lamports_denominator: 1892971837707973,
-    };
-    insert_price(&conn, &exchange_rate).unwrap();
+    // When computing the APY, we have to call `growth_factor` which divides two
+    // Rational numbers. Previously when dividing two rationals our implementation
+    // returned another Rational. In other words, for dividing `a/b` by `c/d`, we
+    // did `a*d/b*c`. In this case, `a*d` or `b*c` could overflow, we now return an
+    // `f64` instead of a Rational and avoid multiplying two large numbers that
+    // could overflow.
+    #[test]
+    fn test_rationals_do_not_overflow() {
+        use chrono::TimeZone;
+        let conn = Connection::open_in_memory().expect("Failed to open sqlite connection.");
+        create_db(&conn).unwrap();
+        let exchange_rate = ExchangeRate {
+            id: 0,
+            timestamp: chrono::Utc.ymd(2022, 01, 28).and_hms(11, 58, 39),
+            slot: 108837851,
+            epoch: 270,
+            pool: SOLIDO_ID.to_owned(),
+            price_lamports_numerator: 1936245653069130,
+            price_lamports_denominator: 1893971837707973,
+        };
+        insert_price(&conn, &exchange_rate).unwrap();
 
-    let apy = get_interval_price_for_period(
-        conn.unchecked_transaction().unwrap(),
-        chrono::Utc.ymd(2020, 7, 7).and_hms(0, 0, 0),
-        chrono::Utc.ymd(2022, 7, 8).and_hms(0, 0, 0),
-        SOLIDO_ID.to_owned(),
-    )
-    .expect("Failed when getting APY for period");
-    let growth_factor = apy.unwrap().growth_factor();
-    assert_eq!(growth_factor, 1.0005282698770684); //  Checked on WA, precision difference in the last digit.
+        let exchange_rate = ExchangeRate {
+            id: 0,
+            timestamp: chrono::Utc.ymd(2022, 02, 28).and_hms(11, 58, 39),
+            slot: 118837851,
+            epoch: 275,
+            pool: SOLIDO_ID.to_owned(),
+            price_lamports_numerator: 1936245653069130,
+            price_lamports_denominator: 1892971837707973,
+        };
+        insert_price(&conn, &exchange_rate).unwrap();
+
+        let apy = get_interval_price_for_period(
+            conn.unchecked_transaction().unwrap(),
+            chrono::Utc.ymd(2020, 7, 7).and_hms(0, 0, 0),
+            chrono::Utc.ymd(2022, 7, 8).and_hms(0, 0, 0),
+            SOLIDO_ID.to_owned(),
+        )
+        .expect("Failed when getting APY for period");
+        let growth_factor = apy.unwrap().growth_factor();
+        assert_eq!(growth_factor, 1.0005282698770684); //  Checked on WA, precision difference in the last digit.
+    }
+
+    #[test]
+    fn test_get_date_from_url_parameters() {
+        let url_encoded = form_urlencoded::Serializer::new(String::new())
+            .append_key_only("http://apy_calc.solido.fi")
+            .append_pair("from", "2022-02-04T11:40:02.683960+00:00")
+            .append_pair("to", "2022-02-07T14:22:08.826526+00:00")
+            .finish();
+
+        let dates = get_date_params(url_encoded.as_bytes());
+        assert_eq!(
+            dates,
+            Ok(parse_utc_iso8601("2022-02-04T11:40:02.683960+00:00")
+                ..parse_utc_iso8601("2022-02-07T14:22:08.826526+00:00")),
+        );
+    }
 }

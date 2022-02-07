@@ -15,6 +15,7 @@ clap = "3.0.0-beta.2"
 chrono = "0.4.19"
 solido-cli-common = { path = "../common" }
 tiny_http = "0.8.2"
+form_urlencoded = "1.0.1"
 num_cpus = "1.0"
 rand = "0.8.3"
 serde = "1.0"
