@@ -1,5 +1,6 @@
 import { PublicKey } from '@solana/web3.js';
 import type BN from 'bn.js';
+import { Solido } from './solidoSnapshot';
 import type { ProgramAddresses, Snapshot } from './types';
 import { Lamports, StLamports } from './types';
 
@@ -65,6 +66,10 @@ export const getHeaviestValidatorStakeAccount = (
 ): Snapshot['validatorsStakeAccounts'][0] => {
   let heaviestValidatorStakeAccount = snapshot.validatorsStakeAccounts[0];
 
+  if (!heaviestValidatorStakeAccount) {
+    throw new Error('No validator stake accounts found');
+  }
+
   snapshot.validatorsStakeAccounts.forEach((validatorStakeAccount) => {
     if (
       validatorStakeAccount.balance.lamports.gt(
@@ -80,14 +85,11 @@ export const getHeaviestValidatorStakeAccount = (
 
 /**
  * Exchange SOL to stSOL
- * @param snapshot Snapshot of the Solido stats
+ * @param solido Solido state data from snapshot
  * @param amount SOL to exchange
  */
-export const exchangeSol = (
-  snapshot: Snapshot,
-  amount: Lamports
-): StLamports => {
-  const exchangeRate = snapshot.solido.exchange_rate;
+export const exchangeSol = (solido: Solido, amount: Lamports): StLamports => {
+  const exchangeRate = solido.exchange_rate;
 
   // The stSOL/SOL ratio is 1:1 for a fresh deployment(i.e., stSolSupply is 0)
   // So the user would get same amount of stSOL as SOL deposited
@@ -103,14 +105,11 @@ export const exchangeSol = (
 
 /**
  * Exchange stSOL to SOL
- * @param snapshot Snapshot of the Solido stats
+ * @param solido Solido state data from snapshot
  * @param amount stSOL to exchange
  */
-export const exchangeStSol = (
-  snapshot: Snapshot,
-  amount: StLamports
-): Lamports => {
-  const exchangeRate = snapshot.solido.exchange_rate;
+export const exchangeStSol = (solido: Solido, amount: StLamports): Lamports => {
+  const exchangeRate = solido.exchange_rate;
 
   return new Lamports(
     (amount.stLamports.toNumber() * exchangeRate.sol_balance.toNumber()) /
