@@ -6,9 +6,15 @@ import type { Solido } from './snapshot';
  * Program addresses for the program deployment
  */
 export interface ProgramAddresses {
+  // Solido Program
   solidoProgramId: PublicKey;
   solidoInstanceId: PublicKey;
   stSolMintAddress: PublicKey;
+
+  // Anker Program
+  ankerProgramId: PublicKey;
+  ankerInstanceId: PublicKey;
+  bSolMintAddress: PublicKey;
 }
 
 /**

@@ -14,4 +14,27 @@ export const MAINNET_PROGRAM_ADDRESSES: ProgramAddresses = {
   stSolMintAddress: new PublicKey(
     '7dHbWXmci3dT8UFYWYZweBLXgycu7Y3iL6trKn1Y7ARj'
   ),
+  ankerProgramId: PublicKey.default,
+  ankerInstanceId: PublicKey.default,
+  bSolMintAddress: PublicKey.default,
+};
+
+export const DEVNET_PROGRAM_ADDRESSES: ProgramAddresses = {
+  solidoProgramId: new PublicKey(
+    '874qdedig9MnSiinBkErWvafQacAfwzkHjHyE6XTa8kg'
+  ),
+  solidoInstanceId: new PublicKey(
+    'EMtjYGwPnXdtqK5SGL8CWGv4wgdBQN79UPoy53x9bBTJ'
+  ),
+  stSolMintAddress: new PublicKey(
+    'H6L2MwgQPVCoyETqFyqiuJgW3reCxFdesnAb579qzX88'
+  ),
+
+  ankerProgramId: new PublicKey('8MT6MtwbSdNyYH655cDxf2MypYSVfmAdx8jXrBWPREzf'),
+  ankerInstanceId: new PublicKey(
+    'BovX97d8MnVTbpwbBdyjSrEr7RvxN8AHEk3dYwTEx7RD'
+  ),
+  bSolMintAddress: new PublicKey(
+    '3FMBoeddUhtqxepzkrxPrMUV3CL4bZM5QmMoLJfEpirz'
+  ),
 };
