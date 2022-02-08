@@ -485,7 +485,7 @@ fn get_interval_price_request(
             }))
         }
     };
-    let method_name = parsed_url.path_segments()?.next()?;
+    let method_name = parsed_url.path_segments()?.last()?;
     if method_name != "interval_price" {
         return Some(get_error_response(ResponseError {
                         error: format!("Method not supported: {}, use \"/interval_price?from=<from_date_iso8601>&to=<to_date_iso8601>\"", method_name)
