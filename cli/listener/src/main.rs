@@ -697,7 +697,6 @@ fn main() {
 mod test {
     use super::*;
     use chrono::TimeZone;
-    use url::Url;
 
     #[test]
     fn test_get_average_apy() {
