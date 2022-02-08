@@ -21,14 +21,16 @@
   "scripts": {
     "watch:ts": "tsc --watch",
     "test": "npm run prettier & jest",
-    "watch:test": "jest --watch",
+    "watch:test-mainnet": "jest --watch -- 'src/tests/mainnet.test.ts'",
+    "watch:test-devnet": "jest --watch -- 'src/tests/devnet.test.ts'",
     "build:ts": "npm run test & tsc",
     "prettier": "prettier --write 'src/**/*.{ts,json}'",
     "docs:build": "typedoc src/index.ts",
     "docs:watch": "typedoc src/index.ts --watch",
     "docs:serve": "npx serve docs -l 8000",
-    "test:dump-snapshot": "ts-node src/tests/updateSnapshot.ts && prettier --write 'src/tests/data/snapshot.ts'",
-    "test:dump-account-info": "ts-node src/tests/updateAccountDumps.ts && prettier --write 'src/tests/data/solido_instance_info.json'"
+    "test:dump-snapshot": "ts-node src/tests/updateSnapshot.ts",
+    "test:dump-account-info": "ts-node src/tests/updateAccountDumps.ts",
+    "test:dump-instructions": "ts-node src/tests/updateInstructions.ts"
   },
   "dependencies": {
     "@solana/buffer-layout": "^3.0.0",
