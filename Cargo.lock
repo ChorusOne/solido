@@ -1937,7 +1937,6 @@ version = "1.2.0"
 dependencies = [
  "chrono",
  "clap 3.0.0-beta.2",
- "form_urlencoded",
  "lido",
  "num_cpus",
  "rand 0.8.4",
@@ -1949,6 +1948,7 @@ dependencies = [
  "solana-sdk",
  "solido-cli-common",
  "tiny_http",
+ "url",
 ]
 
 [[package]]

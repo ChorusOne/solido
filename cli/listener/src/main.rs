@@ -1,4 +1,5 @@
 use std::{
+    borrow::Cow,
     ops::Range,
     sync::{Arc, Mutex},
     thread::JoinHandle,
@@ -24,6 +25,7 @@ use solido_cli_common::{
 };
 use std::str::FromStr;
 use tiny_http::{Header, Request, Response, ResponseBox, Server};
+use url::{form_urlencoded, Url};
 
 const SOLIDO_ID: &str = "solido";
 
@@ -416,13 +418,11 @@ type DateFromTo = Range<chrono::ParseResult<chrono::DateTime<chrono::Utc>>>;
 
 /// Returns a `DateFromTo` with the Result from parsing the iso8601 from
 /// `input`. `input` is the url query in bytes.
-fn get_date_params(input: &[u8]) -> Result<DateFromTo, ResponseError> {
-    let parsed_inputs = form_urlencoded::parse(input).collect::<Vec<_>>();
-
-    let (first_k, first_v) = parsed_inputs.get(1).ok_or(ResponseError {
+fn get_date_params(parsed_inputs: Vec<(Cow<str>, Cow<str>)>) -> Result<DateFromTo, ResponseError> {
+    let (first_k, first_v) = parsed_inputs.get(0).ok_or(ResponseError {
         error: "First parameter \"from\" or \"to\" not provided.".to_owned(),
     })?;
-    let (second_k, second_v) = parsed_inputs.get(2).ok_or(ResponseError {
+    let (second_k, second_v) = parsed_inputs.get(1).ok_or(ResponseError {
         error: "Second parameter \"from\" or \"to\" not provided.".to_owned(),
     })?;
     match (
@@ -430,6 +430,8 @@ fn get_date_params(input: &[u8]) -> Result<DateFromTo, ResponseError> {
         (second_k.as_ref(), second_v.as_ref()),
     ) {
         (("from", from), ("to", to)) | (("to", to), ("from", from)) => {
+            println!("FROM: {}", from);
+            println!("TO: {}", to);
             Ok(parse_utc_iso8601(from)..parse_utc_iso8601(to))
         }
         _ => Err(ResponseError {
@@ -475,28 +477,29 @@ fn get_interval_price_request(
     db_connection: &Connection,
     request: &Request,
 ) -> Option<ResponseBox> {
-    let mut request_split = request.url().split('/');
-    // Ignore first string.
-    request_split.next()?;
-    let parameters_result = if let Some(method) = request_split.next() {
-        let vec_parameters = method.split('?').collect::<Vec<&str>>();
-        let method_name = *vec_parameters.get(0)?;
-        if method_name == "interval_price" {
-            match get_date_params(request.url().as_bytes()) {
-                Ok(res) => Some(res),
-                Err(err) => return Some(get_error_response(err)),
-            }
-        } else if method_name.is_empty() {
-            None
-        } else {
+    let parsed_url = match Url::parse(request.url()) {
+        Ok(parsed_url) => parsed_url,
+        Err(err) => {
             return Some(get_error_response(ResponseError {
-                error: format!("Method not supported: {}, use \"interval_price?from_date=<from_date_iso8601>%to_date=<to_date_iso8601>\"", method_name)
-            }));
+                error: err.to_string(),
+            }))
         }
-    } else {
-        None
+    };
+    let method_name = parsed_url.path_segments()?.next()?;
+    if method_name != "interval_price" {
+        return Some(get_error_response(ResponseError {
+                        error: format!("Method not supported: {}, use \"/interval_price?from=<from_date_iso8601>&to=<to_date_iso8601>\"", method_name)
+                    }));
+    }
+    let parsed_request_url =
+        form_urlencoded::parse(parsed_url.query()?.as_bytes()).collect::<Vec<_>>();
+
+    let dates = match get_date_params(parsed_request_url) {
+        Ok(res) => Some(res),
+        Err(err) => return Some(get_error_response(err)),
     }?;
-    match (parameters_result.start, parameters_result.end) {
+
+    match (dates.start, dates.end) {
         (Ok(from), Ok(to)) => {
             let interval_prices = get_interval_price_for_period(
                 db_connection
@@ -694,6 +697,7 @@ fn main() {
 mod test {
     use super::*;
     use chrono::TimeZone;
+    use url::Url;
 
     #[test]
     fn test_get_average_apy() {
@@ -775,13 +779,13 @@ mod test {
 
     #[test]
     fn test_get_date_from_url_parameters() {
-        let url_encoded = form_urlencoded::Serializer::new(String::new())
-            .append_key_only("http://apy_calc.solido.fi")
+        let query_params = form_urlencoded::Serializer::new(String::new())
             .append_pair("from", "2022-02-04T11:40:02.683960+00:00")
             .append_pair("to", "2022-02-07T14:22:08.826526+00:00")
             .finish();
 
-        let dates = get_date_params(url_encoded.as_bytes());
+        let dates =
+            get_date_params(form_urlencoded::parse(query_params.as_bytes()).collect::<Vec<_>>());
         assert_eq!(
             dates,
             Ok(parse_utc_iso8601("2022-02-04T11:40:02.683960+00:00")
