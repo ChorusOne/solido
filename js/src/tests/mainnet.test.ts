@@ -21,9 +21,9 @@ import {
 import {
   deposit as depositInstructionDump,
   withdraw as withdrawInstructionDump,
-} from './data/instructions';
-import { snapshot as snapshotDump } from './data/snapshot';
-import solidoInstanceInfoDump from './data/solido_instance_info.json';
+} from './data/mainnet/instructions';
+import solidoInstanceInfoDump from './data/mainnet/solido_instance_info.json';
+import { snapshot as snapshotDump } from './data/mainnet/solido_snapshot';
 
 //////////////// Deserializer ////////////////
 
@@ -85,7 +85,7 @@ describe('Utility functions', () => {
     );
 
     expect(stakeAccountAddress.toString()).toBe(
-      new PublicKey('2virNsGL9jhynjcF1QA9k19G82iGDZ9jM9wnEyftFi1h').toString()
+      new PublicKey('AYKAnKBShqEyz2UMLv7Px5CtuWSHEYS2W1V1GTKGKNwE').toString()
     );
   });
 
@@ -94,22 +94,22 @@ describe('Utility functions', () => {
       getHeaviestValidatorStakeAccount(snapshotDump);
 
     expect(new PublicKey(heaviestValidator).toString()).toBe(
-      'LidoSPDw5hiraRkqh2uWTxsvao9AGKHJMthB6YFgqVj'
+      'BqoNCkYacAqKtKpZswHbDQtSK8eHGq15NBd9nYq28TJH'
     );
   });
 
   it('exchanges SOL to get stSOL', async () => {
     const solToExchange = new Lamports(1 * LAMPORTS_PER_SOL);
 
-    const stSolReceived = exchangeSol(snapshotDump, solToExchange);
+    const stSolReceived = exchangeSol(snapshotDump.solido, solToExchange);
 
-    expect(stSolReceived.stLamports.toString()).toBe('977650658');
+    expect(stSolReceived.stLamports.toString()).toBe('976765814');
   });
 
   it('exchanges stSOL to get SOL', async () => {
-    const stSolToExchange = new StLamports('977650659');
+    const stSolToExchange = new StLamports('976765815');
 
-    const solReceived = exchangeStSol(snapshotDump, stSolToExchange);
+    const solReceived = exchangeStSol(snapshotDump.solido, stSolToExchange);
 
     expect(solReceived.lamports.toString()).toBe('1000000000');
   });
@@ -121,25 +121,25 @@ describe('Statistics functions', () => {
   it('gets total value locked', async () => {
     const tvl = await getTotalValueLocked(snapshotDump);
 
-    expect(tvl.lamports.toNumber()).toBe(1999833612130988);
+    expect(tvl.lamports.toNumber()).toBe(2015202291354382);
   });
 
   it('gets total stsol supply', async () => {
     const stSolSupply = getStSolSupply(snapshotDump, 'totalcoins');
 
-    expect(stSolSupply.stLamports.toNumber()).toBe(1954270411879168);
+    expect(stSolSupply.stLamports.toNumber()).toBe(1967472080845457);
   });
 
   it('gets circulating stsol supply', async () => {
     const stSolSupply = getStSolSupply(snapshotDump, 'circulating');
 
-    expect(stSolSupply.stLamports.toNumber()).toBe(1954270411879168);
+    expect(stSolSupply.stLamports.toNumber()).toBe(1967472080845457);
   });
 
   it('gets exchange rate', async () => {
     const exchangeRate = getExchangeRate(snapshotDump);
 
-    expect(exchangeRate).toBe(1.0228602531211206);
+    expect(exchangeRate).toBe(1.0237868536694013);
   });
 });
 
