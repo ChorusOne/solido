@@ -625,6 +625,7 @@ enum ListenerResult {
     ErrListener(Error),
 }
 
+/// Save the exchange rate and get a response for the 30d interval price.
 fn get_and_save_exchange_rate(
     config: &mut SnapshotClientConfig,
     opts: &Opts,
@@ -656,6 +657,8 @@ fn get_and_save_exchange_rate(
     }
 }
 
+/// Insert an `exchange_rate` into the database and query the 30 days APY from
+/// the current date.
 fn insert_price_and_query_30d_price_interval(
     db_connection: &Connection,
     exchange_rate: &ExchangeRate,
