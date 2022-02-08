@@ -1,6 +1,7 @@
 import type { PublicKey } from '@solana/web3.js';
 import BN from 'bn.js';
-import type { Solido } from './snapshot';
+import { Anker } from './ankerSnapshot';
+import type { Solido } from './solidoSnapshot';
 
 /**
  * Program addresses for the program deployment
@@ -44,6 +45,19 @@ export class StLamports {
 }
 
 /**
+ * Balance of bSOL account
+ *
+ * 1 bLamport = 1e-9 bSOL, and is the smallest possible amount of bSOL
+ */
+export class BLamports {
+  bLamports: BN;
+
+  constructor(bLamports: number | string | BN) {
+    this.bLamports = new BN(bLamports);
+  }
+}
+
+/**
  * Snapshot of the Solido stats
  *
  * Snapshot of all Solido-related accounts at a given slot.
@@ -66,4 +80,10 @@ export interface Snapshot {
     address: PublicKey;
     balance: Lamports;
   }[];
+}
+
+export interface AnkerSnapshot {
+  anker: Anker;
+  solido: Solido;
+  stSolReserveAccountBalance: StLamports;
 }
