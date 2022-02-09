@@ -430,8 +430,6 @@ fn get_date_params(parsed_inputs: Vec<(Cow<str>, Cow<str>)>) -> Result<DateFromT
         (second_k.as_ref(), second_v.as_ref()),
     ) {
         (("from", from), ("to", to)) | (("to", to), ("from", from)) => {
-            println!("FROM: {}", from);
-            println!("TO: {}", to);
             Ok(parse_utc_iso8601(from)..parse_utc_iso8601(to))
         }
         _ => Err(ResponseError {
