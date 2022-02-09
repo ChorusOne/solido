@@ -794,6 +794,42 @@ mod test {
 
     #[test]
     fn test_get_interval_from_url() {
+        // check for correct and specific prices.
+        fn check_correct_url(conn: &Connection, url: &str) {
+            let response: ResponseBox = get_interval_price_request(conn, url).unwrap();
+            let mut response_string = String::new();
+
+            // Assert status code is ok.
+            assert_eq!(response.status_code(), 200);
+
+            response
+                .into_reader()
+                .read_to_string(&mut response_string)
+                .unwrap();
+
+            let expected_response = ResponseInterval {
+                interval_prices: IntervalPrices {
+                    begin_datetime: chrono::Utc.ymd(2020, 8, 8).and_hms(0, 0, 0),
+                    end_datetime: chrono::Utc.ymd(2021, 1, 8).and_hms(0, 0, 0),
+                    begin_epoch: 1,
+                    end_epoch: 2,
+                    begin_token_price_sol: Rational {
+                        numerator: 1,
+                        denominator: 1,
+                    },
+                    end_token_price_sol: Rational {
+                        numerator: 1394458971361025,
+                        denominator: 1367327673971744,
+                    },
+                },
+                annual_percentage_rate: 4.7989255185326485,
+            };
+
+            let response_result: ResponseInterval =
+                serde_json::de::from_str(&response_string).unwrap();
+            assert_eq!(response_result, expected_response);
+        }
+
         let conn = Connection::open_in_memory().expect("Failed to open sqlite connection.");
         create_db(&conn).unwrap();
         let exchange_rate = ExchangeRate {
@@ -817,37 +853,9 @@ mod test {
         };
         insert_price(&conn, &exchange_rate).unwrap();
 
-        let url = Url::parse("http://solana.lido.fi/api/apy/interval_price?from=2020-07-07T00:00:00.683960%2B00:00&to=2021-07-08T14:22:08.826526%2B00:00").unwrap();
-        let response: ResponseBox = get_interval_price_request(&conn, url.as_str()).unwrap();
-        let mut response_string = String::new();
-
-        // Assert status code is ok.
-        assert_eq!(response.status_code(), 200);
-
-        response
-            .into_reader()
-            .read_to_string(&mut response_string)
-            .unwrap();
-
-        let expected_response = ResponseInterval {
-            interval_prices: IntervalPrices {
-                begin_datetime: chrono::Utc.ymd(2020, 8, 8).and_hms(0, 0, 0),
-                end_datetime: chrono::Utc.ymd(2021, 1, 8).and_hms(0, 0, 0),
-                begin_epoch: 1,
-                end_epoch: 2,
-                begin_token_price_sol: Rational {
-                    numerator: 1,
-                    denominator: 1,
-                },
-                end_token_price_sol: Rational {
-                    numerator: 1394458971361025,
-                    denominator: 1367327673971744,
-                },
-            },
-            annual_percentage_rate: 4.7989255185326485,
-        };
-
-        let response_result: ResponseInterval = serde_json::de::from_str(&response_string).unwrap();
-        assert_eq!(response_result, expected_response);
+        // Check some formats return ok.
+        check_correct_url(&conn, "http://solana.lido.fi/api/apy/interval_price?from=2020-07-07T00:00:00.683960%2B00:00&to=2021-07-08T14:22:08.826526%2B00:00");
+        check_correct_url(&conn, "http://solana.lido.fi/api/apy/interval_price?from=2020-07-07T00:00:00.683960Z&to=2021-07-08T14:22:08.826526Z");
+        check_correct_url(&conn, "http://solana.lido.fi/api/apy/interval_price?from=2020-07-07T00%3A00:00.683960%2B00:00&to=2021-07-08T14:22%3A08.826526%2B00:00");
     }
 }
