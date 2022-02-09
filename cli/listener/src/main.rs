@@ -10,7 +10,7 @@ use clap::Clap;
 use lido::token::Rational;
 use rand::{rngs::ThreadRng, Rng};
 use rusqlite::{params, Connection, Row};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::{
     clock::{Epoch, Slot},
@@ -88,7 +88,7 @@ pub fn create_db(conn: &Connection) -> rusqlite::Result<()> {
     Ok(())
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct IntervalPrices {
     begin_datetime: chrono::DateTime<chrono::Utc>,
     end_datetime: chrono::DateTime<chrono::Utc>,
@@ -408,7 +408,7 @@ struct ResponseError {
     error: String,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 struct ResponseInterval {
     interval_prices: IntervalPrices,
     annual_percentage_rate: f64,
@@ -471,13 +471,13 @@ fn get_success_response(interval_prices: IntervalPrices) -> ResponseBox {
     .boxed()
 }
 
-/// Gets a response that will be sent to a requesting client.
-/// Returns None if no method is passed.
+/// Gets a response that will be sent to a requesting client for a price
+/// interval. Returns None if no method is passed.
 fn get_interval_price_request(
     db_connection: &Connection,
-    request: &Request,
+    request_url: &str,
 ) -> Option<ResponseBox> {
-    let parsed_url = match Url::parse(request.url()) {
+    let parsed_url = match Url::parse(request_url) {
         Ok(parsed_url) => parsed_url,
         Err(err) => {
             return Some(get_error_response(ResponseError {
@@ -549,7 +549,7 @@ fn serve_request(
     request: Request,
     metrics_mutex: &MetricsMutex,
 ) -> Result<(), std::io::Error> {
-    if let Some(res) = get_interval_price_request(db_connection, &request) {
+    if let Some(res) = get_interval_price_request(db_connection, request.url()) {
         return request.respond(res);
     };
 
@@ -743,7 +743,6 @@ mod test {
     // could overflow.
     #[test]
     fn test_rationals_do_not_overflow() {
-        use chrono::TimeZone;
         let conn = Connection::open_in_memory().expect("Failed to open sqlite connection.");
         create_db(&conn).unwrap();
         let exchange_rate = ExchangeRate {
@@ -793,5 +792,64 @@ mod test {
             Ok(parse_utc_iso8601("2022-02-04T11:40:02.683960+00:00")
                 ..parse_utc_iso8601("2022-02-07T14:22:08.826526+00:00")),
         );
+    }
+
+    #[test]
+    fn test_get_interval_from_url() {
+        let conn = Connection::open_in_memory().expect("Failed to open sqlite connection.");
+        create_db(&conn).unwrap();
+        let exchange_rate = ExchangeRate {
+            id: 0,
+            timestamp: chrono::Utc.ymd(2020, 8, 8).and_hms(0, 0, 0),
+            slot: 1,
+            epoch: 1,
+            pool: SOLIDO_ID.to_owned(),
+            price_lamports_numerator: 1,
+            price_lamports_denominator: 1,
+        };
+        insert_price(&conn, &exchange_rate).unwrap();
+        let exchange_rate = ExchangeRate {
+            id: 0,
+            timestamp: chrono::Utc.ymd(2021, 1, 8).and_hms(0, 0, 0),
+            slot: 2,
+            epoch: 2,
+            pool: SOLIDO_ID.to_owned(),
+            price_lamports_numerator: 1394458971361025,
+            price_lamports_denominator: 1367327673971744,
+        };
+        insert_price(&conn, &exchange_rate).unwrap();
+
+        let url = Url::parse("http://solana.lido.fi/api/apy/interval_price?from=2020-07-07T00:00:00.683960%2B00:00&to=2021-07-08T14:22:08.826526%2B00:00").unwrap();
+        let response: ResponseBox = get_interval_price_request(&conn, url.as_str()).unwrap();
+        let mut response_string = String::new();
+
+        // Assert status code is ok.
+        assert_eq!(response.status_code(), 200);
+
+        response
+            .into_reader()
+            .read_to_string(&mut response_string)
+            .unwrap();
+
+        let expected_response = ResponseInterval {
+            interval_prices: IntervalPrices {
+                begin_datetime: chrono::Utc.ymd(2020, 8, 8).and_hms(0, 0, 0),
+                end_datetime: chrono::Utc.ymd(2021, 1, 8).and_hms(0, 0, 0),
+                begin_epoch: 1,
+                end_epoch: 2,
+                begin_token_price_sol: Rational {
+                    numerator: 1,
+                    denominator: 1,
+                },
+                end_token_price_sol: Rational {
+                    numerator: 1394458971361025,
+                    denominator: 1367327673971744,
+                },
+            },
+            annual_percentage_rate: 4.7989255185326485,
+        };
+
+        let response_result: ResponseInterval = serde_json::de::from_str(&response_string).unwrap();
+        assert_eq!(response_result, expected_response);
     }
 }

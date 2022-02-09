@@ -14,7 +14,7 @@
 //!   getting the formulas right, rather than the checked arithmetic bookkeeping.
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::{
     convert::TryFrom,
     fmt,
@@ -22,7 +22,7 @@ use std::{
     ops::{Add, Div, Mul, Sub},
 };
 
-#[derive(Copy, Clone, PartialEq, Debug, Serialize)]
+#[derive(Copy, Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Rational {
     pub numerator: u64,
     pub denominator: u64,
