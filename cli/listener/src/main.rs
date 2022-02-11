@@ -138,8 +138,8 @@ pub fn get_interval_price_for_period(
 ) -> rusqlite::Result<Option<IntervalPrices>> {
     let row_map = |row: &Row| {
         let timestamp: String = row.get(1)?;
-        let timestamp_iso8601 = chrono::DateTime::<chrono::Utc>::from_str(&timestamp)
-            .expect("Invalid timestamp format.");
+        let timestamp_iso8601 =
+            chrono::DateTime::from_str(&timestamp).expect("Invalid timestamp format.");
         Ok(ExchangeRate {
             id: row.get(0)?,
             timestamp: timestamp_iso8601,
@@ -401,9 +401,9 @@ fn serve_request(request: Request, metrics_mutex: &MetricsMutex) -> Result<(), s
     // We don't even look at the request, for now we always serve the metrics.
 
     let mut out: Vec<u8> = Vec::new();
-    metrics
-        .write_prometheus(&mut out)
-        .expect("We must handle the error because of io::Write, but writing to a Vec does not fail.");
+    metrics.write_prometheus(&mut out).expect(
+        "We must handle the error because of io::Write, but writing to a Vec does not fail.",
+    );
 
     // text/plain with version=0.0.4 is what Prometheus expects as the content type,
     // see also https://prometheus.io/docs/instrumenting/exposition_formats/.
