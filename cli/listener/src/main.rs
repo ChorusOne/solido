@@ -383,8 +383,7 @@ impl Metrics {
                     name: "solido_pricedb_30d_average_apy",
                     help: "Average 30d APY",
                     type_: "gauge",
-                    metrics: vec![Metric::new(interval_price.annual_percentage_rate())
-                        .with_label("solido", "APY".to_string())],
+                    metrics: vec![Metric::new(interval_price.annual_percentage_rate())],
                 },
             )?;
         }
