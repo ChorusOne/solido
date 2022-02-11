@@ -401,22 +401,20 @@ fn serve_request(request: Request, metrics_mutex: &MetricsMutex) -> Result<(), s
     // We don't even look at the request, for now we always serve the metrics.
 
     let mut out: Vec<u8> = Vec::new();
-    let is_ok = metrics.write_prometheus(&mut out).is_ok();
+    metrics
+        .write_prometheus(&mut out)
+        .expect("Error when writing metrics to Vec, probably out of memory.");
 
-    if is_ok {
-        // text/plain with version=0.0.4 is what Prometheus expects as the content type,
-        // see also https://prometheus.io/docs/instrumenting/exposition_formats/.
-        // We add the charset so you can view the metrics in a browser too when it
-        // contains non-ascii bytes.
-        let content_type = Header::from_bytes(
-            &b"Content-Type"[..],
-            &b"text/plain; version=0.0.4; charset=UTF-8"[..],
-        )
-        .expect("Static header value, does not fail at runtime.");
-        request.respond(Response::from_data(out).with_header(content_type))
-    } else {
-        request.respond(Response::from_string("error").with_status_code(500))
-    }
+    // text/plain with version=0.0.4 is what Prometheus expects as the content type,
+    // see also https://prometheus.io/docs/instrumenting/exposition_formats/.
+    // We add the charset so you can view the metrics in a browser too when it
+    // contains non-ascii bytes.
+    let content_type = Header::from_bytes(
+        &b"Content-Type"[..],
+        &b"text/plain; version=0.0.4; charset=UTF-8"[..],
+    )
+    .expect("Static header value, does not fail at runtime.");
+    request.respond(Response::from_data(out).with_header(content_type))
 }
 
 /// Spawn threads that run the http server.
