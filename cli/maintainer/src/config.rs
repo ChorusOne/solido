@@ -730,7 +730,7 @@ cli_opt_struct! {
 
         /// Optionally the bSOL mint address. If not passed a random one will be created.
         #[clap(long, value_name = "address")]
-        b_sol_mint_address: Pubkey => Pubkey::default(),
+        b_sol_mint_address: Pubkey,
 
         /// The UST mint address.
         ///

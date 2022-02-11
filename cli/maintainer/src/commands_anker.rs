@@ -147,36 +147,12 @@ fn command_create_anker(
 
     let (anker_address, _bump_seed) =
         anker::find_instance_address(opts.anker_program_id(), opts.solido_address());
-    let (mint_authority, _bump_seed) =
-        anker::find_mint_authority(opts.anker_program_id(), &anker_address);
     let (st_sol_reserve_account, _bump_seed) =
         anker::find_st_sol_reserve_account(opts.anker_program_id(), &anker_address);
     let (ust_reserve_account, _bump_seed) =
         anker::find_ust_reserve_account(opts.anker_program_id(), &anker_address);
     let (reserve_authority, _bump_seed) =
         anker::find_reserve_authority(opts.anker_program_id(), &anker_address);
-
-    let b_sol_mint_address = {
-        if opts.b_sol_mint_address() != &Pubkey::default() {
-            // If we've been given a mint address, use that one.
-            *opts.b_sol_mint_address()
-        } else {
-            // If not, set up the Anker bSOL SPL token mint account.
-            let mut instructions = Vec::new();
-            let b_sol_mint_keypair =
-                push_create_spl_token_mint(config, &mut instructions, &mint_authority)?;
-            let signers = [&b_sol_mint_keypair, config.signer];
-
-            // Ideally we would set up the entire instance in a single transaction, but
-            // Solana transaction size limits are so low that we need to break our
-            // instructions down into multiple transactions. So set up the mint first,
-            // then continue.
-            eprintln!("Initializing a new SPL token mint for bSOL.");
-            config.sign_and_send_transaction(&instructions[..], &signers)?;
-            eprintln!("Initialized the bSOL token mint.");
-            b_sol_mint_keypair.pubkey()
-        }
-    };
 
     let instructions = [anker::instruction::initialize(
         opts.anker_program_id(),
@@ -186,7 +162,7 @@ fn command_create_anker(
             solido: *opts.solido_address(),
             solido_program: *opts.solido_program_id(),
             st_sol_mint: solido.st_sol_mint,
-            b_sol_mint: b_sol_mint_address,
+            b_sol_mint: *opts.b_sol_mint_address(),
             st_sol_reserve_account,
             ust_reserve_account,
             reserve_authority,
@@ -204,7 +180,7 @@ fn command_create_anker(
         anker_address,
         st_sol_reserve_account,
         ust_reserve_account,
-        b_sol_mint_address,
+        b_sol_mint_address: *opts.b_sol_mint_address(),
     };
 
     Ok(result)
