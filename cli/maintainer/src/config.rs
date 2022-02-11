@@ -412,12 +412,25 @@ cli_opt_struct! {
 
 cli_opt_struct! {
     ShowSolidoAuthoritiesOpts {
-        /// The solido instance to show authorities.
+        /// The Solido instance to show authorities.
         #[clap(long, value_name = "address")]
         solido_address: Pubkey,
+
         /// Address of the Solido program.
         #[clap(long, value_name = "address")]
         solido_program_id: Pubkey,
+   }
+}
+
+cli_opt_struct! {
+    ShowAnkerAuthoritiesOpts {
+        /// The Solido instance, used to derive the Anker instance.
+        #[clap(long, value_name = "address")]
+        solido_address: Pubkey,
+
+        /// Address of the Anker program.
+        #[clap(long, value_name = "address")]
+        anker_program_id: Pubkey,
    }
 }
 
@@ -717,7 +730,7 @@ cli_opt_struct! {
 
         /// Optionally the bSOL mint address. If not passed a random one will be created.
         #[clap(long, value_name = "address")]
-        b_sol_mint_address: Pubkey => Pubkey::default(),
+        b_sol_mint_address: Pubkey,
 
         /// The UST mint address.
         ///

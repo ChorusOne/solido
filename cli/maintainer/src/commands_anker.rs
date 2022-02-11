@@ -20,7 +20,7 @@ use spl_token_swap::curve::constant_product::ConstantProductCurve;
 
 use crate::config::{
     AnkerDepositOpts, AnkerWithdrawOpts, ConfigFile, CreateAnkerOpts, CreateTokenPoolOpts,
-    ShowAnkerOpts,
+    ShowAnkerAuthoritiesOpts, ShowAnkerOpts,
 };
 use crate::print_output;
 use crate::serialization_utils::serialize_bech32;
@@ -30,6 +30,9 @@ use crate::spl_token_utils::{push_create_spl_token_account, push_create_spl_toke
 enum SubCommand {
     /// Create a new Anker instance.
     Create(Box<CreateAnkerOpts>),
+
+    /// Show Anker authorities.
+    ShowAuthorities(ShowAnkerAuthoritiesOpts),
 
     /// Display the details of an Anker instance.
     Show(ShowAnkerOpts),
@@ -60,6 +63,9 @@ impl AnkerOpts {
             }
             SubCommand::Deposit(opts) => opts.merge_with_config_and_environment(config_file),
             SubCommand::Withdraw(opts) => opts.merge_with_config_and_environment(config_file),
+            SubCommand::ShowAuthorities(opts) => {
+                opts.merge_with_config_and_environment(config_file)
+            }
         }
     }
 }
@@ -89,6 +95,11 @@ pub fn main(config: &mut SnapshotClientConfig, anker_opts: &AnkerOpts) {
         SubCommand::Withdraw(opts) => {
             let result = config.with_snapshot(|config| command_withdraw(config, opts));
             let output = result.ok_or_abort_with("Failed to withdraw from Anker.");
+            print_output(config.output_mode, &output);
+        }
+        SubCommand::ShowAuthorities(opts) => {
+            let result = config.with_snapshot(|_| command_show_anker_authorities(opts));
+            let output = result.ok_or_abort_with("Failed to show Anker authorities.");
             print_output(config.output_mode, &output);
         }
     }
@@ -136,36 +147,12 @@ fn command_create_anker(
 
     let (anker_address, _bump_seed) =
         anker::find_instance_address(opts.anker_program_id(), opts.solido_address());
-    let (mint_authority, _bump_seed) =
-        anker::find_mint_authority(opts.anker_program_id(), &anker_address);
     let (st_sol_reserve_account, _bump_seed) =
         anker::find_st_sol_reserve_account(opts.anker_program_id(), &anker_address);
     let (ust_reserve_account, _bump_seed) =
         anker::find_ust_reserve_account(opts.anker_program_id(), &anker_address);
     let (reserve_authority, _bump_seed) =
         anker::find_reserve_authority(opts.anker_program_id(), &anker_address);
-
-    let b_sol_mint_address = {
-        if opts.b_sol_mint_address() != &Pubkey::default() {
-            // If we've been given a mint address, use that one.
-            *opts.b_sol_mint_address()
-        } else {
-            // If not, set up the Anker bSOL SPL token mint account.
-            let mut instructions = Vec::new();
-            let b_sol_mint_keypair =
-                push_create_spl_token_mint(config, &mut instructions, &mint_authority)?;
-            let signers = [&b_sol_mint_keypair, config.signer];
-
-            // Ideally we would set up the entire instance in a single transaction, but
-            // Solana transaction size limits are so low that we need to break our
-            // instructions down into multiple transactions. So set up the mint first,
-            // then continue.
-            eprintln!("Initializing a new SPL token mint for bSOL.");
-            config.sign_and_send_transaction(&instructions[..], &signers)?;
-            eprintln!("Initialized the bSOL token mint.");
-            b_sol_mint_keypair.pubkey()
-        }
-    };
 
     let instructions = [anker::instruction::initialize(
         opts.anker_program_id(),
@@ -175,7 +162,7 @@ fn command_create_anker(
             solido: *opts.solido_address(),
             solido_program: *opts.solido_program_id(),
             st_sol_mint: solido.st_sol_mint,
-            b_sol_mint: b_sol_mint_address,
+            b_sol_mint: *opts.b_sol_mint_address(),
             st_sol_reserve_account,
             ust_reserve_account,
             reserve_authority,
@@ -193,7 +180,7 @@ fn command_create_anker(
         anker_address,
         st_sol_reserve_account,
         ust_reserve_account,
-        b_sol_mint_address,
+        b_sol_mint_address: *opts.b_sol_mint_address(),
     };
 
     Ok(result)
@@ -651,4 +638,57 @@ fn command_withdraw(
         to_st_sol_account: recipient,
     };
     Ok(result)
+}
+
+#[derive(Serialize)]
+pub struct ShowAnkerAuthoritiesOutput {
+    #[serde(serialize_with = "serialize_b58")]
+    pub anker_address: Pubkey,
+
+    #[serde(serialize_with = "serialize_b58")]
+    pub b_sol_mint_authority: Pubkey,
+
+    #[serde(serialize_with = "serialize_b58")]
+    pub st_sol_reserve_account: Pubkey,
+
+    #[serde(serialize_with = "serialize_b58")]
+    pub ust_reserve_account: Pubkey,
+
+    #[serde(serialize_with = "serialize_b58")]
+    pub reserve_authority: Pubkey,
+}
+
+impl fmt::Display for ShowAnkerAuthoritiesOutput {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        writeln!(f, "Anker address:         {}", self.anker_address,)?;
+        writeln!(f, "bSOL Mint authority:   {}", self.b_sol_mint_authority)?;
+        writeln!(f, "stSOL reserve account: {}", self.st_sol_reserve_account)?;
+        writeln!(f, "UST reserve account:   {}", self.ust_reserve_account)?;
+        writeln!(f, "Reserve authority:     {}", self.reserve_authority,)?;
+        Ok(())
+    }
+}
+
+/// Show Anker address derived for its Solido instance and Anker authorities.
+pub fn command_show_anker_authorities(
+    opts: &ShowAnkerAuthoritiesOpts,
+) -> solido_cli_common::Result<ShowAnkerAuthoritiesOutput> {
+    let (anker_address, _) =
+        anker::find_instance_address(opts.anker_program_id(), opts.solido_address());
+    let (b_sol_mint_authority, _) =
+        anker::find_mint_authority(opts.anker_program_id(), &anker_address);
+    let (reserve_authority, _) =
+        anker::find_reserve_authority(opts.anker_program_id(), &anker_address);
+    let (st_sol_reserve_account, _) =
+        anker::find_st_sol_reserve_account(opts.anker_program_id(), &anker_address);
+    let (ust_reserve_account, _) =
+        anker::find_ust_reserve_account(opts.anker_program_id(), &anker_address);
+
+    Ok(ShowAnkerAuthoritiesOutput {
+        anker_address,
+        b_sol_mint_authority,
+        st_sol_reserve_account,
+        ust_reserve_account,
+        reserve_authority,
+    })
 }

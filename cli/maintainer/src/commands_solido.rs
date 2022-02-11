@@ -616,7 +616,7 @@ pub fn command_show_solido(
 }
 
 #[derive(Serialize)]
-pub struct ShowSolidoAuthorities {
+pub struct ShowSolidoAuthoritiesOutput {
     #[serde(serialize_with = "serialize_b58")]
     pub solido_program_id: Pubkey,
 
@@ -636,7 +636,7 @@ pub struct ShowSolidoAuthorities {
     pub rewards_withdraw_authority: Pubkey,
 }
 
-impl fmt::Display for ShowSolidoAuthorities {
+impl fmt::Display for ShowSolidoAuthoritiesOutput {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         writeln!(f, "Stake authority:            {}", self.stake_authority,)?;
         writeln!(f, "Mint authority:             {}", self.mint_authority)?;
@@ -652,7 +652,7 @@ impl fmt::Display for ShowSolidoAuthorities {
 
 pub fn command_show_solido_authorities(
     opts: &ShowSolidoAuthoritiesOpts,
-) -> solido_cli_common::Result<ShowSolidoAuthorities> {
+) -> solido_cli_common::Result<ShowSolidoAuthoritiesOutput> {
     let (reserve_account, _) = find_authority_program_address(
         opts.solido_program_id(),
         opts.solido_address(),
@@ -673,7 +673,7 @@ pub fn command_show_solido_authorities(
         opts.solido_address(),
         REWARDS_WITHDRAW_AUTHORITY,
     );
-    Ok(ShowSolidoAuthorities {
+    Ok(ShowSolidoAuthoritiesOutput {
         solido_program_id: *opts.solido_program_id(),
         solido_address: *opts.solido_address(),
         reserve_account,

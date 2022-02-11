@@ -167,11 +167,39 @@ result = solido(
 token_pool_address = result['pool_address']
 print(f'> Created instance at {token_pool_address}.')
 
-print('\nCreating Anker instance ...')
+# Custom Terra rewards address.
 terra_rewards_address = 'terra18aqm668ygwppxnmkmjn4wrtgdweq5ay7rs42ch'
+
+# Get Anker authorities for testing creating Anker with a known minter.
+authorities = solido(
+    'anker',
+    'show-authorities',
+    '--solido-address',
+    solido_address,
+    '--anker-program-id',
+    anker_program_id,
+)
+anker_st_sol_reserve_account = authorities['st_sol_reserve_account']
+
+# Create bSOL mint.
+b_sol_mint_address = create_test_account(
+    'tests/.keys/b_sol_mint_address.json', fund=False
+)
+spl_token('create-token', b_sol_mint_address.keypair_path)
+# Test changing the mint authority.
+spl_token(
+    'authorize', b_sol_mint_address.pubkey, 'mint', authorities['b_sol_mint_authority']
+)
+
+# Test creating Anker with a known bSOL minter, we do not test creating Anker
+# without passing the `--b-sol-mint-address` flag because both implementations
+# are similar.
+print('\nCreating Anker instance with a known bSOL minter address...')
 result = solido(
     'anker',
     'create',
+    '--b-sol-mint-address',
+    b_sol_mint_address.pubkey,
     '--solido-program-id',
     solido_program_id,
     '--solido-address',
@@ -191,32 +219,25 @@ result = solido(
     '--terra-rewards-address',
     terra_rewards_address,
 )
-# TODO: Also provide --mint-address, we need to be sure that that one works.
+
 anker_address = result['anker_address']
-anker_st_sol_reserve_account = result['st_sol_reserve_account']
-anker_ust_reserve_account = result['ust_reserve_account']
-b_sol_mint_address = result['b_sol_mint_address']
 print(f'> Created instance at {anker_address}.')
 
 
 print('\nVerifying Anker instance with `solido anker show` ...')
 result = solido('anker', 'show', '--anker-address', anker_address)
 
-# Some addresses are generated and it's tedious here in this test to know what
-# they are ahead of time, so we don't check those against a reference, instead
-# we store them so we can use them later in this test.
-reserve_authority = result.pop('reserve_authority')
-b_sol_mint_authority = result.pop('b_sol_mint_authority')
-
-# We do check the remaining fields.
+# Check if `anker show-authorities` got it right.
 expected_result = {
-    'anker_address': anker_address,
+    'anker_address': authorities['anker_address'],
     'anker_program_id': anker_program_id,
     'solido_address': solido_address,
     'solido_program_id': solido_program_id,
-    'b_sol_mint': b_sol_mint_address,
-    'st_sol_reserve': anker_st_sol_reserve_account,
-    'ust_reserve': anker_ust_reserve_account,
+    'b_sol_mint': b_sol_mint_address.pubkey,
+    'st_sol_reserve': authorities['st_sol_reserve_account'],
+    'ust_reserve': authorities['ust_reserve_account'],
+    'b_sol_mint_authority': authorities['b_sol_mint_authority'],
+    'reserve_authority': authorities['reserve_authority'],
     'terra_rewards_destination': terra_rewards_address,
     'ust_reserve_balance_micro_ust': 0,
     'st_sol_reserve_balance_st_lamports': 0,
