@@ -403,7 +403,7 @@ fn serve_request(request: Request, metrics_mutex: &MetricsMutex) -> Result<(), s
     let mut out: Vec<u8> = Vec::new();
     metrics
         .write_prometheus(&mut out)
-        .expect("Error when writing metrics to Vec, probably out of memory.");
+        .expect("We must handle the error because of io::Write, but writing to a Vec does not fail.");
 
     // text/plain with version=0.0.4 is what Prometheus expects as the content type,
     // see also https://prometheus.io/docs/instrumenting/exposition_formats/.
