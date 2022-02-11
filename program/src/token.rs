@@ -41,24 +41,14 @@ impl PartialOrd for Rational {
 }
 
 impl Div for Rational {
-    type Output = Result<Rational>;
+    type Output = f64;
 
+    // We do not return a `Rational` here because `self.numerator *
+    // rhs.denominator` or `rhs.numerator * self.denominator`could overflow.
+    // Instead we deal with floating point numbers.
     fn div(self, rhs: Self) -> Self::Output {
-        if rhs.numerator == 0 {
-            panic!("Cannot divide by zero-valued `Rational`!");
-        }
-        let numerator = self
-            .numerator
-            .checked_mul(rhs.denominator)
-            .ok_or(ArithmeticError)?;
-        let denominator = self
-            .denominator
-            .checked_mul(rhs.numerator)
-            .ok_or(ArithmeticError)?;
-        Ok(Rational {
-            numerator,
-            denominator,
-        })
+        (self.numerator as f64 * rhs.denominator as f64)
+            / (self.denominator as f64 * rhs.numerator as f64)
     }
 }
 
@@ -364,5 +354,30 @@ pub mod test {
         assert_eq!(format!("{}", Lamports(1_000_000_002)), "1.000000002 SOL");
         assert_eq!(format!("{}", MicroUst(1)), "0.000001 UST");
         assert_eq!(format!("{}", MicroUst(1_000_000_002)), "1000.000002 UST");
+    }
+
+    #[test]
+    fn test_division_with_large_number() {
+        let x = Rational {
+            numerator: 18446744073709551557,
+            denominator: 20116405751046403,
+        };
+        let y = Rational {
+            numerator: 69088929115017047,
+            denominator: 18446744073709551533,
+        };
+        let div_result = x / y;
+        assert_eq!(div_result, 244838.99999999997); // Checked with WolframAlpha and adjusted to Rust's precision.
+
+        let x = Rational {
+            numerator: u64::MAX,
+            denominator: u64::MAX,
+        };
+        let y = Rational {
+            numerator: 2,
+            denominator: 2,
+        };
+        let div_result = x / y;
+        assert_eq!(div_result, 1.);
     }
 }

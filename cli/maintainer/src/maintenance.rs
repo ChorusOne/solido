@@ -1099,7 +1099,7 @@ impl SolidoState {
 
     /// Write metrics about the current Solido instance in Prometheus format.
     pub fn write_prometheus<W: io::Write>(&self, out: &mut W) -> io::Result<()> {
-        use crate::prometheus::{
+        use solido_cli_common::prometheus::{
             write_metric, write_solido_metrics_as_prometheus, Metric, MetricFamily,
         };
 

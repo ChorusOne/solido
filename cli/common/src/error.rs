@@ -422,6 +422,13 @@ impl AsPrettyError for PubkeyError {
     }
 }
 
+impl AsPrettyError for rusqlite::Error {
+    fn print_pretty(&self) {
+        print_red("SQLite error:");
+        println!(" {:?}", self);
+    }
+}
+
 impl AsPrettyError for SignerError {
     fn print_pretty(&self) {
         print_red("Failed to sign transaction: ");

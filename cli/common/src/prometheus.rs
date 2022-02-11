@@ -30,11 +30,19 @@ pub enum MetricValue {
     ///
     /// E.g. `Nano(12)` renders as `0.000000012`.
     Nano(u64),
+
+    Float(f64),
 }
 
 impl From<u64> for MetricValue {
     fn from(v: u64) -> MetricValue {
         MetricValue::Int(v)
+    }
+}
+
+impl From<f64> for MetricValue {
+    fn from(v: f64) -> MetricValue {
+        MetricValue::Float(v)
     }
 }
 
@@ -121,6 +129,7 @@ pub fn write_metric<W: Write>(out: &mut W, family: &MetricFamily) -> io::Result<
             MetricValue::Nano(v) => {
                 write!(out, " {}.{:0>9}", v / 1_000_000_000, v % 1_000_000_000)?
             }
+            MetricValue::Float(v) => write!(out, " {}", v)?,
         }
 
         if let Some(timestamp) = metric.timestamp {

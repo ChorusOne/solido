@@ -14,4 +14,8 @@ solana-logger = "1.7.8"
 clap = "3.0.0-beta.2"
 chrono = "0.4.19"
 solido-cli-common = { path = "../common" }
-lido = {path = "../../program", features = ["no-entrypoint"]}
+tiny_http = "0.8.2"
+num_cpus = "1.0"
+rand = "0.8.3"
+serde = "1.0"
+lido = { path = "../../program", features = ["no-entrypoint"] }

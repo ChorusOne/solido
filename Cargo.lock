@@ -1938,11 +1938,15 @@ dependencies = [
  "chrono",
  "clap 3.0.0-beta.2",
  "lido",
+ "num_cpus",
+ "rand 0.8.4",
  "rusqlite",
+ "serde",
  "solana-client",
  "solana-logger 1.7.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "solana-sdk",
  "solido-cli-common",
+ "tiny_http",
 ]
 
 [[package]]
@@ -3981,6 +3985,7 @@ dependencies = [
  "bincode",
  "lido",
  "num-traits",
+ "rusqlite",
  "serde",
  "serde_json",
  "serum-multisig",
