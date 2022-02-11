@@ -20,6 +20,7 @@ use solido_cli_common::{
     prometheus::{write_metric, Metric, MetricFamily},
     snapshot::{Config, OutputMode, SnapshotClient, SnapshotClientConfig},
 };
+use std::str::FromStr;
 use tiny_http::{Header, Request, Response, Server};
 
 const SOLIDO_ID: &str = "solido";
@@ -137,12 +138,8 @@ pub fn get_interval_price_for_period(
 ) -> rusqlite::Result<Option<IntervalPrices>> {
     let row_map = |row: &Row| {
         let timestamp: String = row.get(1)?;
-        let timestamp_iso8601 = chrono::DateTime::from_utc(
-            chrono::DateTime::parse_from_rfc3339(&timestamp)
-                .expect("Invalid timestamp format.")
-                .naive_utc(),
-            chrono::Utc,
-        );
+        let timestamp_iso8601 = chrono::DateTime::<chrono::Utc>::from_str(&timestamp)
+            .expect("Invalid timestamp format.");
         Ok(ExchangeRate {
             id: row.get(0)?,
             timestamp: timestamp_iso8601,
