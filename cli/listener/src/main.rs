@@ -431,7 +431,7 @@ fn get_date_params(query_params: Vec<(Cow<str>, Cow<str>)>) -> Result<DateBeginE
     for (k, v) in &query_params {
         match k.as_ref() {
             "begin" => {
-                let t = parse_utc_iso8601(&v).map_err(|_| {
+                let t = parse_utc_iso8601(v).map_err(|_| {
                     ResponseError::new_bad_request(
                         "Invalid ISO 8601 timestamp in 'begin' query parameter. \
                     Expected e.g. '2022-02-15T23:59:59+00:00'.",
@@ -440,7 +440,7 @@ fn get_date_params(query_params: Vec<(Cow<str>, Cow<str>)>) -> Result<DateBeginE
                 begin_opt = Some(t);
             }
             "end" => {
-                let t = parse_utc_iso8601(&v).map_err(|_| {
+                let t = parse_utc_iso8601(v).map_err(|_| {
                     ResponseError::new_bad_request(
                         "Invalid ISO 8601 timestamp in 'end' query parameter. \
                     Expected e.g. '2022-02-15T23:59:59+00:00'.",
@@ -521,7 +521,7 @@ fn get_interval_price_request(
     let method_name = parsed_url.path_segments()?.last()?;
     if method_name != "apy" {
         return Some(get_error_response(ResponseError::new_bad_request(
-            &"Method not supported, use \"/apy?begin=<begin_date_iso8601>&end=<end_date_iso8601>\"",
+            "Method not supported, use \"/apy?begin=<begin_date_iso8601>&end=<end_date_iso8601>\"",
         )));
     }
     let parsed_request_url =
@@ -532,36 +532,32 @@ fn get_interval_price_request(
         Err(err) => return Some(get_error_response(err)),
     }?;
 
-    match (dates.start, dates.end) {
-        (begin, end) => {
-            let interval_prices = get_interval_price_for_period(
-                db_connection
-                    .unchecked_transaction()
-                    .expect("Failed to create sqlite transaction."),
-                begin,
-                end,
-                SOLIDO_ID.to_owned(),
+    let interval_prices = get_interval_price_for_period(
+        db_connection
+            .unchecked_transaction()
+            .expect("Failed to create sqlite transaction."),
+        dates.start,
+        dates.end,
+        SOLIDO_ID.to_owned(),
+    );
+    match interval_prices {
+        // Error while getting the interval prices.
+        Err(err) => {
+            eprintln!(
+                "Internal Error when getting interval prices: {}",
+                err.to_string()
             );
-            match interval_prices {
-                // Error while getting the interval prices.
-                Err(err) => {
-                    eprintln!(
-                        "Internal Error when getting interval prices: {}",
-                        err.to_string()
-                    );
-                    Some(get_error_response(ResponseError::InternalServerError))
-                }
-                Ok(interval_prices_opt) => {
-                    if let Some(interval_prices) = interval_prices_opt {
-                        // Got interval prices.
-                        Some(get_success_response(interval_prices))
-                    } else {
-                        // No interval price could be calculated, probably because of few data points.
-                        Some(get_error_response(ResponseError::new_bad_request(
-                            "No data points for calculating the price interval.",
-                        )))
-                    }
-                }
+            Some(get_error_response(ResponseError::InternalServerError))
+        }
+        Ok(interval_prices_opt) => {
+            if let Some(interval_prices) = interval_prices_opt {
+                // Got interval prices.
+                Some(get_success_response(interval_prices))
+            } else {
+                // No interval price could be calculated, probably because of few data points.
+                Some(get_error_response(ResponseError::new_bad_request(
+                    "No data points for calculating the price interval.",
+                )))
             }
         }
     }
