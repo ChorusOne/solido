@@ -55,6 +55,7 @@ pub struct Opts {
 #[derive(Debug)]
 pub struct ExchangeRate {
     /// Id of the data point.
+    #[allow(dead_code)]
     id: i32,
     /// Time when the data point was logged.
     timestamp: chrono::DateTime<chrono::Utc>,
@@ -102,20 +103,26 @@ impl IntervalPrices {
     pub fn duration_wall_time(&self) -> chrono::Duration {
         self.end_datetime - self.begin_datetime
     }
+
     pub fn duration_epochs(&self) -> u64 {
         self.end_epoch - self.begin_epoch
     }
+
     pub fn growth_factor(&self) -> f64 {
         self.end_token_price_sol / self.begin_token_price_sol
     }
+
     pub fn annual_growth_factor(&self) -> f64 {
         let year = chrono::Duration::days(365);
         self.growth_factor()
             .powf(year.num_seconds() as f64 / self.duration_wall_time().num_seconds() as f64)
     }
+
     pub fn annual_percentage_rate(&self) -> f64 {
         self.annual_growth_factor().mul_add(100.0, -100.0)
     }
+
+    pub fn has_one_data_point() {}
 }
 
 impl std::fmt::Display for IntervalPrices {
@@ -207,26 +214,21 @@ pub fn get_interval_price_for_period(
         (Some(first), Some(last)) => {
             let first = first?;
             let last = last?;
-            // Not enough data, need at least two data points.
-            if first.id == last.id {
-                Ok(None)
-            } else {
-                let interval_prices = IntervalPrices {
-                    begin_datetime: first.timestamp,
-                    end_datetime: last.timestamp,
-                    begin_epoch: first.epoch,
-                    end_epoch: last.epoch,
-                    begin_token_price_sol: Rational {
-                        numerator: first.price_lamports_numerator,
-                        denominator: first.price_lamports_denominator,
-                    },
-                    end_token_price_sol: Rational {
-                        numerator: last.price_lamports_numerator,
-                        denominator: last.price_lamports_denominator,
-                    },
-                };
-                Ok(Some(interval_prices))
-            }
+            let interval_prices = IntervalPrices {
+                begin_datetime: first.timestamp,
+                end_datetime: last.timestamp,
+                begin_epoch: first.epoch,
+                end_epoch: last.epoch,
+                begin_token_price_sol: Rational {
+                    numerator: first.price_lamports_numerator,
+                    denominator: first.price_lamports_denominator,
+                },
+                end_token_price_sol: Rational {
+                    numerator: last.price_lamports_numerator,
+                    denominator: last.price_lamports_denominator,
+                },
+            };
+            Ok(Some(interval_prices))
         }
         _ => Ok(None),
     }
@@ -540,7 +542,6 @@ fn get_interval_price_request(
                 end,
                 SOLIDO_ID.to_owned(),
             );
-            let interval_prices = interval_prices;
             match interval_prices {
                 // Error while getting the interval prices.
                 Err(err) => {
@@ -557,7 +558,7 @@ fn get_interval_price_request(
                     } else {
                         // No interval price could be calculated, probably because of few data points.
                         Some(get_error_response(ResponseError::new_bad_request(
-                            "Not enough data points for calculating the price interval.",
+                            "No data points for calculating the price interval.",
                         )))
                     }
                 }
@@ -883,5 +884,45 @@ mod test {
         check_correct_url(&conn, "http://solana.lido.fi/api/apy?begin=2020-07-07T00:00:00.683960%2B00:00&end=2021-07-08T14:22:08.826526%2B00:00");
         check_correct_url(&conn, "http://solana.lido.fi/api/apy?begin=2020-07-07T00:00:00.683960Z&end=2021-07-08T14:22:08.826526Z");
         check_correct_url(&conn, "http://solana.lido.fi/api/apy?begin=2020-07-07T00%3A00:00.683960%2B00:00&end=2021-07-08T14:22%3A08.826526%2B00:00");
+    }
+
+    #[test]
+    fn test_get_single_point() {
+        let conn = Connection::open_in_memory().expect("Failed to open sqlite connection.");
+        create_db(&conn).unwrap();
+        let exchange_rate = ExchangeRate {
+            id: 0,
+            timestamp: chrono::Utc.ymd(2022, 01, 28).and_hms(11, 58, 39),
+            slot: 108837851,
+            epoch: 270,
+            pool: SOLIDO_ID.to_owned(),
+            price_lamports_numerator: 1936245653069130,
+            price_lamports_denominator: 1893971837707973,
+        };
+        insert_price(&conn, &exchange_rate).unwrap();
+
+        let apy = get_interval_price_for_period(
+            conn.unchecked_transaction().unwrap(),
+            chrono::Utc.ymd(2020, 7, 7).and_hms(0, 0, 0),
+            chrono::Utc.ymd(2022, 7, 8).and_hms(0, 0, 0),
+            SOLIDO_ID.to_owned(),
+        )
+        .expect("Failed when getting APY for period");
+        let growth_factor = apy.unwrap().annual_percentage_rate();
+        assert_eq!(growth_factor, 0.);
+    }
+
+    #[test]
+    fn test_get_none_when_no_data_point() {
+        let conn = Connection::open_in_memory().expect("Failed to open sqlite connection.");
+        create_db(&conn).unwrap();
+        let apy = get_interval_price_for_period(
+            conn.unchecked_transaction().unwrap(),
+            chrono::Utc.ymd(2020, 7, 7).and_hms(0, 0, 0),
+            chrono::Utc.ymd(2022, 7, 8).and_hms(0, 0, 0),
+            SOLIDO_ID.to_owned(),
+        )
+        .expect("Failed when getting APY for period");
+        assert_eq!(apy, None);
     }
 }
