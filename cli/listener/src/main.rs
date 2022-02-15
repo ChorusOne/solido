@@ -118,7 +118,7 @@ impl IntervalPrices {
             .powf(year.num_seconds() as f64 / self.duration_wall_time().num_seconds() as f64)
     }
 
-    pub fn annual_percentage_rate(&self) -> f64 {
+    pub fn annual_percentage_yield(&self) -> f64 {
         self.annual_growth_factor().mul_add(100.0, -100.0)
     }
 
@@ -136,7 +136,7 @@ impl std::fmt::Display for IntervalPrices {
             self.end_datetime,
             self.end_epoch,
             duration.num_days(),
-            self.annual_percentage_rate()
+            self.annual_percentage_yield()
         )
     }
 }
@@ -396,7 +396,7 @@ impl Metrics {
                     name: "solido_pricedb_30d_average_apy",
                     help: "Average 30d APY",
                     type_: "gauge",
-                    metrics: vec![Metric::new(interval_price.annual_percentage_rate())],
+                    metrics: vec![Metric::new(interval_price.annual_percentage_yield())],
                 },
             )?;
         }
@@ -420,7 +420,7 @@ impl ResponseError {
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 struct ResponseInterval {
     interval_prices: IntervalPrices,
-    annual_percentage_rate: f64,
+    annual_percentage_yield: f64,
 }
 
 type DateBeginEnd = Range<chrono::DateTime<chrono::Utc>>;
@@ -489,7 +489,7 @@ fn get_error_response(err_res: ResponseError) -> ResponseBox {
 /// provided interval price and computed annual percentage rate.
 fn get_success_response(interval_prices: IntervalPrices) -> ResponseBox {
     let response_interval = ResponseInterval {
-        annual_percentage_rate: interval_prices.annual_percentage_rate(),
+        annual_percentage_yield: interval_prices.annual_percentage_yield(),
         interval_prices,
     };
     let content_type = Header::from_bytes(
@@ -755,7 +755,7 @@ mod test {
             SOLIDO_ID.to_owned(),
         )
         .expect("Failed when getting APY for period");
-        assert_eq!(apy.unwrap().annual_percentage_rate(), 4.7989255185326485);
+        assert_eq!(apy.unwrap().annual_percentage_yield(), 4.7989255185326485);
     }
 
     // When computing the APY, we have to call `growth_factor` which divides two
@@ -849,7 +849,7 @@ mod test {
                         denominator: 1367327673971744,
                     },
                 },
-                annual_percentage_rate: 4.7989255185326485,
+                annual_percentage_yield: 4.7989255185326485,
             };
 
             let response_result: ResponseInterval =
@@ -908,7 +908,7 @@ mod test {
             SOLIDO_ID.to_owned(),
         )
         .expect("Failed when getting APY for period");
-        let growth_factor = apy.unwrap().annual_percentage_rate();
+        let growth_factor = apy.unwrap().annual_percentage_yield();
         assert_eq!(growth_factor, 0.);
     }
 
