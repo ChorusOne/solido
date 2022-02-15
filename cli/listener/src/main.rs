@@ -517,9 +517,9 @@ fn get_interval_price_request(
         }
     };
     let method_name = parsed_url.path_segments()?.last()?;
-    if method_name != "interval_price" {
+    if method_name != "apy" {
         return Some(get_error_response(ResponseError::new_bad_request(
-            &"Method not supported, use \"/interval_price?from=<from_date_iso8601>&to=<to_date_iso8601>\"",
+            &"Method not supported, use \"/apy?from=<from_date_iso8601>&to=<to_date_iso8601>\"",
         )));
     }
     let parsed_request_url =
@@ -880,8 +880,8 @@ mod test {
         insert_price(&conn, &exchange_rate).unwrap();
 
         // Check some formats return ok.
-        check_correct_url(&conn, "http://solana.lido.fi/api/apy/interval_price?from=2020-07-07T00:00:00.683960%2B00:00&to=2021-07-08T14:22:08.826526%2B00:00");
-        check_correct_url(&conn, "http://solana.lido.fi/api/apy/interval_price?from=2020-07-07T00:00:00.683960Z&to=2021-07-08T14:22:08.826526Z");
-        check_correct_url(&conn, "http://solana.lido.fi/api/apy/interval_price?from=2020-07-07T00%3A00:00.683960%2B00:00&to=2021-07-08T14:22%3A08.826526%2B00:00");
+        check_correct_url(&conn, "http://solana.lido.fi/api/apy?from=2020-07-07T00:00:00.683960%2B00:00&to=2021-07-08T14:22:08.826526%2B00:00");
+        check_correct_url(&conn, "http://solana.lido.fi/api/apy?from=2020-07-07T00:00:00.683960Z&to=2021-07-08T14:22:08.826526Z");
+        check_correct_url(&conn, "http://solana.lido.fi/api/apy?from=2020-07-07T00%3A00:00.683960%2B00:00&to=2021-07-08T14:22%3A08.826526%2B00:00");
     }
 }
