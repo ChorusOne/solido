@@ -408,35 +408,58 @@ struct ResponseError {
     error: String,
 }
 
+impl ResponseError {
+    fn new(msg: &str) -> Self {
+        ResponseError {
+            error: msg.to_owned(),
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 struct ResponseInterval {
     interval_prices: IntervalPrices,
     annual_percentage_rate: f64,
 }
 
-type DateFromTo = Range<chrono::ParseResult<chrono::DateTime<chrono::Utc>>>;
+type DateFromTo = Range<chrono::DateTime<chrono::Utc>>;
 
-/// Returns a `DateFromTo` with the Result from parsing the iso8601 from
-/// `input`. `input` is the url query in bytes.
-fn get_date_params(parsed_inputs: Vec<(Cow<str>, Cow<str>)>) -> Result<DateFromTo, ResponseError> {
-    let (first_k, first_v) = parsed_inputs.get(0).ok_or(ResponseError {
-        error: "First parameter \"from\" or \"to\" not provided.".to_owned(),
-    })?;
-    let (second_k, second_v) = parsed_inputs.get(1).ok_or(ResponseError {
-        error: "Second parameter \"from\" or \"to\" not provided.".to_owned(),
-    })?;
-    match (
-        (first_k.as_ref(), first_v.as_ref()),
-        (second_k.as_ref(), second_v.as_ref()),
-    ) {
-        (("from", from), ("to", to)) | (("to", to), ("from", from)) => {
-            Ok(parse_utc_iso8601(from)..parse_utc_iso8601(to))
+fn get_date_params(query_params: Vec<(Cow<str>, Cow<str>)>) -> Result<DateFromTo, ResponseError> {
+    let mut from_opt: Option<chrono::DateTime<chrono::Utc>> = None;
+    let mut to_opt: Option<chrono::DateTime<chrono::Utc>> = None;
+    for (k, v) in &query_params {
+        match k.as_ref() {
+            "from" => {
+                let t = parse_utc_iso8601(&v).map_err(|_| {
+                    ResponseError::new(
+                        "Invalid ISO 8601 timestamp in 'from' query parameter. \
+                    Expected e.g. '2022-02-15T23:59:59+00:00'.",
+                    )
+                })?;
+                from_opt = Some(t);
+            }
+            "to" => {
+                let t = parse_utc_iso8601(&v).map_err(|_| {
+                    ResponseError::new(
+                        "Invalid ISO 8601 timestamp in 'to' query parameter. \
+                    Expected e.g. '2022-02-15T23:59:59+00:00'.",
+                    )
+                })?;
+                to_opt = Some(t);
+            }
+            _ => continue,
         }
-        _ => Err(ResponseError {
-            error: "Wrong parameters provided, query parameters should be \"from\" and \"to\"."
-                .to_owned(),
-        }),
     }
+
+    let from = match from_opt {
+        Some(t) => t,
+        None => return Err(ResponseError::new("Missing query parameter: 'from'.")),
+    };
+    let to = match to_opt {
+        Some(t) => t,
+        None => return Err(ResponseError::new("Missing query parameter: 'to'.")),
+    };
+    Ok(from..to)
 }
 
 /// Returns a Request response with an error.
@@ -480,17 +503,13 @@ fn get_interval_price_request(
 ) -> Option<ResponseBox> {
     let parsed_url = match Url::parse(request_url) {
         Ok(parsed_url) => parsed_url,
-        Err(err) => {
-            return Some(get_error_response(ResponseError {
-                error: err.to_string(),
-            }))
-        }
+        Err(err) => return Some(get_error_response(ResponseError::new(&err.to_string()))),
     };
     let method_name = parsed_url.path_segments()?.last()?;
     if method_name != "interval_price" {
-        return Some(get_error_response(ResponseError {
-                        error: format!("Method not supported: {}, use \"/interval_price?from=<from_date_iso8601>&to=<to_date_iso8601>\"", method_name)
-                    }));
+        return Some(get_error_response(ResponseError::new(
+            &format!("Method not supported: {}, use \"/interval_price?from=<from_date_iso8601>&to=<to_date_iso8601>\"", method_name)
+                    )));
     }
     let parsed_request_url =
         form_urlencoded::parse(parsed_url.query()?.as_bytes()).collect::<Vec<_>>();
@@ -501,7 +520,7 @@ fn get_interval_price_request(
     }?;
 
     match (dates.start, dates.end) {
-        (Ok(from), Ok(to)) => {
+        (from, to) => {
             let interval_prices = get_interval_price_for_period(
                 db_connection
                     .unchecked_transaction()
@@ -513,34 +532,19 @@ fn get_interval_price_request(
             let interval_prices = interval_prices;
             match interval_prices {
                 // Error while getting the interval prices.
-                Err(err) => Some(get_error_response(ResponseError {
-                    error: err.to_string(),
-                })),
+                Err(err) => Some(get_error_response(ResponseError::new(&err.to_string()))),
                 Ok(interval_prices_opt) => {
                     if let Some(interval_prices) = interval_prices_opt {
                         // Got interval prices.
                         Some(get_success_response(interval_prices))
                     } else {
                         // No interval price could be calculated, probably because of few data points.
-                        Some(get_error_response(ResponseError {
-                            error: "Not enough data points for calculating the price interval."
-                                .to_owned(),
-                        }))
+                        Some(get_error_response(ResponseError::new(
+                            "Not enough data points for calculating the price interval.",
+                        )))
                     }
                 }
             }
-        }
-        errors => {
-            // Some errors happened while parsing date.
-            let (from_res, to_res) = errors;
-            let mut error_str = "".to_owned();
-            if let Err(from_err) = from_res {
-                error_str = error_str + "parsing \"from\" date: " + &from_err.to_string();
-            }
-            if let Err(to_err) = to_res {
-                error_str = error_str + "parsing \"to\" date " + &to_err.to_string();
-            }
-            Some(get_error_response(ResponseError { error: error_str }))
         }
     }
 }
@@ -790,8 +794,10 @@ mod test {
             get_date_params(form_urlencoded::parse(query_params.as_bytes()).collect::<Vec<_>>());
         assert_eq!(
             dates,
-            Ok(parse_utc_iso8601("2022-02-04T11:40:02.683960+00:00")
-                ..parse_utc_iso8601("2022-02-07T14:22:08.826526+00:00")),
+            Ok(
+                parse_utc_iso8601("2022-02-04T11:40:02.683960+00:00").unwrap()
+                    ..parse_utc_iso8601("2022-02-07T14:22:08.826526+00:00").unwrap()
+            ),
         );
     }
 
