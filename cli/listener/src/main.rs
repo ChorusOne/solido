@@ -404,15 +404,14 @@ impl Metrics {
 }
 
 #[derive(Serialize, PartialEq, Debug)]
-struct ResponseError {
-    error: String,
+enum ResponseError {
+    BadRequest(&'static str),
+    InternalServerError,
 }
 
 impl ResponseError {
-    fn new(msg: &str) -> Self {
-        ResponseError {
-            error: msg.to_owned(),
-        }
+    fn new_bad_request(msg: &'static str) -> Self {
+        ResponseError::BadRequest(msg)
     }
 }
 
@@ -431,7 +430,7 @@ fn get_date_params(query_params: Vec<(Cow<str>, Cow<str>)>) -> Result<DateFromTo
         match k.as_ref() {
             "from" => {
                 let t = parse_utc_iso8601(&v).map_err(|_| {
-                    ResponseError::new(
+                    ResponseError::new_bad_request(
                         "Invalid ISO 8601 timestamp in 'from' query parameter. \
                     Expected e.g. '2022-02-15T23:59:59+00:00'.",
                     )
@@ -440,7 +439,7 @@ fn get_date_params(query_params: Vec<(Cow<str>, Cow<str>)>) -> Result<DateFromTo
             }
             "to" => {
                 let t = parse_utc_iso8601(&v).map_err(|_| {
-                    ResponseError::new(
+                    ResponseError::new_bad_request(
                         "Invalid ISO 8601 timestamp in 'to' query parameter. \
                     Expected e.g. '2022-02-15T23:59:59+00:00'.",
                     )
@@ -453,11 +452,19 @@ fn get_date_params(query_params: Vec<(Cow<str>, Cow<str>)>) -> Result<DateFromTo
 
     let from = match from_opt {
         Some(t) => t,
-        None => return Err(ResponseError::new("Missing query parameter: 'from'.")),
+        None => {
+            return Err(ResponseError::new_bad_request(
+                "Missing query parameter: 'from'.",
+            ))
+        }
     };
     let to = match to_opt {
         Some(t) => t,
-        None => return Err(ResponseError::new("Missing query parameter: 'to'.")),
+        None => {
+            return Err(ResponseError::new_bad_request(
+                "Missing query parameter: 'to'.",
+            ))
+        }
     };
     Ok(from..to)
 }
@@ -503,13 +510,17 @@ fn get_interval_price_request(
 ) -> Option<ResponseBox> {
     let parsed_url = match Url::parse(request_url) {
         Ok(parsed_url) => parsed_url,
-        Err(err) => return Some(get_error_response(ResponseError::new(&err.to_string()))),
+        Err(_err) => {
+            return Some(get_error_response(ResponseError::new_bad_request(
+                "Error parsing Url",
+            )));
+        }
     };
     let method_name = parsed_url.path_segments()?.last()?;
     if method_name != "interval_price" {
-        return Some(get_error_response(ResponseError::new(
-            &format!("Method not supported: {}, use \"/interval_price?from=<from_date_iso8601>&to=<to_date_iso8601>\"", method_name)
-                    )));
+        return Some(get_error_response(ResponseError::new_bad_request(
+            &"Method not supported, use \"/interval_price?from=<from_date_iso8601>&to=<to_date_iso8601>\"",
+        )));
     }
     let parsed_request_url =
         form_urlencoded::parse(parsed_url.query()?.as_bytes()).collect::<Vec<_>>();
@@ -532,14 +543,20 @@ fn get_interval_price_request(
             let interval_prices = interval_prices;
             match interval_prices {
                 // Error while getting the interval prices.
-                Err(err) => Some(get_error_response(ResponseError::new(&err.to_string()))),
+                Err(err) => {
+                    eprintln!(
+                        "Internal Error when getting interval prices: {}",
+                        err.to_string()
+                    );
+                    Some(get_error_response(ResponseError::InternalServerError))
+                }
                 Ok(interval_prices_opt) => {
                     if let Some(interval_prices) = interval_prices_opt {
                         // Got interval prices.
                         Some(get_success_response(interval_prices))
                     } else {
                         // No interval price could be calculated, probably because of few data points.
-                        Some(get_error_response(ResponseError::new(
+                        Some(get_error_response(ResponseError::new_bad_request(
                             "Not enough data points for calculating the price interval.",
                         )))
                     }
