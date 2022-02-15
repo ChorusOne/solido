@@ -460,8 +460,11 @@ fn get_success_response(interval_prices: IntervalPrices) -> ResponseBox {
         annual_percentage_rate: interval_prices.annual_percentage_rate(),
         interval_prices,
     };
-    let content_type = Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..])
-        .expect("Static header value, does not fail at runtime.");
+    let content_type = Header::from_bytes(
+        &b"Content-Type"[..],
+        &b"application/json; charset=UTF-8"[..],
+    )
+    .expect("Static header value, does not fail at runtime.");
     Response::from_data(
         serde_json::to_vec(&response_interval).expect("Serialization shouldn't fail"),
     )
