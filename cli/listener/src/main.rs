@@ -421,36 +421,36 @@ struct ResponseInterval {
     annual_percentage_rate: f64,
 }
 
-type DateFromTo = Range<chrono::DateTime<chrono::Utc>>;
+type DateBeginEnd = Range<chrono::DateTime<chrono::Utc>>;
 
-fn get_date_params(query_params: Vec<(Cow<str>, Cow<str>)>) -> Result<DateFromTo, ResponseError> {
-    let mut from_opt: Option<chrono::DateTime<chrono::Utc>> = None;
-    let mut to_opt: Option<chrono::DateTime<chrono::Utc>> = None;
+fn get_date_params(query_params: Vec<(Cow<str>, Cow<str>)>) -> Result<DateBeginEnd, ResponseError> {
+    let mut begin_opt: Option<chrono::DateTime<chrono::Utc>> = None;
+    let mut end_opt: Option<chrono::DateTime<chrono::Utc>> = None;
     for (k, v) in &query_params {
         match k.as_ref() {
-            "from" => {
+            "begin" => {
                 let t = parse_utc_iso8601(&v).map_err(|_| {
                     ResponseError::new_bad_request(
-                        "Invalid ISO 8601 timestamp in 'from' query parameter. \
+                        "Invalid ISO 8601 timestamp in 'begin' query parameter. \
                     Expected e.g. '2022-02-15T23:59:59+00:00'.",
                     )
                 })?;
-                from_opt = Some(t);
+                begin_opt = Some(t);
             }
-            "to" => {
+            "end" => {
                 let t = parse_utc_iso8601(&v).map_err(|_| {
                     ResponseError::new_bad_request(
-                        "Invalid ISO 8601 timestamp in 'to' query parameter. \
+                        "Invalid ISO 8601 timestamp in 'end' query parameter. \
                     Expected e.g. '2022-02-15T23:59:59+00:00'.",
                     )
                 })?;
-                to_opt = Some(t);
+                end_opt = Some(t);
             }
             _ => continue,
         }
     }
 
-    let from = match from_opt {
+    let begin = match begin_opt {
         Some(t) => t,
         None => {
             return Err(ResponseError::new_bad_request(
@@ -458,7 +458,7 @@ fn get_date_params(query_params: Vec<(Cow<str>, Cow<str>)>) -> Result<DateFromTo
             ))
         }
     };
-    let to = match to_opt {
+    let end = match end_opt {
         Some(t) => t,
         None => {
             return Err(ResponseError::new_bad_request(
@@ -466,7 +466,7 @@ fn get_date_params(query_params: Vec<(Cow<str>, Cow<str>)>) -> Result<DateFromTo
             ))
         }
     };
-    Ok(from..to)
+    Ok(begin..end)
 }
 
 /// Returns a Request response with an error.
@@ -519,7 +519,7 @@ fn get_interval_price_request(
     let method_name = parsed_url.path_segments()?.last()?;
     if method_name != "apy" {
         return Some(get_error_response(ResponseError::new_bad_request(
-            &"Method not supported, use \"/apy?from=<from_date_iso8601>&to=<to_date_iso8601>\"",
+            &"Method not supported, use \"/apy?begin=<begin_date_iso8601>&end=<end_date_iso8601>\"",
         )));
     }
     let parsed_request_url =
@@ -531,13 +531,13 @@ fn get_interval_price_request(
     }?;
 
     match (dates.start, dates.end) {
-        (from, to) => {
+        (begin, end) => {
             let interval_prices = get_interval_price_for_period(
                 db_connection
                     .unchecked_transaction()
                     .expect("Failed to create sqlite transaction."),
-                from,
-                to,
+                begin,
+                end,
                 SOLIDO_ID.to_owned(),
             );
             let interval_prices = interval_prices;
@@ -803,8 +803,8 @@ mod test {
     #[test]
     fn test_get_date_from_url_parameters() {
         let query_params = form_urlencoded::Serializer::new(String::new())
-            .append_pair("from", "2022-02-04T11:40:02.683960+00:00")
-            .append_pair("to", "2022-02-07T14:22:08.826526+00:00")
+            .append_pair("begin", "2022-02-04T11:40:02.683960+00:00")
+            .append_pair("end", "2022-02-07T14:22:08.826526+00:00")
             .finish();
 
         let dates =
@@ -880,8 +880,8 @@ mod test {
         insert_price(&conn, &exchange_rate).unwrap();
 
         // Check some formats return ok.
-        check_correct_url(&conn, "http://solana.lido.fi/api/apy?from=2020-07-07T00:00:00.683960%2B00:00&to=2021-07-08T14:22:08.826526%2B00:00");
-        check_correct_url(&conn, "http://solana.lido.fi/api/apy?from=2020-07-07T00:00:00.683960Z&to=2021-07-08T14:22:08.826526Z");
-        check_correct_url(&conn, "http://solana.lido.fi/api/apy?from=2020-07-07T00%3A00:00.683960%2B00:00&to=2021-07-08T14:22%3A08.826526%2B00:00");
+        check_correct_url(&conn, "http://solana.lido.fi/api/apy?begin=2020-07-07T00:00:00.683960%2B00:00&end=2021-07-08T14:22:08.826526%2B00:00");
+        check_correct_url(&conn, "http://solana.lido.fi/api/apy?begin=2020-07-07T00:00:00.683960Z&end=2021-07-08T14:22:08.826526Z");
+        check_correct_url(&conn, "http://solana.lido.fi/api/apy?begin=2020-07-07T00%3A00:00.683960%2B00:00&end=2021-07-08T14:22%3A08.826526%2B00:00");
     }
 }
