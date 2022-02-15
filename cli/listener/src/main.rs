@@ -543,10 +543,7 @@ fn get_interval_price_request(
     match interval_prices {
         // Error while getting the interval prices.
         Err(err) => {
-            eprintln!(
-                "Internal Error when getting interval prices: {}",
-                err.to_string()
-            );
+            eprintln!("Internal Error when getting interval prices: {}", err);
             Some(get_error_response(ResponseError::InternalServerError))
         }
         Ok(interval_prices_opt) => {
