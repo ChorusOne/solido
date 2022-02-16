@@ -521,7 +521,7 @@ fn get_interval_price_request(
     let method_name = parsed_url.path_segments()?.last()?;
     if method_name != "apy" {
         return Some(get_error_response(ResponseError::new_bad_request(
-            "Method not supported, use \"/apy?begin=<begin_date_iso8601>&end=<end_date_iso8601>\"",
+            "Method not supported, use \"/apy?begin=<begin_date_iso8601>&end=<end_date_iso8601>\".",
         )));
     }
     let parsed_request_url =
