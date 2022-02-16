@@ -456,7 +456,7 @@ fn get_date_params(query_params: Vec<(Cow<str>, Cow<str>)>) -> Result<DateBeginE
         Some(t) => t,
         None => {
             return Err(ResponseError::new_bad_request(
-                "Missing query parameter: 'from'.",
+                "Missing query parameter: 'begin'.",
             ))
         }
     };
