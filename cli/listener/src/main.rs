@@ -471,18 +471,20 @@ fn get_date_params(query_params: Vec<(Cow<str>, Cow<str>)>) -> Result<DateBeginE
     Ok(begin..end)
 }
 
-/// Returns a Request response with an error.
-/// With the status code set to 400.
+/// Returns a Request response with an error depending on `err_res` type.
 fn get_error_response(err_res: ResponseError) -> ResponseBox {
-    let content_type = Header::from_bytes(
-        &b"Content-Type"[..],
-        &b"application/json; charset=UTF-8"[..],
-    )
-    .expect("Static header value, does not fail at runtime.");
-    Response::from_data(serde_json::to_vec(&err_res).expect("Serialization shouldn't fail"))
-        .with_status_code(400)
-        .with_header(content_type)
-        .boxed()
+    let content_type = Header::from_bytes(&b"Content-Type"[..], &b"text/plain; charset=UTF-8"[..])
+        .expect("Static header value, does not fail at runtime.");
+    match err_res {
+        ResponseError::BadRequest(msg) => Response::from_string(msg)
+            .with_status_code(400)
+            .with_header(content_type)
+            .boxed(),
+        ResponseError::InternalServerError => Response::from_string("internal server error")
+            .with_status_code(500)
+            .with_header(content_type)
+            .boxed(),
+    }
 }
 
 /// Get an interval price, consume it and returns a `ResponseBox` with the
