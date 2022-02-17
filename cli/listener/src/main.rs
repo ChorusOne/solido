@@ -506,59 +506,64 @@ fn get_success_response(interval_prices: IntervalPrices) -> ResponseBox {
     .boxed()
 }
 
-/// Gets a response that will be sent to a requesting client for a price
-/// interval. Returns None if no method is passed.
+/// Gets a response that will be sent to a requesting client for an APY
+/// query.
 fn get_interval_price_request(
     db_connection: &Connection,
-    request_url: &str,
-) -> Option<ResponseBox> {
-    let parsed_url = match Url::parse(request_url) {
-        Ok(parsed_url) => parsed_url,
-        Err(_err) => {
-            return Some(get_error_response(ResponseError::new_bad_request(
-                "Error parsing Url",
-            )));
-        }
-    };
-    let method_name = parsed_url.path_segments()?.last()?;
-    if method_name != "apy" {
-        return Some(get_error_response(ResponseError::new_bad_request(
-            "Method not supported, use \"/apy?begin=<begin_date_iso8601>&end=<end_date_iso8601>\".",
-        )));
-    }
-    let parsed_request_url =
-        form_urlencoded::parse(parsed_url.query()?.as_bytes()).collect::<Vec<_>>();
-
-    let dates = match get_date_params(parsed_request_url) {
-        Ok(res) => Some(res),
-        Err(err) => return Some(get_error_response(err)),
-    }?;
-
+    range_date: &DateBeginEnd,
+) -> ResponseBox {
     let interval_prices = get_interval_price_for_period(
         db_connection
             .unchecked_transaction()
             .expect("Failed to create sqlite transaction."),
-        dates.start,
-        dates.end,
+        range_date.start,
+        range_date.end,
         SOLIDO_ID.to_owned(),
     );
     match interval_prices {
         // Error while getting the interval prices.
         Err(err) => {
             eprintln!("Internal Error when getting interval prices: {}", err);
-            Some(get_error_response(ResponseError::InternalServerError))
+            get_error_response(ResponseError::InternalServerError)
         }
         Ok(interval_prices_opt) => {
             if let Some(interval_prices) = interval_prices_opt {
                 // Got interval prices.
-                Some(get_success_response(interval_prices))
+                get_success_response(interval_prices)
             } else {
                 // No interval price could be calculated, probably because of few data points.
-                Some(get_error_response(ResponseError::new_bad_request(
+                get_error_response(ResponseError::new_bad_request(
                     "No data points for calculating the price interval.",
-                )))
+                ))
             }
         }
+    }
+}
+
+enum ParseUrlResponse {
+    Metrics,
+    IntervalPriceRequest(DateBeginEnd), // Store date
+    Error(ResponseError),
+}
+
+fn parse_url(request_url: &str) -> Option<ParseUrlResponse> {
+    let parsed_url = match Url::parse(request_url) {
+        Ok(parsed_url) => parsed_url,
+        Err(_err) => return None,
+    };
+    let method_name = parsed_url.path_segments()?.last()?;
+    match method_name {
+        "apy" => {
+            let query_params =
+                form_urlencoded::parse(parsed_url.query()?.as_bytes()).collect::<Vec<_>>();
+            let dates = match get_date_params(query_params) {
+                Ok(res) => res,
+                Err(err) => return Some(ParseUrlResponse::Error(err)),
+            };
+            Some(ParseUrlResponse::IntervalPriceRequest(dates))
+        }
+        "metrics" => Some(ParseUrlResponse::Metrics),
+        _ => None,
     }
 }
 
@@ -567,32 +572,43 @@ fn serve_request(
     request: Request,
     metrics_mutex: &MetricsMutex,
 ) -> Result<(), std::io::Error> {
-    if let Some(res) = get_interval_price_request(db_connection, request.url()) {
-        return request.respond(res);
-    };
+    let response = if let Some(method) = parse_url(request.url()) {
+        match method {
+            ParseUrlResponse::Metrics => {
+                // Take the current snapshot. This only holds the lock briefly, and does
+                // not prevent other threads from updating the snapshot while this request
+                // handler is running.
+                let metrics = metrics_mutex.lock().unwrap().clone();
 
-    // Take the current snapshot. This only holds the lock briefly, and does
-    // not prevent other threads from updating the snapshot while this request
-    // handler is running.
-    let metrics = metrics_mutex.lock().unwrap().clone();
+                // We don't even look at the request, for now we always serve the metrics.
 
-    // We don't even look at the request, for now we always serve the metrics.
-
-    let mut out: Vec<u8> = Vec::new();
-    metrics.write_prometheus(&mut out).expect(
+                let mut out: Vec<u8> = Vec::new();
+                metrics.write_prometheus(&mut out).expect(
         "We must handle the error because of io::Write, but writing to a Vec does not fail.",
     );
 
-    // text/plain with version=0.0.4 is what Prometheus expects as the content type,
-    // see also https://prometheus.io/docs/instrumenting/exposition_formats/.
-    // We add the charset so you can view the metrics in a browser too when it
-    // contains non-ascii bytes.
-    let content_type = Header::from_bytes(
-        &b"Content-Type"[..],
-        &b"text/plain; version=0.0.4; charset=UTF-8"[..],
-    )
-    .expect("Static header value, does not fail at runtime.");
-    request.respond(Response::from_data(out).with_header(content_type))
+                // text/plain with version=0.0.4 is what Prometheus expects as the content type,
+                // see also https://prometheus.io/docs/instrumenting/exposition_formats/.
+                // We add the charset so you can view the metrics in a browser too when it
+                // contains non-ascii bytes.
+                let content_type = Header::from_bytes(
+                    &b"Content-Type"[..],
+                    &b"text/plain; version=0.0.4; charset=UTF-8"[..],
+                )
+                .expect("Static header value, does not fail at runtime.");
+                // request.respond(Response::from_data(out).with_header(content_type));
+                Response::from_data(out).with_header(content_type).boxed()
+            }
+            ParseUrlResponse::IntervalPriceRequest(range_date) => {
+                get_interval_price_request(db_connection, &range_date)
+            }
+            ParseUrlResponse::Error(err) => get_error_response(err),
+        }
+    } else {
+        get_error_response(ResponseError::new_bad_request("Error parsing Url"))
+    };
+
+    request.respond(response)
 }
 
 /// Spawn threads that run the http server.
@@ -812,73 +828,6 @@ mod test {
                     ..parse_utc_iso8601("2022-02-07T14:22:08.826526+00:00").unwrap()
             ),
         );
-    }
-
-    #[test]
-    fn test_get_interval_from_url() {
-        // check for correct and specific prices.
-        fn check_correct_url(conn: &Connection, url: &str) {
-            let response: ResponseBox = get_interval_price_request(conn, url).unwrap();
-            let mut response_string = String::new();
-
-            // Assert status code is ok.
-            assert_eq!(response.status_code(), 200);
-
-            response
-                .into_reader()
-                .read_to_string(&mut response_string)
-                .unwrap();
-
-            let expected_response = ResponseInterval {
-                interval_prices: IntervalPrices {
-                    begin_datetime: chrono::Utc.ymd(2020, 8, 8).and_hms(0, 0, 0),
-                    end_datetime: chrono::Utc.ymd(2021, 1, 8).and_hms(0, 0, 0),
-                    begin_epoch: 1,
-                    end_epoch: 2,
-                    begin_token_price_sol: Rational {
-                        numerator: 1,
-                        denominator: 1,
-                    },
-                    end_token_price_sol: Rational {
-                        numerator: 1394458971361025,
-                        denominator: 1367327673971744,
-                    },
-                },
-                annual_percentage_yield: 4.7989255185326485,
-            };
-
-            let response_result: ResponseInterval =
-                serde_json::de::from_str(&response_string).unwrap();
-            assert_eq!(response_result, expected_response);
-        }
-
-        let conn = Connection::open_in_memory().expect("Failed to open sqlite connection.");
-        create_db(&conn).unwrap();
-        let exchange_rate = ExchangeRate {
-            id: 0,
-            timestamp: chrono::Utc.ymd(2020, 8, 8).and_hms(0, 0, 0),
-            slot: 1,
-            epoch: 1,
-            pool: SOLIDO_ID.to_owned(),
-            price_lamports_numerator: 1,
-            price_lamports_denominator: 1,
-        };
-        insert_price(&conn, &exchange_rate).unwrap();
-        let exchange_rate = ExchangeRate {
-            id: 0,
-            timestamp: chrono::Utc.ymd(2021, 1, 8).and_hms(0, 0, 0),
-            slot: 2,
-            epoch: 2,
-            pool: SOLIDO_ID.to_owned(),
-            price_lamports_numerator: 1394458971361025,
-            price_lamports_denominator: 1367327673971744,
-        };
-        insert_price(&conn, &exchange_rate).unwrap();
-
-        // Check some formats return ok.
-        check_correct_url(&conn, "http://solana.lido.fi/api/apy?begin=2020-07-07T00:00:00.683960%2B00:00&end=2021-07-08T14:22:08.826526%2B00:00");
-        check_correct_url(&conn, "http://solana.lido.fi/api/apy?begin=2020-07-07T00:00:00.683960Z&end=2021-07-08T14:22:08.826526Z");
-        check_correct_url(&conn, "http://solana.lido.fi/api/apy?begin=2020-07-07T00%3A00:00.683960%2B00:00&end=2021-07-08T14:22%3A08.826526%2B00:00");
     }
 
     #[test]
