@@ -142,10 +142,7 @@ impl std::fmt::Display for IntervalPrices {
 }
 
 fn parse_utc_iso8601(date_str: &str) -> chrono::ParseResult<chrono::DateTime<chrono::Utc>> {
-    Ok(chrono::DateTime::from_utc(
-        chrono::DateTime::parse_from_rfc3339(date_str)?.naive_utc(),
-        chrono::Utc,
-    ))
+    date_str.parse()
 }
 
 pub fn get_interval_price_for_period(
@@ -547,7 +544,10 @@ enum ParseUrlResponse {
 }
 
 fn parse_url(request_url: &str) -> Option<ParseUrlResponse> {
-    let parsed_url = match Url::parse(request_url) {
+    // `Url::parse` needs the base URL, which is not given by the
+    // `request.url()` from `tiny_url`. We input some dummy data which it's
+    // never used.
+    let parsed_url = match Url::parse(&("http://127.0.0.1".to_owned() + request_url)) {
         Ok(parsed_url) => parsed_url,
         Err(_err) => return None,
     };
