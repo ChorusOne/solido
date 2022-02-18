@@ -50,6 +50,30 @@ pub struct Opts {
     /// Listen address and port for the http server.
     #[clap(long, default_value = "0.0.0.0:8929")]
     listen: String,
+
+    /// Whether to fetch data from the chain.
+    ///
+    /// Set to "disable" to run in read-only mode, where we still serve the API
+    /// to query APY, but don't add new data points to the database.
+    #[clap(long, default_value = "enable", value_name = "enabled")]
+    fetch: FetchMode,
+}
+
+#[derive(Debug)]
+enum FetchMode {
+    EnableFetch,
+    DisableFetch,
+}
+
+impl FromStr for FetchMode {
+    type Err = &'static str;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "enable" => Ok(FetchMode::EnableFetch),
+            "disable" => Ok(FetchMode::DisableFetch),
+            _ => Err("Invalid fetch mode, should be 'enable' or 'disable'."),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -726,8 +750,19 @@ fn main() {
     create_db(&conn).expect("Failed to create database.");
 
     let daemon = Daemon::new(&mut config, &opts, &conn);
-    let _http_threads = start_http_server(&opts, daemon.metrics_snapshot.clone());
-    daemon.run()
+    let http_threads = start_http_server(&opts, daemon.metrics_snapshot.clone());
+
+    // Start fetching prices, but only if fetching is enabled. If it is, this
+    // never exits.
+    match opts.fetch {
+        FetchMode::EnableFetch => daemon.run(),
+        FetchMode::DisableFetch => {}
+    }
+
+    // These threads never exit, so this blocks indefinitely.
+    for thread in http_threads {
+        thread.join().expect("We don't observe thread panics, we set panic=abort.")
+    }
 }
 
 #[cfg(test)]
