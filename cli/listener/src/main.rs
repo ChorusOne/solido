@@ -1,4 +1,6 @@
 use std::{
+    borrow::Cow,
+    ops::Range,
     sync::{Arc, Mutex},
     thread::JoinHandle,
     time::{Duration, Instant},
@@ -8,6 +10,7 @@ use clap::Clap;
 use lido::token::Rational;
 use rand::{rngs::ThreadRng, Rng};
 use rusqlite::{params, Connection, Row};
+use serde::{Deserialize, Serialize};
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::{
     clock::{Epoch, Slot},
@@ -21,7 +24,8 @@ use solido_cli_common::{
     snapshot::{Config, OutputMode, SnapshotClient, SnapshotClientConfig},
 };
 use std::str::FromStr;
-use tiny_http::{Header, Request, Response, Server};
+use tiny_http::{Header, Request, Response, ResponseBox, Server};
+use url::{form_urlencoded, Url};
 
 const SOLIDO_ID: &str = "solido";
 
@@ -51,6 +55,7 @@ pub struct Opts {
 #[derive(Debug)]
 pub struct ExchangeRate {
     /// Id of the data point.
+    #[allow(dead_code)]
     id: i32,
     /// Time when the data point was logged.
     timestamp: chrono::DateTime<chrono::Utc>,
@@ -84,50 +89,60 @@ pub fn create_db(conn: &Connection) -> rusqlite::Result<()> {
     Ok(())
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct IntervalPrices {
-    t0: chrono::DateTime<chrono::Utc>,
-    t1: chrono::DateTime<chrono::Utc>,
-    epoch0: Epoch,
-    epoch1: Epoch,
-    price0_lamports: Rational,
-    price1_lamports: Rational,
+    begin_datetime: chrono::DateTime<chrono::Utc>,
+    end_datetime: chrono::DateTime<chrono::Utc>,
+    begin_epoch: Epoch,
+    end_epoch: Epoch,
+    begin_token_price_sol: Rational,
+    end_token_price_sol: Rational,
 }
 
 impl IntervalPrices {
     pub fn duration_wall_time(&self) -> chrono::Duration {
-        self.t1 - self.t0
+        self.end_datetime - self.begin_datetime
     }
+
     pub fn duration_epochs(&self) -> u64 {
-        self.epoch1 - self.epoch0
+        self.end_epoch - self.begin_epoch
     }
+
     pub fn growth_factor(&self) -> f64 {
-        self.price1_lamports / self.price0_lamports
+        self.end_token_price_sol / self.begin_token_price_sol
     }
+
     pub fn annual_growth_factor(&self) -> f64 {
         let year = chrono::Duration::days(365);
         self.growth_factor()
             .powf(year.num_seconds() as f64 / self.duration_wall_time().num_seconds() as f64)
     }
-    pub fn annual_percentage_rate(&self) -> f64 {
+
+    pub fn annual_percentage_yield(&self) -> f64 {
         self.annual_growth_factor().mul_add(100.0, -100.0)
     }
+
+    pub fn has_one_data_point() {}
 }
 
 impl std::fmt::Display for IntervalPrices {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let duration = self.t1 - self.t0;
+        let duration = self.end_datetime - self.begin_datetime;
         writeln!(
             f,
             "Interval price:\n  From: {} (epoch {})\n  To  : {} (epoch {})\n  Average {} days APY: {}",
-            self.t0,
-            self.epoch0,
-            self.t1,
-            self.epoch1,
+            self.begin_datetime,
+            self.begin_epoch,
+            self.end_datetime,
+            self.end_epoch,
             duration.num_days(),
-            self.annual_percentage_rate()
+            self.annual_percentage_yield()
         )
     }
+}
+
+fn parse_utc_iso8601(date_str: &str) -> chrono::ParseResult<chrono::DateTime<chrono::Utc>> {
+    date_str.parse()
 }
 
 pub fn get_interval_price_for_period(
@@ -138,11 +153,11 @@ pub fn get_interval_price_for_period(
 ) -> rusqlite::Result<Option<IntervalPrices>> {
     let row_map = |row: &Row| {
         let timestamp: String = row.get(1)?;
-        let timestamp_iso8601 =
-            chrono::DateTime::from_str(&timestamp).expect("Invalid timestamp format.");
+        let timestamp =
+            chrono::DateTime::from_str(&timestamp).expect("Invalid timestamp format stored in DB.");
         Ok(ExchangeRate {
             id: row.get(0)?,
-            timestamp: timestamp_iso8601,
+            timestamp,
             slot: row.get(2)?,
             epoch: row.get(3)?,
             pool: row.get(4)?,
@@ -196,26 +211,21 @@ pub fn get_interval_price_for_period(
         (Some(first), Some(last)) => {
             let first = first?;
             let last = last?;
-            // Not enough data, need at least two data points.
-            if first.id == last.id {
-                Ok(None)
-            } else {
-                let interval_prices = IntervalPrices {
-                    t0: first.timestamp,
-                    t1: last.timestamp,
-                    epoch0: first.epoch,
-                    epoch1: last.epoch,
-                    price0_lamports: Rational {
-                        numerator: first.price_lamports_numerator,
-                        denominator: first.price_lamports_denominator,
-                    },
-                    price1_lamports: Rational {
-                        numerator: last.price_lamports_numerator,
-                        denominator: last.price_lamports_denominator,
-                    },
-                };
-                Ok(Some(interval_prices))
-            }
+            let interval_prices = IntervalPrices {
+                begin_datetime: first.timestamp,
+                end_datetime: last.timestamp,
+                begin_epoch: first.epoch,
+                end_epoch: last.epoch,
+                begin_token_price_sol: Rational {
+                    numerator: first.price_lamports_numerator,
+                    denominator: first.price_lamports_denominator,
+                },
+                end_token_price_sol: Rational {
+                    numerator: last.price_lamports_numerator,
+                    denominator: last.price_lamports_denominator,
+                },
+            };
+            Ok(Some(interval_prices))
         }
         _ => Ok(None),
     }
@@ -302,7 +312,7 @@ impl<'a, 'b> Daemon<'a, 'b> {
                             "No interval price could be produced, awaiting more data points"
                         ),
                         Some(interval_prices) => {
-                            println!("{}", interval_prices);
+                            println!("30d APY: {}", interval_prices);
                             self.metrics.solido_average_30d_interval_price = Some(interval_prices);
                         }
                     }
@@ -383,7 +393,7 @@ impl Metrics {
                     name: "solido_pricedb_30d_average_apy",
                     help: "Average 30d APY",
                     type_: "gauge",
-                    metrics: vec![Metric::new(interval_price.annual_percentage_rate())],
+                    metrics: vec![Metric::new(interval_price.annual_percentage_yield())],
                 },
             )?;
         }
@@ -392,29 +402,213 @@ impl Metrics {
     }
 }
 
-fn serve_request(request: Request, metrics_mutex: &MetricsMutex) -> Result<(), std::io::Error> {
-    // Take the current snapshot. This only holds the lock briefly, and does
-    // not prevent other threads from updating the snapshot while this request
-    // handler is running.
-    let metrics = metrics_mutex.lock().unwrap().clone();
+#[derive(Serialize, PartialEq, Debug)]
+enum ResponseError {
+    BadRequest(&'static str),
+    InternalServerError,
+}
 
-    // We don't even look at the request, for now we always serve the metrics.
+impl ResponseError {
+    fn new_bad_request(msg: &'static str) -> Self {
+        ResponseError::BadRequest(msg)
+    }
+}
 
-    let mut out: Vec<u8> = Vec::new();
-    metrics.write_prometheus(&mut out).expect(
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+struct ResponseInterval {
+    interval_prices: IntervalPrices,
+    annual_percentage_yield: f64,
+}
+
+type DateBeginEnd = Range<chrono::DateTime<chrono::Utc>>;
+
+fn get_date_params(query_params: Vec<(Cow<str>, Cow<str>)>) -> Result<DateBeginEnd, ResponseError> {
+    let mut begin_opt: Option<chrono::DateTime<chrono::Utc>> = None;
+    let mut end_opt: Option<chrono::DateTime<chrono::Utc>> = None;
+    for (k, v) in &query_params {
+        match k.as_ref() {
+            "begin" => {
+                let t = parse_utc_iso8601(v).map_err(|_| {
+                    ResponseError::new_bad_request(
+                        "Invalid ISO 8601 timestamp in 'begin' query parameter. \
+                    Expected e.g. '2022-02-15T23:59:59+00:00'.",
+                    )
+                })?;
+                begin_opt = Some(t);
+            }
+            "end" => {
+                let t = parse_utc_iso8601(v).map_err(|_| {
+                    ResponseError::new_bad_request(
+                        "Invalid ISO 8601 timestamp in 'end' query parameter. \
+                    Expected e.g. '2022-02-15T23:59:59+00:00'.",
+                    )
+                })?;
+                end_opt = Some(t);
+            }
+            _ => continue,
+        }
+    }
+
+    let begin = match begin_opt {
+        Some(t) => t,
+        None => {
+            return Err(ResponseError::new_bad_request(
+                "Missing query parameter: 'begin'.",
+            ))
+        }
+    };
+    let end = match end_opt {
+        Some(t) => t,
+        None => {
+            return Err(ResponseError::new_bad_request(
+                "Missing query parameter: 'end'.",
+            ))
+        }
+    };
+    Ok(begin..end)
+}
+
+/// Returns a Request response with an error depending on `err_res` type.
+fn get_error_response(err_res: ResponseError) -> ResponseBox {
+    let content_type = Header::from_bytes(&b"Content-Type"[..], &b"text/plain; charset=UTF-8"[..])
+        .expect("Static header value, does not fail at runtime.");
+    match err_res {
+        ResponseError::BadRequest(msg) => Response::from_string(msg)
+            .with_status_code(400)
+            .with_header(content_type)
+            .boxed(),
+        ResponseError::InternalServerError => Response::from_string("internal server error")
+            .with_status_code(500)
+            .with_header(content_type)
+            .boxed(),
+    }
+}
+
+/// Get an interval price, consume it and returns a `ResponseBox` with the
+/// provided interval price and computed annual percentage rate.
+fn get_success_response(interval_prices: IntervalPrices) -> ResponseBox {
+    let response_interval = ResponseInterval {
+        annual_percentage_yield: interval_prices.annual_percentage_yield(),
+        interval_prices,
+    };
+    let content_type = Header::from_bytes(
+        &b"Content-Type"[..],
+        &b"application/json; charset=UTF-8"[..],
+    )
+    .expect("Static header value, does not fail at runtime.");
+    Response::from_data(
+        serde_json::to_vec(&response_interval).expect("Serialization shouldn't fail"),
+    )
+    .with_header(content_type)
+    .boxed()
+}
+
+/// Gets a response that will be sent to a requesting client for an APY
+/// query.
+fn get_interval_price_request(
+    db_connection: &Connection,
+    range_date: &DateBeginEnd,
+) -> ResponseBox {
+    let interval_prices = get_interval_price_for_period(
+        db_connection
+            .unchecked_transaction()
+            .expect("Failed to create sqlite transaction."),
+        range_date.start,
+        range_date.end,
+        SOLIDO_ID.to_owned(),
+    );
+    match interval_prices {
+        // Error while getting the interval prices.
+        Err(err) => {
+            eprintln!("Internal Error when getting interval prices: {}", err);
+            get_error_response(ResponseError::InternalServerError)
+        }
+        Ok(interval_prices_opt) => {
+            if let Some(interval_prices) = interval_prices_opt {
+                // Got interval prices.
+                get_success_response(interval_prices)
+            } else {
+                // No interval price could be calculated, probably because of few data points.
+                get_error_response(ResponseError::new_bad_request(
+                    "No data points for calculating the price interval.",
+                ))
+            }
+        }
+    }
+}
+
+enum ParseUrlResponse {
+    Metrics,
+    IntervalPriceRequest(DateBeginEnd), // Store date
+    Error(ResponseError),
+}
+
+fn parse_url(request_url: &str) -> Option<ParseUrlResponse> {
+    // `Url::parse` needs the base URL, which is not given by the
+    // `request.url()` from `tiny_url`. We input some dummy data which it's
+    // never used.
+    let parsed_url = match Url::parse(&("http://127.0.0.1".to_owned() + request_url)) {
+        Ok(parsed_url) => parsed_url,
+        Err(_err) => return None,
+    };
+    let method_name = parsed_url.path_segments()?.last()?;
+    match method_name {
+        "apy" => {
+            let query_params =
+                form_urlencoded::parse(parsed_url.query()?.as_bytes()).collect::<Vec<_>>();
+            let dates = match get_date_params(query_params) {
+                Ok(res) => res,
+                Err(err) => return Some(ParseUrlResponse::Error(err)),
+            };
+            Some(ParseUrlResponse::IntervalPriceRequest(dates))
+        }
+        "metrics" => Some(ParseUrlResponse::Metrics),
+        _ => None,
+    }
+}
+
+fn serve_request(
+    db_connection: &Connection,
+    request: Request,
+    metrics_mutex: &MetricsMutex,
+) -> Result<(), std::io::Error> {
+    let response = if let Some(method) = parse_url(request.url()) {
+        match method {
+            ParseUrlResponse::Metrics => {
+                // Take the current snapshot. This only holds the lock briefly, and does
+                // not prevent other threads from updating the snapshot while this request
+                // handler is running.
+                let metrics = metrics_mutex.lock().unwrap().clone();
+
+                // We don't even look at the request, for now we always serve the metrics.
+
+                let mut out: Vec<u8> = Vec::new();
+                metrics.write_prometheus(&mut out).expect(
         "We must handle the error because of io::Write, but writing to a Vec does not fail.",
     );
 
-    // text/plain with version=0.0.4 is what Prometheus expects as the content type,
-    // see also https://prometheus.io/docs/instrumenting/exposition_formats/.
-    // We add the charset so you can view the metrics in a browser too when it
-    // contains non-ascii bytes.
-    let content_type = Header::from_bytes(
-        &b"Content-Type"[..],
-        &b"text/plain; version=0.0.4; charset=UTF-8"[..],
-    )
-    .expect("Static header value, does not fail at runtime.");
-    request.respond(Response::from_data(out).with_header(content_type))
+                // text/plain with version=0.0.4 is what Prometheus expects as the content type,
+                // see also https://prometheus.io/docs/instrumenting/exposition_formats/.
+                // We add the charset so you can view the metrics in a browser too when it
+                // contains non-ascii bytes.
+                let content_type = Header::from_bytes(
+                    &b"Content-Type"[..],
+                    &b"text/plain; version=0.0.4; charset=UTF-8"[..],
+                )
+                .expect("Static header value, does not fail at runtime.");
+                // request.respond(Response::from_data(out).with_header(content_type));
+                Response::from_data(out).with_header(content_type).boxed()
+            }
+            ParseUrlResponse::IntervalPriceRequest(range_date) => {
+                get_interval_price_request(db_connection, &range_date)
+            }
+            ParseUrlResponse::Error(err) => get_error_response(err),
+        }
+    } else {
+        get_error_response(ResponseError::new_bad_request("Error parsing Url"))
+    };
+
+    request.respond(response)
 }
 
 /// Spawn threads that run the http server.
@@ -436,6 +630,8 @@ fn start_http_server(opts: &Opts, metrics_mutex: Arc<MetricsMutex>) -> Vec<JoinH
     // parallel.
     (0..num_cpus::get())
         .map(|i| {
+            // Create one db connection per thread.
+            let conn = Connection::open(&opts.db_path).expect("Failed to open sqlite connection.");
             let server_clone = server.clone();
             let snapshot_mutex_clone = metrics_mutex.clone();
             std::thread::Builder::new()
@@ -444,7 +640,7 @@ fn start_http_server(opts: &Opts, metrics_mutex: Arc<MetricsMutex>) -> Vec<JoinH
                     for request in server_clone.incoming_requests() {
                         // Ignore any errors; if we fail to respond, then there's little
                         // we can do about it here ... the client should just retry.
-                        let _ = serve_request(request, &*snapshot_mutex_clone);
+                        let _ = serve_request(&conn, request, &*snapshot_mutex_clone);
                     }
                 })
                 .expect("Failed to spawn http handler thread.")
@@ -463,6 +659,7 @@ enum ListenerResult {
     ErrListener(Error),
 }
 
+/// Save the exchange rate and get a response for the 30d interval price.
 fn get_and_save_exchange_rate(
     config: &mut SnapshotClientConfig,
     opts: &Opts,
@@ -494,6 +691,8 @@ fn get_and_save_exchange_rate(
     }
 }
 
+/// Insert an `exchange_rate` into the database and query the 30 days APY from
+/// the current date.
 fn insert_price_and_query_30d_price_interval(
     db_connection: &Connection,
     exchange_rate: &ExchangeRate,
@@ -531,81 +730,143 @@ fn main() {
     daemon.run()
 }
 
-#[test]
-fn test_get_average_apy() {
+#[cfg(test)]
+mod test {
+    use super::*;
     use chrono::TimeZone;
-    let conn = Connection::open_in_memory().expect("Failed to open sqlite connection.");
-    create_db(&conn).unwrap();
-    let exchange_rate = ExchangeRate {
-        id: 0,
-        timestamp: chrono::Utc.ymd(2020, 8, 8).and_hms(0, 0, 0),
-        slot: 1,
-        epoch: 1,
-        pool: SOLIDO_ID.to_owned(),
-        price_lamports_numerator: 1,
-        price_lamports_denominator: 1,
-    };
-    insert_price(&conn, &exchange_rate).unwrap();
-    let exchange_rate = ExchangeRate {
-        id: 0,
-        timestamp: chrono::Utc.ymd(2021, 1, 8).and_hms(0, 0, 0),
-        slot: 2,
-        epoch: 2,
-        pool: SOLIDO_ID.to_owned(),
-        price_lamports_numerator: 1394458971361025,
-        price_lamports_denominator: 1367327673971744,
-    };
-    insert_price(&conn, &exchange_rate).unwrap();
-    let apy = get_interval_price_for_period(
-        conn.unchecked_transaction().unwrap(),
-        chrono::Utc.ymd(2020, 7, 7).and_hms(0, 0, 0),
-        chrono::Utc.ymd(2021, 7, 8).and_hms(0, 0, 0),
-        SOLIDO_ID.to_owned(),
-    )
-    .expect("Failed when getting APY for period");
-    assert_eq!(apy.unwrap().annual_percentage_rate(), 4.7989255185326485);
-}
 
-// When computing the APY, we have to call `growth_factor` which divides two
-// Rational numbers. Previously when dividing two rationals our implementation
-// returned another Rational. In other words, for dividing `a/b` by `c/d`, we
-// did `a*d/b*c`. In this case, `a*d` or `b*c` could overflow, we now return an
-// `f64` instead of a Rational and avoid multiplying two large numbers that
-// could overflow.
-#[test]
-fn test_rationals_do_not_overflow() {
-    use chrono::TimeZone;
-    let conn = Connection::open_in_memory().expect("Failed to open sqlite connection.");
-    create_db(&conn).unwrap();
-    let exchange_rate = ExchangeRate {
-        id: 0,
-        timestamp: chrono::Utc.ymd(2022, 01, 28).and_hms(11, 58, 39),
-        slot: 108837851,
-        epoch: 270,
-        pool: SOLIDO_ID.to_owned(),
-        price_lamports_numerator: 1936245653069130,
-        price_lamports_denominator: 1893971837707973,
-    };
-    insert_price(&conn, &exchange_rate).unwrap();
+    #[test]
+    fn test_get_average_apy() {
+        let conn = Connection::open_in_memory().expect("Failed to open sqlite connection.");
+        create_db(&conn).unwrap();
+        let exchange_rate = ExchangeRate {
+            id: 0,
+            timestamp: chrono::Utc.ymd(2020, 8, 8).and_hms(0, 0, 0),
+            slot: 1,
+            epoch: 1,
+            pool: SOLIDO_ID.to_owned(),
+            price_lamports_numerator: 1,
+            price_lamports_denominator: 1,
+        };
+        insert_price(&conn, &exchange_rate).unwrap();
+        let exchange_rate = ExchangeRate {
+            id: 0,
+            timestamp: chrono::Utc.ymd(2021, 1, 8).and_hms(0, 0, 0),
+            slot: 2,
+            epoch: 2,
+            pool: SOLIDO_ID.to_owned(),
+            price_lamports_numerator: 1394458971361025,
+            price_lamports_denominator: 1367327673971744,
+        };
+        insert_price(&conn, &exchange_rate).unwrap();
+        let apy = get_interval_price_for_period(
+            conn.unchecked_transaction().unwrap(),
+            chrono::Utc.ymd(2020, 7, 7).and_hms(0, 0, 0),
+            chrono::Utc.ymd(2021, 7, 8).and_hms(0, 0, 0),
+            SOLIDO_ID.to_owned(),
+        )
+        .expect("Failed when getting APY for period");
+        assert_eq!(apy.unwrap().annual_percentage_yield(), 4.7989255185326485);
+    }
 
-    let exchange_rate = ExchangeRate {
-        id: 0,
-        timestamp: chrono::Utc.ymd(2022, 02, 28).and_hms(11, 58, 39),
-        slot: 118837851,
-        epoch: 275,
-        pool: SOLIDO_ID.to_owned(),
-        price_lamports_numerator: 1936245653069130,
-        price_lamports_denominator: 1892971837707973,
-    };
-    insert_price(&conn, &exchange_rate).unwrap();
+    // When computing the APY, we have to call `growth_factor` which divides two
+    // Rational numbers. Previously when dividing two rationals our implementation
+    // returned another Rational. In other words, for dividing `a/b` by `c/d`, we
+    // did `a*d/b*c`. In this case, `a*d` or `b*c` could overflow, we now return an
+    // `f64` instead of a Rational and avoid multiplying two large numbers that
+    // could overflow.
+    #[test]
+    fn test_rationals_do_not_overflow() {
+        let conn = Connection::open_in_memory().expect("Failed to open sqlite connection.");
+        create_db(&conn).unwrap();
+        let exchange_rate = ExchangeRate {
+            id: 0,
+            timestamp: chrono::Utc.ymd(2022, 01, 28).and_hms(11, 58, 39),
+            slot: 108837851,
+            epoch: 270,
+            pool: SOLIDO_ID.to_owned(),
+            price_lamports_numerator: 1936245653069130,
+            price_lamports_denominator: 1893971837707973,
+        };
+        insert_price(&conn, &exchange_rate).unwrap();
 
-    let apy = get_interval_price_for_period(
-        conn.unchecked_transaction().unwrap(),
-        chrono::Utc.ymd(2020, 7, 7).and_hms(0, 0, 0),
-        chrono::Utc.ymd(2022, 7, 8).and_hms(0, 0, 0),
-        SOLIDO_ID.to_owned(),
-    )
-    .expect("Failed when getting APY for period");
-    let growth_factor = apy.unwrap().growth_factor();
-    assert_eq!(growth_factor, 1.0005282698770684); //  Checked on WA, precision difference in the last digit.
+        let exchange_rate = ExchangeRate {
+            id: 0,
+            timestamp: chrono::Utc.ymd(2022, 02, 28).and_hms(11, 58, 39),
+            slot: 118837851,
+            epoch: 275,
+            pool: SOLIDO_ID.to_owned(),
+            price_lamports_numerator: 1936245653069130,
+            price_lamports_denominator: 1892971837707973,
+        };
+        insert_price(&conn, &exchange_rate).unwrap();
+
+        let apy = get_interval_price_for_period(
+            conn.unchecked_transaction().unwrap(),
+            chrono::Utc.ymd(2020, 7, 7).and_hms(0, 0, 0),
+            chrono::Utc.ymd(2022, 7, 8).and_hms(0, 0, 0),
+            SOLIDO_ID.to_owned(),
+        )
+        .expect("Failed when getting APY for period");
+        let growth_factor = apy.unwrap().growth_factor();
+        assert_eq!(growth_factor, 1.0005282698770684); //  Checked on WA, precision difference in the last digit.
+    }
+
+    #[test]
+    fn test_get_date_from_url_parameters() {
+        let query_params = form_urlencoded::Serializer::new(String::new())
+            .append_pair("begin", "2022-02-04T11:40:02.683960+00:00")
+            .append_pair("end", "2022-02-07T14:22:08.826526+00:00")
+            .finish();
+
+        let dates =
+            get_date_params(form_urlencoded::parse(query_params.as_bytes()).collect::<Vec<_>>());
+        assert_eq!(
+            dates,
+            Ok(
+                parse_utc_iso8601("2022-02-04T11:40:02.683960+00:00").unwrap()
+                    ..parse_utc_iso8601("2022-02-07T14:22:08.826526+00:00").unwrap()
+            ),
+        );
+    }
+
+    #[test]
+    fn test_get_single_point() {
+        let conn = Connection::open_in_memory().expect("Failed to open sqlite connection.");
+        create_db(&conn).unwrap();
+        let exchange_rate = ExchangeRate {
+            id: 0,
+            timestamp: chrono::Utc.ymd(2022, 01, 28).and_hms(11, 58, 39),
+            slot: 108837851,
+            epoch: 270,
+            pool: SOLIDO_ID.to_owned(),
+            price_lamports_numerator: 1936245653069130,
+            price_lamports_denominator: 1893971837707973,
+        };
+        insert_price(&conn, &exchange_rate).unwrap();
+
+        let apy = get_interval_price_for_period(
+            conn.unchecked_transaction().unwrap(),
+            chrono::Utc.ymd(2020, 7, 7).and_hms(0, 0, 0),
+            chrono::Utc.ymd(2022, 7, 8).and_hms(0, 0, 0),
+            SOLIDO_ID.to_owned(),
+        )
+        .expect("Failed when getting APY for period");
+        let growth_factor = apy.unwrap().annual_percentage_yield();
+        assert_eq!(growth_factor, 0.);
+    }
+
+    #[test]
+    fn test_get_none_when_no_data_point() {
+        let conn = Connection::open_in_memory().expect("Failed to open sqlite connection.");
+        create_db(&conn).unwrap();
+        let apy = get_interval_price_for_period(
+            conn.unchecked_transaction().unwrap(),
+            chrono::Utc.ymd(2020, 7, 7).and_hms(0, 0, 0),
+            chrono::Utc.ymd(2022, 7, 8).and_hms(0, 0, 0),
+            SOLIDO_ID.to_owned(),
+        )
+        .expect("Failed when getting APY for period");
+        assert_eq!(apy, None);
+    }
 }
