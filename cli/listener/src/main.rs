@@ -25,7 +25,7 @@ use solido_cli_common::{
 };
 use std::str::FromStr;
 use tiny_http::{Header, Request, Response, ResponseBox, Server};
-use url::{form_urlencoded, Url};
+use url::Url;
 
 const SOLIDO_ID: &str = "solido";
 
@@ -415,13 +415,8 @@ impl Metrics {
 #[derive(Serialize, PartialEq, Debug)]
 enum ResponseError {
     BadRequest(&'static str),
+    NotFound(&'static str),
     InternalServerError,
-}
-
-impl ResponseError {
-    fn new_bad_request(msg: &'static str) -> Self {
-        ResponseError::BadRequest(msg)
-    }
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
@@ -432,14 +427,16 @@ struct ResponseInterval {
 
 type DateBeginEnd = Range<chrono::DateTime<chrono::Utc>>;
 
-fn get_date_params(query_params: Vec<(Cow<str>, Cow<str>)>) -> Result<DateBeginEnd, ResponseError> {
+fn get_date_params<'a, I: IntoIterator<Item = (Cow<'a, str>, Cow<'a, str>)>>(
+    query_params: I,
+) -> Result<DateBeginEnd, ResponseError> {
     let mut begin_opt: Option<chrono::DateTime<chrono::Utc>> = None;
     let mut end_opt: Option<chrono::DateTime<chrono::Utc>> = None;
-    for (k, v) in &query_params {
+    for (k, v) in query_params {
         match k.as_ref() {
             "begin" => {
-                let t = parse_utc_iso8601(v).map_err(|_| {
-                    ResponseError::new_bad_request(
+                let t = parse_utc_iso8601(&v).map_err(|_| {
+                    ResponseError::BadRequest(
                         "Invalid ISO 8601 timestamp in 'begin' query parameter. \
                     Expected e.g. '2022-02-15T23:59:59+00:00'.",
                     )
@@ -447,8 +444,8 @@ fn get_date_params(query_params: Vec<(Cow<str>, Cow<str>)>) -> Result<DateBeginE
                 begin_opt = Some(t);
             }
             "end" => {
-                let t = parse_utc_iso8601(v).map_err(|_| {
-                    ResponseError::new_bad_request(
+                let t = parse_utc_iso8601(&v).map_err(|_| {
+                    ResponseError::BadRequest(
                         "Invalid ISO 8601 timestamp in 'end' query parameter. \
                     Expected e.g. '2022-02-15T23:59:59+00:00'.",
                     )
@@ -462,18 +459,14 @@ fn get_date_params(query_params: Vec<(Cow<str>, Cow<str>)>) -> Result<DateBeginE
     let begin = match begin_opt {
         Some(t) => t,
         None => {
-            return Err(ResponseError::new_bad_request(
+            return Err(ResponseError::BadRequest(
                 "Missing query parameter: 'begin'.",
             ))
         }
     };
     let end = match end_opt {
         Some(t) => t,
-        None => {
-            return Err(ResponseError::new_bad_request(
-                "Missing query parameter: 'end'.",
-            ))
-        }
+        None => return Err(ResponseError::BadRequest("Missing query parameter: 'end'.")),
     };
     Ok(begin..end)
 }
@@ -485,6 +478,10 @@ fn get_error_response(err_res: ResponseError) -> ResponseBox {
     match err_res {
         ResponseError::BadRequest(msg) => Response::from_string(msg)
             .with_status_code(400)
+            .with_header(content_type)
+            .boxed(),
+        ResponseError::NotFound(msg) => Response::from_string(msg)
+            .with_status_code(404)
             .with_header(content_type)
             .boxed(),
         ResponseError::InternalServerError => Response::from_string("internal server error")
@@ -539,7 +536,7 @@ fn get_interval_price_request(
                 get_success_response(interval_prices)
             } else {
                 // No interval price could be calculated, probably because of few data points.
-                get_error_response(ResponseError::new_bad_request(
+                get_error_response(ResponseError::BadRequest(
                     "No data points for calculating the price interval.",
                 ))
             }
@@ -547,33 +544,29 @@ fn get_interval_price_request(
     }
 }
 
-enum ParseUrlResponse {
+enum Endpoint {
     Metrics,
-    IntervalPriceRequest(DateBeginEnd), // Store date
-    Error(ResponseError),
+    IntervalPriceRequest(DateBeginEnd),
 }
 
-fn parse_url(request_url: &str) -> Option<ParseUrlResponse> {
+fn parse_url(request_url: &str) -> Result<Endpoint, ResponseError> {
     // `Url::parse` needs the base URL, which is not given by the
     // `request.url()` from `tiny_url`. We input some dummy data which it's
     // never used.
-    let parsed_url = match Url::parse(&("http://127.0.0.1".to_owned() + request_url)) {
-        Ok(parsed_url) => parsed_url,
-        Err(_err) => return None,
-    };
-    let method_name = parsed_url.path_segments()?.last()?;
-    match method_name {
-        "apy" => {
-            let query_params =
-                form_urlencoded::parse(parsed_url.query()?.as_bytes()).collect::<Vec<_>>();
-            let dates = match get_date_params(query_params) {
-                Ok(res) => res,
-                Err(err) => return Some(ParseUrlResponse::Error(err)),
-            };
-            Some(ParseUrlResponse::IntervalPriceRequest(dates))
+    let base = Url::parse("http://unused.invalid/").expect("Hard-coded value is valid.");
+    let parse_result = Url::options().base_url(Some(&base)).parse(request_url);
+    let parsed_url = parse_result.map_err(|_| ResponseError::BadRequest("Failed to parse url."))?;
+
+    let final_segment = parsed_url
+        .path_segments()
+        .and_then(|segments| segments.last());
+
+    match final_segment {
+        Some("apy") => {
+            get_date_params(parsed_url.query_pairs()).map(Endpoint::IntervalPriceRequest)
         }
-        "metrics" => Some(ParseUrlResponse::Metrics),
-        _ => None,
+        Some("metrics") => Ok(Endpoint::Metrics),
+        _ => Err(ResponseError::NotFound("Unknown route.")),
     }
 }
 
@@ -582,42 +575,37 @@ fn serve_request(
     request: Request,
     metrics_mutex: &MetricsMutex,
 ) -> Result<(), std::io::Error> {
-    let response = if let Some(method) = parse_url(request.url()) {
-        match method {
-            ParseUrlResponse::Metrics => {
-                // Take the current snapshot. This only holds the lock briefly, and does
-                // not prevent other threads from updating the snapshot while this request
-                // handler is running.
-                let metrics = metrics_mutex.lock().unwrap().clone();
+    let response = match parse_url(request.url()) {
+        Ok(Endpoint::Metrics) => {
+            // Take the current snapshot. This only holds the lock briefly, and does
+            // not prevent other threads from updating the snapshot while this request
+            // handler is running.
+            let metrics = metrics_mutex.lock().unwrap().clone();
 
-                // We don't even look at the request, for now we always serve the metrics.
+            // We don't even look at the request, for now we always serve the metrics.
 
-                let mut out: Vec<u8> = Vec::new();
-                metrics.write_prometheus(&mut out).expect(
-        "We must handle the error because of io::Write, but writing to a Vec does not fail.",
-    );
+            let mut out: Vec<u8> = Vec::new();
+            metrics.write_prometheus(&mut out).expect(
+                "We must handle the error because of io::Write, but writing to a Vec does not fail.",
+            );
 
-                // text/plain with version=0.0.4 is what Prometheus expects as the content type,
-                // see also https://prometheus.io/docs/instrumenting/exposition_formats/.
-                // We add the charset so you can view the metrics in a browser too when it
-                // contains non-ascii bytes.
-                let content_type = Header::from_bytes(
-                    &b"Content-Type"[..],
-                    &b"text/plain; version=0.0.4; charset=UTF-8"[..],
-                )
-                .expect("Static header value, does not fail at runtime.");
-                // request.respond(Response::from_data(out).with_header(content_type));
-                Response::from_data(out).with_header(content_type).boxed()
-            }
-            ParseUrlResponse::IntervalPriceRequest(range_date) => {
-                get_interval_price_request(db_connection, &range_date)
-            }
-            ParseUrlResponse::Error(err) => get_error_response(err),
+            // text/plain with version=0.0.4 is what Prometheus expects as the content type,
+            // see also https://prometheus.io/docs/instrumenting/exposition_formats/.
+            // We add the charset so you can view the metrics in a browser too when it
+            // contains non-ascii bytes.
+            let content_type = Header::from_bytes(
+                &b"Content-Type"[..],
+                &b"text/plain; version=0.0.4; charset=UTF-8"[..],
+            )
+            .expect("Static header value, does not fail at runtime.");
+            // request.respond(Response::from_data(out).with_header(content_type));
+            Response::from_data(out).with_header(content_type).boxed()
         }
-    } else {
-        get_error_response(ResponseError::new_bad_request("Error parsing Url"))
+        Ok(Endpoint::IntervalPriceRequest(range_date)) => {
+            get_interval_price_request(db_connection, &range_date)
+        }
+        Err(err) => get_error_response(err),
     };
-
     request.respond(response)
 }
 
@@ -836,6 +824,8 @@ mod test {
 
     #[test]
     fn test_get_date_from_url_parameters() {
+        use url::form_urlencoded;
+
         let query_params = form_urlencoded::Serializer::new(String::new())
             .append_pair("begin", "2022-02-04T11:40:02.683960+00:00")
             .append_pair("end", "2022-02-07T14:22:08.826526+00:00")
