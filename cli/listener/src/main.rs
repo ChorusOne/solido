@@ -557,15 +557,16 @@ fn parse_url(request_url: &str) -> Result<Endpoint, ResponseError> {
     let parse_result = Url::options().base_url(Some(&base)).parse(request_url);
     let parsed_url = parse_result.map_err(|_| ResponseError::BadRequest("Failed to parse url."))?;
 
-    let final_segment = parsed_url
+    let last_second_last = parsed_url
         .path_segments()
-        .and_then(|segments| segments.last());
+        .map(|it| it.rev())
+        .map(|mut p| (p.next(), p.next()));
 
-    match final_segment {
-        Some("apy") => {
+    match last_second_last {
+        Some((Some("apy"), _)) => {
             get_date_params(parsed_url.query_pairs()).map(Endpoint::IntervalPriceRequest)
         }
-        Some("metrics") => Ok(Endpoint::Metrics),
+        Some((Some("metrics"), None)) => Ok(Endpoint::Metrics),
         _ => Err(ResponseError::NotFound("Unknown route.")),
     }
 }
