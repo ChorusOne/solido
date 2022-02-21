@@ -51,29 +51,15 @@ pub struct Opts {
     #[clap(long, default_value = "0.0.0.0:8929")]
     listen: String,
 
-    /// Whether to fetch data from the chain.
+    /// Disable fetching data from the chain.
     ///
-    /// Set to "disable" to run in read-only mode, where we still serve the API
-    /// to query APY, but don't add new data points to the database.
-    #[clap(long, default_value = "enable", value_name = "enabled")]
-    fetch: FetchMode,
-}
-
-#[derive(Debug)]
-enum FetchMode {
-    EnableFetch,
-    DisableFetch,
-}
-
-impl FromStr for FetchMode {
-    type Err = &'static str;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "enable" => Ok(FetchMode::EnableFetch),
-            "disable" => Ok(FetchMode::DisableFetch),
-            _ => Err("Invalid fetch mode, should be 'enable' or 'disable'."),
-        }
-    }
+    /// By default, the daemon will do two things:
+    /// 1. Fetch price data from the chain and save it to the database.
+    /// 2. Serve the API to query APY, which reads from the database.
+    /// Read-only mode disables 1 while keeping 2 enabled, which ensures that
+    /// the application does not write to the database.
+    #[clap(long, takes_value = false)]
+    read_only: bool,
 }
 
 #[derive(Debug)]
@@ -754,14 +740,15 @@ fn main() {
 
     // Start fetching prices, but only if fetching is enabled. If it is, this
     // never exits.
-    match opts.fetch {
-        FetchMode::EnableFetch => daemon.run(),
-        FetchMode::DisableFetch => {}
+    if !opts.read_only {
+        daemon.run();
     }
 
     // These threads never exit, so this blocks indefinitely.
     for thread in http_threads {
-        thread.join().expect("We don't observe thread panics, we set panic=abort.")
+        thread
+            .join()
+            .expect("We don't observe thread panics, we set panic=abort.")
     }
 }
 
