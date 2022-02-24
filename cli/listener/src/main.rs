@@ -6,6 +6,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use chrono::TimeZone;
 use clap::Clap;
 use lido::token::Rational;
 use rand::{rngs::ThreadRng, Rng};
@@ -468,6 +469,13 @@ fn get_date_params<'a, I: IntoIterator<Item = (Cow<'a, str>, Cow<'a, str>)>>(
                     Expected e.g. '30'.",
                         )
                     })?;
+                begin_opt = Some(begin);
+                end_opt = Some(end);
+            }
+            "since_launch" => {
+                let begin = chrono::Utc.ymd(2021, 09, 01).and_hms(00, 00, 00); // Solido Launch Date
+                let end = chrono::Utc::now();
+
                 begin_opt = Some(begin);
                 end_opt = Some(end);
             }
