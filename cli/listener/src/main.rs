@@ -452,6 +452,25 @@ fn get_date_params<'a, I: IntoIterator<Item = (Cow<'a, str>, Cow<'a, str>)>>(
                 })?;
                 end_opt = Some(t);
             }
+            "days" => {
+                let days = v.parse::<i64>().map_err(|_| {
+                    ResponseError::BadRequest(
+                        "Invalid number of days in 'days' query parameter. \
+                    Expected e.g. '30'.",
+                    )
+                })?;
+                let end = chrono::Utc::now();
+                let begin = end
+                    .checked_sub_signed(chrono::Duration::days(days))
+                    .ok_or_else(|| {
+                        ResponseError::BadRequest(
+                            "Invalid number of days in 'days' query parameter. \
+                    Expected e.g. '30'.",
+                        )
+                    })?;
+                begin_opt = Some(begin);
+                end_opt = Some(end);
+            }
             _ => continue,
         }
     }
