@@ -431,8 +431,9 @@ type DateBeginEnd = Range<chrono::DateTime<chrono::Utc>>;
 fn get_date_params<'a, I: IntoIterator<Item = (Cow<'a, str>, Cow<'a, str>)>>(
     query_params: I,
 ) -> Result<DateBeginEnd, ResponseError> {
-    let mut begin_opt: Option<chrono::DateTime<chrono::Utc>> = None;
-    let mut end_opt: Option<chrono::DateTime<chrono::Utc>> = None;
+    let mut begin_opt: Vec<chrono::DateTime<chrono::Utc>> = vec![];
+    let mut end_opt: Vec<chrono::DateTime<chrono::Utc>> = vec![];
+
     for (k, v) in query_params {
         match k.as_ref() {
             "begin" => {
@@ -442,7 +443,8 @@ fn get_date_params<'a, I: IntoIterator<Item = (Cow<'a, str>, Cow<'a, str>)>>(
                     Expected e.g. '2022-02-15T23:59:59+00:00'.",
                     )
                 })?;
-                begin_opt = Some(t);
+
+                begin_opt.push(t);
             }
             "end" => {
                 let t = parse_utc_iso8601(&v).map_err(|_| {
@@ -451,7 +453,8 @@ fn get_date_params<'a, I: IntoIterator<Item = (Cow<'a, str>, Cow<'a, str>)>>(
                     Expected e.g. '2022-02-15T23:59:59+00:00'.",
                     )
                 })?;
-                end_opt = Some(t);
+
+                end_opt.push(t);
             }
             "days" => {
                 let days = v.parse::<i64>().map_err(|_| {
@@ -465,29 +468,46 @@ fn get_date_params<'a, I: IntoIterator<Item = (Cow<'a, str>, Cow<'a, str>)>>(
                     .checked_sub_signed(chrono::Duration::days(days))
                     .ok_or(ResponseError::BadRequest("Date range too large"))?;
 
+                begin_opt.push(begin);
+                end_opt.push(end);
             }
             "since_launch" => {
                 let begin = chrono::Utc.ymd(2021, 9, 1).and_hms(00, 00, 00); // Solido Launch Date
                 let end = chrono::Utc::now();
 
-                begin_opt = Some(begin);
-                end_opt = Some(end);
+                begin_opt.push(begin);
+                end_opt.push(end);
             }
             _ => continue,
         }
     }
 
-    let begin = match begin_opt {
-        Some(t) => t,
-        None => {
+    let begin = match begin_opt.len() {
+        0 => {
             return Err(ResponseError::BadRequest(
-                "Missing query parameter: 'begin'.",
+                "Missing query parameter: 'begin', 'days' or 'since_launch'",
+            ))
+        }
+        1 => begin_opt[0],
+        _ => {
+            return Err(ResponseError::BadRequest(
+                "Exactly one of 'begin' or 'days' or 'since_launch' must be specified.",
             ))
         }
     };
-    let end = match end_opt {
-        Some(t) => t,
-        None => return Err(ResponseError::BadRequest("Missing query parameter: 'end'.")),
+
+    let end = match end_opt.len() {
+        0 => {
+            return Err(ResponseError::BadRequest(
+                "Missing query parameter: 'end', 'days' or 'since_launch'",
+            ))
+        }
+        1 => end_opt[0],
+        _ => {
+            return Err(ResponseError::BadRequest(
+                "Exactly one of 'end' or 'days' or 'since_launch' must be specified.",
+            ))
+        }
     };
     Ok(begin..end)
 }
