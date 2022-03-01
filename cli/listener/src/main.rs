@@ -4,6 +4,7 @@ use std::{
     sync::{Arc, Mutex},
     thread::JoinHandle,
     time::{Duration, Instant},
+    vec,
 };
 
 use chrono::TimeZone;
@@ -440,7 +441,7 @@ fn get_date_params<'a, I: IntoIterator<Item = (Cow<'a, str>, Cow<'a, str>)>>(
                 let t = parse_utc_iso8601(&v).map_err(|_| {
                     ResponseError::BadRequest(
                         "Invalid ISO 8601 timestamp in 'begin' query parameter. \
-                    Expected e.g. '2022-02-15T23:59:59+00:00'.",
+                    Expected e.g. '2022-02-15T23:59:59Z'.",
                     )
                 })?;
 
@@ -450,7 +451,7 @@ fn get_date_params<'a, I: IntoIterator<Item = (Cow<'a, str>, Cow<'a, str>)>>(
                 let t = parse_utc_iso8601(&v).map_err(|_| {
                     ResponseError::BadRequest(
                         "Invalid ISO 8601 timestamp in 'end' query parameter. \
-                    Expected e.g. '2022-02-15T23:59:59+00:00'.",
+                    Expected e.g. '2022-02-15T23:59:59Z'.",
                     )
                 })?;
 
