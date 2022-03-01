@@ -212,9 +212,7 @@ pub fn get_interval_price_for_period(
             "SELECT MAX(epoch) from exchange_rate where pool = :pool and timestamp < :t",
         )?;
         let epoch = match last_epoch_stmt
-            .query_row([pool.clone(), to_time.to_rfc3339()], |row| {
-                row.get::<usize, u64>(0)
-            })
+            .query_row([pool, to_time.to_rfc3339()], |row| row.get::<usize, u64>(0))
             .ok()
         {
             Some(epoch) => epoch,
