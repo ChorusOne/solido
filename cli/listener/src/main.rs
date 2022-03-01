@@ -463,17 +463,11 @@ fn get_date_params<'a, I: IntoIterator<Item = (Cow<'a, str>, Cow<'a, str>)>>(
                 let end = chrono::Utc::now();
                 let begin = end
                     .checked_sub_signed(chrono::Duration::days(days))
-                    .ok_or_else(|| {
-                        ResponseError::BadRequest(
-                            "Invalid number of days in 'days' query parameter. \
-                    Expected e.g. '30'.",
-                        )
-                    })?;
-                begin_opt = Some(begin);
-                end_opt = Some(end);
+                    .ok_or(ResponseError::BadRequest("Date range too large"))?;
+
             }
             "since_launch" => {
-                let begin = chrono::Utc.ymd(2021, 09, 01).and_hms(00, 00, 00); // Solido Launch Date
+                let begin = chrono::Utc.ymd(2021, 9, 1).and_hms(00, 00, 00); // Solido Launch Date
                 let end = chrono::Utc::now();
 
                 begin_opt = Some(begin);
