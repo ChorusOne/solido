@@ -15,6 +15,7 @@ use solana_client::rpc_client::RpcClient;
 use solana_sdk::{
     clock::{Epoch, Slot},
     commitment_config::CommitmentConfig,
+    epoch_schedule::EpochSchedule,
     pubkey::Pubkey,
     signature::Keypair,
 };
@@ -30,8 +31,8 @@ use url::Url;
 // Name put in the solido table `pool`.
 const SOLIDO_ID: &str = "solido";
 
-// Offset from the first Epoch's entry to use as data point.
-const QUERY_INTERVAL_OFFSET: usize = 200;
+// Offset from the first Epoch's slot to use as data point.
+const QUERY_SLOT_OFFSET: u64 = 1000;
 
 #[derive(Clap, Debug)]
 pub struct Opts {
@@ -179,47 +180,57 @@ pub fn get_interval_price_for_period(
             price_lamports_denominator: row.get(6)?,
         })
     };
+    // This is the constructor for mainnet.
+    let epoch_schedule = EpochSchedule::without_warmup();
 
     let (first, last) = {
-        // Get first logged minimal logged data based on timestamp that is greater than `from_time`.
-        let stmt_first = &mut tx.prepare(&format!(
-            "WITH prices_epoch AS (
-                SELECT *
-                FROM exchange_rate
-                WHERE epoch = (SELECT MIN(epoch) from exchange_rate where pool = :pool AND timestamp > :t)
-              )
-              SELECT
-                *
-              FROM
-                prices_epoch
-              ORDER BY
-                timestamp ASC
-              LIMIT {}
-            ", QUERY_INTERVAL_OFFSET),
+        // Get minimum epoch in which timestamp is greater than `from_time`.
+        let mut first_epoch_stmt = tx.prepare(
+            "SELECT MIN(epoch) from exchange_rate where pool = :pool and timestamp > :t",
         )?;
-        // Get first logged maximal logged data based on timestamp that is smaller than `to_time`.
-        let stmt_last =
-            &mut tx.prepare(&format!("WITH prices_epoch AS (
-                SELECT *
-                FROM exchange_rate
-                WHERE epoch = (SELECT MAX(epoch) from exchange_rate where pool = :pool AND timestamp < :t)
-              )
-              SELECT
-                *
-              FROM
-                prices_epoch
-              ORDER BY
-                timestamp ASC
-                LIMIT {}
-            ", QUERY_INTERVAL_OFFSET))?;
+        let epoch = match first_epoch_stmt
+            .query_row([pool.clone(), from_time.to_rfc3339()], |row| {
+                row.get::<usize, u64>(0)
+            })
+            .ok()
+        {
+            Some(epoch) => epoch,
+            None => return Ok(None),
+        };
+        let minimum_slot = epoch_schedule.get_first_slot_in_epoch(epoch) + QUERY_SLOT_OFFSET;
 
-        let mut row_iter = stmt_first.query_map([pool.clone(), from_time.to_rfc3339()], row_map)?;
-        let first = row_iter.nth(QUERY_INTERVAL_OFFSET - 1);
+        // Get the first row from `epoch` in which the slot is greater than `minimum_slot`.
+        let mut exchange_rate_stmt = tx.prepare(
+            "SELECT * from exchange_rate WHERE epoch = :epoch AND slot >= :slot_min LIMIT 1",
+        )?;
+        let first_exchange_rate = exchange_rate_stmt
+            .query_map([epoch, minimum_slot], row_map)?
+            .next();
 
-        let mut row_iter = stmt_last.query_map([pool, to_time.to_rfc3339()], row_map)?;
-        let last = row_iter.nth(QUERY_INTERVAL_OFFSET - 1);
+        // Get maximum epoch in which timestamp is smaller than `from_time`.
+        let mut last_epoch_stmt = tx.prepare(
+            "SELECT MAX(epoch) from exchange_rate where pool = :pool and timestamp < :t",
+        )?;
+        let epoch = match last_epoch_stmt
+            .query_row([pool.clone(), to_time.to_rfc3339()], |row| {
+                row.get::<usize, u64>(0)
+            })
+            .ok()
+        {
+            Some(epoch) => epoch,
+            None => return Ok(None),
+        };
+        let minimum_slot = epoch_schedule.get_first_slot_in_epoch(epoch) + QUERY_SLOT_OFFSET;
 
-        (first, last)
+        // Get the first row from `epoch` in which the slot is greater than `minimum_slot`.
+        let mut exchange_rate_stmt = tx.prepare(
+            "SELECT * from exchange_rate WHERE epoch = :epoch AND slot >= :slot_min LIMIT 1",
+        )?;
+        let last_exchange_rate = exchange_rate_stmt
+            .query_map([epoch, minimum_slot], row_map)?
+            .next();
+
+        (first_exchange_rate, last_exchange_rate)
     };
 
     match (first, last) {
@@ -751,15 +762,6 @@ mod test {
     use super::*;
     use chrono::TimeZone;
 
-    // Insert `n` prices in the db offset by 1 minute from each other.
-    fn insert_n_prices(conn: &Connection, n: usize, exchange_rate: &ExchangeRate) {
-        let mut exchange_rate = exchange_rate.clone();
-        for _ in 0..n {
-            insert_price(conn, &exchange_rate).unwrap();
-            exchange_rate.timestamp = exchange_rate.timestamp + chrono::Duration::minutes(1);
-        }
-    }
-
     #[test]
     fn test_get_average_apy() {
         let conn = Connection::open_in_memory().expect("Failed to open sqlite connection.");
@@ -767,23 +769,23 @@ mod test {
         let exchange_rate = ExchangeRate {
             id: 0,
             timestamp: chrono::Utc.ymd(2020, 8, 8).and_hms(0, 0, 0),
-            slot: 1,
-            epoch: 1,
+            slot: 116640000 + 1000, // First slot for epoch 270: 116640000
+            epoch: 270,
             pool: SOLIDO_ID.to_owned(),
             price_lamports_numerator: 1,
             price_lamports_denominator: 1,
         };
-        insert_n_prices(&conn, QUERY_INTERVAL_OFFSET, &exchange_rate);
+        insert_price(&conn, &exchange_rate).unwrap();
         let exchange_rate = ExchangeRate {
             id: 0,
             timestamp: chrono::Utc.ymd(2021, 1, 8).and_hms(0, 0, 0),
-            slot: 2,
-            epoch: 2,
+            slot: 117072000 + 1000, // First slot for epoch 271: 117072000
+            epoch: 271,
             pool: SOLIDO_ID.to_owned(),
             price_lamports_numerator: 1394458971361025,
             price_lamports_denominator: 1367327673971744,
         };
-        insert_n_prices(&conn, QUERY_INTERVAL_OFFSET, &exchange_rate);
+        insert_price(&conn, &exchange_rate).unwrap();
         let apy = get_interval_price_for_period(
             conn.unchecked_transaction().unwrap(),
             chrono::Utc.ymd(2020, 7, 7).and_hms(0, 0, 0),
@@ -807,24 +809,24 @@ mod test {
         let exchange_rate = ExchangeRate {
             id: 0,
             timestamp: chrono::Utc.ymd(2022, 01, 28).and_hms(11, 58, 39),
-            slot: 108837851,
+            slot: 116640000 + 1000, // First slot for epoch 270: 116640000
             epoch: 270,
             pool: SOLIDO_ID.to_owned(),
             price_lamports_numerator: 1936245653069130,
             price_lamports_denominator: 1893971837707973,
         };
-        insert_n_prices(&conn, QUERY_INTERVAL_OFFSET, &exchange_rate);
+        insert_price(&conn, &exchange_rate).unwrap();
 
         let exchange_rate = ExchangeRate {
             id: 0,
             timestamp: chrono::Utc.ymd(2022, 02, 28).and_hms(11, 58, 39),
-            slot: 118837851,
-            epoch: 275,
+            slot: 117072000 + 1000, // First slot for epoch 271: 117072000
+            epoch: 271,
             pool: SOLIDO_ID.to_owned(),
             price_lamports_numerator: 1936245653069130,
             price_lamports_denominator: 1892971837707973,
         };
-        insert_n_prices(&conn, QUERY_INTERVAL_OFFSET, &exchange_rate);
+        insert_price(&conn, &exchange_rate).unwrap();
 
         let apy = get_interval_price_for_period(
             conn.unchecked_transaction().unwrap(),
@@ -864,13 +866,13 @@ mod test {
         let exchange_rate = ExchangeRate {
             id: 0,
             timestamp: chrono::Utc.ymd(2022, 01, 28).and_hms(11, 58, 39),
-            slot: 108837851,
+            slot: 116643000,
             epoch: 270,
             pool: SOLIDO_ID.to_owned(),
             price_lamports_numerator: 1936245653069130,
             price_lamports_denominator: 1893971837707973,
         };
-        insert_n_prices(&conn, QUERY_INTERVAL_OFFSET, &exchange_rate);
+        insert_price(&conn, &exchange_rate).unwrap();
 
         let apy = get_interval_price_for_period(
             conn.unchecked_transaction().unwrap(),
@@ -898,19 +900,19 @@ mod test {
     }
 
     #[test]
-    fn test_get_none_when_fewer_than_interval_offset_data_points() {
+    fn test_get_none_when_slot_too_small() {
         let conn = Connection::open_in_memory().expect("Failed to open sqlite connection.");
         create_db(&conn).unwrap();
         let exchange_rate = ExchangeRate {
             id: 0,
             timestamp: chrono::Utc.ymd(2022, 01, 28).and_hms(11, 58, 39),
-            slot: 108837851,
+            slot: 116640000 + 999, // First slot for epoch 270: 116640000
             epoch: 270,
             pool: SOLIDO_ID.to_owned(),
             price_lamports_numerator: 1936245653069130,
             price_lamports_denominator: 1893971837707973,
         };
-        insert_n_prices(&conn, QUERY_INTERVAL_OFFSET - 1, &exchange_rate);
+        insert_price(&conn, &exchange_rate).unwrap();
 
         let apy = get_interval_price_for_period(
             conn.unchecked_transaction().unwrap(),
