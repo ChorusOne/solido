@@ -208,7 +208,7 @@ pub fn get_interval_price_for_period(
             )?
             .next();
 
-        // Get maximum epoch in which timestamp is smaller than `from_time`.
+        // Get maximum epoch in which timestamp is smaller than `to_time`.
         let mut last_epoch_stmt = tx.prepare(
             "SELECT MAX(epoch) from exchange_rate where pool = :pool and timestamp < :t",
         )?;
