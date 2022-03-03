@@ -191,41 +191,41 @@ pub fn get_interval_price_for_period(
         let epoch = match first_epoch_stmt
             .query_row([pool.clone(), from_time.to_rfc3339()], |row| {
                 row.get::<usize, u64>(0)
-            })
-            .ok()
-        {
-            Some(epoch) => epoch,
-            None => return Ok(None),
+            }) {
+            Ok(epoch) => epoch,
+            Err(_) => return Ok(None),
         };
         let minimum_slot = epoch_schedule.get_first_slot_in_epoch(epoch) + QUERY_SLOT_OFFSET;
 
         // Get the first row from `epoch` in which the slot is greater than `minimum_slot`.
         let mut exchange_rate_stmt = tx.prepare(
-            "SELECT * from exchange_rate WHERE epoch = :epoch AND slot >= :slot_min LIMIT 1",
+            "SELECT * from exchange_rate WHERE pool = :pool AND epoch = :epoch AND slot >= :slot_min LIMIT 1",
         )?;
         let first_exchange_rate = exchange_rate_stmt
-            .query_map([epoch, minimum_slot], row_map)?
+            .query_map(
+                [pool.clone(), epoch.to_string(), minimum_slot.to_string()],
+                row_map,
+            )?
             .next();
 
         // Get maximum epoch in which timestamp is smaller than `from_time`.
         let mut last_epoch_stmt = tx.prepare(
             "SELECT MAX(epoch) from exchange_rate where pool = :pool and timestamp < :t",
         )?;
-        let epoch = match last_epoch_stmt
-            .query_row([pool, to_time.to_rfc3339()], |row| row.get::<usize, u64>(0))
-            .ok()
-        {
-            Some(epoch) => epoch,
-            None => return Ok(None),
+        let epoch = match last_epoch_stmt.query_row([pool.clone(), to_time.to_rfc3339()], |row| {
+            row.get::<usize, u64>(0)
+        }) {
+            Ok(epoch) => epoch,
+            Err(_) => return Ok(None),
         };
         let minimum_slot = epoch_schedule.get_first_slot_in_epoch(epoch) + QUERY_SLOT_OFFSET;
 
         // Get the first row from `epoch` in which the slot is greater than `minimum_slot`.
         let mut exchange_rate_stmt = tx.prepare(
-            "SELECT * from exchange_rate WHERE epoch = :epoch AND slot >= :slot_min LIMIT 1",
+            "SELECT * from exchange_rate WHERE pool = :pool AND epoch = :epoch AND slot >= :slot_min LIMIT 1",
         )?;
         let last_exchange_rate = exchange_rate_stmt
-            .query_map([epoch, minimum_slot], row_map)?
+            .query_map([pool, epoch.to_string(), minimum_slot.to_string()], row_map)?
             .next();
 
         (first_exchange_rate, last_exchange_rate)
