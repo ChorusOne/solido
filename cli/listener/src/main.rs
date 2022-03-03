@@ -98,7 +98,10 @@ pub fn create_db(conn: &Connection) -> rusqlite::Result<()> {
                 price_lamports_numerator    INTEGER NOT NULL,
                 price_lamports_denominator  INTEGER NOT NULL,
                 CHECK (price_lamports_denominator>0)
-            )",
+            );
+            CREATE INDEX IF NOT EXISTS ix_exchange_rate_timestamp ON exchange_rate (timestamp);
+            CREATE INDEX IF NOT EXISTS ix_exchange_rate_slot ON exchange_rate (slot);
+            ",
         [],
     )?;
     Ok(())
