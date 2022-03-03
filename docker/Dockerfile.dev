@@ -1,6 +1,6 @@
 FROM chorusone/solido-base
 
-ENV SOLVERSION=1.7.15
+ENV SOLVERSION=1.8.16
 ENV SOLINSTALLCHECKSUM=33778e26b0b81133ba3bb4f9e46e84182f2adf72f0bc6e06fc59ad55ddd017d1
 ENV SOLPATH="/root/.local/share/solana/install/active_release/bin"
 ENV SOLIDOBUILDPATH="$SOLPATH/solido-build"
