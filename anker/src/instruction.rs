@@ -282,18 +282,18 @@ accounts_struct! {
             is_writable: false,
         },
 
-        // Accounts for token swap
+        // Accounts for token swap.
         pub token_swap_pool {
             is_signer: false,
             is_writable: false,
         },
         pub pool_st_sol_account {
             is_signer: false,
-            is_writable: true, // Needed to swap tokens.
+            is_writable: false,
         },
         pub pool_ust_account {
             is_signer: false,
-            is_writable: true, // Needed to swap tokens.
+            is_writable: false,
         },
 
         const sysvar_clock = sysvar::clock::id(),
