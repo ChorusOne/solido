@@ -199,6 +199,7 @@ fn process_initialize(
 }
 
 /// Deposit an amount of StLamports and get bSol in return.
+#[inline(never)]
 fn process_deposit(
     program_id: &Pubkey,
     accounts_raw: &[AccountInfo],

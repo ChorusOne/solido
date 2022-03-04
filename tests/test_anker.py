@@ -219,7 +219,7 @@ result = solido(
     '--terra-rewards-address',
     terra_rewards_address,
     '--sell-rewards-min-out-bps',
-    '9900'
+    '9900',
 )
 
 anker_address = result['anker_address']
