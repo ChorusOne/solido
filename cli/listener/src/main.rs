@@ -15,6 +15,7 @@ use solana_client::rpc_client::RpcClient;
 use solana_sdk::{
     clock::{Epoch, Slot},
     commitment_config::CommitmentConfig,
+    epoch_schedule::EpochSchedule,
     pubkey::Pubkey,
     signature::Keypair,
 };
@@ -27,7 +28,11 @@ use std::str::FromStr;
 use tiny_http::{Header, Request, Response, ResponseBox, Server};
 use url::Url;
 
+// Name put in the solido table `pool`.
 const SOLIDO_ID: &str = "solido";
+
+// Offset from the first Epoch's slot to use as data point.
+const QUERY_SLOT_OFFSET: u64 = 1000;
 
 #[derive(Clap, Debug)]
 pub struct Opts {
@@ -62,7 +67,7 @@ pub struct Opts {
     read_only: bool,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ExchangeRate {
     /// Id of the data point.
     #[allow(dead_code)]
@@ -93,7 +98,10 @@ pub fn create_db(conn: &Connection) -> rusqlite::Result<()> {
                 price_lamports_numerator    INTEGER NOT NULL,
                 price_lamports_denominator  INTEGER NOT NULL,
                 CHECK (price_lamports_denominator>0)
-            )",
+            );
+            CREATE INDEX IF NOT EXISTS ix_exchange_rate_timestamp ON exchange_rate (timestamp);
+            CREATE INDEX IF NOT EXISTS ix_exchange_rate_slot ON exchange_rate (slot);
+            ",
         [],
     )?;
     Ok(())
@@ -175,46 +183,55 @@ pub fn get_interval_price_for_period(
             price_lamports_denominator: row.get(6)?,
         })
     };
+    // This is the constructor for mainnet.
+    let epoch_schedule = EpochSchedule::without_warmup();
 
     let (first, last) = {
-        // Get first logged minimal logged data based on timestamp that is greater than `from_time`.
-        // TODO(516): Do not limit the query below, but select the first data point
-        // that is offset by 200 data points from the selected epoch
-        let stmt_first = &mut tx.prepare(
-            "WITH prices_epoch AS (
-                SELECT *
-                FROM exchange_rate
-                WHERE epoch = (SELECT MIN(epoch) from exchange_rate where pool = :pool AND timestamp > :t)
-              )
-              SELECT
-                *
-              FROM
-                prices_epoch
-              ORDER BY
-                timestamp ASC
-            ",
+        // Get minimum epoch in which timestamp is greater than `from_time`.
+        let mut first_epoch_stmt = tx.prepare(
+            "SELECT MIN(epoch) from exchange_rate where pool = :pool and timestamp > :t",
         )?;
-        // Get first logged maximal logged data based on timestamp that is smaller than `to_time`.
-        let stmt_last =
-            &mut tx.prepare("WITH prices_epoch AS (
-                SELECT *
-                FROM exchange_rate
-                WHERE epoch = (SELECT MAX(epoch) from exchange_rate where pool = :pool AND timestamp < :t)
-              )
-              SELECT
-                *
-              FROM
-                prices_epoch
-              ORDER BY
-                timestamp ASC
-            ")?;
-        let mut row_iter = stmt_first.query_map([pool.clone(), from_time.to_rfc3339()], row_map)?;
-        let first = row_iter.next();
+        let epoch = match first_epoch_stmt
+            .query_row([pool.clone(), from_time.to_rfc3339()], |row| {
+                row.get::<usize, u64>(0)
+            }) {
+            Ok(epoch) => epoch,
+            Err(_) => return Ok(None),
+        };
+        let minimum_slot = epoch_schedule.get_first_slot_in_epoch(epoch) + QUERY_SLOT_OFFSET;
 
-        let mut row_iter = stmt_last.query_map([pool, to_time.to_rfc3339()], row_map)?;
-        let last = row_iter.next();
+        // Get the first row from `epoch` in which the slot is greater than `minimum_slot`.
+        let mut exchange_rate_stmt = tx.prepare(
+            "SELECT * from exchange_rate WHERE pool = :pool AND epoch = :epoch AND slot >= :slot_min LIMIT 1",
+        )?;
+        let first_exchange_rate = exchange_rate_stmt
+            .query_map(
+                [pool.clone(), epoch.to_string(), minimum_slot.to_string()],
+                row_map,
+            )?
+            .next();
 
-        (first, last)
+        // Get maximum epoch in which timestamp is smaller than `to_time`.
+        let mut last_epoch_stmt = tx.prepare(
+            "SELECT MAX(epoch) from exchange_rate where pool = :pool and timestamp < :t",
+        )?;
+        let epoch = match last_epoch_stmt.query_row([pool.clone(), to_time.to_rfc3339()], |row| {
+            row.get::<usize, u64>(0)
+        }) {
+            Ok(epoch) => epoch,
+            Err(_) => return Ok(None),
+        };
+        let minimum_slot = epoch_schedule.get_first_slot_in_epoch(epoch) + QUERY_SLOT_OFFSET;
+
+        // Get the first row from `epoch` in which the slot is greater than `minimum_slot`.
+        let mut exchange_rate_stmt = tx.prepare(
+            "SELECT * from exchange_rate WHERE pool = :pool AND epoch = :epoch AND slot >= :slot_min LIMIT 1",
+        )?;
+        let last_exchange_rate = exchange_rate_stmt
+            .query_map([pool, epoch.to_string(), minimum_slot.to_string()], row_map)?
+            .next();
+
+        (first_exchange_rate, last_exchange_rate)
     };
 
     match (first, last) {
@@ -753,8 +770,8 @@ mod test {
         let exchange_rate = ExchangeRate {
             id: 0,
             timestamp: chrono::Utc.ymd(2020, 8, 8).and_hms(0, 0, 0),
-            slot: 1,
-            epoch: 1,
+            slot: 116640000 + 1000, // First slot for epoch 270: 116640000
+            epoch: 270,
             pool: SOLIDO_ID.to_owned(),
             price_lamports_numerator: 1,
             price_lamports_denominator: 1,
@@ -763,8 +780,8 @@ mod test {
         let exchange_rate = ExchangeRate {
             id: 0,
             timestamp: chrono::Utc.ymd(2021, 1, 8).and_hms(0, 0, 0),
-            slot: 2,
-            epoch: 2,
+            slot: 117072000 + 1000, // First slot for epoch 271: 117072000
+            epoch: 271,
             pool: SOLIDO_ID.to_owned(),
             price_lamports_numerator: 1394458971361025,
             price_lamports_denominator: 1367327673971744,
@@ -793,7 +810,7 @@ mod test {
         let exchange_rate = ExchangeRate {
             id: 0,
             timestamp: chrono::Utc.ymd(2022, 01, 28).and_hms(11, 58, 39),
-            slot: 108837851,
+            slot: 116640000 + 1000, // First slot for epoch 270: 116640000
             epoch: 270,
             pool: SOLIDO_ID.to_owned(),
             price_lamports_numerator: 1936245653069130,
@@ -804,8 +821,8 @@ mod test {
         let exchange_rate = ExchangeRate {
             id: 0,
             timestamp: chrono::Utc.ymd(2022, 02, 28).and_hms(11, 58, 39),
-            slot: 118837851,
-            epoch: 275,
+            slot: 117072000 + 1000, // First slot for epoch 271: 117072000
+            epoch: 271,
             pool: SOLIDO_ID.to_owned(),
             price_lamports_numerator: 1936245653069130,
             price_lamports_denominator: 1892971837707973,
@@ -850,7 +867,7 @@ mod test {
         let exchange_rate = ExchangeRate {
             id: 0,
             timestamp: chrono::Utc.ymd(2022, 01, 28).and_hms(11, 58, 39),
-            slot: 108837851,
+            slot: 116643000,
             epoch: 270,
             pool: SOLIDO_ID.to_owned(),
             price_lamports_numerator: 1936245653069130,
@@ -880,6 +897,31 @@ mod test {
             SOLIDO_ID.to_owned(),
         )
         .expect("Failed when getting APY for period");
+        assert_eq!(apy, None);
+    }
+
+    #[test]
+    fn test_get_none_when_slot_too_small() {
+        let conn = Connection::open_in_memory().expect("Failed to open sqlite connection.");
+        create_db(&conn).unwrap();
+        let exchange_rate = ExchangeRate {
+            id: 0,
+            timestamp: chrono::Utc.ymd(2022, 01, 28).and_hms(11, 58, 39),
+            slot: 116640000 + 999, // First slot for epoch 270: 116640000
+            epoch: 270,
+            pool: SOLIDO_ID.to_owned(),
+            price_lamports_numerator: 1936245653069130,
+            price_lamports_denominator: 1893971837707973,
+        };
+        insert_price(&conn, &exchange_rate).unwrap();
+
+        let apy = get_interval_price_for_period(
+            conn.unchecked_transaction().unwrap(),
+            chrono::Utc.ymd(2020, 7, 7).and_hms(0, 0, 0),
+            chrono::Utc.ymd(2022, 7, 8).and_hms(0, 0, 0),
+            SOLIDO_ID.to_owned(),
+        )
+        .unwrap();
         assert_eq!(apy, None);
     }
 }
