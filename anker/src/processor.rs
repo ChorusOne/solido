@@ -23,7 +23,9 @@ use spl_token_swap::state::SwapState;
 
 use lido::{state::Lido, token::StLamports};
 
-use crate::state::{HistoricalStSolPrice, POOL_PRICE_MIN_SAMPLE_DISTANCE, POOL_PRICE_NUM_SAMPLES};
+use crate::state::{
+    HistoricalStSolPriceArray, POOL_PRICE_MAX_SAMPLE_AGE, POOL_PRICE_MIN_SAMPLE_DISTANCE,
+};
 use crate::{
     error::AnkerError,
     find_instance_address, find_mint_authority, find_reserve_authority,
@@ -154,16 +156,11 @@ fn process_initialize(
         },
         sell_rewards_min_out_bps,
         metrics: Metrics::new(),
-        historical_st_sol_prices: [
-            // At initialization, we fill the historical prices with a dummy
-            // price of 1 UST per stSOL recorded at slot 0. Because we require
-            // these prices to be recent at `SellRewards` time, these dummy
-            // values are never used.
-            HistoricalStSolPrice {
-                slot: 0,
-                st_sol_price_in_ust: MicroUst(1_000_000),
-            }; 5
-        ],
+        // At initialization, we fill the historical prices with a dummy
+        // price of 1 UST per stSOL recorded at slot 0. Because we require
+        // these prices to be recent at `SellRewards` time, these dummy
+        // values are never used.
+        historical_st_sol_prices: HistoricalStSolPriceArray::new(),
         self_bump_seed: anker_bump_seed,
         mint_authority_bump_seed: mint_bump_seed,
         reserve_authority_bump_seed,
@@ -275,7 +272,7 @@ fn process_fetch_pool_price(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -
     let clock = Clock::from_account_info(accounts.sysvar_clock)?;
 
     // The price samples must be spaced at least some distance apart.
-    let most_recent_sample = anker.historical_st_sol_prices[POOL_PRICE_NUM_SAMPLES - 1];
+    let most_recent_sample = anker.historical_st_sol_prices.last();
     let slots_elapsed = clock.slot.saturating_sub(most_recent_sample.slot);
     if slots_elapsed < POOL_PRICE_MIN_SAMPLE_DISTANCE {
         msg!(
@@ -315,17 +312,9 @@ fn process_fetch_pool_price(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -
         u64::try_from(swap_result.destination_amount_swapped).map_err(|_| ArithmeticError)?,
     );
 
-    // Maintain the invariant that samples are sorted by ascending slot number.
-    // The sample at index 0 is the oldest, so we remove it (well, move it to the
-    // end to be overwritten), and move everything else closer to the beginning
-    // of the array. Then we overwrite the last element with the current price
-    // and slot number, and we confirmed above that that slot number is larger
-    // than the slot number of the sample before it.
-    anker.historical_st_sol_prices.rotate_left(1);
-    anker.historical_st_sol_prices[POOL_PRICE_NUM_SAMPLES - 1].slot = clock.slot;
-    anker.historical_st_sol_prices[POOL_PRICE_NUM_SAMPLES - 1].st_sol_price_in_ust =
-        st_sol_price_in_ust;
-
+    anker
+        .historical_st_sol_prices
+        .insert_and_rotate(clock.slot, st_sol_price_in_ust);
     anker.save(accounts.anker)
 }
 

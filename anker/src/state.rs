@@ -12,7 +12,7 @@ use crate::{
 };
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use lido::state::Lido;
-use lido::token::{Lamports, Rational, StLamports};
+use lido::token::{ArithmeticError, Lamports, Rational, StLamports};
 use lido::util::serialize_b58;
 use serde::Serialize;
 use solana_program::program_error::ProgramError;
@@ -92,6 +92,74 @@ pub struct HistoricalStSolPrice {
 
 #[repr(C)]
 #[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    BorshDeserialize,
+    BorshSerialize,
+    BorshSchema,
+    Eq,
+    PartialEq,
+    Serialize,
+)]
+pub struct HistoricalStSolPriceArray(pub [HistoricalStSolPrice; POOL_PRICE_NUM_SAMPLES]);
+
+impl HistoricalStSolPriceArray {
+    /// Create new `HistorialStSolPriceArray` with slot 0 and 1 UST in each
+    /// position of the array.
+    pub fn new() -> Self {
+        HistoricalStSolPriceArray(
+            [HistoricalStSolPrice {
+                slot: 0,
+                st_sol_price_in_ust: MicroUst(1_000_000),
+            }; 5],
+        )
+    }
+
+    /// Get last price from the array.
+    pub fn last(&self) -> HistoricalStSolPrice {
+        self.0[POOL_PRICE_NUM_SAMPLES - 1]
+    }
+
+    /// Insert `st_sol_price_in_ust` at the end of the array and rotate it.
+    pub fn insert_and_rotate(&mut self, slot: Slot, st_sol_price_in_ust: MicroUst) {
+        // Maintain the invariant that samples are sorted by ascending slot number.
+        // The sample at index 0 is the oldest, so we remove it (well, move it to the
+        // end to be overwritten), and move everything else closer to the beginning
+        // of the array. Then we overwrite the last element with the current price
+        // and slot number, and we confirmed above that that slot number is larger
+        // than the slot number of the sample before it.
+        self.0.rotate_left(1);
+        self.0[POOL_PRICE_NUM_SAMPLES - 1].slot = slot;
+        self.0[POOL_PRICE_NUM_SAMPLES - 1].st_sol_price_in_ust = st_sol_price_in_ust;
+    }
+
+    /// Calculate the minimum amount we are willing to pay for the `StLamports`
+    /// rewards based on the median price from the historical price information.
+    pub fn calculate_minimum_price(
+        &self,
+        rewards: StLamports,
+        sell_rewards_min_out_bps: u64,
+    ) -> Result<MicroUst, ArithmeticError> {
+        // Get median historical price.
+        let median_price = self.0[POOL_PRICE_NUM_SAMPLES / 2];
+        let minimum_ust_per_st_sol = (median_price.st_sol_price_in_ust
+            * Rational {
+                numerator: sell_rewards_min_out_bps,
+                denominator: 10_000,
+            })?;
+        let minimum_price = (rewards
+            * Rational {
+                numerator: minimum_ust_per_st_sol.0,
+                denominator: 1_000_000_000,
+            })?;
+        Ok(MicroUst(minimum_price.0))
+    }
+}
+
+#[repr(C)]
+#[derive(
     Clone, Debug, Default, BorshDeserialize, BorshSerialize, BorshSchema, Eq, PartialEq, Serialize,
 )]
 pub struct Anker {
@@ -134,7 +202,7 @@ pub struct Anker {
     ///
     /// Invariant: entries are sorted by ascending slot number (so the oldest
     /// entry is at index 0).
-    pub historical_st_sol_prices: [HistoricalStSolPrice; POOL_PRICE_NUM_SAMPLES],
+    pub historical_st_sol_prices: HistoricalStSolPriceArray,
 
     /// Bump seed for the derived address that this Anker instance should live at.
     pub self_bump_seed: u8,
@@ -835,5 +903,53 @@ mod test {
             let anker_recovered = try_from_slice_unchecked(&res[..]).unwrap();
             assert_eq!(anker, anker_recovered);
         }
+    }
+
+    #[test]
+    fn test_historical_price_array_minimum() {
+        let mut price_array = HistoricalStSolPriceArray::new();
+        // 100 UST for each StSol.
+        for slot in 0..POOL_PRICE_NUM_SAMPLES as u64 {
+            price_array.insert_and_rotate(slot, MicroUst(100_000_000));
+        }
+
+        // 1 StSol rewards and 1% slippage.
+        let minimum_ust = price_array
+            .calculate_minimum_price(StLamports(1_000_000_000), 9900)
+            .unwrap();
+        assert_eq!(minimum_ust, MicroUst(99_000_000));
+
+        // 1 StSol rewards and 2% slippage.
+        let minimum_ust = price_array
+            .calculate_minimum_price(StLamports(1_000_000_000), 9800)
+            .unwrap();
+        assert_eq!(minimum_ust, MicroUst(98_000_000));
+
+        // 80 StSol rewards and 5% slippage
+        let minimum_ust = price_array
+            .calculate_minimum_price(StLamports(80_000_000_000), 9500)
+            .unwrap();
+        assert_eq!(minimum_ust, MicroUst(7_600_000_000));
+
+        // 331 StSol rewards and 50% slippage
+        let minimum_ust = price_array
+            .calculate_minimum_price(StLamports(331_000_000_000), 5000)
+            .unwrap();
+        assert_eq!(minimum_ust, MicroUst(16_550_000_000));
+    }
+
+    #[test]
+    fn test_historical_price_array_limits() {
+        let mut price_array = HistoricalStSolPriceArray::new();
+        // 100 UST for each StSol.
+        for slot in 0..POOL_PRICE_NUM_SAMPLES as u64 {
+            price_array.insert_and_rotate(slot, MicroUst(100_000_000));
+        }
+
+        // 100 StLamports rewards and 1% slippage.
+        let minimum_ust = price_array
+            .calculate_minimum_price(StLamports(100), 9900)
+            .unwrap();
+        assert_eq!(minimum_ust, MicroUst(9));
     }
 }
