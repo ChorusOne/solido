@@ -562,8 +562,7 @@ impl Context {
             )],
             vec![manager],
         )
-        .await?;
-        Ok(())
+        .await
     }
 
     pub async fn try_change_token_swap_pool(
@@ -588,6 +587,37 @@ impl Context {
         )
         .await?;
         Ok(())
+    }
+
+    /// Return the `MicroUst` balance of the account in `address`.
+    pub async fn try_fetch_pool_price(&mut self) -> transport::Result<()> {
+        let (ust_address, st_sol_address) = self
+            .token_pool_context
+            .get_ust_stsol_addresses(&mut self.solido_context)
+            .await;
+
+        send_transaction(
+            &mut self.solido_context.context,
+            &mut self.solido_context.nonce,
+            &[instruction::fetch_pool_price(
+                &id(),
+                &instruction::FetchPoolPriceAccountsMeta {
+                    anker: self.anker,
+                    solido: self.solido_context.solido.pubkey(),
+                    token_swap_pool: self.token_pool_context.swap_account.pubkey(),
+                    pool_st_sol_account: st_sol_address,
+                    pool_ust_account: ust_address,
+                },
+            )],
+            vec![],
+        )
+        .await
+    }
+
+    pub async fn fetch_pool_price(&mut self) {
+        self.try_fetch_pool_price()
+            .await
+            .expect("Could not send transaction to fetch pool price.")
     }
 
     pub async fn get_anker(&mut self) -> anker::state::Anker {

@@ -300,6 +300,15 @@ accounts_struct! {
     }
 }
 
+pub fn fetch_pool_price(program_id: &Pubkey, accounts: &FetchPoolPriceAccountsMeta) -> Instruction {
+    let data = AnkerInstruction::FetchPoolPrice;
+    Instruction {
+        program_id: *program_id,
+        accounts: accounts.to_vec(),
+        data: data.to_vec(),
+    }
+}
+
 accounts_struct! {
     SellRewardsAccountsMeta, SellRewardsAccountsInfo {
         pub anker {
@@ -366,6 +375,7 @@ accounts_struct! {
             is_writable: false,
         },
         const spl_token = spl_token::id(),
+        const sysvar_clock = sysvar::clock::id(),
     }
 }
 

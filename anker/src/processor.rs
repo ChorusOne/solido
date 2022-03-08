@@ -23,7 +23,9 @@ use spl_token_swap::state::SwapState;
 
 use lido::{state::Lido, token::StLamports};
 
-use crate::state::{HistoricalStSolPriceArray, POOL_PRICE_MIN_SAMPLE_DISTANCE};
+use crate::state::{
+    HistoricalStSolPriceArray, POOL_PRICE_MAX_SAMPLE_AGE, POOL_PRICE_MIN_SAMPLE_DISTANCE,
+};
 use crate::{
     error::AnkerError,
     find_instance_address, find_mint_authority, find_reserve_authority,
@@ -327,6 +329,19 @@ fn process_sell_rewards(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> Pr
         accounts.anker.key,
         accounts.st_sol_reserve_account,
     )?;
+
+    let clock = Clock::from_account_info(accounts.sysvar_clock)?;
+    let most_recent_sample = anker.historical_st_sol_prices.last();
+    let slots_elapsed = clock.slot.saturating_sub(most_recent_sample.slot);
+    if slots_elapsed > POOL_PRICE_MAX_SAMPLE_AGE {
+        msg!(
+            "The last stSOL/UST price was sampled at slot {}. \
+            It must be sampled more recently.",
+            most_recent_sample.slot,
+        );
+        return Err(AnkerError::FetchPoolPriceNotCalledRecently.into());
+    }
+
     anker.check_is_st_sol_account(&solido, accounts.st_sol_reserve_account)?;
     anker.check_mint(accounts.b_sol_mint)?;
 
@@ -343,9 +358,14 @@ fn process_sell_rewards(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> Pr
     // If this underflows, something went wrong, and we abort the transaction.
     let rewards = (reserve_st_sol_before - b_sol_supply_value_in_st_sol)?;
 
+    // Get minimum amount we are willing to pay for the rewards in UST.
+    let minimum_ust_price = anker
+        .historical_st_sol_prices
+        .calculate_minimum_price(rewards, anker.sell_rewards_min_out_bps)?;
+
     // Get the amount of UST that we had.
     let ust_before = MicroUst(Anker::get_token_amount(accounts.ust_reserve_account)?);
-    swap_rewards(program_id, rewards, &anker, &accounts)?;
+    swap_rewards(program_id, rewards, &anker, &accounts, minimum_ust_price)?;
     // Get new UST amount.
     let ust_after = MicroUst(Anker::get_token_amount(accounts.ust_reserve_account)?);
     let reserve_st_sol_after =

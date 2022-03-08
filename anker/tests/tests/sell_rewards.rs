@@ -13,6 +13,7 @@ async fn test_successful_sell_rewards() {
     context
         .initialize_token_pool_and_deposit(Lamports(DEPOSIT_AMOUNT))
         .await;
+    context.fetch_pool_price().await;
 
     let anker_before = context.get_anker().await;
     context.sell_rewards().await;
@@ -61,6 +62,7 @@ async fn test_successful_sell_rewards_pool_a_b_token_swapped() {
     context
         .initialize_token_pool_and_deposit(Lamports(DEPOSIT_AMOUNT))
         .await;
+    context.fetch_pool_price().await;
     context.sell_rewards().await;
 
     let ust_balance = context.get_ust_balance(context.ust_reserve).await;
@@ -73,6 +75,7 @@ async fn test_sell_rewards_fails_with_different_reserve() {
     context
         .initialize_token_pool_and_deposit(Lamports(DEPOSIT_AMOUNT))
         .await;
+    context.fetch_pool_price().await;
 
     context.ust_reserve = context.create_ust_token_account(Pubkey::new_unique()).await;
 
@@ -86,6 +89,7 @@ async fn test_sell_rewards_fails_with_different_token_swap_program() {
     context
         .initialize_token_pool_and_deposit(Lamports(DEPOSIT_AMOUNT))
         .await;
+    context.fetch_pool_price().await;
 
     // If we try to call `SellRewards`, but the swap program is not the owner of
     // the pool, that should fail.
