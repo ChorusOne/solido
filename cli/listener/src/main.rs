@@ -553,7 +553,7 @@ fn get_interval_price_request(
                 get_success_response(interval_prices)
             } else {
                 // No interval price could be calculated, probably because of few data points.
-                get_error_response(ResponseError::BadRequest(
+                get_error_response(ResponseError::NotFound(
                     "No data points for calculating the price interval.",
                 ))
             }
