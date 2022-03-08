@@ -23,9 +23,7 @@ use spl_token_swap::state::SwapState;
 
 use lido::{state::Lido, token::StLamports};
 
-use crate::state::{
-    HistoricalStSolPriceArray, POOL_PRICE_MAX_SAMPLE_AGE, POOL_PRICE_MIN_SAMPLE_DISTANCE,
-};
+use crate::state::{HistoricalStSolPriceArray, POOL_PRICE_MIN_SAMPLE_DISTANCE};
 use crate::{
     error::AnkerError,
     find_instance_address, find_mint_authority, find_reserve_authority,
