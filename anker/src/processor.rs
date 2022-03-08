@@ -47,6 +47,7 @@ use crate::{
 };
 use crate::{state::ANKER_LEN, ANKER_RESERVE_AUTHORITY};
 
+#[inline(never)]
 fn process_initialize(
     program_id: &Pubkey,
     accounts_raw: &[AccountInfo],
@@ -373,6 +374,7 @@ fn process_sell_rewards(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> Pr
 }
 
 /// Return some bSOL and get back the underlying stSOL.
+#[inline(never)]
 fn process_withdraw(
     program_id: &Pubkey,
     accounts_raw: &[AccountInfo],
@@ -468,6 +470,7 @@ fn process_withdraw(
 
 /// Change the Terra rewards destination.
 /// Solido's manager needs to sign the transaction.
+#[inline(never)]
 fn process_change_terra_rewards_destination(
     program_id: &Pubkey,
     accounts_raw: &[AccountInfo],
@@ -483,6 +486,7 @@ fn process_change_terra_rewards_destination(
 
 /// Change the Token Pool instance.
 /// Solido's manager needs to sign the transaction.
+#[inline(never)]
 fn process_change_token_swap_pool(
     program_id: &Pubkey,
     accounts_raw: &[AccountInfo],
