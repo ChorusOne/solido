@@ -431,6 +431,7 @@ type DateBeginEnd = Range<chrono::DateTime<chrono::Utc>>;
 
 fn get_date_params<'a, I: IntoIterator<Item = (Cow<'a, str>, Cow<'a, str>)>>(
     query_params: I,
+    now: chrono::DateTime<chrono::Utc>,
 ) -> Result<DateBeginEnd, ResponseError> {
     let mut begin_opt: Vec<chrono::DateTime<chrono::Utc>> = vec![];
     let mut end_opt: Vec<chrono::DateTime<chrono::Utc>> = vec![];
@@ -464,7 +465,7 @@ fn get_date_params<'a, I: IntoIterator<Item = (Cow<'a, str>, Cow<'a, str>)>>(
                     Expected e.g. '30'.",
                     )
                 })?;
-                let end = chrono::Utc::now();
+                let end = now;
                 let begin = end
                     .checked_sub_signed(chrono::Duration::days(days))
                     .ok_or(ResponseError::BadRequest("Date range too large"))?;
@@ -474,7 +475,7 @@ fn get_date_params<'a, I: IntoIterator<Item = (Cow<'a, str>, Cow<'a, str>)>>(
             }
             "since_launch" => {
                 let begin = chrono::Utc.ymd(2021, 9, 1).and_hms(00, 00, 00); // Solido Launch Date
-                let end = chrono::Utc::now();
+                let end = now;
 
                 begin_opt.push(begin);
                 end_opt.push(end);
@@ -591,7 +592,10 @@ enum Endpoint {
     IntervalPriceRequest(DateBeginEnd),
 }
 
-fn parse_url(request_url: &str) -> Result<Endpoint, ResponseError> {
+fn parse_url(
+    request_url: &str,
+    now: chrono::DateTime<chrono::Utc>,
+) -> Result<Endpoint, ResponseError> {
     // `Url::parse` needs the base URL, which is not given by the
     // `request.url()` from `tiny_url`. We input some dummy data which it's
     // never used.
@@ -606,7 +610,7 @@ fn parse_url(request_url: &str) -> Result<Endpoint, ResponseError> {
 
     match last_second_last {
         Some((Some("apy"), _)) => {
-            get_date_params(parsed_url.query_pairs()).map(Endpoint::IntervalPriceRequest)
+            get_date_params(parsed_url.query_pairs(), now).map(Endpoint::IntervalPriceRequest)
         }
         Some((Some("metrics"), None)) => Ok(Endpoint::Metrics),
         _ => Err(ResponseError::NotFound("Unknown route.")),
@@ -618,7 +622,9 @@ fn serve_request(
     request: Request,
     metrics_mutex: &MetricsMutex,
 ) -> Result<(), std::io::Error> {
-    let response = match parse_url(request.url()) {
+    let now = chrono::Utc::now();
+
+    let response = match parse_url(request.url(), now) {
         Ok(Endpoint::Metrics) => {
             // Take the current snapshot. This only holds the lock briefly, and does
             // not prevent other threads from updating the snapshot while this request
