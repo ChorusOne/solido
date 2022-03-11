@@ -792,7 +792,6 @@ fn main() {
 #[cfg(test)]
 mod test {
     use super::*;
-    use chrono::TimeZone;
 
     #[test]
     fn test_get_average_apy() {
@@ -880,14 +879,64 @@ mod test {
             .append_pair("end", "2022-02-07T14:22:08.826526+00:00")
             .finish();
 
-        let dates =
-            get_date_params(form_urlencoded::parse(query_params.as_bytes()).collect::<Vec<_>>());
+        let now = chrono::Utc::now();
+
+        let dates = get_date_params(
+            form_urlencoded::parse(query_params.as_bytes()).collect::<Vec<_>>(),
+            now,
+        );
         assert_eq!(
             dates,
             Ok(
                 parse_utc_iso8601("2022-02-04T11:40:02.683960+00:00").unwrap()
                     ..parse_utc_iso8601("2022-02-07T14:22:08.826526+00:00").unwrap()
             ),
+        );
+    }
+
+    #[test]
+    fn test_get_date_from_url_parameters_days() {
+        use url::form_urlencoded;
+
+        let query_params = form_urlencoded::Serializer::new(String::new())
+            .append_pair("days", "2")
+            .finish();
+
+        let now = parse_utc_iso8601("2022-02-07T11:40:02.683960+00:00").unwrap();
+
+        let dates = get_date_params(
+            form_urlencoded::parse(query_params.as_bytes()).collect::<Vec<_>>(),
+            now,
+        );
+
+        assert_eq!(
+            dates,
+            Ok(
+                parse_utc_iso8601("2022-02-05T11:40:02.683960+00:00").unwrap()
+                    ..parse_utc_iso8601("2022-02-07T11:40:02.683960+00:00").unwrap()
+            ),
+        );
+    }
+
+    #[test]
+    fn test_get_date_from_url_parameters_since_launch() {
+        use url::form_urlencoded;
+
+        let query_params = form_urlencoded::Serializer::new(String::new())
+            .append_key_only("since_launch")
+            .finish();
+
+        let now = parse_utc_iso8601("2022-02-07T11:40:02.683960+00:00").unwrap();
+
+        let dates = get_date_params(
+            form_urlencoded::parse(query_params.as_bytes()).collect::<Vec<_>>(),
+            now,
+        );
+
+        assert_eq!(
+            dates,
+            Ok(parse_utc_iso8601("2021-09-01T00:00:00+00:00").unwrap()
+                ..parse_utc_iso8601("2022-02-07T11:40:02.683960+00:00").unwrap()),
         );
     }
 
