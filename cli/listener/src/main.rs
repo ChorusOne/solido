@@ -442,7 +442,7 @@ fn get_date_params<'a, I: IntoIterator<Item = (Cow<'a, str>, Cow<'a, str>)>>(
                 let t = parse_utc_iso8601(&v).map_err(|_| {
                     ResponseError::BadRequest(
                         "Invalid ISO 8601 timestamp in 'begin' query parameter. \
-                    Expected e.g. '2022-02-15T23:59:59Z'.",
+                    Expected e.g. '2022-02-15T23:59:59+00:00'. Note that query parameters must be url-encoded",
                     )
                 })?;
 
@@ -452,7 +452,7 @@ fn get_date_params<'a, I: IntoIterator<Item = (Cow<'a, str>, Cow<'a, str>)>>(
                 let t = parse_utc_iso8601(&v).map_err(|_| {
                     ResponseError::BadRequest(
                         "Invalid ISO 8601 timestamp in 'end' query parameter. \
-                    Expected e.g. '2022-02-15T23:59:59Z'.",
+                    Expected e.g. '2022-02-15T23:59:59+00:00'. Note that query parameters must be url-encoded.",
                     )
                 })?;
 
