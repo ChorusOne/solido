@@ -4,8 +4,10 @@ use std::{
     sync::{Arc, Mutex},
     thread::JoinHandle,
     time::{Duration, Instant},
+    vec,
 };
 
+use chrono::TimeZone;
 use clap::Clap;
 use lido::token::Rational;
 use rand::{rngs::ThreadRng, Rng};
@@ -446,44 +448,85 @@ type DateBeginEnd = Range<chrono::DateTime<chrono::Utc>>;
 
 fn get_date_params<'a, I: IntoIterator<Item = (Cow<'a, str>, Cow<'a, str>)>>(
     query_params: I,
+    now: chrono::DateTime<chrono::Utc>,
 ) -> Result<DateBeginEnd, ResponseError> {
-    let mut begin_opt: Option<chrono::DateTime<chrono::Utc>> = None;
-    let mut end_opt: Option<chrono::DateTime<chrono::Utc>> = None;
+    let mut begin_opt: Vec<chrono::DateTime<chrono::Utc>> = vec![];
+    let mut end_opt: Vec<chrono::DateTime<chrono::Utc>> = vec![];
+
     for (k, v) in query_params {
         match k.as_ref() {
             "begin" => {
                 let t = parse_utc_iso8601(&v).map_err(|_| {
                     ResponseError::BadRequest(
                         "Invalid ISO 8601 timestamp in 'begin' query parameter. \
-                    Expected e.g. '2022-02-15T23:59:59+00:00'.",
+                    Expected e.g. '2022-02-15T23:59:59+00:00'. Note that query parameters must be url-encoded",
                     )
                 })?;
-                begin_opt = Some(t);
+
+                begin_opt.push(t);
             }
             "end" => {
                 let t = parse_utc_iso8601(&v).map_err(|_| {
                     ResponseError::BadRequest(
                         "Invalid ISO 8601 timestamp in 'end' query parameter. \
-                    Expected e.g. '2022-02-15T23:59:59+00:00'.",
+                    Expected e.g. '2022-02-15T23:59:59+00:00'. Note that query parameters must be url-encoded.",
                     )
                 })?;
-                end_opt = Some(t);
+
+                end_opt.push(t);
+            }
+            "days" => {
+                let days = v.parse::<i64>().map_err(|_| {
+                    ResponseError::BadRequest(
+                        "Invalid number of days in 'days' query parameter. \
+                    Expected e.g. '30'.",
+                    )
+                })?;
+                let end = now;
+                let begin = end
+                    .checked_sub_signed(chrono::Duration::days(days))
+                    .ok_or(ResponseError::BadRequest("Date range too large"))?;
+
+                begin_opt.push(begin);
+                end_opt.push(end);
+            }
+            "since_launch" => {
+                let begin = chrono::Utc.ymd(2021, 9, 1).and_hms(00, 00, 00); // Solido Launch Date
+                let end = now;
+
+                begin_opt.push(begin);
+                end_opt.push(end);
             }
             _ => continue,
         }
     }
 
-    let begin = match begin_opt {
-        Some(t) => t,
-        None => {
+    let begin = match begin_opt.len() {
+        0 => {
             return Err(ResponseError::BadRequest(
-                "Missing query parameter: 'begin'.",
+                "Missing query parameter: 'begin', 'days' or 'since_launch'",
+            ))
+        }
+        1 => begin_opt[0],
+        _ => {
+            return Err(ResponseError::BadRequest(
+                "Exactly one of 'begin' or 'days' or 'since_launch' must be specified.",
             ))
         }
     };
-    let end = match end_opt {
-        Some(t) => t,
-        None => return Err(ResponseError::BadRequest("Missing query parameter: 'end'.")),
+
+    let end = match end_opt.len() {
+        0 => {
+            return Err(ResponseError::BadRequest(
+                "Missing query parameter: 'end', 'days' or 'since_launch'",
+            ))
+        }
+        1 => end_opt[0],
+        _ => {
+            return Err(ResponseError::BadRequest(
+                "Exactly one of 'end' or 'days' or 'since_launch' must be specified.",
+            ))
+        }
     };
     Ok(begin..end)
 }
@@ -566,7 +609,10 @@ enum Endpoint {
     IntervalPriceRequest(DateBeginEnd),
 }
 
-fn parse_url(request_url: &str) -> Result<Endpoint, ResponseError> {
+fn parse_url(
+    request_url: &str,
+    now: chrono::DateTime<chrono::Utc>,
+) -> Result<Endpoint, ResponseError> {
     // `Url::parse` needs the base URL, which is not given by the
     // `request.url()` from `tiny_url`. We input some dummy data which it's
     // never used.
@@ -581,7 +627,7 @@ fn parse_url(request_url: &str) -> Result<Endpoint, ResponseError> {
 
     match last_second_last {
         Some((Some("apy"), _)) => {
-            get_date_params(parsed_url.query_pairs()).map(Endpoint::IntervalPriceRequest)
+            get_date_params(parsed_url.query_pairs(), now).map(Endpoint::IntervalPriceRequest)
         }
         Some((Some("metrics"), None)) => Ok(Endpoint::Metrics),
         _ => Err(ResponseError::NotFound("Unknown route.")),
@@ -593,7 +639,9 @@ fn serve_request(
     request: Request,
     metrics_mutex: &MetricsMutex,
 ) -> Result<(), std::io::Error> {
-    let response = match parse_url(request.url()) {
+    let now = chrono::Utc::now();
+
+    let response = match parse_url(request.url(), now) {
         Ok(Endpoint::Metrics) => {
             // Take the current snapshot. This only holds the lock briefly, and does
             // not prevent other threads from updating the snapshot while this request
@@ -761,7 +809,6 @@ fn main() {
 #[cfg(test)]
 mod test {
     use super::*;
-    use chrono::TimeZone;
 
     #[test]
     fn test_get_average_apy() {
@@ -849,14 +896,64 @@ mod test {
             .append_pair("end", "2022-02-07T14:22:08.826526+00:00")
             .finish();
 
-        let dates =
-            get_date_params(form_urlencoded::parse(query_params.as_bytes()).collect::<Vec<_>>());
+        let now = chrono::Utc::now();
+
+        let dates = get_date_params(
+            form_urlencoded::parse(query_params.as_bytes()).collect::<Vec<_>>(),
+            now,
+        );
         assert_eq!(
             dates,
             Ok(
                 parse_utc_iso8601("2022-02-04T11:40:02.683960+00:00").unwrap()
                     ..parse_utc_iso8601("2022-02-07T14:22:08.826526+00:00").unwrap()
             ),
+        );
+    }
+
+    #[test]
+    fn test_get_date_from_url_parameters_days() {
+        use url::form_urlencoded;
+
+        let query_params = form_urlencoded::Serializer::new(String::new())
+            .append_pair("days", "2")
+            .finish();
+
+        let now = parse_utc_iso8601("2022-02-07T11:40:02.683960+00:00").unwrap();
+
+        let dates = get_date_params(
+            form_urlencoded::parse(query_params.as_bytes()).collect::<Vec<_>>(),
+            now,
+        );
+
+        assert_eq!(
+            dates,
+            Ok(
+                parse_utc_iso8601("2022-02-05T11:40:02.683960+00:00").unwrap()
+                    ..parse_utc_iso8601("2022-02-07T11:40:02.683960+00:00").unwrap()
+            ),
+        );
+    }
+
+    #[test]
+    fn test_get_date_from_url_parameters_since_launch() {
+        use url::form_urlencoded;
+
+        let query_params = form_urlencoded::Serializer::new(String::new())
+            .append_key_only("since_launch")
+            .finish();
+
+        let now = parse_utc_iso8601("2022-02-07T11:40:02.683960+00:00").unwrap();
+
+        let dates = get_date_params(
+            form_urlencoded::parse(query_params.as_bytes()).collect::<Vec<_>>(),
+            now,
+        );
+
+        assert_eq!(
+            dates,
+            Ok(parse_utc_iso8601("2021-09-01T00:00:00+00:00").unwrap()
+                ..parse_utc_iso8601("2022-02-07T11:40:02.683960+00:00").unwrap()),
         );
     }
 
