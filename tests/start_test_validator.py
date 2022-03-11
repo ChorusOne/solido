@@ -23,7 +23,7 @@ test_validator = subprocess.Popen(
     stdout=subprocess.DEVNULL,
 )
 
-# Wait up to 5 seconds for the validator to be running and processing blocks. We
+# Wait up to 60 seconds for the validator to be running and processing blocks. We
 # check this by running "solana block-height", and observing at least one
 # increase. If that is the case, the RPC is available, and the validator must be
 # producing blocks. Previously we only checked "solana cluster-version", but
@@ -31,9 +31,9 @@ test_validator = subprocess.Popen(
 # transactions.
 last_observed_block_height: Optional[int] = None
 
-for _ in range(50):
+for _ in range(60):
     result = subprocess.run(
-        ['solana', 'block-height'],
+        ['solana', '--url', 'http://127.0.0.1:8899', 'block-height'],
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
     )
@@ -46,7 +46,7 @@ for _ in range(50):
             break
         last_observed_block_height = current_block_height
 
-    sleep_seconds = 0.1
+    sleep_seconds = 1
     time.sleep(sleep_seconds)
 
 is_rpc_online = last_observed_block_height is not None
@@ -56,9 +56,15 @@ if is_rpc_online and test_validator.poll() is None:
     print(test_validator.pid)
 
 elif is_rpc_online:
-    print('RPC is online, but the process is gone ... was a validator already running?')
-    sys.exit(1)
+    print(
+        'RPC is online, but the process is gone ... was a validator already running?',
+        file=sys.stderr,
+    )
+    sys.exit(2)
 
 else:
-    print('Test validator is still not responding, something is wrong.')
-    sys.exit(1)
+    print(
+        'Test validator is still not responding, something is wrong.',
+        file=sys.stderr,
+    )
+    sys.exit(3)

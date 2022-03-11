@@ -108,7 +108,7 @@ jobs:
         tests/airdrop_lamports.sh
 
         tests/test_solido.py
-        kill $validator
+        kill -9 $validator
 
     - name: Run Multisig integration test
       run: |
@@ -119,7 +119,7 @@ jobs:
         # should still be there from the previous run.
 
         tests/test_multisig.py
-        kill $validator
+        kill -9 $validator
 
     - name: Run Anker integration test
       run: |
@@ -130,7 +130,7 @@ jobs:
         # should still be there from the previous run.
 
         tests/test_anker.py
-        kill $validator
+        kill -9 $validator
 
   lint:
     runs-on: ubuntu-latest
