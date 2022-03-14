@@ -19,7 +19,11 @@ use spl_token_swap::instruction::Swap;
 
 use crate::solido_context::send_transaction;
 use crate::solido_context::{self};
-use anker::{find_reserve_authority, find_st_sol_reserve_account, wormhole::TerraAddress};
+use anker::{
+    find_reserve_authority, find_st_sol_reserve_account,
+    state::{POOL_PRICE_MIN_SAMPLE_DISTANCE, POOL_PRICE_NUM_SAMPLES},
+    wormhole::TerraAddress,
+};
 
 // Program id for the Anker program. Only used for tests.
 solana_program::declare_id!("Anker111111111111111111111111111111111111117");
@@ -618,6 +622,17 @@ impl Context {
         self.try_fetch_pool_price()
             .await
             .expect("Could not send transaction to fetch pool price.")
+    }
+
+    pub async fn fill_historical_st_sol_price_array(&mut self) {
+        for _ in 0..POOL_PRICE_NUM_SAMPLES {
+            let current_slot = self.solido_context.get_clock().await.slot;
+            self.fetch_pool_price().await;
+            self.solido_context
+                .context
+                .warp_to_slot(current_slot + POOL_PRICE_MIN_SAMPLE_DISTANCE)
+                .unwrap();
+        }
     }
 
     pub async fn get_anker(&mut self) -> anker::state::Anker {
