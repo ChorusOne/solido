@@ -135,6 +135,7 @@ impl HistoricalStSolPriceArray {
         self.0.rotate_left(1);
         self.0[POOL_PRICE_NUM_SAMPLES - 1].slot = slot;
         self.0[POOL_PRICE_NUM_SAMPLES - 1].st_sol_price_in_ust = st_sol_price_in_ust;
+        assert!(self.0[POOL_PRICE_NUM_SAMPLES - 1].slot >= self.0[POOL_PRICE_NUM_SAMPLES - 2].slot);
     }
 
     /// Calculate the minimum amount we are willing to pay for the `StLamports`
