@@ -149,8 +149,10 @@ impl HistoricalStSolPriceArray {
         sorted_arr.sort_by(|a, b| {
             if a.st_sol_price_in_ust < b.st_sol_price_in_ust {
                 Ordering::Less
-            } else {
+            } else if a.st_sol_price_in_ust > b.st_sol_price_in_ust {
                 Ordering::Greater
+            } else {
+                Ordering::Equal
             }
         });
         // Get median historical price.
