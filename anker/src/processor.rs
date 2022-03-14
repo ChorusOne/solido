@@ -359,13 +359,13 @@ fn process_sell_rewards(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> Pr
     let rewards = (reserve_st_sol_before - b_sol_supply_value_in_st_sol)?;
 
     // Get minimum amount we are willing to pay for the rewards in UST.
-    let minimum_ust_price = anker
+    let minimum_ust_out = anker
         .historical_st_sol_prices
-        .calculate_minimum_price(rewards, anker.sell_rewards_min_out_bps)?;
+        .minimum_ust_swap_amount(rewards, anker.sell_rewards_min_out_bps)?;
 
     // Get the amount of UST that we had.
     let ust_before = MicroUst(Anker::get_token_amount(accounts.ust_reserve_account)?);
-    swap_rewards(program_id, rewards, &anker, &accounts, minimum_ust_price)?;
+    swap_rewards(program_id, rewards, &anker, &accounts, minimum_ust_out)?;
     // Get new UST amount.
     let ust_after = MicroUst(Anker::get_token_amount(accounts.ust_reserve_account)?);
     let reserve_st_sol_after =

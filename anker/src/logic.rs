@@ -234,7 +234,7 @@ pub fn swap_rewards(
     amount: StLamports,
     anker: &Anker,
     accounts: &SellRewardsAccountsInfo,
-    minimum_ust_price: MicroUst,
+    minimum_ust_out: MicroUst,
 ) -> ProgramResult {
     if amount == StLamports(0) {
         msg!("Anker rewards must be greater than zero to be claimable.");
@@ -257,7 +257,7 @@ pub fn swap_rewards(
         None,
         Swap {
             amount_in: amount.0,
-            minimum_amount_out: minimum_ust_price.0,
+            minimum_amount_out: minimum_ust_out.0,
         },
     )?;
 

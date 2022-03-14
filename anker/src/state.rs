@@ -138,7 +138,7 @@ impl HistoricalStSolPriceArray {
 
     /// Calculate the minimum amount we are willing to pay for the `StLamports`
     /// rewards based on the median price from the historical price information.
-    pub fn calculate_minimum_price(
+    pub fn minimum_ust_swap_amount(
         &self,
         rewards: StLamports,
         sell_rewards_min_out_bps: u64,
@@ -918,25 +918,25 @@ mod test {
 
         // 1 StSol rewards and 1% slippage.
         let minimum_ust = price_array
-            .calculate_minimum_price(StLamports(1_000_000_000), 9900)
+            .minimum_ust_swap_amount(StLamports(1_000_000_000), 9900)
             .unwrap();
         assert_eq!(minimum_ust, MicroUst(99_000_000));
 
         // 1 StSol rewards and 2% slippage.
         let minimum_ust = price_array
-            .calculate_minimum_price(StLamports(1_000_000_000), 9800)
+            .minimum_ust_swap_amount(StLamports(1_000_000_000), 9800)
             .unwrap();
         assert_eq!(minimum_ust, MicroUst(98_000_000));
 
         // 80 StSol rewards and 5% slippage
         let minimum_ust = price_array
-            .calculate_minimum_price(StLamports(80_000_000_000), 9500)
+            .minimum_ust_swap_amount(StLamports(80_000_000_000), 9500)
             .unwrap();
         assert_eq!(minimum_ust, MicroUst(7_600_000_000));
 
         // 331 StSol rewards and 50% slippage
         let minimum_ust = price_array
-            .calculate_minimum_price(StLamports(331_000_000_000), 5000)
+            .minimum_ust_swap_amount(StLamports(331_000_000_000), 5000)
             .unwrap();
         assert_eq!(minimum_ust, MicroUst(16_550_000_000));
     }
@@ -952,7 +952,7 @@ mod test {
         price_array.insert_and_rotate(4, MicroUst(80_000_000));
         // prices: [90, 95, 105, 101, 80], median: 95
         let minimum_ust = price_array
-            .calculate_minimum_price(StLamports(331_000_000_000), 5000)
+            .minimum_ust_swap_amount(StLamports(331_000_000_000), 5000)
             .unwrap();
         assert_eq!(minimum_ust, MicroUst(15_722_500_000));
 
@@ -960,7 +960,7 @@ mod test {
         price_array.insert_and_rotate(6, MicroUst(85_000_000));
         // prices: [70, 80, 85, 101, 105], median: 85
         let minimum_ust = price_array
-            .calculate_minimum_price(StLamports(100_000_000_000), 9800)
+            .minimum_ust_swap_amount(StLamports(100_000_000_000), 9800)
             .unwrap();
         assert_eq!(minimum_ust, MicroUst(8_330_000_000));
     }
@@ -975,7 +975,7 @@ mod test {
 
         // 100 StLamports rewards and 1% slippage.
         let minimum_ust = price_array
-            .calculate_minimum_price(StLamports(100), 9900)
+            .minimum_ust_swap_amount(StLamports(100), 9900)
             .unwrap();
         assert_eq!(minimum_ust, MicroUst(9));
     }
