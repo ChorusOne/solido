@@ -122,6 +122,11 @@ impl HistoricalStSolPriceArray {
         self.0[POOL_PRICE_NUM_SAMPLES - 1]
     }
 
+    /// Get first price from the array.
+    pub fn first(&self) -> HistoricalStSolPrice {
+        self.0[0]
+    }
+
     /// Insert `st_sol_price_in_ust` at the end of the array and rotate it.
     pub fn insert_and_rotate(&mut self, slot: Slot, st_sol_price_in_ust: MicroUst) {
         // Maintain the invariant that samples are sorted by ascending slot number.

@@ -331,13 +331,13 @@ fn process_sell_rewards(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> Pr
     )?;
 
     let clock = Clock::from_account_info(accounts.sysvar_clock)?;
-    let most_recent_sample = anker.historical_st_sol_prices.last();
-    let slots_elapsed = clock.slot.saturating_sub(most_recent_sample.slot);
+    let oldest_sample = anker.historical_st_sol_prices.first();
+    let slots_elapsed = clock.slot.saturating_sub(oldest_sample.slot);
     if slots_elapsed > POOL_PRICE_MAX_SAMPLE_AGE {
         msg!(
-            "The last stSOL/UST price was sampled at slot {}. \
-            It must be sampled more recently.",
-            most_recent_sample.slot,
+            "The oldest stSOL/UST price was sampled at slot {}. \
+            It must have been sampled more recently.",
+            oldest_sample.slot,
         );
         return Err(AnkerError::FetchPoolPriceNotCalledRecently.into());
     }
