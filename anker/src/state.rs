@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2021 Chorus One AG
 // SPDX-License-Identifier: GPL-3.0
 
+use std::cmp::Ordering;
+
 use crate::instruction::{
     FetchPoolPriceAccountsInfo, SellRewardsAccountsInfo, SendRewardsAccountsInfo,
 };
@@ -142,8 +144,16 @@ impl HistoricalStSolPriceArray {
         rewards: StLamports,
         sell_rewards_min_out_bps: u64,
     ) -> Result<MicroUst, ArithmeticError> {
+        let mut sorted_arr = self.0;
+        sorted_arr.sort_by(|a, b| {
+            if a.st_sol_price_in_ust < b.st_sol_price_in_ust {
+                Ordering::Less
+            } else {
+                Ordering::Greater
+            }
+        });
         // Get median historical price.
-        let median_price = self.0[POOL_PRICE_NUM_SAMPLES / 2];
+        let median_price = sorted_arr[POOL_PRICE_NUM_SAMPLES / 2];
         let minimum_ust_per_st_sol = (median_price.st_sol_price_in_ust
             * Rational {
                 numerator: sell_rewards_min_out_bps,
