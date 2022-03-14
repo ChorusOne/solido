@@ -952,6 +952,30 @@ mod test {
     }
 
     #[test]
+    fn test_different_prices() {
+        let mut price_array = HistoricalStSolPriceArray::new();
+        // Prices in USD per Sol [100, 90, 95, 105, 101], median: 100
+        for (slot, price) in [100, 90, 95, 105, 101].iter().enumerate() {
+            price_array.insert_and_rotate(slot as Slot, MicroUst(price * 1_000_000));
+        }
+
+        price_array.insert_and_rotate(4, MicroUst(80_000_000));
+        // prices: [90, 95, 105, 101, 80], median: 95
+        let minimum_ust = price_array
+            .calculate_minimum_price(StLamports(331_000_000_000), 5000)
+            .unwrap();
+        assert_eq!(minimum_ust, MicroUst(15_722_500_000));
+
+        price_array.insert_and_rotate(5, MicroUst(70_000_000));
+        price_array.insert_and_rotate(6, MicroUst(85_000_000));
+        // prices: [70, 80, 85, 101, 105], median: 85
+        let minimum_ust = price_array
+            .calculate_minimum_price(StLamports(100_000_000_000), 9800)
+            .unwrap();
+        assert_eq!(minimum_ust, MicroUst(8_330_000_000));
+    }
+
+    #[test]
     fn test_historical_price_array_limits() {
         let mut price_array = HistoricalStSolPriceArray::new();
         // 100 UST for each StSol.
