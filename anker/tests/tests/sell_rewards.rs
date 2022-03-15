@@ -30,6 +30,10 @@ async fn test_fails_sell_rewards_if_not_enough_fetch_pool_price_calls() {
         let result = context.try_sell_rewards().await;
         assert_solido_error!(result, AnkerError::FetchPoolPriceNotCalledRecently);
     }
+    // Confirm that after we complete the `historical_st_sol_prices` array we
+    // can call `sell_rewards`.
+    context.fetch_pool_price().await;
+    context.sell_rewards().await;
 }
 
 #[tokio::test]
