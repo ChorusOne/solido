@@ -144,7 +144,7 @@ impl HistoricalStSolPriceArray {
         sell_rewards_min_out_bps: u64,
     ) -> Result<MicroUst, ArithmeticError> {
         let mut sorted_arr = self.0;
-        sorted_arr.sort_by(|a, b| a.st_sol_price_in_ust.cmp(&b.st_sol_price_in_ust));
+        sorted_arr.sort_by_key(|x| x.st_sol_price_in_ust);
         // Get median historical price.
         let median_price = sorted_arr[POOL_PRICE_NUM_SAMPLES / 2];
         let minimum_ust_per_st_sol = (median_price.st_sol_price_in_ust
