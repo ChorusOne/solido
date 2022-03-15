@@ -958,7 +958,7 @@ mod test {
 
         price_array.insert_and_rotate(5, MicroUst(70_000_000));
         price_array.insert_and_rotate(6, MicroUst(85_000_000));
-        // prices: [70, 80, 85, 101, 105], median: 85
+        // prices: [105, 101, 80, 70, 85], median: 85
         let minimum_ust = price_array
             .calculate_minimum_price(StLamports(100_000_000_000), 9800)
             .unwrap();
