@@ -57,6 +57,9 @@ pub enum AnkerError {
 
     /// We failed to compute the price of stSOL in UST.
     PoolPriceUndefined = 4014,
+
+    /// `FetchPoolPrice` has not been called recently, we must call it before selling the rewards.
+    FetchPoolPriceNotCalledRecently = 4015,
 }
 
 // Just reuse the generated Debug impl for Display. It shows the variant names.

@@ -1,4 +1,8 @@
-use anker::{error::AnkerError, token::MicroUst};
+use anker::{
+    error::AnkerError,
+    state::{POOL_PRICE_MIN_SAMPLE_DISTANCE, POOL_PRICE_NUM_SAMPLES},
+    token::MicroUst,
+};
 use lido::token::{Lamports, StLamports};
 use solana_program::pubkey::Pubkey;
 use solana_program_test::tokio;
@@ -8,6 +12,31 @@ use testlib::{anker_context::Context, assert_solido_error};
 const DEPOSIT_AMOUNT: u64 = 1_000_000_000; // 1e9 units
 
 #[tokio::test]
+async fn test_fails_sell_rewards_if_not_enough_fetch_pool_price_calls() {
+    let mut context = Context::new().await;
+    context
+        .initialize_token_pool_and_deposit(Lamports(DEPOSIT_AMOUNT))
+        .await;
+
+    // Test calling `fetch_pool_price` not enough times.
+    for _ in 0..POOL_PRICE_NUM_SAMPLES - 1 {
+        let current_slot = context.solido_context.get_clock().await.slot;
+        context.fetch_pool_price().await;
+        context
+            .solido_context
+            .context
+            .warp_to_slot(current_slot + POOL_PRICE_MIN_SAMPLE_DISTANCE)
+            .unwrap();
+        let result = context.try_sell_rewards().await;
+        assert_solido_error!(result, AnkerError::FetchPoolPriceNotCalledRecently);
+    }
+    // Confirm that after we complete the `historical_st_sol_prices` array we
+    // can call `sell_rewards`.
+    context.fetch_pool_price().await;
+    context.sell_rewards().await;
+}
+
+#[tokio::test]
 async fn test_successful_sell_rewards() {
     let mut context = Context::new().await;
     context
@@ -15,7 +44,10 @@ async fn test_successful_sell_rewards() {
         .await;
 
     let anker_before = context.get_anker().await;
+
+    context.fill_historical_st_sol_price_array().await;
     context.sell_rewards().await;
+
     let anker_after = context.get_anker().await;
     assert_eq!(
         anker_after.metrics.swapped_rewards_st_sol_total
@@ -61,6 +93,7 @@ async fn test_successful_sell_rewards_pool_a_b_token_swapped() {
     context
         .initialize_token_pool_and_deposit(Lamports(DEPOSIT_AMOUNT))
         .await;
+    context.fill_historical_st_sol_price_array().await;
     context.sell_rewards().await;
 
     let ust_balance = context.get_ust_balance(context.ust_reserve).await;
@@ -73,6 +106,7 @@ async fn test_sell_rewards_fails_with_different_reserve() {
     context
         .initialize_token_pool_and_deposit(Lamports(DEPOSIT_AMOUNT))
         .await;
+    context.fill_historical_st_sol_price_array().await;
 
     context.ust_reserve = context.create_ust_token_account(Pubkey::new_unique()).await;
 
@@ -86,6 +120,7 @@ async fn test_sell_rewards_fails_with_different_token_swap_program() {
     context
         .initialize_token_pool_and_deposit(Lamports(DEPOSIT_AMOUNT))
         .await;
+    context.fill_historical_st_sol_price_array().await;
 
     // If we try to call `SellRewards`, but the swap program is not the owner of
     // the pool, that should fail.
