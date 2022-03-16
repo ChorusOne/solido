@@ -87,6 +87,7 @@ pub struct HistoricalStSolPrice {
     pub slot: Slot,
 
     /// The price of 1 stSOL (1e9 stLamports).
+    #[serde(rename = "st_sol_price_in_micro_ust")]
     pub st_sol_price_in_ust: MicroUst,
 }
 
