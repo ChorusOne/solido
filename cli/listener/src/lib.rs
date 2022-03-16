@@ -76,19 +76,19 @@ pub struct Opts {
 pub struct ExchangeRate {
     /// Id of the data point.
     #[allow(dead_code)]
-    id: i32,
+    pub id: i32,
     /// Time when the data point was logged.
-    timestamp: chrono::DateTime<chrono::Utc>,
+    pub timestamp: chrono::DateTime<chrono::Utc>,
     /// Slot when the data point was logged.
-    slot: Slot,
+    pub slot: Slot,
     /// Epoch when the data point was logged.
-    epoch: Epoch,
+    pub epoch: Epoch,
     /// Pool identifier, e.g. for Solido would be "solido".
-    pool: String,
+    pub pool: String,
     /// Price of token A.
-    price_lamports_numerator: u64,
+    pub price_lamports_numerator: u64,
     /// Price of token B.
-    price_lamports_denominator: u64,
+    pub price_lamports_denominator: u64,
 }
 
 pub fn create_db(conn: &Connection) -> rusqlite::Result<()> {
