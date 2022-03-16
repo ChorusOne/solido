@@ -337,7 +337,7 @@ fn command_show_anker(
         ust_reserve_balance,
         b_sol_supply,
 
-        historical_st_sol_price: anker.historical_st_sol_prices.0.iter().cloned().collect(),
+        historical_st_sol_price: anker.historical_st_sol_prices.0.to_vec(),
     };
 
     Ok(result)
