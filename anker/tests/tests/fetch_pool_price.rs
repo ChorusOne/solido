@@ -27,9 +27,9 @@ async fn test_successful_fetch_pool_price() {
     let anker = context.get_anker().await;
 
     // Initially, there are 10 stSOL and 10_000 UST in the pool.
-    // for maintaining the constant product k = 10 *10_000 = 100_000.
+    // for maintaining the constant product k = 10 * 10_000 = 100_000.
     // When selling 1 StSOL we should maintain the equality:
-    // (10 + 1) * (10_000 - x) = 100_000, x = 909.0909090909091
+    // (10 + 1) * (10_000 - x) = k, x = 909.0909090909091
     let current_ust_price = MicroUst(909_090_909);
 
     let mut expected_historical_st_sol_prices = (0..5)
@@ -104,9 +104,9 @@ async fn test_fetch_pool_price_when_price_changed() {
     );
 
     // There are 11 stSOL and 9090_909_091 UST in the pool.
-    // for maintaining the constant product k = 10 *10_000 = 100_000.
+    // for maintaining the constant product k = 11 * 9090.909_091 = 100_000.
     // When selling 1 StSOL we should maintain the equality:
-    // (11 + 1) * (9090.909091 - x) = 100_000, x = 757.5757576666656
+    // (11 + 1) * (9090.909091 - x) = k, x = 757.5757576666656
 
     assert_eq!(
         anker.historical_st_sol_prices.0[POOL_PRICE_NUM_SAMPLES - 1],
