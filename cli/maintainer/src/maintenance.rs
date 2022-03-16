@@ -7,6 +7,7 @@ use std::fmt;
 use std::io;
 use std::time::SystemTime;
 
+use anker::state::POOL_PRICE_MAX_SAMPLE_AGE;
 use itertools::izip;
 
 use lido::processor::StakeType;
@@ -747,6 +748,14 @@ impl SolidoState {
     /// Try to sell the extra stSOL rewards for UST tokens.
     pub fn try_sell_anker_rewards(&self) -> Option<MaintenanceInstruction> {
         let anker_state = self.anker_state.as_ref()?;
+        let oldest_sample = anker_state.anker.historical_st_sol_prices.first();
+        let slots_elapsed = self.clock.slot.saturating_sub(oldest_sample.slot);
+
+        // Check if we can sell Anker rewards
+        if slots_elapsed > POOL_PRICE_MAX_SAMPLE_AGE {
+            return None;
+        }
+
         let reserve_st_sol = anker_state.st_sol_reserve_balance;
         let st_sol_amount = self
             .solido
