@@ -119,7 +119,7 @@ checksum = "08e35d76a8f8bc8934acc877c8643ec14ddcb355d423de8f9b7e225fe9824b60"
 dependencies = [
  "anchor-syn",
  "anyhow",
- "heck",
+ "heck 0.3.3",
  "proc-macro2 1.0.28",
  "quote 1.0.9",
  "syn 1.0.74",
@@ -193,7 +193,7 @@ checksum = "833a32a3945814ecd8b6fdcb8666580e69037fe2efc4eaa4a9c68b1940450505"
 dependencies = [
  "anyhow",
  "bs58 0.3.1",
- "heck",
+ "heck 0.3.3",
  "proc-macro2 1.0.28",
  "proc-macro2-diagnostics",
  "quote 1.0.9",
@@ -689,9 +689,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "3.0.0-beta.2"
+version = "3.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4bd1061998a501ee7d4b6d449020df3266ca3124b941ec56cf2005c3779ca142"
+checksum = "d8c93436c21e4698bacadf42917db28b23017027a4deccb35dbe47a7e7840123"
 dependencies = [
  "atty",
  "bitflags",
@@ -701,18 +701,16 @@ dependencies = [
  "os_str_bytes",
  "strsim 0.10.0",
  "termcolor",
- "textwrap 0.12.1",
- "unicode-width",
- "vec_map",
+ "textwrap 0.15.0",
 ]
 
 [[package]]
 name = "clap_derive"
-version = "3.0.0-beta.2"
+version = "3.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "370f715b81112975b1b69db93e0b56ea4cd4e5002ac43b2da8474106a54096a1"
+checksum = "da95d038ede1a964ce99f49cbe27a7fb538d1da595e4b4f70b8c8f338d17bf16"
 dependencies = [
- "heck",
+ "heck 0.4.0",
  "proc-macro-error",
  "proc-macro2 1.0.28",
  "quote 1.0.9",
@@ -1539,6 +1537,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "heck"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2540771e65fc8cb83cd6e8a237f70c319bd5c29f78ed1084ba5d50eeac86f7f9"
+
+[[package]]
 name = "hermit-abi"
 version = "0.1.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1936,7 +1940,7 @@ name = "listener"
 version = "1.2.0"
 dependencies = [
  "chrono",
- "clap 3.0.0-beta.2",
+ "clap 3.1.6",
  "lido",
  "num_cpus",
  "rand 0.8.4",
@@ -2297,9 +2301,12 @@ dependencies = [
 
 [[package]]
 name = "os_str_bytes"
-version = "2.4.0"
+version = "6.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "afb2e1c3ee07430c2cf76151675e583e0f19985fa6efae47d6848a3e2c824f85"
+checksum = "8e22443d1643a904602595ba1cd8f7d896afe56d26712531c5ff73a15b2fbf64"
+dependencies = [
+ "memchr",
+]
 
 [[package]]
 name = "ouroboros"
@@ -3949,7 +3956,7 @@ dependencies = [
  "bincode",
  "borsh 0.9.1",
  "bs58 0.4.0",
- "clap 3.0.0-beta.2",
+ "clap 3.1.6",
  "derivation-path",
  "itertools 0.10.1",
  "lido",
@@ -4258,12 +4265,9 @@ dependencies = [
 
 [[package]]
 name = "textwrap"
-version = "0.12.1"
+version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "203008d98caf094106cfaba70acfed15e18ed3ddb7d94e49baec153a2b462789"
-dependencies = [
- "unicode-width",
-]
+checksum = "b1141d4d61095b28419e22cb0bbf02755f5e54e0526f97f1e3d1d160e60885fb"
 
 [[package]]
 name = "thiserror"

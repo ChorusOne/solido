@@ -10,8 +10,8 @@ use std::{
     vec,
 };
 
+use clap::Parser;
 use chrono::TimeZone;
-use clap::Clap;
 use lido::token::Rational;
 use rand::{rngs::ThreadRng, Rng};
 use rusqlite::{params, Connection, Row};
@@ -39,7 +39,7 @@ const SOLIDO_ID: &str = "solido";
 // Offset from the first Epoch's slot to use as data point.
 const QUERY_SLOT_OFFSET: u64 = 1000;
 
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 pub struct Opts {
     /// Solido's instance address
     #[clap(long)]
