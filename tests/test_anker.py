@@ -24,6 +24,7 @@ from util import (
     spl_token,
     spl_token_balance,
     create_spl_token_account,
+    wait_for_slots,
 )
 
 print('Creating test accounts ...')
@@ -312,6 +313,22 @@ spl_token(
 anker_show = solido('anker', 'show', '--anker-address', anker_address)
 assert anker_show['st_sol_reserve_balance_st_lamports'] == 1_000_000_000
 print('> Anker stSOL reserve now contains 1 SOL.')
+
+print('\nPerforming 5 maintenance to populate the historical prices ...')
+expected_price_update_result = {'FetchPoolPrice': {'st_sol_price_in_micro_ust': 500000}}
+for i in range(4):
+    result = perform_maintenance()
+    assert (
+        result == expected_price_update_result
+    ), f'Expected {result} to be {expected_price_update_result}'
+
+    print(f'> ({i + 1}/4) Waiting for 100 slots for the next price update ...')
+    wait_for_slots(100)
+result = perform_maintenance()
+assert (
+    result == expected_price_update_result
+), f'Expected {result} to be {expected_price_update_result}'
+
 
 print('\nPerforming maintenance to swap that stSOL for UST ...')
 result = perform_maintenance()
