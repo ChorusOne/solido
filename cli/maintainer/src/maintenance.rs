@@ -7,7 +7,9 @@ use std::fmt;
 use std::io;
 use std::time::SystemTime;
 
+use anker::logic::get_one_st_sol_for_ust_price_from_pool;
 use anker::state::POOL_PRICE_MAX_SAMPLE_AGE;
+use anker::state::POOL_PRICE_MIN_SAMPLE_DISTANCE;
 use itertools::izip;
 
 use lido::processor::StakeType;
@@ -114,6 +116,11 @@ pub enum MaintenanceOutput {
         validator_vote_account: Pubkey,
     },
     UnstakeFromActiveValidator(Unstake),
+
+    FetchPoolPrice {
+        #[serde(rename = "st_sol_price_in_micro_ust")]
+        st_sol_price_in_ust: MicroUst,
+    },
 
     SellRewards {
         #[serde(rename = "st_sol_amount_st_lamports")]
@@ -254,6 +261,12 @@ impl fmt::Display for MaintenanceOutput {
             MaintenanceOutput::SendRewards { ust_amount } => {
                 writeln!(f, "Sent Anker UST rewards through Wormhole.")?;
                 writeln!(f, "  Amount: {}", ust_amount)?;
+            }
+            MaintenanceOutput::FetchPoolPrice {
+                st_sol_price_in_ust,
+            } => {
+                writeln!(f, "Fetch Pool Price")?;
+                writeln!(f, "  Estimated amount per stSOL: {}", st_sol_price_in_ust)?;
             }
         }
         Ok(())
@@ -745,13 +758,55 @@ impl SolidoState {
         None
     }
 
+    /// Try to update the historical pool price exchange rate to protect us
+    /// against sandwiching attacks.
+    /// We try to update the historical price when we're near the epoch
+    /// boundaries.
+    pub fn try_fetch_pool_price(&self) -> Option<MaintenanceInstruction> {
+        let anker_state = self.anker_state.as_ref()?;
+        let current_slot = self.clock.slot;
+        let next_epoch_begin_slot = self
+            .epoch_schedule
+            .get_first_slot_in_epoch(self.clock.epoch + 1);
+
+        // We start fetching pool prices if we are before the epoch's
+        // end minus `POOL_PRICE_MAX_SAMPLE_AGE` and minus one sample distance,
+        // so we have some margin.
+        let slot_start_fetch_pool_price = next_epoch_begin_slot
+            .saturating_sub(POOL_PRICE_MAX_SAMPLE_AGE + POOL_PRICE_MIN_SAMPLE_DISTANCE);
+        let should_start_fetch = current_slot > slot_start_fetch_pool_price;
+
+        let last_price = anker_state.anker.historical_st_sol_prices.last();
+        let slots_elapsed = current_slot.saturating_sub(last_price.slot);
+        let passed_minimum_update_price = slots_elapsed >= POOL_PRICE_MIN_SAMPLE_DISTANCE;
+
+        if should_start_fetch && passed_minimum_update_price {
+            let estimated_st_sol_in_ust = get_one_st_sol_for_ust_price_from_pool(
+                &anker_state.constant_product_calculator,
+                &anker_state.pool_st_sol_account,
+                &anker_state.pool_ust_account,
+                anker_state.pool_st_sol_balance,
+                anker_state.pool_ust_balance,
+            )
+            .ok()?;
+            Some(MaintenanceInstruction::new(
+                anker_state.get_fetch_pool_price_instruction(self.solido_address),
+                MaintenanceOutput::FetchPoolPrice {
+                    st_sol_price_in_ust: estimated_st_sol_in_ust,
+                },
+            ))
+        } else {
+            None
+        }
+    }
+
     /// Try to sell the extra stSOL rewards for UST tokens.
     pub fn try_sell_anker_rewards(&self) -> Option<MaintenanceInstruction> {
         let anker_state = self.anker_state.as_ref()?;
         let oldest_sample = anker_state.anker.historical_st_sol_prices.first();
         let slots_elapsed = self.clock.slot.saturating_sub(oldest_sample.slot);
 
-        // Check if we can sell Anker rewards
+        // Check if we can sell Anker rewards.
         if slots_elapsed > POOL_PRICE_MAX_SAMPLE_AGE {
             return None;
         }
@@ -1605,6 +1660,7 @@ pub fn try_perform_maintenance(
         .or_else(|| state.try_unstake_from_active_validators())
         .or_else(|| state.try_claim_validator_fee())
         .or_else(|| state.try_remove_validator())
+        .or_else(|| state.try_fetch_pool_price())
         .or_else(|| state.try_sell_anker_rewards())
         .or_else(|| state.try_send_anker_rewards());
 
