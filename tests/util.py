@@ -324,7 +324,7 @@ def get_approve_and_execute(
     return approve_and_execute
 
 
-def wait_for_slots(slots: int):
+def wait_for_slots(slots: int) -> None:
     import time
 
     """
