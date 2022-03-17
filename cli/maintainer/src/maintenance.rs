@@ -758,6 +758,19 @@ impl SolidoState {
         None
     }
 
+    /// Get the amount of rewards we can sell in Anker.
+    fn get_anker_rewards(&self) -> Option<StLamports> {
+        let anker_state = self.anker_state.as_ref()?;
+        let reserve_st_sol = anker_state.st_sol_reserve_balance;
+        let st_sol_amount = self
+            .solido
+            .exchange_rate
+            .exchange_sol(Lamports(anker_state.b_sol_total_supply_amount.0))
+            .expect("It will not overflow because we always have less than the total amount of minted Sol.");
+
+        (reserve_st_sol - st_sol_amount).ok()
+    }
+
     /// Try to update the historical pool price exchange rate to protect us
     /// against sandwiching attacks.
     /// We try to update the historical price when we're near the epoch
@@ -780,7 +793,17 @@ impl SolidoState {
         let slots_elapsed = current_slot.saturating_sub(last_price.slot);
         let passed_minimum_update_price = slots_elapsed >= POOL_PRICE_MIN_SAMPLE_DISTANCE;
 
-        if should_start_fetch && passed_minimum_update_price {
+        // If we have some rewards to claim, let's try to keep the historical
+        // price updated until we claim the rewards.
+        let rewards = self.get_anker_rewards()?;
+        let min_rewards_to_sell = self
+            .solido
+            .exchange_rate
+            .exchange_sol(Self::MINIMUM_WITHDRAW_AMOUNT)
+            .expect("The price of a signature should be small enough that it doesn't overflow.");
+        let have_rewards_to_claim = rewards >= min_rewards_to_sell;
+
+        if (should_start_fetch || have_rewards_to_claim) && passed_minimum_update_price {
             let estimated_st_sol_in_ust = get_one_st_sol_for_ust_price_from_pool(
                 &anker_state.constant_product_calculator,
                 &anker_state.pool_st_sol_account,
@@ -806,45 +829,47 @@ impl SolidoState {
         let oldest_sample = anker_state.anker.historical_st_sol_prices.first();
         let slots_elapsed = self.clock.slot.saturating_sub(oldest_sample.slot);
 
-        // Check if we can sell Anker rewards.
+        // Check if we can sell Anker rewards for consistency. This should not
+        // happen if we call `try_fetch_pool_price` before this function.
         if slots_elapsed > POOL_PRICE_MAX_SAMPLE_AGE {
             return None;
         }
 
-        let reserve_st_sol = anker_state.st_sol_reserve_balance;
-        let st_sol_amount = self
-            .solido
-            .exchange_rate
-            .exchange_sol(Lamports(anker_state.b_sol_total_supply_amount.0))
-            .expect("It will not overflow because we always have less than the total amount of minted Sol.");
-
-        let rewards = (reserve_st_sol - st_sol_amount).ok()?;
-
+        let rewards = self.get_anker_rewards()?;
         let min_rewards_to_sell = self
             .solido
             .exchange_rate
             .exchange_sol(Self::MINIMUM_WITHDRAW_AMOUNT)
             .expect("The price of a signature should be small enough that it doesn't overflow.");
 
-        // Estimate the amount of UST that we will get when swapping against the constant product
-        // pool. This is only an approximation because it doesn’t uphold the constant product
-        // invariant, but this is a reasonable approximation when the rewards to sell are small
-        // compared to the pool balance. Also, this ignores swap fees. It would have been nice
-        // to use the actual `spl_token_swap::state::SwapV1` instance, but it is not `Send`, so
-        // we can’t store it in our state.
-        let ust_per_st_sol = Rational {
-            numerator: anker_state.pool_ust_balance.0,
-            denominator: anker_state.pool_st_sol_balance.0,
-        };
-        let expected_proceeds = (rewards * ust_per_st_sol)
-            .map(|x| MicroUst(x.0))
-            .unwrap_or(MicroUst(0));
+        let ust_per_st_sol = get_one_st_sol_for_ust_price_from_pool(
+            &anker_state.constant_product_calculator,
+            &anker_state.pool_st_sol_account,
+            &anker_state.pool_ust_account,
+            anker_state.pool_st_sol_balance,
+            anker_state.pool_ust_balance,
+        )
+        .ok()?;
+
+        let expected_proceeds = MicroUst(rewards.0 * ust_per_st_sol.0);
         // We want at least 0.01 UST out if we are going to do the swap at all.
         let min_proceeds = MicroUst(10_000);
 
+        // Check if we can sell the rewards with the preset slippage tolerance.
+        // Note that this might change when the instruction gets included in the block.
+        // TODO(#539): Try to arbitrage in case this condition does not hold.
+        let minimum_ust_amount_for_rewards = anker_state
+            .anker
+            .historical_st_sol_prices
+            .minimum_ust_swap_amount(rewards, anker_state.anker.sell_rewards_min_out_bps)
+            .ok()?;
+
         // We should not call the instruction if the rewards are 0, or if the rewards are so small
         // that the transaction cost is a significant portion of the rewards.
-        if rewards < min_rewards_to_sell || expected_proceeds < min_proceeds {
+        if rewards < min_rewards_to_sell
+            || expected_proceeds < min_proceeds
+            || expected_proceeds < minimum_ust_amount_for_rewards
+        {
             None
         } else {
             Some(MaintenanceInstruction::new(
