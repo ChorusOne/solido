@@ -3,6 +3,7 @@
 
 use std::fmt;
 
+use anker::state::HistoricalStSolPrice;
 use anker::token::{BLamports, MicroUst};
 use anker::wormhole::TerraAddress;
 use clap::Clap;
@@ -232,22 +233,24 @@ struct ShowAnkerOutput {
 
     #[serde(rename = "b_sol_supply_b_lamports")]
     b_sol_supply: BLamports,
+
+    historical_st_sol_price: Vec<HistoricalStSolPrice>,
 }
 
 impl fmt::Display for ShowAnkerOutput {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        writeln!(f, "Anker address:         {}", self.anker_address)?;
-        writeln!(f, "Anker program id:      {}", self.anker_program_id)?;
-        writeln!(f, "Solido address:        {}", self.solido_address)?;
-        writeln!(f, "Solido program id:     {}", self.solido_program_id)?;
+        writeln!(f, "Anker address:          {}", self.anker_address)?;
+        writeln!(f, "Anker program id:       {}", self.anker_program_id)?;
+        writeln!(f, "Solido address:         {}", self.solido_address)?;
+        writeln!(f, "Solido program id:      {}", self.solido_program_id)?;
         writeln!(
             f,
-            "Rewards destination:   {}",
+            "Rewards destination:    {}",
             self.terra_rewards_destination
         )?;
         if self.sell_rewards_min_out_bps <= 9999 {
             writeln!(f,
-                     "Sell rewards min out:  {}.{:>02}% of the expected amount ({}.{:>02}% slippage + fees)",
+                     "Sell rewards min out:   {}.{:>02}% of the expected amount ({}.{:>02}% slippage + fees)",
                      self.sell_rewards_min_out_bps / 100,
                      self.sell_rewards_min_out_bps % 100,
                     (10000 - self.sell_rewards_min_out_bps) / 100,
@@ -256,25 +259,29 @@ impl fmt::Display for ShowAnkerOutput {
         } else {
             writeln!(
                 f,
-                "Sell rewards min out:  {}.{:>02}% of the expected amount \
+                "Sell rewards min out:   {}.{:>02}% of the expected amount \
                      (Warning! Getting >100% out is unlikely to ever happen.)",
                 self.sell_rewards_min_out_bps / 100,
                 self.sell_rewards_min_out_bps % 100,
             )?;
         }
-        writeln!(f, "bSOL mint:             {}", self.b_sol_mint)?;
-        writeln!(f, "bSOL mint authority:   {}", self.b_sol_mint_authority)?;
-        writeln!(f, "bSOL supply:           {}", self.b_sol_supply)?;
-        writeln!(f, "Reserve authority:     {}", self.reserve_authority)?;
-        writeln!(f, "stSOL reserve address: {}", self.st_sol_reserve)?;
-        writeln!(f, "stSOL reserve balance: {}", self.st_sol_reserve_balance)?;
-        write!(f, "stSOL reserve value:   ")?;
+        writeln!(f, "bSOL mint:              {}", self.b_sol_mint)?;
+        writeln!(f, "bSOL mint authority:    {}", self.b_sol_mint_authority)?;
+        writeln!(f, "bSOL supply:            {}", self.b_sol_supply)?;
+        writeln!(f, "Reserve authority:      {}", self.reserve_authority)?;
+        writeln!(f, "stSOL reserve address:  {}", self.st_sol_reserve)?;
+        writeln!(f, "stSOL reserve balance:  {}", self.st_sol_reserve_balance)?;
+        write!(f, "stSOL reserve value:    ")?;
         match self.st_sol_reserve_value {
             Some(sol_value) => writeln!(f, "{}", sol_value),
             None => writeln!(f, "Undefined; does Solido have nonzero deposits?"),
         }?;
-        writeln!(f, "UST reserve address:   {}", self.ust_reserve)?;
-        writeln!(f, "UST reserve balance:   {}", self.ust_reserve_balance)?;
+        writeln!(f, "UST reserve address:    {}", self.ust_reserve)?;
+        writeln!(f, "UST reserve balance:    {}", self.ust_reserve_balance)?;
+        writeln!(f, "Historical stSOL price:")?;
+        for x in &self.historical_st_sol_price {
+            writeln!(f, "  Slot {}: {} per stSOL", x.slot, x.st_sol_price_in_ust)?;
+        }
         Ok(())
     }
 }
@@ -329,6 +336,8 @@ fn command_show_anker(
 
         ust_reserve_balance,
         b_sol_supply,
+
+        historical_st_sol_price: anker.historical_st_sol_prices.0.to_vec(),
     };
 
     Ok(result)

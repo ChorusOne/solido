@@ -246,6 +246,13 @@ expected_result = {
     'st_sol_reserve_balance_st_lamports': 0,
     'st_sol_reserve_value_lamports': None,
     'b_sol_supply_b_lamports': 0,
+    'historical_st_sol_price': [
+        {'slot': 0, 'st_sol_price_in_micro_ust': 1_000_000},
+        {'slot': 0, 'st_sol_price_in_micro_ust': 1_000_000},
+        {'slot': 0, 'st_sol_price_in_micro_ust': 1_000_000},
+        {'slot': 0, 'st_sol_price_in_micro_ust': 1_000_000},
+        {'slot': 0, 'st_sol_price_in_micro_ust': 1_000_000},
+    ],
 }
 assert result == expected_result, f'Expected {result} to be {expected_result}'
 print('> Instance parameters are as expected.')
