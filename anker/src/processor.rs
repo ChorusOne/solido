@@ -1,10 +1,8 @@
 // SPDX-FileCopyrightText: 2021 Chorus One AG
 // SPDX-License-Identifier: GPL-3.0
 
-use std::convert::TryFrom;
-
 use borsh::BorshDeserialize;
-use lido::token::{ArithmeticError, Lamports};
+use lido::token::Lamports;
 use solana_program::{
     account_info::AccountInfo,
     clock::Clock,
@@ -18,14 +16,9 @@ use solana_program::{
     rent::Rent,
     sysvar::Sysvar,
 };
-use spl_token_swap::curve::calculator::TradeDirection;
-use spl_token_swap::state::SwapState;
 
 use lido::{state::Lido, token::StLamports};
 
-use crate::state::{
-    HistoricalStSolPriceArray, POOL_PRICE_MAX_SAMPLE_AGE, POOL_PRICE_MIN_SAMPLE_DISTANCE,
-};
 use crate::{
     error::AnkerError,
     find_instance_address, find_mint_authority, find_reserve_authority,
@@ -43,6 +36,10 @@ use crate::{
     wormhole::{get_wormhole_transfer_instruction, TerraAddress},
 };
 use crate::{find_ust_reserve_account, ANKER_STSOL_RESERVE_ACCOUNT, ANKER_UST_RESERVE_ACCOUNT};
+use crate::{
+    logic::get_one_st_sol_for_ust_price_from_pool,
+    state::{HistoricalStSolPriceArray, POOL_PRICE_MAX_SAMPLE_AGE, POOL_PRICE_MIN_SAMPLE_DISTANCE},
+};
 use crate::{
     logic::{create_account, initialize_spl_account, swap_rewards},
     state::ExchangeRate,
@@ -285,33 +282,13 @@ fn process_fetch_pool_price(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -
         return Err(AnkerError::FetchPoolPriceTooEarly.into());
     }
 
-    // To sample the price, we go from stSOL to UST.
-    let trade_direction = if swap_pool.token_a == *accounts.pool_ust_account.key {
-        TradeDirection::BtoA
-    } else {
-        TradeDirection::AtoB
-    };
-
-    // Check how much UST we get out, if we put in 1 stSOL. With a constant-product
-    // pool, the amount we get out depends not only on the state of the pool, but
-    // also on the amount we put in. We pick 1 stSOL here because it should be
-    // large enough that we don't lose precision in the output, but small enough
-    // to not move the price by a lot if we did swap that amount.
-    let one_st_sol = StLamports(1_000_000_000);
-    let swap_result = swap_pool
-        .swap_curve()
-        .calculator
-        .swap_without_fees(
-            one_st_sol.0 as u128,
-            pool_st_sol_balance.0 as u128,
-            pool_ust_balance.0 as u128,
-            trade_direction,
-        )
-        .ok_or(AnkerError::PoolPriceUndefined)?;
-    assert_eq!(swap_result.source_amount_swapped, one_st_sol.0 as u128);
-    let st_sol_price_in_ust = MicroUst(
-        u64::try_from(swap_result.destination_amount_swapped).map_err(|_| ArithmeticError)?,
-    );
+    let st_sol_price_in_ust = get_one_st_sol_for_ust_price_from_pool(
+        &*swap_pool.swap_curve.calculator,
+        &swap_pool.token_a,
+        accounts.pool_ust_account.key,
+        pool_st_sol_balance,
+        pool_ust_balance,
+    )?;
 
     anker
         .historical_st_sol_prices

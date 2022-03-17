@@ -5,7 +5,7 @@ use crate::{
 };
 use lido::{
     state::Lido,
-    token::{Lamports, StLamports},
+    token::{ArithmeticError, Lamports, StLamports},
 };
 use solana_program::{
     account_info::AccountInfo,
@@ -18,7 +18,11 @@ use solana_program::{
     rent::Rent,
     system_instruction,
 };
-use spl_token_swap::instruction::Swap;
+use spl_token_swap::{
+    curve::calculator::{CurveCalculator, TradeDirection},
+    instruction::Swap,
+};
+use std::convert::TryFrom;
 
 use crate::{
     instruction::{DepositAccountsInfo, InitializeAccountsInfo, SellRewardsAccountsInfo},
@@ -285,4 +289,39 @@ pub fn swap_rewards(
         ],
         &signers,
     )
+}
+
+/// Get the price for selling 1 stSOL in MicroUst in the token swap pool.
+pub fn get_one_st_sol_for_ust_price_from_pool(
+    curve_calculator: &dyn CurveCalculator,
+    swap_pool_token_a: &Pubkey,
+    pool_ust_address: &Pubkey,
+    pool_st_sol_balance: StLamports,
+    pool_ust_balance: MicroUst,
+) -> Result<MicroUst, ProgramError> {
+    // To sample the price, we go from stSOL to UST.
+    let trade_direction = if swap_pool_token_a == pool_ust_address {
+        TradeDirection::BtoA
+    } else {
+        TradeDirection::AtoB
+    };
+
+    // Check how much UST we get out, if we put in 1 stSOL. With a constant-product
+    // pool, the amount we get out depends not only on the state of the pool, but
+    // also on the amount we put in. We pick 1 stSOL here because it should be
+    // large enough that we don't lose precision in the output, but small enough
+    // to not move the price by a lot if we did swap that amount.
+    let one_st_sol = StLamports(1_000_000_000);
+    let swap_result = curve_calculator
+        .swap_without_fees(
+            one_st_sol.0 as u128,
+            pool_st_sol_balance.0 as u128,
+            pool_ust_balance.0 as u128,
+            trade_direction,
+        )
+        .ok_or(AnkerError::PoolPriceUndefined)?;
+    assert_eq!(swap_result.source_amount_swapped, one_st_sol.0 as u128);
+    Ok(MicroUst(
+        u64::try_from(swap_result.destination_amount_swapped).map_err(|_| ArithmeticError)?,
+    ))
 }
