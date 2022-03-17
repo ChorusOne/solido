@@ -21,6 +21,7 @@ test_validator = subprocess.Popen(
         'solana-test-validator',
     ],
     stdout=subprocess.DEVNULL,
+    shell=True,
 )
 
 # Wait up to 60 seconds for the validator to be running and processing blocks. We
