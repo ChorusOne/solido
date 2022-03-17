@@ -108,7 +108,7 @@ jobs:
         tests/airdrop_lamports.sh
 
         tests/test_solido.py
-        kill -9 $validator
+        killall -9 solana-test-validator
         rm -r test-ledger
 
     - name: Run Multisig integration test
@@ -119,7 +119,7 @@ jobs:
         tests/airdrop_lamports.sh
 
         tests/test_multisig.py
-        kill -9 $validator
+        killall -9 solana-test-validator
         rm -r test-ledger
 
     - name: Run Anker integration test
@@ -130,7 +130,7 @@ jobs:
         tests/airdrop_lamports.sh
 
         tests/test_anker.py
-        kill -9 $validator
+        killall -9 solana-test-validator
         rm -r test-ledger
 
   lint:
