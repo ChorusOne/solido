@@ -109,28 +109,29 @@ jobs:
 
         tests/test_solido.py
         kill -9 $validator
+        rm -r test-ledger
 
     - name: Run Multisig integration test
       run: |
         export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
         validator=$(tests/start_test_validator.py)
 
-        # We don't need to run keygen/setup again, the private key and state
-        # should still be there from the previous run.
+        tests/airdrop_lamports.sh
 
         tests/test_multisig.py
         kill -9 $validator
+        rm -r test-ledger
 
     - name: Run Anker integration test
       run: |
         export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
         validator=$(tests/start_test_validator.py)
 
-        # We don't need to run keygen/setup again, the private key and state
-        # should still be there from the previous run.
+        tests/airdrop_lamports.sh
 
         tests/test_anker.py
         kill -9 $validator
+        rm -r test-ledger
 
   lint:
     runs-on: ubuntu-latest
