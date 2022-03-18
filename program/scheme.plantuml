@@ -1,0 +1,393 @@
+@startuml SoLido program
+allow_mixing
+
+skinparam class {
+  BackgroundColor<<On-Chain>> Wheat
+  BorderColor<<On-Chain>> Tomato
+  BackgroundColor<<Client>> aliceblue
+  BorderColor<<On-Client>> aliceblue
+}
+
+skinparam stereotypeCBackgroundColor<< On-Chain >> DimGray
+
+class Lido <<On-Chain>> {
+  + lido_version: <font color="grey"> u8
+  + manager: <font color="grey"> Pubkey
+  + st_sol_mint: <font color="grey"> Pubkey
+  + exchange_rate: <font color="grey"> ExchangeRate
+  # sol_reserve_account_bump_seed: <font color="grey"> u8
+  # stake_authority_bump_seed: <font color="grey"> u8
+  # mint_authority_bump_seed: <font color="grey"> u8
+  # rewards_withdraw_authority_bump_seed: <font color="grey"> u8
+  + reward_distribution: <font color="grey">RewardDistribution
+  + fee_recipients: <font color="grey">FeeRecipients
+  + metrics: <font color="grey">Metrics
+  + validators: <font color="grey">[<Pubkey, Validator>]
+  + maintainers: <font color="grey">[Pubkey]
+}
+
+package "-" {
+
+  class AccountInfo {
+      + key: <font color="grey">Pubkey
+      # is_signer: <font color="grey">bool
+      # is_writable: <font color="grey">bool
+      + lamports: <font color="grey">u64
+      + data: <font color="grey">[u8]
+      # owner: <font color="grey">Pubkey
+      # executable: <font color="grey">bool
+      # rent_epoch: <font color="grey">u64
+  }
+
+  class ExchangeRate {
+      + computed_in_epoch: <font color="grey">u64,
+      + st_sol_supply: <font color="grey">u64,
+      + sol_balance: <font color="grey">u64,
+  }
+
+  class RewardDistribution {
+    + treasury_fee: <font color="grey">u32
+    + validation_fee: <font color="grey">u32
+    + developer_fee: <font color="grey">u32
+    + st_sol_appreciation: <font color="grey">u32
+  }
+
+  class FeeRecipients {
+    + treasury_account: <font color="grey">Pubkey
+    + developer_account: <font color="grey">Pubkey
+  }
+
+  class Metrics {
+    + fee_treasury_sol_total: <font color="grey">u64
+    + fee_validation_sol_total: <font color="grey">u64
+    + fee_developer_sol_total: <font color="grey">u64
+    + st_sol_appreciation_sol_total: <font color="grey">u64
+    + fee_treasury_st_sol_total: <font color="grey">u64
+    + fee_validation_st_sol_total: <font color="grey">u64
+    + fee_developer_st_sol_total: <font color="grey">u64
+    + deposit_amount: <font color="grey">LamportsHistogram
+    + withdraw_amount: <font color="grey">WithdrawMetric
+  }
+
+  class LamportsHistogram {
+    + counts: <font color="grey">[u64; 12]
+    + total: <font color="grey">u64
+  }
+
+  class WithdrawMetric {
+    + total_st_sol_amount: <font color="grey">u64
+    + total_sol_amount: <font color="grey">u64
+    + count: <font color="grey">u64
+  }
+
+  class Validator {
+    + fee_credit: <font color="grey">u64
+    + fee_address: <font color="grey">Pubkey
+    # stake_seeds: <font color="grey">SeedRange
+    # unstake_seeds: <font color="grey">SeedRange
+    + stake_accounts_balance: <font color="grey">u64
+    + unstake_accounts_balance: <font color="grey">u64
+    + active: <font color="grey">bool
+  }
+
+  class SeedRange {
+    + begin: u64
+    + end: u64
+  }
+
+  Lido::exchange_rate .. ExchangeRate
+  Lido::reward_distribution .. RewardDistribution
+  Lido::fee_recipients .. FeeRecipients
+  Lido::validators .. Validator
+  Lido::metrics .. Metrics
+  Metrics::deposit_amount.. LamportsHistogram
+  Metrics::withdraw_amount.. WithdrawMetric
+  Validator::stake_seeds .. SeedRange
+}
+
+package "Initialize" {
+  InitializeAccountsInfo --> Lido : Initialize data
+
+  class InitializeAccountsInfo <<Client>> {
+    + lido : <font color="grey"> AccountInfo
+    + manager : <font color="grey"> AccountInfo
+    + st_sol_mint : <font color="grey"> AccountInfo
+    + treasury_account : <font color="grey"> AccountInfo
+    + developer_account : <font color="grey"> AccountInfo
+    + reserve_account: <font color="grey"> AccountInfo
+    + sysvar_rent : <font color="grey"> AccountInfo
+    + spl_token : <font color="grey"> AccountInfo
+    {method} reward_distribution: <font color="grey">RewardDistribution
+    {method} max_validators: <font color="grey">u32
+    {method} max_maintainers: <font color="grey">u32
+  }
+}
+
+package Deposit {
+  class DepositAccountsInfo <<Client>> {
+    + lido: <font color="grey">AccountInfo
+    + user: <font color="grey">AccountInfo
+    + recipient: <font color="grey">AccountInfo
+    + st_sol_mint: <font color="grey">AccountInfo
+    + reserve_account: <font color="grey">AccountInfo
+    + mint_authority: <font color="grey">AccountInfo
+    # spl_token: <font color="grey">AccountInfo
+    # system_program: <font color="grey">AccountInfo
+    {method} amount: <font color="grey">u32
+  }
+  note top: Deposit a given amount of SOL
+
+  class recipient <<PDA>>{}
+  class reserve_account <<PDA>>{}
+
+  DepositAccountsInfo::user -up-> reserve_account : [1] transfer SOL's from \nuser to reserve account
+  DepositAccountsInfo::user -up-> recipient : [2] mint stSOL's to recipient
+  DepositAccountsInfo::reserve_account .. reserve_account
+  DepositAccountsInfo::recipient .. recipient
+  DepositAccountsInfo --> Lido::metrics : [3] update deposit_amount metrics
+}
+
+package StakeDeposit {
+  class StakeDepositAccountsInfo <<Client>> {
+    + lido: <font color="grey">AccountInfo
+    + maintainer: <font color="grey">AccountInfo
+    + reserve: <font color="grey">AccountInfo
+    + validator_vote_account: <font color="grey">AccountInfo
+    + stake_account_merge_into: <font color="grey">AccountInfo
+    + stake_account_end: <font color="grey">AccountInfo
+    + stake_authority: <font color="grey">AccountInfo
+    # sysvar_clock: <font color="grey">AccountInfo
+    # system_program: <font color="grey">AccountInfo
+    # sysvar_rent: <font color="grey">AccountInfo
+    # stake_program: <font color="grey">AccountInfo
+    # stake_history: <font color="grey">AccountInfo
+    # stake_program_config: <font color="grey">AccountInfo
+    {method} amount: <font color="grey">u32
+  }
+  note top: Move deposits from the reserve into a stake\n account and delegate it to a member validator
+
+  class stake_account_end <<PDA>>{}
+
+  StakeDepositAccountsInfo::stake_account_end .. stake_account_end
+  StakeDepositAccountsInfo::reserve -left> stake_account_end : [1] Create a new account and\n fund it from the reserve
+  StakeDepositAccountsInfo::validator_vote_account --> Lido::validators : [3] increase validator's\n stake_accounts_balance
+
+  state condition <<choice>>
+  condition : stake_account_end == stake_account_merge_into \n<font color="grey">(check if this was the first time we stake in this epoch)
+
+  stake_account_end --> condition
+  condition --> StakeDepositAccountsInfo::validator_vote_account : [2] True\n delegate stake to validator \nthrow stake_account_end
+  condition --> StakeDepositAccountsInfo::stake_account_merge_into : [2] False\n merge stake_account_end to\n stake_account_merge_into
+
+}
+
+package "Unstake" {
+  class UnstakeAccountsInfo <<Client>>{
+    + lido: <font color="grey">AccountInfo
+    + maintainer: <font color="grey">AccountInfo
+    + validator_vote_account: <font color="grey">AccountInfo
+    + source_stake_account: <font color="grey">AccountInfo
+    + destination_unstake_account: <font color="grey">AccountInfo
+    + stake_authority: <font color="grey">AccountInfo
+    # sysvar_clock: <font color="grey">AccountInfo
+    # system_program: <font color="grey">AccountInfo
+    # stake_program: <font color="grey">AccountInfo
+    {method} amount: <font color="grey">u32
+    }
+    note top: Unstake from a validator to a new stake account
+
+    class destination_unstake_account{
+      [2] deactivate this account
+    }
+
+    UnstakeAccountsInfo::source_stake_account --> destination_unstake_account : [1] split SOL from source_stake_account \nto destination_unstake_account
+    UnstakeAccountsInfo::destination_unstake_account .. destination_unstake_account
+    destination_unstake_account --> Lido::validators : [3] increase validator's \nunstake_accounts_balance
+}
+
+package "UpdateExchangeRate" {
+  class UpdateExchangeRateAccountsInfo <<Client>> {
+	+ lido:  <font color="grey">AccountInfo
+	+ reserve:  <font color="grey">AccountInfo
+	+ st_sol_mint:  <font color="grey">AccountInfo
+	+ sysvar_clock: <font color="grey">AccountInfo
+	+ sysvar_rent: <font color="grey">AccountInfo
+  }
+  note top: Update the exchange rate\n at the beginning of the epoch
+
+  UpdateExchangeRateAccountsInfo --> Lido::exchange_rate : update SOL balance\n and stSOL supply
+}
+
+package WithdrawInactiveStake {
+  class WithdrawInactiveStakeInfo <<Client>>{
+     + lido: <font color="grey">AccountInfo
+     + validator_vote_account: <font color="grey">AccountInfo
+     + stake_authority: <font color="grey">AccountInfo
+     + reserve: <font color="grey">AccountInfo
+     # sysvar_clock: <font color="grey">AccountInfo
+     # sysvar_rent: <font color="grey">AccountInfo
+     # sysvar_stake_history: <font color="grey">AccountInfo
+     # stake_program: <font color="grey">AccountInfo
+     + stake_accounts: <font color="grey">[AccountInfo]
+   }
+   note top: Observe any external changes in the balances of a validator's\n stake accounts. If there is inactive balance in\n stake accounts, withdraw this back to the reserve
+
+   class stake_account{}
+
+   stake_account --> WithdrawInactiveStakeInfo::reserve: [1] withdrew inactive stake back\n to the reserve from\n stake/unstake account
+   stake_account .. "many" WithdrawInactiveStakeInfo::stake_accounts
+
+   WithdrawInactiveStakeInfo::reserve --> Lido::validators : [2] update validaror's\n stake/unstake balance
+}
+
+package CollectValidatorFee {
+  class CollectValidatorFeeInfo <<Client>>{
+    + lido: <font color="grey">AccountInfo
+    + validator_vote_account: <font color="grey">AccountInfo
+    + st_sol_mint: <font color="grey">AccountInfo
+    + mint_authority: <font color="grey">AccountInfo
+    + treasury_st_sol_account:  <font color="grey">AccountInfo
+    + developer_st_sol_account: <font color="grey">AccountInfo
+    + reserve:  <font color="grey">AccountInfo
+    + rewards_withdraw_authority: <font color="grey">AccountInfo
+    # sysvar_clock:  <font color="grey">AccountInfo
+    # spl_token_program: <font color="grey">AccountInfo
+    # sysvar_rent:  <font color="grey">AccountInfo
+    # vote_program: <font color="grey">AccountInfo
+  }
+  note top: Collects the validator fee from the validator vote\n account and distributes this fee across the specified\n participants. It transfers the collected Lamports to the reserve\n account, where they can be re-staked
+
+  class treasury_st_sol_account{}
+  class developer_st_sol_account{}
+  class reserve{}
+
+  CollectValidatorFeeInfo::treasury_st_sol_account .. treasury_st_sol_account
+  CollectValidatorFeeInfo::developer_st_sol_account .. developer_st_sol_account
+  CollectValidatorFeeInfo::validator_vote_account --> treasury_st_sol_account : [1] mint treasury stSOL fee
+  CollectValidatorFeeInfo::validator_vote_account --> developer_st_sol_account : [2] mint developer stSOL fee
+  CollectValidatorFeeInfo::validator_vote_account --> Lido::validators : [3] update validator's\n stSOL fee credit
+  CollectValidatorFeeInfo::validator_vote_account --> Lido::metrics : [4] update fee metrics
+  CollectValidatorFeeInfo::validator_vote_account --> reserve : [5] withdraw rewards\n to reserve
+  reserve .. CollectValidatorFeeInfo::reserve
+}
+
+package Withdraw {
+  class WithdrawAccountsInfo <<Client>>{
+    + lido: <font color="grey">AccountInfo
+    + st_sol_account_owner: <font color="grey">AccountInfo
+    + st_sol_account: <font color="grey">AccountInfo
+    + st_sol_mint: <font color="grey">AccountInfo
+    + validator_vote_account: <font color="grey">AccountInfo
+    + source_stake_account: <font color="grey">AccountInfo
+    + destination_stake_account: <font color="grey">AccountInfo
+    + stake_authority: <font color="grey">AccountInfo
+    # spl_token: <font color="grey">AccountInfo
+    # sysvar_clock: <font color="grey">AccountInfo
+    # system_program: <font color="grey">AccountInfo
+    # stake_program:  <font color="grey">AccountInfo
+    {method} amount: <font color="grey">u32
+  }
+  note top: Withdraw a given amount of stSOL.\n Caller provides some `amount` of StLamports\n that are to be burned in order to withdraw SOL.
+
+  class st_sol_account{
+    [2] burn the given amount of stSOL
+  }
+  class destination_stake_account{
+    [5] Set the stake and withdraw authority\n of the destination stake account\n to the user’s pubkey
+  }
+
+  destination_stake_account .. WithdrawAccountsInfo::destination_stake_account
+  WithdrawAccountsInfo::validator_vote_account --> Lido::validators : [1] decrease validator's\n stake accounts balance
+  WithdrawAccountsInfo::st_sol_account .. st_sol_account
+  st_sol_account --> Lido::metrics : [3] update withdrawal metrics.
+  WithdrawAccountsInfo::source_stake_account --> destination_stake_account : [4] split SOL from source_stake_account \nto destination_stake_account
+}
+
+package ClaimValidatorFee {
+  class ClaimValidatorFeeInfo <<Client>>{
+    + lido:  <font color="grey">AccountInfo
+    + st_sol_mint: <font color="grey">AccountInfo
+    + mint_authority: <font color="grey">AccountInfo
+    + validator_fee_st_sol_account: <font color="grey">AccountInfo
+    # spl_token: <font color="grey">AccountInfo
+  }
+  note top: Claim rewards from the validator\n account and distribute rewards
+
+  Lido::validators --> ClaimValidatorFeeInfo::validator_fee_st_sol_account : [1] mint validator's fee\n credit to it's account
+}
+
+package ChangeRewardDistribution {
+  class ChangeRewardDistributionInfo <<Client>>{
+    + lido: <font color="grey">AccountInfo
+    + manager: <font color="grey">AccountInfo
+    + treasury_account: <font color="grey">AccountInfo
+    + developer_account: <font color="grey">AccountInfo
+    {method} new_reward_distribution: <font color="grey">RewardDistribution
+  }
+
+  ChangeRewardDistributionInfo::treasury_account --> Lido::fee_recipients : [1] update treasury_account
+  ChangeRewardDistributionInfo::treasury_account --> Lido::fee_recipients : [2] update developer_account
+  ChangeRewardDistributionInfo::new_reward_distribution --> Lido::reward_distribution : [3] update reward_distribution
+}
+
+package AddValidator {
+  class AddValidatorInfo <<Client>>{
+    + lido: <font color="grey">AccountInfo
+    + manager: <font color="grey">AccountInfo
+    + validator_vote_account: <font color="grey">AccountInfo
+    + validator_fee_st_sol_account: <font color="grey">AccountInfo
+    # sysvar_rent: <font color="grey">AccountInfo
+  }
+
+  AddValidatorInfo::validator_vote_account -->  Lido::validators : [1] add validator key
+  AddValidatorInfo::validator_fee_st_sol_account --> Lido::validators : [2] create validator entry
+}
+
+package RemoveValidator{
+  class RemoveValidatorInfo <<Client>>{
+      + lido: <font color="grey">AccountInfo
+      + validator_vote_account_to_remove: <font color="grey">AccountInfo
+  }
+
+  RemoveValidatorInfo::validator_vote_account_to_remove -->  Lido::validators : [1] remove validator
+}
+
+package DeactivateValidator {
+  class DeactivateValidatorInfo <<Client>>{
+    + lido: <font color="grey">AccountInfo
+    + manager: <font color="grey">AccountInfo
+    + validator_vote_account_to_deactivate: <font color="grey">AccountInfo
+  }
+  note top: Set the `active` flag to false for a given validator.\n Deactivation initiates the validator removal process
+
+  DeactivateValidatorInfo::validator_vote_account_to_deactivate -->  Lido::validators : [1] set validator.active\n to False
+}
+
+package MergeStake {
+  class MergeStakeInfo <<Client>>{
+    + lido:  <font color="grey">AccountInfo
+    + validator_vote_account: <font color="grey">AccountInfo
+    + from_stake:  <font color="grey">AccountInfo
+    + to_stake:  <font color="grey">AccountInfo
+    + stake_authority: <font color="grey">AccountInfo
+    # sysvar_clock:  <font color="grey">AccountInfo
+    # stake_history:  <font color="grey">AccountInfo
+    # stake_program: <font color="grey">AccountInfo
+  }
+  note top: Merge two stake accounts from the\n beginning of the validator's stake accounts list
+
+  class to_stake{}
+
+  MergeStakeInfo::from_stake --> to_stake : [1] merge two stake accounts
+  to_stake .. MergeStakeInfo::to_stake
+  MergeStakeInfo --> Lido::validators : [2] update validator's stake_seeds\n for active stake accounts
+}
+
+WithdrawInactiveStake -[hidden]up-> Lido
+UpdateExchangeRate -[hidden]up-> Lido
+Initialize -[hidden]up-> Lido
+RemoveValidator -[hidden]up-> AddValidator
+DeactivateValidator -[hidden]up-> AddValidator
+MergeStake -[hidden]up-> Lido
+
+@enduml

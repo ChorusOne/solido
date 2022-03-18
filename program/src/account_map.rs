@@ -25,6 +25,7 @@ pub struct PubkeyAndEntry<T> {
     Clone, Default, Debug, Eq, PartialEq, BorshSerialize, BorshDeserialize, BorshSchema, Serialize,
 )]
 pub struct AccountMap<T> {
+    // why not deserialize from vector to BTreeMap and serialize to vector?
     pub entries: Vec<PubkeyAndEntry<T>>,
     pub maximum_entries: u32,
 }
@@ -111,7 +112,7 @@ impl<T: Default + EntryConstantSize> AccountMap<T> {
         let entry_size = key_size + value_size;
 
         // 8 bytes for the length and u32 field, then the entries themselves.
-        8 + entry_size * max_entries as usize
+        8 + entry_size * max_entries as usize // 8 is a magic number, use mem::size_of::<u64>()
     }
 
     /// Return how many entries could fit in a buffer of the given size.

@@ -340,6 +340,7 @@ macro_rules! accounts_struct {
 
                     // Also consume the iterator, so the no-excess-accounts check
                     // below does not trigger.
+                     // use std::iter::Iterator::skip(multi_account.len()) for that
                     for _ in 0..$multi_account.len() {
                         accounts_iter.next();
                     }
