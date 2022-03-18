@@ -875,6 +875,7 @@ cli_opt_struct! {
         anker_address: Pubkey,
 
         /// New token swap pool address.
+        #[clap(long, value_name = "address")]
         token_swap_pool: Pubkey,
 
         /// Multisig instance.
