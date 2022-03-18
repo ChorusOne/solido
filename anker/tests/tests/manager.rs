@@ -119,3 +119,27 @@ async fn test_change_terra_rewards_destination_different_manager() {
         new_anker.terra_rewards_destination
     );
 }
+
+#[tokio::test]
+async fn test_successful_change_sell_rewards_min_out_bps() {
+    let mut context = Context::new().await;
+    let sell_rewards_min_out_bps = 10;
+    let manager = Keypair::from_bytes(&context.solido_context.manager.to_bytes()).unwrap();
+    let result = context
+        .try_change_sell_rewards_min_out_bps(&manager, sell_rewards_min_out_bps)
+        .await;
+    assert!(result.is_ok());
+    let anker = context.get_anker().await;
+    assert_eq!(anker.sell_rewards_min_out_bps, sell_rewards_min_out_bps);
+}
+
+#[tokio::test]
+async fn test_change_sell_rewards_min_out_bps_more_than_100_percent() {
+    let mut context = Context::new().await;
+    let sell_rewards_min_out_bps = 1_000_001;
+    let manager = Keypair::from_bytes(&context.solido_context.manager.to_bytes()).unwrap();
+    let result = context
+        .try_change_sell_rewards_min_out_bps(&manager, sell_rewards_min_out_bps)
+        .await;
+    assert_solido_error!(result, AnkerError::InvalidSellRewardsMinBps);
+}
