@@ -388,3 +388,82 @@ result = solido('anker', 'show', '--anker-address', anker_address)
 assert result['st_sol_reserve_balance_st_lamports'] == 1_000_000_000
 assert result['b_sol_supply_b_lamports'] == 0
 print(f'> Anker reserve has 1 stSOL, the bSOL mint has a supply of 0 bSOL.')
+
+print('\nTesting manager functions ...')
+print('> Changing Terra rewards destination')
+transaction_result = solido(
+    'anker',
+    'change-terra-rewards-destination',
+    '--anker-address',
+    anker_address,
+    '--multisig-address',
+    multisig_instance,
+    '--multisig-program-id',
+    multisig_program_id,
+    '--terra-rewards-destination',
+    'terra14dycr8jm7e5kw88g4studekkzzw5xc5ffnp4hk',
+    keypair_path=test_addrs[0].keypair_path,
+)
+transaction_address = transaction_result['transaction_address']
+approve_and_execute(transaction_address)
+
+print('> Changing Token Swap Pool')
+print('    Creating new token pool instance ...')
+
+new_ust_pool_account = create_spl_token_account(
+    test_addrs[1].keypair_path, ust_mint_address.pubkey
+)
+new_st_sol_pool_account = create_spl_token_account(
+    test_addrs[1].keypair_path, st_sol_mint_address
+)
+spl_token('transfer', st_sol_mint_address, '1', new_st_sol_pool_account)
+spl_token('mint', ust_mint_address.pubkey, '1', new_ust_pool_account)
+
+result = solido(
+    'anker',
+    'create-token-pool',
+    '--token-swap-program-id',
+    orca_token_swap_program_id,
+    '--st-sol-account',
+    new_st_sol_pool_account,
+    '--ust-account',
+    new_ust_pool_account,
+    '--ust-mint-address',
+    ust_mint_address.pubkey,
+    keypair_path=test_addrs[1].keypair_path,
+)
+new_token_pool_address = result['pool_address']
+print(f'    Created instance at {new_token_pool_address}.')
+
+transaction_result = solido(
+    'anker',
+    'change-token-swap-pool',
+    '--anker-address',
+    anker_address,
+    '--multisig-address',
+    multisig_instance,
+    '--multisig-program-id',
+    multisig_program_id,
+    '--token-swap-pool',
+    new_token_pool_address,
+    keypair_path=test_addrs[0].keypair_path,
+)
+transaction_address = transaction_result['transaction_address']
+approve_and_execute(transaction_address)
+
+print('> Changing Terra rewards destination')
+transaction_result = solido(
+    'anker',
+    'change-sell-rewards-min-bps',
+    '--anker-address',
+    anker_address,
+    '--multisig-address',
+    multisig_instance,
+    '--multisig-program-id',
+    multisig_program_id,
+    '--sell-rewards-min-out-bps',
+    '10',
+    keypair_path=test_addrs[0].keypair_path,
+)
+transaction_address = transaction_result['transaction_address']
+approve_and_execute(transaction_address)
