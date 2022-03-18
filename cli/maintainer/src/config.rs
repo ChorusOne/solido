@@ -541,6 +541,10 @@ cli_opt_struct! {
         /// Address of the Multisig program.
         #[clap(long)]
         multisig_program_id: Pubkey,
+
+        /// Address of the Anker program.
+        #[clap(long, value_name = "address")]
+        anker_program_id: Pubkey => Pubkey::default(),
     }
 }
 
