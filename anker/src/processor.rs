@@ -23,9 +23,6 @@ use spl_token_swap::state::SwapState;
 
 use lido::{state::Lido, token::StLamports};
 
-use crate::state::{
-    HistoricalStSolPriceArray, POOL_PRICE_MAX_SAMPLE_AGE, POOL_PRICE_MIN_SAMPLE_DISTANCE,
-};
 use crate::{
     error::AnkerError,
     find_instance_address, find_mint_authority, find_reserve_authority,
@@ -43,6 +40,10 @@ use crate::{
     wormhole::{get_wormhole_transfer_instruction, TerraAddress},
 };
 use crate::{find_ust_reserve_account, ANKER_STSOL_RESERVE_ACCOUNT, ANKER_UST_RESERVE_ACCOUNT};
+use crate::{
+    instruction::ChangeSellRewardsMinBpsAccountsInfo,
+    state::{HistoricalStSolPriceArray, POOL_PRICE_MAX_SAMPLE_AGE, POOL_PRICE_MIN_SAMPLE_DISTANCE},
+};
 use crate::{
     logic::{create_account, initialize_spl_account, swap_rewards},
     state::ExchangeRate,
@@ -68,6 +69,9 @@ fn process_initialize(
             accounts.anker.key,
         );
         return Err(AnkerError::InvalidDerivedAccount.into());
+    }
+    if sell_rewards_min_out_bps > 1_000_000 {
+        return Err(AnkerError::InvalidSellRewardsMinBps.into());
     }
 
     let solido = Lido::deserialize_lido(accounts.solido_program.key, accounts.solido)?;
@@ -533,6 +537,27 @@ fn process_change_token_swap_pool(
     anker.save(accounts.anker)
 }
 
+/// Change Anker's `sell_rewards_min_out_bps`.
+/// Solido's manager needs to sign the transaction.
+#[inline(never)]
+fn process_change_sell_rewards_min_out_bps(
+    program_id: &Pubkey,
+    accounts_raw: &[AccountInfo],
+    sell_rewards_min_out_bps: u64,
+) -> ProgramResult {
+    let accounts = ChangeSellRewardsMinBpsAccountsInfo::try_from_slice(accounts_raw)?;
+    let (solido, mut anker) = deserialize_anker(program_id, accounts.anker, accounts.solido)?;
+    solido.check_manager(accounts.manager)?;
+
+    // Cannot be greater than 100%.
+    if sell_rewards_min_out_bps > 1_000_000 {
+        return Err(AnkerError::InvalidSellRewardsMinBps.into());
+    }
+
+    anker.sell_rewards_min_out_bps = sell_rewards_min_out_bps;
+    anker.save(accounts.anker)
+}
+
 /// Send rewards via Wormhole from the UST reserve address to Terra.
 #[inline(never)]
 fn process_send_rewards(
@@ -663,6 +688,11 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
         }
         AnkerInstruction::SendRewards { wormhole_nonce } => {
             process_send_rewards(program_id, accounts, wormhole_nonce)
+        }
+        AnkerInstruction::ChangeSellRewardsMinBps {
+            sell_rewards_min_out_bps,
+        } => {
+            process_change_sell_rewards_min_out_bps(program_id, accounts, sell_rewards_min_out_bps)
         }
     }
 }

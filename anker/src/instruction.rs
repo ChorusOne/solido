@@ -64,6 +64,12 @@ pub enum AnkerInstruction {
 
     /// Change the token pool instance.
     ChangeTokenSwapPool,
+
+    /// Change the `sell_rewards_min_out_bps`.
+    ChangeSellRewardsMinBps {
+        #[allow(dead_code)] // It is not dead code when compiled for BPF.
+        sell_rewards_min_out_bps: u64,
+    },
 }
 
 impl AnkerInstruction {
@@ -423,7 +429,7 @@ pub fn change_terra_rewards_destination(
 
 accounts_struct! {
     ChangeTokenSwapPoolAccountsMeta, ChangeTokenSwapPoolAccountsInfo {
-        // Needs to be writtable in order to save new Token Pool address.
+        // Needs to be writable in order to save new Token Pool address.
         pub anker {
             is_signer: false,
             is_writable: true,
@@ -452,6 +458,39 @@ pub fn change_token_swap_pool(
     accounts: &ChangeTokenSwapPoolAccountsMeta,
 ) -> Instruction {
     let data = AnkerInstruction::ChangeTokenSwapPool;
+    Instruction {
+        program_id: *program_id,
+        accounts: accounts.to_vec(),
+        data: data.to_vec(),
+    }
+}
+
+accounts_struct! {
+    ChangeSellRewardsMinBpsAccountsMeta, ChangeSellRewardsMinBpsAccountsInfo {
+        // Needs to be writable in order to save new `sell_rewards_min_out_bps`.
+        pub anker {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub solido {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub manager {
+            is_signer: true,
+            is_writable: false,
+        },
+    }
+}
+
+pub fn change_sell_rewards_min_out_bps(
+    program_id: &Pubkey,
+    accounts: &ChangeSellRewardsMinBpsAccountsMeta,
+    sell_rewards_min_out_bps: u64,
+) -> Instruction {
+    let data = AnkerInstruction::ChangeSellRewardsMinBps {
+        sell_rewards_min_out_bps,
+    };
     Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
