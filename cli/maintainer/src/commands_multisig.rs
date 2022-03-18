@@ -461,6 +461,7 @@ enum SolidoInstruction {
     },
 }
 
+#[allow(clippy::enum_variant_names)]
 #[derive(Serialize)]
 enum AnkerInstruction {
     ChangeTerraRewardsDestination {
@@ -1023,7 +1024,7 @@ fn show_transaction(
             }
         }
     } else if anker_program_id == Some(instr.program_id) {
-        match try_parse_anker_instruction(config, &&instr) {
+        match try_parse_anker_instruction(config, &instr) {
             Ok(instr) => instr,
             Err(SnapshotError::MissingAccount) => return Err(SnapshotError::MissingAccount),
             Err(SnapshotError::MissingValidatorIdentity(addr)) => {
