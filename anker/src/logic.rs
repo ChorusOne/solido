@@ -320,8 +320,31 @@ pub fn get_one_st_sol_for_ust_price_from_pool(
             trade_direction,
         )
         .ok_or(AnkerError::PoolPriceUndefined)?;
-    assert_eq!(swap_result.source_amount_swapped, one_st_sol.0 as u128);
     Ok(MicroUst(
         u64::try_from(swap_result.destination_amount_swapped).map_err(|_| ArithmeticError)?,
     ))
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use spl_token_swap::curve::constant_product::ConstantProductCurve;
+
+    #[test]
+    fn test_less_than_one_st_sol_for_ust() {
+        // Previously, we had one assert that stated we sold exactly one stSOL,
+        // sometimes due to precision errors this assertion might fail. We
+        // removed it and put this test that sells `Lamports(999_999_998)`.
+        let curve = ConstantProductCurve::default();
+        let swap_pool_token_a = Pubkey::new_unique();
+        let pool_ust_address = Pubkey::new_unique();
+        let result = get_one_st_sol_for_ust_price_from_pool(
+            &curve,
+            &swap_pool_token_a,
+            &pool_ust_address,
+            StLamports(500_000_000),
+            MicroUst(1_000_000_000),
+        );
+        assert_eq!(result, Ok(MicroUst(666_666_666)));
+    }
 }
