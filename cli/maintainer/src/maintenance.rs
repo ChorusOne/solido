@@ -119,7 +119,7 @@ pub enum MaintenanceOutput {
 
     FetchPoolPrice {
         #[serde(rename = "st_sol_price_in_micro_ust")]
-        st_sol_price_in_ust: MicroUst,
+        expected_st_sol_price_in_ust: MicroUst,
     },
 
     SellRewards {
@@ -263,10 +263,14 @@ impl fmt::Display for MaintenanceOutput {
                 writeln!(f, "  Amount: {}", ust_amount)?;
             }
             MaintenanceOutput::FetchPoolPrice {
-                st_sol_price_in_ust,
+                expected_st_sol_price_in_ust,
             } => {
                 writeln!(f, "Fetch Pool Price")?;
-                writeln!(f, "  Estimated amount per stSOL: {}", st_sol_price_in_ust)?;
+                writeln!(
+                    f,
+                    "  Expected amount per stSOL: {}",
+                    expected_st_sol_price_in_ust
+                )?;
             }
         }
         Ok(())
@@ -804,7 +808,7 @@ impl SolidoState {
         let have_rewards_to_claim = rewards >= min_rewards_to_sell;
 
         if (should_start_fetch || have_rewards_to_claim) && passed_minimum_update_price {
-            let estimated_st_sol_in_ust = get_one_st_sol_for_ust_price_from_pool(
+            let expected_st_sol_price_in_ust = get_one_st_sol_for_ust_price_from_pool(
                 &anker_state.constant_product_calculator,
                 &anker_state.pool_st_sol_account,
                 &anker_state.pool_ust_account,
@@ -815,7 +819,7 @@ impl SolidoState {
             Some(MaintenanceInstruction::new(
                 anker_state.get_fetch_pool_price_instruction(self.solido_address),
                 MaintenanceOutput::FetchPoolPrice {
-                    st_sol_price_in_ust: estimated_st_sol_in_ust,
+                    expected_st_sol_price_in_ust,
                 },
             ))
         } else {
