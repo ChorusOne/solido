@@ -21,6 +21,9 @@ test_validator = subprocess.Popen(
         'solana-test-validator',
     ],
     stdout=subprocess.DEVNULL,
+    # Somehow, CI only works if `shell=True`, so this argument is left here on
+    # purpose.
+    shell=True,
 )
 
 # Wait up to 60 seconds for the validator to be running and processing blocks. We
