@@ -314,7 +314,7 @@ anker_show = solido('anker', 'show', '--anker-address', anker_address)
 assert anker_show['st_sol_reserve_balance_st_lamports'] == 1_000_000_000
 print('> Anker stSOL reserve now contains 1 SOL.')
 
-print('\nPerforming 5 maintenance to populate the historical prices ...')
+print('\nPerforming maintenance 5 times to populate the historical prices ...')
 expected_price_update_result = {'FetchPoolPrice': {'st_sol_price_in_micro_ust': 500000}}
 for i in range(4):
     result = perform_maintenance()
