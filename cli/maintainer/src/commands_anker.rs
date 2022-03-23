@@ -136,8 +136,8 @@ pub fn main(config: &mut SnapshotClientConfig, anker_opts: &AnkerOpts) {
             print_output(config.output_mode, &output);
         }
         SubCommand::ChangeSellRewardsMinOutBps(opts) => {
-            let result =
-                config.with_snapshot(|config| command_change_sell_rewards_min_bps(config, opts));
+            let result = config
+                .with_snapshot(|config| command_change_sell_rewards_min_out_bps(config, opts));
             let output = result.ok_or_abort_with("Failed to change Anker sell_rewards_min_bps.");
             print_output(config.output_mode, &output);
         }
@@ -808,7 +808,7 @@ pub fn command_change_token_swap_pool(
     )
 }
 
-pub fn command_change_sell_rewards_min_bps(
+pub fn command_change_sell_rewards_min_out_bps(
     config: &mut SnapshotConfig,
     opts: &AnkerChangeSellRewardsMinOutBpsOpts,
 ) -> solido_cli_common::Result<ProposeInstructionOutput> {
