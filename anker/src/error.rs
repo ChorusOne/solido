@@ -62,7 +62,7 @@ pub enum AnkerError {
     FetchPoolPriceNotCalledRecently = 4015,
 
     /// Value of `sell_rewards_min_out_bps` is greater than 100% (1_000_000).
-    InvalidSellRewardsMinBps = 4016,
+    InvalidSellRewardsMinOutBps = 4016,
 }
 
 // Just reuse the generated Debug impl for Display. It shows the variant names.
