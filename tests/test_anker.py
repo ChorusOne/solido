@@ -241,6 +241,7 @@ expected_result = {
     'b_sol_mint_authority': authorities['b_sol_mint_authority'],
     'reserve_authority': authorities['reserve_authority'],
     'terra_rewards_destination': terra_rewards_address,
+    'token_swap_pool': token_pool_address,
     'sell_rewards_min_out_bps': 0,
     'ust_reserve_balance_micro_ust': 0,
     'st_sol_reserve_balance_st_lamports': 0,
@@ -454,7 +455,7 @@ approve_and_execute(transaction_address)
 print('> Changing min out basis points')
 transaction_result = solido(
     'anker',
-    'change-sell-rewards-min-bps',
+    'change-sell-rewards-min-out-bps',
     '--anker-address',
     anker_address,
     '--multisig-address',
@@ -467,3 +468,29 @@ transaction_result = solido(
 )
 transaction_address = transaction_result['transaction_address']
 approve_and_execute(transaction_address)
+
+print('\nVerifying Anker instance with `solido anker show` ...')
+# See if `anker show` shows the correct output
+result = solido('anker', 'show', '--anker-address', anker_address)
+
+# Check if `anker show-authorities` got it right.
+expected_result = {
+    'anker_address': authorities['anker_address'],
+    'anker_program_id': anker_program_id,
+    'solido_address': solido_address,
+    'solido_program_id': solido_program_id,
+    'b_sol_mint': b_sol_mint_address.pubkey,
+    'st_sol_reserve': authorities['st_sol_reserve_account'],
+    'ust_reserve': authorities['ust_reserve_account'],
+    'b_sol_mint_authority': authorities['b_sol_mint_authority'],
+    'reserve_authority': authorities['reserve_authority'],
+    'terra_rewards_destination': 'terra14dycr8jm7e5kw88g4studekkzzw5xc5ffnp4hk',
+    'token_swap_pool': new_token_pool_address,
+    'sell_rewards_min_out_bps': 10,
+    'ust_reserve_balance_micro_ust': 500_000,
+    'st_sol_reserve_balance_st_lamports': 1_000_000_000,
+    'st_sol_reserve_value_lamports': None,
+    'b_sol_supply_b_lamports': 0,
+}
+assert result == expected_result, f'Expected {result} to be {expected_result}'
+print('> Instance parameters are as expected.')

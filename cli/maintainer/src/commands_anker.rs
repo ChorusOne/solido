@@ -246,6 +246,9 @@ struct ShowAnkerOutput {
     #[serde(serialize_with = "serialize_b58")]
     b_sol_mint_authority: Pubkey,
 
+    #[serde(serialize_with = "serialize_b58")]
+    token_swap_pool: Pubkey,
+
     #[serde(serialize_with = "serialize_bech32")]
     terra_rewards_destination: TerraAddress,
 
@@ -354,6 +357,7 @@ fn command_show_anker(
         solido_address: anker.solido,
         solido_program_id: anker.solido_program_id,
 
+        token_swap_pool: anker.token_swap_pool,
         terra_rewards_destination: anker.terra_rewards_destination,
         sell_rewards_min_out_bps: anker.sell_rewards_min_out_bps,
 

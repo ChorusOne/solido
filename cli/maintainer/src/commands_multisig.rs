@@ -8,7 +8,7 @@ use std::str::FromStr;
 use anchor_lang::prelude::{AccountMeta, ToAccountMetas};
 use anchor_lang::{Discriminator, InstructionData};
 use anker::instruction::{
-    ChangeSellRewardsMinBpsAccountsMeta, ChangeTerraRewardsDestinationAccountsMeta,
+    ChangeSellRewardsMinOutBpsAccountsMeta, ChangeTerraRewardsDestinationAccountsMeta,
     ChangeTokenSwapPoolAccountsMeta,
 };
 use anker::wormhole::TerraAddress;
@@ -488,7 +488,7 @@ enum AnkerInstruction {
         #[serde(serialize_with = "serialize_b58")]
         new_token_swap_pool: Pubkey,
     },
-    ChangeSellRewardsMinBps {
+    ChangeSellRewardsMinOutBps {
         #[serde(serialize_with = "serialize_b58")]
         anker_instance: Pubkey,
 
@@ -497,7 +497,7 @@ enum AnkerInstruction {
 
         old_sell_rewards_min_out_bps: u64,
 
-        new_sell_rewards_min_bps: u64,
+        new_sell_rewards_min_out_bps: u64,
     },
 }
 
@@ -748,11 +748,11 @@ impl fmt::Display for ShowTransactionOutput {
                     writeln!(f, "    Old Token Swap Pool: {}", old_token_swap_pool)?;
                     writeln!(f, "    New Token Swap Pool: {}", new_token_swap_pool)?;
                 }
-                AnkerInstruction::ChangeSellRewardsMinBps {
+                AnkerInstruction::ChangeSellRewardsMinOutBps {
                     anker_instance,
                     manager,
-                    old_sell_rewards_min_bps,
-                    new_sell_rewards_min_bps,
+                    old_sell_rewards_min_out_bps,
+                    new_sell_rewards_min_out_bps,
                 } => {
                     writeln!(f, "It changes the sell rewards min bps in Anker")?;
                     writeln!(f, "    Anker instance:           {}", anker_instance)?;
@@ -760,12 +760,12 @@ impl fmt::Display for ShowTransactionOutput {
                     writeln!(
                         f,
                         "    Old sell rewards min bps: {}",
-                        old_sell_rewards_min_bps
+                        old_sell_rewards_min_out_bps
                     )?;
                     writeln!(
                         f,
                         "    New sell rewards min bps: {}",
-                        new_sell_rewards_min_bps
+                        new_sell_rewards_min_out_bps
                     )?;
                 }
             },
@@ -1164,16 +1164,16 @@ fn try_parse_anker_instruction(
                 new_token_swap_pool: accounts.new_token_swap_pool,
             })
         }
-        anker::instruction::AnkerInstruction::ChangeSellRewardsMinBps {
+        anker::instruction::AnkerInstruction::ChangeSellRewardsMinOutBps {
             sell_rewards_min_out_bps,
         } => {
-            let accounts = ChangeSellRewardsMinBpsAccountsMeta::try_from_slice(&instr.accounts)?;
+            let accounts = ChangeSellRewardsMinOutBpsAccountsMeta::try_from_slice(&instr.accounts)?;
             let current_anker = config.client.get_anker(&accounts.anker)?;
-            ParsedInstruction::AnkerInstruction(AnkerInstruction::ChangeSellRewardsMinBps {
+            ParsedInstruction::AnkerInstruction(AnkerInstruction::ChangeSellRewardsMinOutBps {
                 anker_instance: accounts.anker,
                 manager: accounts.manager,
-                old_sell_rewards_min_bps: current_anker.sell_rewards_min_out_bps,
-                new_sell_rewards_min_bps: sell_rewards_min_out_bps,
+                old_sell_rewards_min_out_bps: current_anker.sell_rewards_min_out_bps,
+                new_sell_rewards_min_out_bps: sell_rewards_min_out_bps,
             })
         }
         _ => ParsedInstruction::InvalidAnkerInstruction,
