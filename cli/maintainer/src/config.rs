@@ -889,7 +889,7 @@ cli_opt_struct! {
 }
 
 cli_opt_struct! {
-    AnkerChangeSellRewardsMinBpsOpts {
+    AnkerChangeSellRewardsMinOutBpsOpts {
         /// Address of the Anker instance.
         #[clap(long, value_name = "address")]
         anker_address: Pubkey,

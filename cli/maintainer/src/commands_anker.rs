@@ -20,7 +20,7 @@ use spl_token_swap::curve::constant_product::ConstantProductCurve;
 
 use crate::commands_multisig::{propose_instruction, ProposeInstructionOutput};
 use crate::config::{
-    AnkerChangeSellRewardsMinBpsOpts, AnkerChangeTerraRewardsDestinationOpts,
+    AnkerChangeSellRewardsMinOutBpsOpts, AnkerChangeTerraRewardsDestinationOpts,
     AnkerChangeTokenSwapPoolOpts, AnkerDepositOpts, AnkerWithdrawOpts, ConfigFile, CreateAnkerOpts,
     CreateTokenPoolOpts, ShowAnkerAuthoritiesOpts, ShowAnkerOpts,
 };
@@ -55,7 +55,7 @@ enum SubCommand {
     ChangeTokenSwapPool(AnkerChangeTokenSwapPoolOpts),
 
     /// Change Anker's `sell_rewards_min_out_bps`.
-    ChangeSellRewardsMinBps(AnkerChangeSellRewardsMinBpsOpts),
+    ChangeSellRewardsMinOutBps(AnkerChangeSellRewardsMinOutBpsOpts),
 }
 
 #[derive(Clap, Debug)]
@@ -83,7 +83,7 @@ impl AnkerOpts {
             SubCommand::ChangeTokenSwapPool(opts) => {
                 opts.merge_with_config_and_environment(config_file)
             }
-            SubCommand::ChangeSellRewardsMinBps(opts) => {
+            SubCommand::ChangeSellRewardsMinOutBps(opts) => {
                 opts.merge_with_config_and_environment(config_file)
             }
         }
@@ -135,7 +135,7 @@ pub fn main(config: &mut SnapshotClientConfig, anker_opts: &AnkerOpts) {
             let output = result.ok_or_abort_with("Failed to change Anker token swap pool address.");
             print_output(config.output_mode, &output);
         }
-        SubCommand::ChangeSellRewardsMinBps(opts) => {
+        SubCommand::ChangeSellRewardsMinOutBps(opts) => {
             let result =
                 config.with_snapshot(|config| command_change_sell_rewards_min_bps(config, opts));
             let output = result.ok_or_abort_with("Failed to change Anker sell_rewards_min_bps.");
@@ -810,7 +810,7 @@ pub fn command_change_token_swap_pool(
 
 pub fn command_change_sell_rewards_min_bps(
     config: &mut SnapshotConfig,
-    opts: &AnkerChangeSellRewardsMinBpsOpts,
+    opts: &AnkerChangeSellRewardsMinOutBpsOpts,
 ) -> solido_cli_common::Result<ProposeInstructionOutput> {
     let client = &mut config.client;
     let anker_account = client.get_account(opts.anker_address())?;
@@ -820,7 +820,7 @@ pub fn command_change_sell_rewards_min_bps(
 
     let instruction = anker::instruction::change_sell_rewards_min_out_bps(
         &anker_program_id,
-        &anker::instruction::ChangeSellRewardsMinBpsAccountsMeta {
+        &anker::instruction::ChangeSellRewardsMinOutBpsAccountsMeta {
             anker: *opts.anker_address(),
             solido: anker.solido,
             manager: solido.manager,
