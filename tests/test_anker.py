@@ -451,7 +451,7 @@ transaction_result = solido(
 transaction_address = transaction_result['transaction_address']
 approve_and_execute(transaction_address)
 
-print('> Changing Terra rewards destination')
+print('> Changing min out basis points')
 transaction_result = solido(
     'anker',
     'change-sell-rewards-min-bps',

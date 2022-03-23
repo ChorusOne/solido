@@ -495,7 +495,7 @@ enum AnkerInstruction {
         #[serde(serialize_with = "serialize_b58")]
         manager: Pubkey,
 
-        old_sell_rewards_min_bps: u64,
+        old_sell_rewards_min_out_bps: u64,
 
         new_sell_rewards_min_bps: u64,
     },
