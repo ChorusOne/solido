@@ -136,10 +136,21 @@ async fn test_successful_change_sell_rewards_min_out_bps() {
 #[tokio::test]
 async fn test_change_sell_rewards_min_out_bps_more_than_100_percent() {
     let mut context = Context::new().await;
-    let sell_rewards_min_out_bps = 1_000_001;
+    let sell_rewards_min_out_bps = 10_001;
     let manager = Keypair::from_bytes(&context.solido_context.manager.to_bytes()).unwrap();
     let result = context
         .try_change_sell_rewards_min_out_bps(&manager, sell_rewards_min_out_bps)
         .await;
-    assert_solido_error!(result, AnkerError::InvalidSellRewardsMinBps);
+    assert_solido_error!(result, AnkerError::InvalidSellRewardsMinOutBps);
+}
+
+#[tokio::test]
+async fn test_change_sell_rewards_fake_manager() {
+    let mut context = Context::new().await;
+    let sell_rewards_min_out_bps = 10_001;
+    let manager = context.solido_context.deterministic_keypair.new_keypair();
+    let result = context
+        .try_change_sell_rewards_min_out_bps(&manager, sell_rewards_min_out_bps)
+        .await;
+    assert_solido_error!(result, LidoError::InvalidManager);
 }

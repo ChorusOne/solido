@@ -66,7 +66,7 @@ pub enum AnkerInstruction {
     ChangeTokenSwapPool,
 
     /// Change the `sell_rewards_min_out_bps`.
-    ChangeSellRewardsMinBps {
+    ChangeSellRewardsMinOutBps {
         #[allow(dead_code)] // It is not dead code when compiled for BPF.
         sell_rewards_min_out_bps: u64,
     },
@@ -466,7 +466,7 @@ pub fn change_token_swap_pool(
 }
 
 accounts_struct! {
-    ChangeSellRewardsMinBpsAccountsMeta, ChangeSellRewardsMinBpsAccountsInfo {
+    ChangeSellRewardsMinOutBpsAccountsMeta, ChangeSellRewardsMinOutBpsAccountsInfo {
         // Needs to be writable in order to save new `sell_rewards_min_out_bps`.
         pub anker {
             is_signer: false,
@@ -485,10 +485,10 @@ accounts_struct! {
 
 pub fn change_sell_rewards_min_out_bps(
     program_id: &Pubkey,
-    accounts: &ChangeSellRewardsMinBpsAccountsMeta,
+    accounts: &ChangeSellRewardsMinOutBpsAccountsMeta,
     sell_rewards_min_out_bps: u64,
 ) -> Instruction {
-    let data = AnkerInstruction::ChangeSellRewardsMinBps {
+    let data = AnkerInstruction::ChangeSellRewardsMinOutBps {
         sell_rewards_min_out_bps,
     };
     Instruction {

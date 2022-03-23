@@ -41,7 +41,7 @@ use crate::{
 };
 use crate::{find_ust_reserve_account, ANKER_STSOL_RESERVE_ACCOUNT, ANKER_UST_RESERVE_ACCOUNT};
 use crate::{
-    instruction::ChangeSellRewardsMinBpsAccountsInfo,
+    instruction::ChangeSellRewardsMinOutBpsAccountsInfo,
     state::{HistoricalStSolPriceArray, POOL_PRICE_MAX_SAMPLE_AGE, POOL_PRICE_MIN_SAMPLE_DISTANCE},
 };
 use crate::{
@@ -70,8 +70,8 @@ fn process_initialize(
         );
         return Err(AnkerError::InvalidDerivedAccount.into());
     }
-    if sell_rewards_min_out_bps > 1_000_000 {
-        return Err(AnkerError::InvalidSellRewardsMinBps.into());
+    if sell_rewards_min_out_bps > 10_000 {
+        return Err(AnkerError::InvalidSellRewardsMinOutBps.into());
     }
 
     let solido = Lido::deserialize_lido(accounts.solido_program.key, accounts.solido)?;
@@ -545,13 +545,13 @@ fn process_change_sell_rewards_min_out_bps(
     accounts_raw: &[AccountInfo],
     sell_rewards_min_out_bps: u64,
 ) -> ProgramResult {
-    let accounts = ChangeSellRewardsMinBpsAccountsInfo::try_from_slice(accounts_raw)?;
+    let accounts = ChangeSellRewardsMinOutBpsAccountsInfo::try_from_slice(accounts_raw)?;
     let (solido, mut anker) = deserialize_anker(program_id, accounts.anker, accounts.solido)?;
     solido.check_manager(accounts.manager)?;
 
     // Cannot be greater than 100%.
-    if sell_rewards_min_out_bps > 1_000_000 {
-        return Err(AnkerError::InvalidSellRewardsMinBps.into());
+    if sell_rewards_min_out_bps > 10_000 {
+        return Err(AnkerError::InvalidSellRewardsMinOutBps.into());
     }
 
     anker.sell_rewards_min_out_bps = sell_rewards_min_out_bps;
@@ -689,7 +689,7 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
         AnkerInstruction::SendRewards { wormhole_nonce } => {
             process_send_rewards(program_id, accounts, wormhole_nonce)
         }
-        AnkerInstruction::ChangeSellRewardsMinBps {
+        AnkerInstruction::ChangeSellRewardsMinOutBps {
             sell_rewards_min_out_bps,
         } => {
             process_change_sell_rewards_min_out_bps(program_id, accounts, sell_rewards_min_out_bps)

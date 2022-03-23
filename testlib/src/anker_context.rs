@@ -603,7 +603,7 @@ impl Context {
             &mut self.solido_context.nonce,
             &[instruction::change_sell_rewards_min_out_bps(
                 &id(),
-                &instruction::ChangeSellRewardsMinBpsAccountsMeta {
+                &instruction::ChangeSellRewardsMinOutBpsAccountsMeta {
                     anker: self.anker,
                     solido: self.solido_context.solido.pubkey(),
                     manager: manager.pubkey(),
