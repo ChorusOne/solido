@@ -775,69 +775,11 @@ impl SolidoState {
         (reserve_st_sol - st_sol_amount).ok()
     }
 
-    /// Try to update the historical pool price exchange rate to protect us
+    /// Try to sell the extra stSOL rewards for UST tokens or
+    /// to update the historical pool price exchange rate to protect us
     /// against sandwiching attacks.
-    /// We try to update the historical price when we're near the epoch
-    /// boundaries.
-    pub fn try_fetch_pool_price(&self) -> Option<MaintenanceInstruction> {
-        let anker_state = self.anker_state.as_ref()?;
-        let current_slot = self.clock.slot;
-        let next_epoch_begin_slot = self
-            .epoch_schedule
-            .get_first_slot_in_epoch(self.clock.epoch + 1);
-
-        // We start fetching pool prices if we are before the epoch's
-        // end minus `POOL_PRICE_MAX_SAMPLE_AGE` and minus one sample distance,
-        // so we have some margin.
-        let slot_start_fetch_pool_price = next_epoch_begin_slot
-            .saturating_sub(POOL_PRICE_MAX_SAMPLE_AGE + POOL_PRICE_MIN_SAMPLE_DISTANCE);
-        let should_start_fetch = current_slot > slot_start_fetch_pool_price;
-
-        let last_price = anker_state.anker.historical_st_sol_prices.last();
-        let slots_elapsed = current_slot.saturating_sub(last_price.slot);
-        let passed_minimum_update_price = slots_elapsed >= POOL_PRICE_MIN_SAMPLE_DISTANCE;
-
-        // If we have some rewards to claim, let's try to keep the historical
-        // price updated until we claim the rewards.
-        let rewards = self.get_anker_rewards()?;
-        let min_rewards_to_sell = self
-            .solido
-            .exchange_rate
-            .exchange_sol(Self::MINIMUM_WITHDRAW_AMOUNT)
-            .expect("The price of a signature should be small enough that it doesn't overflow.");
-        let have_rewards_to_claim = rewards >= min_rewards_to_sell;
-
-        if (should_start_fetch || have_rewards_to_claim) && passed_minimum_update_price {
-            let expected_st_sol_price_in_ust = get_one_st_sol_for_ust_price_from_pool(
-                &anker_state.constant_product_calculator,
-                &anker_state.pool_st_sol_account,
-                &anker_state.pool_ust_account,
-                anker_state.pool_st_sol_balance,
-                anker_state.pool_ust_balance,
-            )
-            .ok()?;
-            Some(MaintenanceInstruction::new(
-                anker_state.get_fetch_pool_price_instruction(self.solido_address),
-                MaintenanceOutput::FetchPoolPrice {
-                    expected_st_sol_price_in_ust,
-                },
-            ))
-        } else {
-            None
-        }
-    }
-
-    /// Try to sell the extra stSOL rewards for UST tokens.
     pub fn try_sell_anker_rewards(&self) -> Option<MaintenanceInstruction> {
         let anker_state = self.anker_state.as_ref()?;
-        let oldest_sample = anker_state.anker.historical_st_sol_prices.first();
-        let slots_elapsed = self.clock.slot.saturating_sub(oldest_sample.slot);
-
-        // Check if we can sell Anker rewards for consistency. This should not
-        // happen if we call `try_fetch_pool_price` before this function.
-        if slots_elapsed > POOL_PRICE_MAX_SAMPLE_AGE {
-            return None;
-        }
 
         let rewards = self.get_anker_rewards()?;
         let min_rewards_to_sell = self
@@ -846,7 +788,7 @@ impl SolidoState {
             .exchange_sol(Self::MINIMUM_WITHDRAW_AMOUNT)
             .expect("The price of a signature should be small enough that it doesn't overflow.");
 
-        let ust_per_st_sol = get_one_st_sol_for_ust_price_from_pool(
+        let expected_st_sol_price_in_ust = get_one_st_sol_for_ust_price_from_pool(
             &anker_state.constant_product_calculator,
             &anker_state.pool_st_sol_account,
             &anker_state.pool_ust_account,
@@ -855,7 +797,7 @@ impl SolidoState {
         )
         .ok()?;
 
-        let expected_proceeds = MicroUst(rewards.0 * ust_per_st_sol.0);
+        let expected_proceeds = MicroUst(rewards.0 * expected_st_sol_price_in_ust.0);
         // We want at least 0.01 UST out if we are going to do the swap at all.
         let min_proceeds = MicroUst(10_000);
 
@@ -870,8 +812,33 @@ impl SolidoState {
 
         // We should not call the instruction if the rewards are 0, or if the rewards are so small
         // that the transaction cost is a significant portion of the rewards.
-        if rewards < min_rewards_to_sell
-            || expected_proceeds < min_proceeds
+        if rewards < min_rewards_to_sell {
+            return None;
+        }
+
+        let oldest_price_sample = anker_state.anker.historical_st_sol_prices.first();
+        let slots_elapsed_since_oldest_sample =
+            self.clock.slot.saturating_sub(oldest_price_sample.slot);
+
+        let youngest_sample = anker_state.anker.historical_st_sol_prices.last();
+        let slots_elapsed_since_youngest_sample =
+            self.clock.slot.saturating_sub(youngest_sample.slot);
+
+        // Time to update the historical price
+        if slots_elapsed_since_oldest_sample > POOL_PRICE_MAX_SAMPLE_AGE
+            || oldest_price_sample.slot == 0
+        {
+            if slots_elapsed_since_youngest_sample < POOL_PRICE_MIN_SAMPLE_DISTANCE {
+                None
+            } else {
+                Some(MaintenanceInstruction::new(
+                    anker_state.get_fetch_pool_price_instruction(self.solido_address),
+                    MaintenanceOutput::FetchPoolPrice {
+                        expected_st_sol_price_in_ust,
+                    },
+                ))
+            }
+        } else if expected_proceeds < min_proceeds
             || expected_proceeds < minimum_ust_amount_for_rewards
         {
             None
@@ -1689,7 +1656,6 @@ pub fn try_perform_maintenance(
         .or_else(|| state.try_unstake_from_active_validators())
         .or_else(|| state.try_claim_validator_fee())
         .or_else(|| state.try_remove_validator())
-        .or_else(|| state.try_fetch_pool_price())
         .or_else(|| state.try_sell_anker_rewards())
         .or_else(|| state.try_send_anker_rewards());
 
