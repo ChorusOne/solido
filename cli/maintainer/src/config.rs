@@ -895,6 +895,9 @@ cli_opt_struct! {
         anker_address: Pubkey,
 
         /// New Anker's `sell_rewards_min_out_bps`.
+        //
+        // See also `anker create --sell-rewards-min-out-bps`.
+        #[clap(value_name = "basis points")]
         sell_rewards_min_out_bps: u64,
 
         /// Multisig instance.
