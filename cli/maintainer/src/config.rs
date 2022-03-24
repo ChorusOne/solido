@@ -847,3 +847,65 @@ cli_opt_struct! {
         amount_b_sol: BLamports,
     }
 }
+
+cli_opt_struct! {
+    AnkerChangeTerraRewardsDestinationOpts {
+        /// Address of the Anker instance.
+        #[clap(long, value_name = "address")]
+        anker_address: Pubkey,
+
+        /// New terra rewards address.
+        #[clap(long, value_name = "address")]
+        terra_rewards_destination: TerraAddress,
+
+        /// Multisig instance.
+        #[clap(long, value_name = "address")]
+        multisig_address: Pubkey,
+
+        /// Address of the Multisig program.
+        #[clap(long)]
+        multisig_program_id: Pubkey,
+    }
+}
+
+cli_opt_struct! {
+    AnkerChangeTokenSwapPoolOpts {
+        /// Address of the Anker instance.
+        #[clap(long, value_name = "address")]
+        anker_address: Pubkey,
+
+        /// New token swap pool address.
+        #[clap(long, value_name = "address")]
+        token_swap_pool: Pubkey,
+
+        /// Multisig instance.
+        #[clap(long, value_name = "address")]
+        multisig_address: Pubkey,
+
+        /// Address of the Multisig program.
+        #[clap(long)]
+        multisig_program_id: Pubkey,
+    }
+}
+
+cli_opt_struct! {
+    AnkerChangeSellRewardsMinOutBpsOpts {
+        /// Address of the Anker instance.
+        #[clap(long, value_name = "address")]
+        anker_address: Pubkey,
+
+        /// New Anker's `sell_rewards_min_out_bps`.
+        //
+        // See also `anker create --sell-rewards-min-out-bps`.
+        #[clap(value_name = "basis points")]
+        sell_rewards_min_out_bps: u64,
+
+        /// Multisig instance.
+        #[clap(long, value_name = "address")]
+        multisig_address: Pubkey,
+
+        /// Address of the Multisig program.
+        #[clap(long)]
+        multisig_program_id: Pubkey,
+    }
+}

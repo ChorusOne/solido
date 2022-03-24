@@ -18,9 +18,11 @@ use solido_cli_common::snapshot::{SnapshotClientConfig, SnapshotConfig};
 use spl_token_swap::curve::base::{CurveType, SwapCurve};
 use spl_token_swap::curve::constant_product::ConstantProductCurve;
 
+use crate::commands_multisig::{propose_instruction, ProposeInstructionOutput};
 use crate::config::{
-    AnkerDepositOpts, AnkerWithdrawOpts, ConfigFile, CreateAnkerOpts, CreateTokenPoolOpts,
-    ShowAnkerAuthoritiesOpts, ShowAnkerOpts,
+    AnkerChangeSellRewardsMinOutBpsOpts, AnkerChangeTerraRewardsDestinationOpts,
+    AnkerChangeTokenSwapPoolOpts, AnkerDepositOpts, AnkerWithdrawOpts, ConfigFile, CreateAnkerOpts,
+    CreateTokenPoolOpts, ShowAnkerAuthoritiesOpts, ShowAnkerOpts,
 };
 use crate::print_output;
 use crate::serialization_utils::serialize_bech32;
@@ -45,6 +47,15 @@ enum SubCommand {
 
     /// Return bSOL to Anker to redeem stSOL.
     Withdraw(AnkerWithdrawOpts),
+
+    /// Change Terra rewards destination.
+    ChangeTerraRewardsDestination(AnkerChangeTerraRewardsDestinationOpts),
+
+    /// Change Token Swap pool.
+    ChangeTokenSwapPool(AnkerChangeTokenSwapPoolOpts),
+
+    /// Change Anker's `sell_rewards_min_out_bps`.
+    ChangeSellRewardsMinOutBps(AnkerChangeSellRewardsMinOutBpsOpts),
 }
 
 #[derive(Clap, Debug)]
@@ -64,6 +75,15 @@ impl AnkerOpts {
             SubCommand::Deposit(opts) => opts.merge_with_config_and_environment(config_file),
             SubCommand::Withdraw(opts) => opts.merge_with_config_and_environment(config_file),
             SubCommand::ShowAuthorities(opts) => {
+                opts.merge_with_config_and_environment(config_file)
+            }
+            SubCommand::ChangeTerraRewardsDestination(opts) => {
+                opts.merge_with_config_and_environment(config_file)
+            }
+            SubCommand::ChangeTokenSwapPool(opts) => {
+                opts.merge_with_config_and_environment(config_file)
+            }
+            SubCommand::ChangeSellRewardsMinOutBps(opts) => {
                 opts.merge_with_config_and_environment(config_file)
             }
         }
@@ -100,6 +120,25 @@ pub fn main(config: &mut SnapshotClientConfig, anker_opts: &AnkerOpts) {
         SubCommand::ShowAuthorities(opts) => {
             let result = config.with_snapshot(|_| command_show_anker_authorities(opts));
             let output = result.ok_or_abort_with("Failed to show Anker authorities.");
+            print_output(config.output_mode, &output);
+        }
+        SubCommand::ChangeTerraRewardsDestination(opts) => {
+            let result = config
+                .with_snapshot(|config| command_change_terra_rewards_destination(config, opts));
+            let output = result
+                .ok_or_abort_with("Failed to change Anker Terra rewards destination address.");
+            print_output(config.output_mode, &output);
+        }
+        SubCommand::ChangeTokenSwapPool(opts) => {
+            let result =
+                config.with_snapshot(|config| command_change_token_swap_pool(config, opts));
+            let output = result.ok_or_abort_with("Failed to change Anker token swap pool address.");
+            print_output(config.output_mode, &output);
+        }
+        SubCommand::ChangeSellRewardsMinOutBps(opts) => {
+            let result = config
+                .with_snapshot(|config| command_change_sell_rewards_min_out_bps(config, opts));
+            let output = result.ok_or_abort_with("Failed to change Anker sell_rewards_min_bps.");
             print_output(config.output_mode, &output);
         }
     }
@@ -712,4 +751,86 @@ pub fn command_show_anker_authorities(
         ust_reserve_account,
         reserve_authority,
     })
+}
+
+pub fn command_change_terra_rewards_destination(
+    config: &mut SnapshotConfig,
+    opts: &AnkerChangeTerraRewardsDestinationOpts,
+) -> solido_cli_common::Result<ProposeInstructionOutput> {
+    let client = &mut config.client;
+    let anker_account = client.get_account(opts.anker_address())?;
+    let anker_program_id = anker_account.owner;
+    let anker = client.get_anker(opts.anker_address())?;
+    let solido = config.client.get_solido(&anker.solido)?;
+
+    let instruction = anker::instruction::change_terra_rewards_destination(
+        &anker_program_id,
+        &anker::instruction::ChangeTerraRewardsDestinationAccountsMeta {
+            anker: *opts.anker_address(),
+            solido: anker.solido,
+            manager: solido.manager,
+        },
+        opts.terra_rewards_destination().clone(),
+    );
+    propose_instruction(
+        config,
+        opts.multisig_program_id(),
+        *opts.multisig_address(),
+        instruction,
+    )
+}
+
+pub fn command_change_token_swap_pool(
+    config: &mut SnapshotConfig,
+    opts: &AnkerChangeTokenSwapPoolOpts,
+) -> solido_cli_common::Result<ProposeInstructionOutput> {
+    let client = &mut config.client;
+    let anker_account = client.get_account(opts.anker_address())?;
+    let anker_program_id = anker_account.owner;
+    let anker = client.get_anker(opts.anker_address())?;
+    let solido = config.client.get_solido(&anker.solido)?;
+
+    let instruction = anker::instruction::change_token_swap_pool(
+        &anker_program_id,
+        &anker::instruction::ChangeTokenSwapPoolAccountsMeta {
+            anker: *opts.anker_address(),
+            solido: anker.solido,
+            manager: solido.manager,
+            current_token_swap_pool: anker.token_swap_pool,
+            new_token_swap_pool: *opts.token_swap_pool(),
+        },
+    );
+    propose_instruction(
+        config,
+        opts.multisig_program_id(),
+        *opts.multisig_address(),
+        instruction,
+    )
+}
+
+pub fn command_change_sell_rewards_min_out_bps(
+    config: &mut SnapshotConfig,
+    opts: &AnkerChangeSellRewardsMinOutBpsOpts,
+) -> solido_cli_common::Result<ProposeInstructionOutput> {
+    let client = &mut config.client;
+    let anker_account = client.get_account(opts.anker_address())?;
+    let anker_program_id = anker_account.owner;
+    let anker = client.get_anker(opts.anker_address())?;
+    let solido = config.client.get_solido(&anker.solido)?;
+
+    let instruction = anker::instruction::change_sell_rewards_min_out_bps(
+        &anker_program_id,
+        &anker::instruction::ChangeSellRewardsMinOutBpsAccountsMeta {
+            anker: *opts.anker_address(),
+            solido: anker.solido,
+            manager: solido.manager,
+        },
+        *opts.sell_rewards_min_out_bps(),
+    );
+    propose_instruction(
+        config,
+        opts.multisig_program_id(),
+        *opts.multisig_address(),
+        instruction,
+    )
 }
