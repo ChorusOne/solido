@@ -15,14 +15,14 @@ use rusqlite::{params, Connection, Row};
 use serde::{Deserialize, Serialize};
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::{
-    clock::{Epoch, Slot},
+    clock::{Epoch, Slot, SLOT_MS},
     commitment_config::CommitmentConfig,
     epoch_schedule::EpochSchedule,
     pubkey::Pubkey,
     signature::Keypair,
 };
 use solido_cli_common::{
-    error::{AsPrettyError, Error},
+    error::{Abort, AsPrettyError, Error},
     prometheus::{write_metric, Metric, MetricFamily},
     snapshot::{Config, OutputMode, SnapshotClient, SnapshotClientConfig},
 };
@@ -570,11 +570,41 @@ fn get_success_response(interval_prices: IntervalPrices) -> ResponseBox {
     .boxed()
 }
 
+/// Get a header with `Expires` key.
+/// If the end date for the query is far in the past we set it to expire in 1
+/// year. However, if the end date is in the same epoch, we set it to expire in
+/// the approximate time the next epoch begins.
+fn get_expires_header(
+    now: chrono::DateTime<chrono::Utc>,
+    current_slot: Slot,
+    interval_prices: &IntervalPrices,
+) -> Header {
+    let epoch_sched = EpochSchedule::without_warmup();
+    let (epoch_for_current_slot, _) = epoch_sched.get_epoch_and_slot_index(current_slot);
+
+    // Set the validity of the query until the next epoch
+    let expires_date = if epoch_for_current_slot == interval_prices.end_epoch {
+        let first_slot_next_epoch = epoch_sched.get_first_slot_in_epoch(epoch_for_current_slot + 1);
+        // Does not underflow because `first_slot_next_epoch <= current_slot`.
+        let slots_diff = first_slot_next_epoch - current_slot;
+        // Estimate for how many milliseconds the response is valid.
+        let ms_diff = slots_diff * SLOT_MS;
+        now + chrono::Duration::milliseconds(ms_diff as i64)
+    } else {
+        // 1 year duration if the end is in the past.
+        now + chrono::Duration::days(365)
+    };
+    Header::from_bytes(&b"Expires"[..], &expires_date.to_rfc2822()[..])
+        .expect("Static header value, does not fail at runtime.")
+}
+
 /// Gets a response that will be sent to a requesting client for an APY
 /// query.
 fn get_interval_price_request(
     db_connection: &Connection,
     range_date: &DateBeginEnd,
+    now: chrono::DateTime<chrono::Utc>,
+    current_slot: Slot,
 ) -> ResponseBox {
     let interval_prices = get_interval_price_for_period(
         db_connection
@@ -593,7 +623,11 @@ fn get_interval_price_request(
         Ok(interval_prices_opt) => {
             if let Some(interval_prices) = interval_prices_opt {
                 // Got interval prices.
-                get_success_response(interval_prices)
+                let expires_header = get_expires_header(now, current_slot, &interval_prices);
+                let mut response = get_success_response(interval_prices);
+
+                response.add_header(expires_header);
+                response
             } else {
                 // No interval price could be calculated, probably because of few data points.
                 get_error_response(ResponseError::NotFound(
@@ -638,6 +672,7 @@ fn serve_request(
     db_connection: &Connection,
     request: Request,
     metrics_mutex: &MetricsMutex,
+    current_slot: Slot,
 ) -> Result<(), std::io::Error> {
     let now = chrono::Utc::now();
 
@@ -668,7 +703,7 @@ fn serve_request(
             Response::from_data(out).with_header(content_type).boxed()
         }
         Ok(Endpoint::IntervalPriceRequest(range_date)) => {
-            get_interval_price_request(db_connection, &range_date)
+            get_interval_price_request(db_connection, &range_date, now, current_slot)
         }
         Err(err) => get_error_response(err),
     };
@@ -676,7 +711,11 @@ fn serve_request(
 }
 
 /// Spawn threads that run the http server.
-fn start_http_server(opts: &Opts, metrics_mutex: Arc<MetricsMutex>) -> Vec<JoinHandle<()>> {
+fn start_http_server(
+    opts: &Opts,
+    metrics_mutex: Arc<MetricsMutex>,
+    current_slot: Slot,
+) -> Vec<JoinHandle<()>> {
     let server = match Server::http(opts.listen.clone()) {
         Ok(server) => Arc::new(server),
         Err(err) => {
@@ -704,7 +743,7 @@ fn start_http_server(opts: &Opts, metrics_mutex: Arc<MetricsMutex>) -> Vec<JoinH
                     for request in server_clone.incoming_requests() {
                         // Ignore any errors; if we fail to respond, then there's little
                         // we can do about it here ... the client should just retry.
-                        let _ = serve_request(&conn, request, &*snapshot_mutex_clone);
+                        let _ = serve_request(&conn, request, &*snapshot_mutex_clone, current_slot);
                     }
                 })
                 .expect("Failed to spawn http handler thread.")
@@ -789,8 +828,13 @@ fn main() {
     let conn = Connection::open(&opts.db_path).expect("Failed to open sqlite connection.");
     create_db(&conn).expect("Failed to create database.");
 
+    let clock = config
+        .with_snapshot(|config| config.client.get_clock())
+        .ok_or_abort_with("Failed to get clock instance");
+
     let daemon = Daemon::new(&mut config, &opts, &conn);
-    let http_threads = start_http_server(&opts, daemon.metrics_snapshot.clone());
+
+    let http_threads = start_http_server(&opts, daemon.metrics_snapshot.clone(), clock.slot);
 
     // Start fetching prices, but only if fetching is enabled. If it is, this
     // never exits.
@@ -808,6 +852,8 @@ fn main() {
 
 #[cfg(test)]
 mod test {
+    use tiny_http::HeaderField;
+
     use super::*;
 
     #[test]
@@ -1020,5 +1066,81 @@ mod test {
         )
         .unwrap();
         assert_eq!(apy, None);
+    }
+
+    #[test]
+    fn test_expiration_header_past() {
+        let begin_epoch_291_datetime = chrono::Utc.ymd(2022, 3, 19).and_hms(18, 20, 02);
+        let begin_epoch_292_datetime = chrono::Utc.ymd(2022, 3, 22).and_hms(13, 28, 50);
+
+        let begin_epoch_293_datetime = chrono::Utc.ymd(2022, 3, 25).and_hms(07, 43, 25);
+        let first_slot_epoch_293 = 126_576_000;
+
+        let interval_prices = IntervalPrices {
+            begin_datetime: begin_epoch_291_datetime,
+            end_datetime: begin_epoch_292_datetime,
+            begin_epoch: 291,
+            end_epoch: 292,
+            begin_token_price_sol: Rational {
+                numerator: 1,
+                denominator: 1,
+            },
+            end_token_price_sol: Rational {
+                numerator: 1,
+                denominator: 1,
+            },
+        };
+
+        let expiration_header = get_expires_header(
+            begin_epoch_293_datetime,
+            first_slot_epoch_293,
+            &interval_prices,
+        );
+        assert_eq!(
+            expiration_header.field,
+            HeaderField::from_str("Expires").unwrap()
+        );
+        let next_year_expiration = begin_epoch_293_datetime + chrono::Duration::days(365);
+        assert_eq!(expiration_header.value, next_year_expiration.to_rfc2822());
+    }
+
+    #[test]
+    fn test_expiration_header_present() {
+        let begin_epoch_291_datetime = chrono::Utc.ymd(2022, 3, 19).and_hms(18, 20, 02);
+        let begin_epoch_292_datetime = chrono::Utc.ymd(2022, 3, 22).and_hms(13, 28, 50);
+        let first_slot_epoch_292 = 126_144_000;
+
+        let first_slot_epoch_293 = 126_576_000;
+
+        let interval_prices = IntervalPrices {
+            begin_datetime: begin_epoch_291_datetime,
+            end_datetime: begin_epoch_292_datetime,
+            begin_epoch: 291,
+            end_epoch: 292,
+            begin_token_price_sol: Rational {
+                numerator: 1,
+                denominator: 1,
+            },
+            end_token_price_sol: Rational {
+                numerator: 1,
+                denominator: 1,
+            },
+        };
+
+        let expiration_header = get_expires_header(
+            begin_epoch_292_datetime,
+            first_slot_epoch_292,
+            &interval_prices,
+        );
+        assert_eq!(
+            expiration_header.field,
+            HeaderField::from_str("Expires").unwrap()
+        );
+        let expected_slots_difference = first_slot_epoch_293 - first_slot_epoch_292;
+        let expected_time_ms_difference = expected_slots_difference * SLOT_MS;
+
+        let expected_time = begin_epoch_292_datetime
+            + chrono::Duration::milliseconds(expected_time_ms_difference as i64);
+        assert_eq!(expiration_header.value, expected_time.to_rfc2822());
     }
 }
