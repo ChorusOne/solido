@@ -227,7 +227,7 @@ print(f'> Created instance at {anker_address}.')
 
 
 print('\nVerifying Anker instance with `solido anker show` ...')
-result = solido('anker', 'show', '--anker-address', anker_address)
+anker_show = solido('anker', 'show', '--anker-address', anker_address)
 
 # Check if `anker show-authorities` got it right.
 expected_result = {
@@ -248,7 +248,7 @@ expected_result = {
     'st_sol_reserve_value_lamports': None,
     'b_sol_supply_b_lamports': 0,
 }
-assert result == expected_result, f'Expected {result} to be {expected_result}'
+assert anker_show == expected_result, f'Expected {anker_show} to be {expected_result}'
 print('> Instance parameters are as expected.')
 
 
@@ -302,8 +302,8 @@ spl_token(
     st_sol_account,
 )
 
-result = solido('anker', 'show', '--anker-address', anker_address)
-assert result['st_sol_reserve_balance_st_lamports'] == 1_000_000_000
+anker_show = solido('anker', 'show', '--anker-address', anker_address)
+assert anker_show['st_sol_reserve_balance_st_lamports'] == 1_000_000_000
 print('> Anker stSOL reserve now contains 1 SOL.')
 
 print('\nPerforming maintenance to swap that stSOL for UST ...')
@@ -314,12 +314,12 @@ assert result == {
     }
 }, f'Expected SellRewards, but got {result}'
 
-result = solido('anker', 'show', '--anker-address', anker_address)
-assert result['st_sol_reserve_balance_st_lamports'] == 0
+anker_show = solido('anker', 'show', '--anker-address', anker_address)
+assert anker_show['st_sol_reserve_balance_st_lamports'] == 0
 # The pool contained 1 stSOL and 1 UST, we doubled the amount of stSOL, so to
 # keep the product constant, there is now 0.5 UST in the pool, and the other
 # 0.5 UST went to Anker.
-assert result['ust_reserve_balance_micro_ust'] == 500_000
+assert anker_show['ust_reserve_balance_micro_ust'] == 500_000
 print('> Anker stSOL reserve now contains 0.5 UST.')
 
 
@@ -385,13 +385,14 @@ st_sol_balance = spl_token_balance(st_sol_account)
 assert st_sol_balance.balance_raw == 1_000_000_000
 print(f'> stSOL balance of {st_sol_account} is now 1.0 stSOL again.')
 
-result = solido('anker', 'show', '--anker-address', anker_address)
-assert result['st_sol_reserve_balance_st_lamports'] == 1_000_000_000
-assert result['b_sol_supply_b_lamports'] == 0
+anker_show = solido('anker', 'show', '--anker-address', anker_address)
+assert anker_show['st_sol_reserve_balance_st_lamports'] == 1_000_000_000
+assert anker_show['b_sol_supply_b_lamports'] == 0
 print(f'> Anker reserve has 1 stSOL, the bSOL mint has a supply of 0 bSOL.')
 
 print('\nTesting manager functions ...')
 print('> Changing Terra rewards destination')
+new_terra_rewards_destination = 'terra14dycr8jm7e5kw88g4studekkzzw5xc5ffnp4hk'
 transaction_result = solido(
     'anker',
     'change-terra-rewards-destination',
@@ -402,7 +403,7 @@ transaction_result = solido(
     '--multisig-program-id',
     multisig_program_id,
     '--terra-rewards-destination',
-    'terra14dycr8jm7e5kw88g4studekkzzw5xc5ffnp4hk',
+    new_terra_rewards_destination,
     keypair_path=test_addrs[0].keypair_path,
 )
 transaction_address = transaction_result['transaction_address']
@@ -453,6 +454,7 @@ transaction_address = transaction_result['transaction_address']
 approve_and_execute(transaction_address)
 
 print('> Changing min out basis points')
+new_min_out_bps = anker_show['sell_rewards_min_out_bps'] + 10
 transaction_result = solido(
     'anker',
     'change-sell-rewards-min-out-bps',
@@ -463,7 +465,7 @@ transaction_result = solido(
     '--multisig-program-id',
     multisig_program_id,
     '--sell-rewards-min-out-bps',
-    '10',
+    str(new_min_out_bps),
     keypair_path=test_addrs[0].keypair_path,
 )
 transaction_address = transaction_result['transaction_address']
@@ -471,7 +473,7 @@ approve_and_execute(transaction_address)
 
 print('\nVerifying Anker instance with `solido anker show` ...')
 # See if `anker show` shows the correct output
-result = solido('anker', 'show', '--anker-address', anker_address)
+anker_show = solido('anker', 'show', '--anker-address', anker_address)
 
 # Check if `anker show-authorities` got it right.
 expected_result = {
@@ -484,7 +486,7 @@ expected_result = {
     'ust_reserve': authorities['ust_reserve_account'],
     'b_sol_mint_authority': authorities['b_sol_mint_authority'],
     'reserve_authority': authorities['reserve_authority'],
-    'terra_rewards_destination': 'terra14dycr8jm7e5kw88g4studekkzzw5xc5ffnp4hk',
+    'terra_rewards_destination': new_terra_rewards_destination,
     'token_swap_pool': new_token_pool_address,
     'sell_rewards_min_out_bps': 10,
     'ust_reserve_balance_micro_ust': 500_000,
@@ -492,5 +494,5 @@ expected_result = {
     'st_sol_reserve_value_lamports': None,
     'b_sol_supply_b_lamports': 0,
 }
-assert result == expected_result, f'Expected {result} to be {expected_result}'
+assert anker_show == expected_result, f'Expected {anker_show} to be {expected_result}'
 print('> Instance parameters are as expected.')
