@@ -787,32 +787,39 @@ impl SolidoState {
             .exchange_rate
             .exchange_sol(Self::MINIMUM_WITHDRAW_AMOUNT)
             .expect("The price of a signature should be small enough that it doesn't overflow.");
+        // We should not call the instruction if the rewards are 0, or if the rewards are so small
+        // that the transaction cost is a significant portion of the rewards.
+        if rewards < min_rewards_to_sell {
+            return None;
+        }
 
-        let expected_st_sol_price_in_ust = get_one_st_sol_for_ust_price_from_pool(
-            &anker_state.constant_product_calculator,
-            &anker_state.pool_st_sol_account,
-            &anker_state.pool_ust_account,
-            anker_state.pool_st_sol_balance,
-            anker_state.pool_ust_balance,
-        )
-        .ok()?;
+        let expected_proceeds = anker_state
+            .constant_product_calculator
+            .swap_without_fees(
+                rewards.0 as u128,
+                anker_state.pool_st_sol_balance.0 as u128,
+                anker_state.pool_ust_balance.0 as u128,
+                TradeDirection::AtoB,
+            )?
+            .destination_amount_swapped;
+        let expected_proceeds = MicroUst(expected_proceeds as u64);
 
-        let expected_proceeds = MicroUst(rewards.0 * expected_st_sol_price_in_ust.0);
         // We want at least 0.01 UST out if we are going to do the swap at all.
         let min_proceeds = MicroUst(10_000);
 
+        // We want at least 0.01 UST out if we are going to do the swap at all.
+        if expected_proceeds < min_proceeds {
+            return None;
+        }
+
         // Check if we can sell the rewards with the preset slippage tolerance.
         // Note that this might change when the instruction gets included in the block.
-        // TODO(#539): Try to arbitrage in case this condition does not hold.
         let minimum_ust_amount_for_rewards = anker_state
             .anker
             .historical_st_sol_prices
             .minimum_ust_swap_amount(rewards, anker_state.anker.sell_rewards_min_out_bps)
             .ok()?;
-
-        // We should not call the instruction if the rewards are 0, or if the rewards are so small
-        // that the transaction cost is a significant portion of the rewards.
-        if rewards < min_rewards_to_sell {
+        if expected_proceeds < minimum_ust_amount_for_rewards {
             return None;
         }
 
@@ -831,6 +838,14 @@ impl SolidoState {
             if slots_elapsed_since_youngest_sample < POOL_PRICE_MIN_SAMPLE_DISTANCE {
                 None
             } else {
+                let expected_st_sol_price_in_ust = get_one_st_sol_for_ust_price_from_pool(
+                    &anker_state.constant_product_calculator,
+                    &anker_state.pool_st_sol_account,
+                    &anker_state.pool_ust_account,
+                    anker_state.pool_st_sol_balance,
+                    anker_state.pool_ust_balance,
+                )
+                .ok()?;
                 Some(MaintenanceInstruction::new(
                     anker_state.get_fetch_pool_price_instruction(self.solido_address),
                     MaintenanceOutput::FetchPoolPrice {
@@ -838,10 +853,6 @@ impl SolidoState {
                     },
                 ))
             }
-        } else if expected_proceeds < min_proceeds
-            || expected_proceeds < minimum_ust_amount_for_rewards
-        {
-            None
         } else {
             Some(MaintenanceInstruction::new(
                 anker_state
@@ -986,7 +997,7 @@ impl SolidoState {
             let current_stake_balance = stake_accounts
                 .iter()
                 .map(|(_addr, detail)| detail.balance.total())
-                .sum::<token::Result<Lamports>>()
+                .sum::<lido::token::Result<Lamports>>()
                 .expect("If this overflows, there would be more than u64::MAX staked.");
 
             let expected_difference_stake =
