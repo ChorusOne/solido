@@ -593,6 +593,28 @@ impl Context {
         Ok(())
     }
 
+    pub async fn try_change_sell_rewards_min_out_bps(
+        &mut self,
+        manager: &Keypair,
+        sell_rewards_min_out_bps: u64,
+    ) -> transport::Result<()> {
+        send_transaction(
+            &mut self.solido_context.context,
+            &mut self.solido_context.nonce,
+            &[instruction::change_sell_rewards_min_out_bps(
+                &id(),
+                &instruction::ChangeSellRewardsMinOutBpsAccountsMeta {
+                    anker: self.anker,
+                    solido: self.solido_context.solido.pubkey(),
+                    manager: manager.pubkey(),
+                },
+                sell_rewards_min_out_bps,
+            )],
+            vec![manager],
+        )
+        .await
+    }
+
     /// Return the `MicroUst` balance of the account in `address`.
     pub async fn try_fetch_pool_price(&mut self) -> transport::Result<()> {
         let (ust_address, st_sol_address) = self

@@ -60,6 +60,9 @@ pub enum AnkerError {
 
     /// `FetchPoolPrice` has not been called recently, we must call it before selling the rewards.
     FetchPoolPriceNotCalledRecently = 4015,
+
+    /// Value of `sell_rewards_min_out_bps` is greater than 100% (1_000_000).
+    InvalidSellRewardsMinOutBps = 4016,
 }
 
 // Just reuse the generated Debug impl for Display. It shows the variant names.
