@@ -7,8 +7,11 @@ use std::fmt;
 use std::io;
 use std::time::SystemTime;
 
-use anker::logic::get_one_st_sol_for_ust_price_from_pool;
-use anker::state::{POOL_PRICE_MAX_SAMPLE_AGE, POOL_PRICE_MIN_SAMPLE_DISTANCE};
+use anker::{
+    logic::get_one_st_sol_for_ust_price_from_pool,
+    state::{POOL_PRICE_MAX_SAMPLE_AGE, POOL_PRICE_MIN_SAMPLE_DISTANCE},
+    token::MicroUst,
+};
 use itertools::izip;
 
 use serde::Serialize;
@@ -32,7 +35,6 @@ use solido_cli_common::{
 };
 use spl_token::state::Mint;
 
-use anker::token::MicroUst;
 use lido::{
     account_map::PubkeyAndEntry,
     processor::StakeType,
@@ -43,7 +45,7 @@ use lido::{
     token::Rational,
     token::StLamports,
     util::serialize_b58,
-    MINIMUM_STAKE_ACCOUNT_BALANCE, MINT_AUTHORITY, STAKE_AUTHORITY,
+    MINIMUM_STAKE_ACCOUNT_BALANCE, MINT_AUTHORITY, REWARDS_WITHDRAW_AUTHORITY, STAKE_AUTHORITY,
 };
 use spl_token_swap::curve::calculator::{CurveCalculator, TradeDirection};
 
