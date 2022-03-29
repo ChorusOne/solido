@@ -227,7 +227,7 @@ print(f'> Created instance at {anker_address}.')
 
 
 print('\nVerifying Anker instance with `solido anker show` ...')
-result = solido('anker', 'show', '--anker-address', anker_address)
+anker_show = solido('anker', 'show', '--anker-address', anker_address)
 
 # Check if `anker show-authorities` got it right.
 expected_result = {
@@ -241,6 +241,7 @@ expected_result = {
     'b_sol_mint_authority': authorities['b_sol_mint_authority'],
     'reserve_authority': authorities['reserve_authority'],
     'terra_rewards_destination': terra_rewards_address,
+    'token_swap_pool': token_pool_address,
     'sell_rewards_min_out_bps': 0,
     'ust_reserve_balance_micro_ust': 0,
     'st_sol_reserve_balance_st_lamports': 0,
@@ -254,7 +255,7 @@ expected_result = {
         {'slot': 0, 'st_sol_price_in_micro_ust': 1_000_000},
     ],
 }
-assert result == expected_result, f'Expected {result} to be {expected_result}'
+assert anker_show == expected_result, f'Expected {anker_show} to be {expected_result}'
 print('> Instance parameters are as expected.')
 
 
@@ -308,8 +309,8 @@ spl_token(
     st_sol_account,
 )
 
-result = solido('anker', 'show', '--anker-address', anker_address)
-assert result['st_sol_reserve_balance_st_lamports'] == 1_000_000_000
+anker_show = solido('anker', 'show', '--anker-address', anker_address)
+assert anker_show['st_sol_reserve_balance_st_lamports'] == 1_000_000_000
 print('> Anker stSOL reserve now contains 1 SOL.')
 
 print('\nPerforming maintenance to swap that stSOL for UST ...')
@@ -320,12 +321,12 @@ assert result == {
     }
 }, f'Expected SellRewards, but got {result}'
 
-result = solido('anker', 'show', '--anker-address', anker_address)
-assert result['st_sol_reserve_balance_st_lamports'] == 0
+anker_show = solido('anker', 'show', '--anker-address', anker_address)
+assert anker_show['st_sol_reserve_balance_st_lamports'] == 0
 # The pool contained 1 stSOL and 1 UST, we doubled the amount of stSOL, so to
 # keep the product constant, there is now 0.5 UST in the pool, and the other
 # 0.5 UST went to Anker.
-assert result['ust_reserve_balance_micro_ust'] == 500_000
+assert anker_show['ust_reserve_balance_micro_ust'] == 500_000
 print('> Anker stSOL reserve now contains 0.5 UST.')
 
 
@@ -391,7 +392,114 @@ st_sol_balance = spl_token_balance(st_sol_account)
 assert st_sol_balance.balance_raw == 1_000_000_000
 print(f'> stSOL balance of {st_sol_account} is now 1.0 stSOL again.')
 
-result = solido('anker', 'show', '--anker-address', anker_address)
-assert result['st_sol_reserve_balance_st_lamports'] == 1_000_000_000
-assert result['b_sol_supply_b_lamports'] == 0
+anker_show = solido('anker', 'show', '--anker-address', anker_address)
+assert anker_show['st_sol_reserve_balance_st_lamports'] == 1_000_000_000
+assert anker_show['b_sol_supply_b_lamports'] == 0
 print(f'> Anker reserve has 1 stSOL, the bSOL mint has a supply of 0 bSOL.')
+
+print('\nTesting manager functions ...')
+print('> Changing Terra rewards destination')
+new_terra_rewards_destination = 'terra14dycr8jm7e5kw88g4studekkzzw5xc5ffnp4hk'
+transaction_result = solido(
+    'anker',
+    'change-terra-rewards-destination',
+    '--anker-address',
+    anker_address,
+    '--multisig-address',
+    multisig_instance,
+    '--multisig-program-id',
+    multisig_program_id,
+    '--terra-rewards-destination',
+    new_terra_rewards_destination,
+    keypair_path=test_addrs[0].keypair_path,
+)
+transaction_address = transaction_result['transaction_address']
+approve_and_execute(transaction_address)
+
+print('> Changing Token Swap Pool')
+print('    Creating new token pool instance ...')
+
+new_ust_pool_account = create_spl_token_account(
+    test_addrs[1].keypair_path, ust_mint_address.pubkey
+)
+new_st_sol_pool_account = create_spl_token_account(
+    test_addrs[1].keypair_path, st_sol_mint_address
+)
+spl_token('transfer', st_sol_mint_address, '1', new_st_sol_pool_account)
+spl_token('mint', ust_mint_address.pubkey, '1', new_ust_pool_account)
+
+result = solido(
+    'anker',
+    'create-token-pool',
+    '--token-swap-program-id',
+    orca_token_swap_program_id,
+    '--st-sol-account',
+    new_st_sol_pool_account,
+    '--ust-account',
+    new_ust_pool_account,
+    '--ust-mint-address',
+    ust_mint_address.pubkey,
+    keypair_path=test_addrs[1].keypair_path,
+)
+new_token_pool_address = result['pool_address']
+print(f'    Created instance at {new_token_pool_address}.')
+
+transaction_result = solido(
+    'anker',
+    'change-token-swap-pool',
+    '--anker-address',
+    anker_address,
+    '--multisig-address',
+    multisig_instance,
+    '--multisig-program-id',
+    multisig_program_id,
+    '--token-swap-pool',
+    new_token_pool_address,
+    keypair_path=test_addrs[0].keypair_path,
+)
+transaction_address = transaction_result['transaction_address']
+approve_and_execute(transaction_address)
+
+print('> Changing min out basis points')
+new_min_out_bps = anker_show['sell_rewards_min_out_bps'] + 10
+transaction_result = solido(
+    'anker',
+    'change-sell-rewards-min-out-bps',
+    '--anker-address',
+    anker_address,
+    '--multisig-address',
+    multisig_instance,
+    '--multisig-program-id',
+    multisig_program_id,
+    '--sell-rewards-min-out-bps',
+    str(new_min_out_bps),
+    keypair_path=test_addrs[0].keypair_path,
+)
+transaction_address = transaction_result['transaction_address']
+approve_and_execute(transaction_address)
+
+print('\nVerifying Anker instance with `solido anker show` ...')
+# See if `anker show` shows the correct output
+anker_show = solido('anker', 'show', '--anker-address', anker_address)
+
+# Check if `anker show-authorities` got it right.
+expected_result = {
+    'anker_address': authorities['anker_address'],
+    'anker_program_id': anker_program_id,
+    'solido_address': solido_address,
+    'solido_program_id': solido_program_id,
+    'b_sol_mint': b_sol_mint_address.pubkey,
+    'st_sol_reserve': authorities['st_sol_reserve_account'],
+    'ust_reserve': authorities['ust_reserve_account'],
+    'b_sol_mint_authority': authorities['b_sol_mint_authority'],
+    'reserve_authority': authorities['reserve_authority'],
+    'terra_rewards_destination': new_terra_rewards_destination,
+    'token_swap_pool': new_token_pool_address,
+    'sell_rewards_min_out_bps': str(new_min_out_bps),
+    'ust_reserve_balance_micro_ust': 500_000,
+    'st_sol_reserve_balance_st_lamports': 1_000_000_000,
+    'st_sol_reserve_value_lamports': None,
+    'b_sol_supply_b_lamports': 0,
+}
+assert anker_show == expected_result, f'Expected {anker_show} to be {expected_result}'
+print('> Instance parameters are as expected.')
