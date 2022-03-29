@@ -290,7 +290,7 @@ impl fmt::Display for ShowAnkerOutput {
             "Rewards destination:    {}",
             self.terra_rewards_destination
         )?;
-        writeln!(f, "Token Swap Pool:       {}", self.token_swap_pool)?;
+        writeln!(f, "Token Swap Pool:        {}", self.token_swap_pool)?;
         if self.sell_rewards_min_out_bps <= 9999 {
             writeln!(f,
                      "Sell rewards min out:   {}.{:>02}% of the expected amount ({}.{:>02}% slippage + fees)",
