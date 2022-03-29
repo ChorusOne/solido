@@ -3,22 +3,24 @@
 
 use std::fmt;
 
-use anker::state::HistoricalStSolPrice;
-use anker::token::{BLamports, MicroUst};
-use anker::wormhole::TerraAddress;
 use clap::Clap;
-use lido::token::{Lamports, StLamports};
-use lido::util::serialize_b58;
 use serde::Serialize;
 use solana_program::pubkey::Pubkey;
 use solana_program::system_instruction;
 use solana_sdk::signature::Keypair;
 use solana_sdk::signer::Signer;
-use solido_cli_common::error::Abort;
-use solido_cli_common::snapshot::{SnapshotClientConfig, SnapshotConfig};
 use spl_token_swap::curve::base::{CurveType, SwapCurve};
 use spl_token_swap::curve::constant_product::ConstantProductCurve;
 
+use anker::state::HistoricalStSolPrice;
+use anker::token::{BLamports, MicroUst};
+use anker::wormhole::TerraAddress;
+use lido::token::{Lamports, StLamports};
+use lido::util::serialize_b58;
+use solido_cli_common::error::Abort;
+use solido_cli_common::snapshot::{SnapshotClientConfig, SnapshotConfig};
+
+use crate::anker_state::AnkerState;
 use crate::commands_multisig::{propose_instruction, ProposeInstructionOutput};
 use crate::config::{
     AnkerChangeSellRewardsMinOutBpsOpts, AnkerChangeTerraRewardsDestinationOpts,
@@ -250,6 +252,12 @@ struct ShowAnkerOutput {
     #[serde(serialize_with = "serialize_b58")]
     token_swap_pool: Pubkey,
 
+    #[serde(serialize_with = "serialize_b58")]
+    token_swap_pool_st_sol_account: Pubkey,
+
+    #[serde(serialize_with = "serialize_b58")]
+    token_swap_pool_ust_account: Pubkey,
+
     #[serde(serialize_with = "serialize_bech32")]
     terra_rewards_destination: TerraAddress,
 
@@ -291,6 +299,16 @@ impl fmt::Display for ShowAnkerOutput {
             self.terra_rewards_destination
         )?;
         writeln!(f, "Token Swap Pool:        {}", self.token_swap_pool)?;
+        writeln!(
+            f,
+            " - Pool stSOL account:  {}",
+            self.token_swap_pool_st_sol_account
+        )?;
+        writeln!(
+            f,
+            " - Pool UST account:    {}",
+            self.token_swap_pool_ust_account
+        )?;
         if self.sell_rewards_min_out_bps <= 9999 {
             writeln!(f,
                      "Sell rewards min out:   {}.{:>02}% of the expected amount ({}.{:>02}% slippage + fees)",
@@ -338,6 +356,7 @@ fn command_show_anker(
     let anker_program_id = anker_account.owner;
     let anker = client.get_anker(opts.anker_address())?;
     let solido = client.get_solido(&anker.solido)?;
+    let anker_state = AnkerState::new(config, &anker_program_id, opts.anker_address(), &solido)?;
 
     let (mint_authority, _seed) =
         anker::find_mint_authority(&anker_program_id, opts.anker_address());
@@ -348,15 +367,14 @@ fn command_show_anker(
     let (ust_reserve, _seed) =
         anker::find_ust_reserve_account(&anker_program_id, opts.anker_address());
 
-    let st_sol_reserve_balance = StLamports(client.get_spl_token_balance(&st_sol_reserve)?);
-    let ust_reserve_balance = MicroUst(client.get_spl_token_balance(&ust_reserve)?);
+    let st_sol_reserve_balance = anker_state.st_sol_reserve_balance;
+    let ust_reserve_balance = anker_state.ust_reserve_balance;
 
     let st_sol_reserve_value = solido
         .exchange_rate
         .exchange_st_sol(st_sol_reserve_balance)
         .ok();
-    let b_sol_mint = client.get_spl_token_mint(&anker.b_sol_mint)?;
-    let b_sol_supply = BLamports(b_sol_mint.supply);
+    let b_sol_supply = anker_state.b_sol_total_supply_amount;
 
     let result = ShowAnkerOutput {
         anker_address: *opts.anker_address(),
@@ -366,6 +384,9 @@ fn command_show_anker(
         solido_program_id: anker.solido_program_id,
 
         token_swap_pool: anker.token_swap_pool,
+        token_swap_pool_st_sol_account: anker_state.pool_st_sol_account,
+        token_swap_pool_ust_account: anker_state.pool_ust_account,
+
         terra_rewards_destination: anker.terra_rewards_destination,
         sell_rewards_min_out_bps: anker.sell_rewards_min_out_bps,
 
