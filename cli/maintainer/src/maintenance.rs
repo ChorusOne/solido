@@ -807,8 +807,6 @@ impl SolidoState {
 
         // We want at least 0.01 UST out if we are going to do the swap at all.
         let min_proceeds = MicroUst(10_000);
-
-        // We want at least 0.01 UST out if we are going to do the swap at all.
         if expected_proceeds < min_proceeds {
             return None;
         }
