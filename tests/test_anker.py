@@ -488,7 +488,7 @@ expected_result = {
     'reserve_authority': authorities['reserve_authority'],
     'terra_rewards_destination': new_terra_rewards_destination,
     'token_swap_pool': new_token_pool_address,
-    'sell_rewards_min_out_bps': 10,
+    'sell_rewards_min_out_bps': str(new_min_out_bps),
     'ust_reserve_balance_micro_ust': 500_000,
     'st_sol_reserve_balance_st_lamports': 1_000_000_000,
     'st_sol_reserve_value_lamports': None,
