@@ -17,7 +17,7 @@ use solido_cli_common::{
     error::{Error, SerializationError},
     snapshot::SnapshotConfig,
 };
-use spl_token_swap::curve::constant_product::ConstantProductCurve;
+use spl_token_swap::curve::{constant_product::ConstantProductCurve, fees};
 
 #[derive(Default)]
 pub struct AnkerState {
@@ -32,6 +32,7 @@ pub struct AnkerState {
     pub pool_ust_balance: MicroUst,
 
     pub constant_product_calculator: ConstantProductCurve,
+    pub pool_fees: fees::Fees,
     pub ust_mint: Pubkey,
     pub pool_mint: Pubkey,
     pub pool_fee_account: Pubkey,
@@ -97,6 +98,7 @@ impl AnkerState {
             pool_st_sol_balance,
             pool_ust_balance,
             constant_product_calculator: ConstantProductCurve::default(),
+            pool_fees: token_swap.fees,
             ust_mint: ust_account.mint,
             pool_mint: token_swap.pool_mint,
             pool_fee_account: token_swap.pool_fee_account,

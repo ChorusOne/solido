@@ -794,10 +794,17 @@ impl SolidoState {
             return None;
         }
 
+        // Fees as in the `spl_token_swap` `SwapCurve::swap` calculation.
+        let trade_fee = anker_state.pool_fees.trading_fee(rewards.0 as u128)?;
+        let owner_fee = anker_state.pool_fees.owner_trading_fee(rewards.0 as u128)?;
+
+        let total_fees = trade_fee.checked_add(owner_fee)?;
+        let rewards_minus_fees = (rewards.0 as u128).checked_sub(total_fees)?;
+
         let expected_proceeds = anker_state
             .constant_product_calculator
             .swap_without_fees(
-                rewards.0 as u128,
+                rewards_minus_fees,
                 anker_state.pool_st_sol_balance.0 as u128,
                 anker_state.pool_ust_balance.0 as u128,
                 TradeDirection::AtoB,
