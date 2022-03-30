@@ -518,11 +518,11 @@ expected_result = {
     'st_sol_reserve_value_lamports': None,
     'b_sol_supply_b_lamports': 0,
     'historical_st_sol_price': [
-        {'slot': 0, 'st_sol_price_in_micro_ust': 1000000},
-        {'slot': 0, 'st_sol_price_in_micro_ust': 1000000},
-        {'slot': 0, 'st_sol_price_in_micro_ust': 1000000},
-        {'slot': 0, 'st_sol_price_in_micro_ust': 1000000},
-        {'slot': 0, 'st_sol_price_in_micro_ust': 1000000},
+        {
+            'slot': anker_show['historical_st_sol_price'][i]['slot'],
+            'st_sol_price_in_micro_ust': 500000,
+        }
+        for i in range(5)
     ],
 }
 assert anker_show == expected_result, f'Expected {anker_show} to be {expected_result}'
