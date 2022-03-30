@@ -495,11 +495,18 @@ expected_result = {
     'reserve_authority': authorities['reserve_authority'],
     'terra_rewards_destination': new_terra_rewards_destination,
     'token_swap_pool': new_token_pool_address,
-    'sell_rewards_min_out_bps': str(new_min_out_bps),
+    'sell_rewards_min_out_bps': new_min_out_bps,
     'ust_reserve_balance_micro_ust': 500_000,
     'st_sol_reserve_balance_st_lamports': 1_000_000_000,
     'st_sol_reserve_value_lamports': None,
     'b_sol_supply_b_lamports': 0,
+    'historical_st_sol_price': [
+        {'slot': 0, 'st_sol_price_in_micro_ust': 1000000},
+        {'slot': 0, 'st_sol_price_in_micro_ust': 1000000},
+        {'slot': 0, 'st_sol_price_in_micro_ust': 1000000},
+        {'slot': 0, 'st_sol_price_in_micro_ust': 1000000},
+        {'slot': 0, 'st_sol_price_in_micro_ust': 1000000},
+    ],
 }
 assert anker_show == expected_result, f'Expected {anker_show} to be {expected_result}'
 print('> Instance parameters are as expected.')
