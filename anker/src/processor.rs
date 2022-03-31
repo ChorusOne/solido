@@ -323,6 +323,18 @@ fn process_sell_rewards(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> Pr
         return Err(AnkerError::FetchPoolPriceNotCalledRecently.into());
     }
 
+    let youngest_sample = anker.historical_st_sol_prices.last();
+    let slots_elapsed = clock.slot.saturating_sub(youngest_sample.slot);
+    if slots_elapsed < POOL_PRICE_MIN_SAMPLE_DISTANCE {
+        msg!(
+            "The youngest stSOL/UST price was sampled at slot {}. \
+            Wait at least {} slots until selling the rewards..",
+            youngest_sample.slot,
+            POOL_PRICE_MIN_SAMPLE_DISTANCE,
+        );
+        return Err(AnkerError::SellRewardsTooEarly.into());
+    }
+
     anker.check_is_st_sol_account(&solido, accounts.st_sol_reserve_account)?;
     anker.check_mint(accounts.b_sol_mint)?;
 
