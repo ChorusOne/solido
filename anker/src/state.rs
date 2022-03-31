@@ -201,7 +201,7 @@ pub struct Anker {
     /// median of the recent price samples times a factor alpha. In other words,
     /// this factor alpha is `1 - max_slippage`. Alpha is defined as
     /// `sell_rewards_min_out_bps / 1e4`. The `bps` here means "basis points".
-    /// A basis point is 0.01% = 1e-4.)
+    /// A basis point is 0.01% = 1e-4.
     pub sell_rewards_min_out_bps: u64,
 
     /// Metrics for informational purposes.
