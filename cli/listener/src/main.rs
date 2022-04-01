@@ -15,7 +15,7 @@ use rusqlite::{params, Connection, Row};
 use serde::{Deserialize, Serialize};
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::{
-    clock::{Epoch, Slot, SLOT_MS},
+    clock::{Clock, Epoch, Slot, SLOT_MS},
     commitment_config::CommitmentConfig,
     epoch_schedule::EpochSchedule,
     pubkey::Pubkey,
@@ -267,7 +267,15 @@ pub fn insert_price(conn: &Connection, exchange_rate: &ExchangeRate) -> rusqlite
     Ok(())
 }
 
-type MetricsMutex = Mutex<Arc<Metrics>>;
+struct Snapshot {
+    /// Metrics about the daemon.
+    metrics: Metrics,
+
+    /// Clock instance, so we know what time it is.
+    clock: Option<Clock>,
+}
+
+type MetricsMutex = Mutex<Arc<Snapshot>>;
 struct Daemon<'a, 'b> {
     config: &'a mut SnapshotClientConfig<'b>,
     opts: &'a Opts,
@@ -299,10 +307,17 @@ impl<'a, 'b> Daemon<'a, 'b> {
             errors: 0,
             solido_average_30d_interval_price: None,
         };
+        let clock = config
+            .with_snapshot(|config| config.client.get_clock())
+            .ok();
+
         Daemon {
             config,
             opts,
-            metrics_snapshot: Arc::new(Mutex::new(Arc::new(empty_metrics.clone()))),
+            metrics_snapshot: Arc::new(Mutex::new(Arc::new(Snapshot {
+                metrics: empty_metrics.clone(),
+                clock,
+            }))),
             metrics: empty_metrics,
             rng: rand::thread_rng(),
             last_read_success: Instant::now(),
@@ -313,7 +328,7 @@ impl<'a, 'b> Daemon<'a, 'b> {
     fn run(mut self) -> ! {
         loop {
             self.metrics.polls += 1;
-            let sleep_time = match get_and_save_exchange_rate(
+            let (sleep_time, clock_opt) = match get_and_save_exchange_rate(
                 self.config,
                 self.opts,
                 self.db_connection,
@@ -323,9 +338,9 @@ impl<'a, 'b> Daemon<'a, 'b> {
                     println!("Error while obtaining on-chain state.");
                     err.print_pretty();
                     self.metrics.errors += 1;
-                    self.get_sleep_time_after_error()
+                    (self.get_sleep_time_after_error(), None)
                 }
-                ListenerResult::OkListener(exchange_rate, interval_prices_option) => {
+                ListenerResult::OkListener(exchange_rate, interval_prices_option, clock) => {
                     println!(
                         "Got exchange rate: {}/{}: {} at slot {} and epoch {}.",
                         exchange_rate.price_lamports_numerator,
@@ -345,16 +360,19 @@ impl<'a, 'b> Daemon<'a, 'b> {
                             self.metrics.solido_average_30d_interval_price = Some(interval_prices);
                         }
                     }
-                    self.get_sleep_time()
+                    (self.get_sleep_time(), Some(clock))
                 }
-                ListenerResult::ErrListener(err) => {
+                ListenerResult::ErrListener(err, clock) => {
                     println!("Error in listener.");
                     err.print_pretty();
-                    self.get_sleep_time_after_error()
+                    (self.get_sleep_time_after_error(), Some(clock))
                 }
             };
             // Update metrics snapshot.
-            *self.metrics_snapshot.lock().unwrap() = Arc::new(self.metrics.clone());
+            *self.metrics_snapshot.lock().unwrap() = Arc::new(Snapshot {
+                metrics: self.metrics.clone(),
+                clock: clock_opt,
+            });
             std::thread::sleep(sleep_time);
         }
     }
@@ -756,10 +774,10 @@ enum ListenerResult {
     ErrSnapshot(Error),
 
     /// We have a snapshot, and we got the price.
-    OkListener(ExchangeRate, Option<IntervalPrices>),
+    OkListener(ExchangeRate, Option<IntervalPrices>, Clock),
 
     /// We have a snapshot, but failed in-between, e.g. when inserting in database.
-    ErrListener(Error),
+    ErrListener(Error, Clock),
 }
 
 /// Save the exchange rate and get a response for the 30d interval price.
@@ -772,23 +790,28 @@ fn get_and_save_exchange_rate(
     let result = config.with_snapshot(|config| {
         let solido = config.client.get_solido(&opts.solido_address)?;
         let clock = config.client.get_clock()?;
-        Ok(ExchangeRate {
-            id: 0,
-            timestamp: chrono::Utc::now(),
-            slot: clock.slot,
-            epoch: clock.epoch,
-            pool: pool.clone(),
-            price_lamports_numerator: solido.exchange_rate.sol_balance.0,
-            price_lamports_denominator: solido.exchange_rate.st_sol_supply.0,
-        })
+        Ok((
+            ExchangeRate {
+                id: 0,
+                timestamp: chrono::Utc::now(),
+                slot: clock.slot,
+                epoch: clock.epoch,
+                pool: pool.clone(),
+                price_lamports_numerator: solido.exchange_rate.sol_balance.0,
+                price_lamports_denominator: solido.exchange_rate.st_sol_supply.0,
+            },
+            clock,
+        ))
     });
 
     match result {
         Err(err) => ListenerResult::ErrSnapshot(err),
-        Ok(exchange_rate) => {
+        Ok((exchange_rate, clock)) => {
             match insert_price_and_query_30d_price_interval(db_connection, &exchange_rate) {
-                Ok(interval_prices) => ListenerResult::OkListener(exchange_rate, interval_prices),
-                Err(error) => ListenerResult::ErrListener(Box::new(error)),
+                Ok(interval_prices) => {
+                    ListenerResult::OkListener(exchange_rate, interval_prices, clock)
+                }
+                Err(error) => ListenerResult::ErrListener(Box::new(error), clock),
             }
         }
     }
