@@ -699,12 +699,12 @@ fn serve_request(
             // Take the current snapshot. This only holds the lock briefly, and does
             // not prevent other threads from updating the snapshot while this request
             // handler is running.
-            let metrics = metrics_mutex.lock().unwrap().clone();
+            let snapshot = metrics_mutex.lock().unwrap().clone();
 
             // We don't even look at the request, for now we always serve the metrics.
 
             let mut out: Vec<u8> = Vec::new();
-            metrics.write_prometheus(&mut out).expect(
+            snapshot.metrics.write_prometheus(&mut out).expect(
                 "We must handle the error because of io::Write, but writing to a Vec does not fail.",
             );
 
