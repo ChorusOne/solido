@@ -837,28 +837,30 @@ impl SolidoState {
         let slots_elapsed_since_youngest_sample =
             self.clock.slot.saturating_sub(youngest_sample.slot);
 
+        // If the youngest sample is too recent, we are not yet allowed to sell
+        // rewards or update the price.
+        if slots_elapsed_since_youngest_sample < POOL_PRICE_MIN_SAMPLE_DISTANCE {
+            return None;
+        }
+
         // Time to update the historical price
         if slots_elapsed_since_oldest_sample > POOL_PRICE_MAX_SAMPLE_AGE
             || oldest_price_sample.slot == 0
         {
-            if slots_elapsed_since_youngest_sample < POOL_PRICE_MIN_SAMPLE_DISTANCE {
-                None
-            } else {
-                let expected_st_sol_price_in_ust = get_one_st_sol_for_ust_price_from_pool(
-                    &anker_state.constant_product_calculator,
-                    &anker_state.pool_st_sol_account,
-                    &anker_state.pool_ust_account,
-                    anker_state.pool_st_sol_balance,
-                    anker_state.pool_ust_balance,
-                )
-                .ok()?;
-                Some(MaintenanceInstruction::new(
-                    anker_state.get_fetch_pool_price_instruction(self.solido_address),
-                    MaintenanceOutput::FetchPoolPrice {
-                        expected_st_sol_price_in_ust,
-                    },
-                ))
-            }
+            let expected_st_sol_price_in_ust = get_one_st_sol_for_ust_price_from_pool(
+                &anker_state.constant_product_calculator,
+                &anker_state.pool_st_sol_account,
+                &anker_state.pool_ust_account,
+                anker_state.pool_st_sol_balance,
+                anker_state.pool_ust_balance,
+            )
+            .ok()?;
+            Some(MaintenanceInstruction::new(
+                anker_state.get_fetch_pool_price_instruction(self.solido_address),
+                MaintenanceOutput::FetchPoolPrice {
+                    expected_st_sol_price_in_ust,
+                },
+            ))
         } else {
             Some(MaintenanceInstruction::new(
                 anker_state

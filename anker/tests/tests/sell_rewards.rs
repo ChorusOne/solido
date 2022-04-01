@@ -30,9 +30,21 @@ async fn test_fails_sell_rewards_if_not_enough_fetch_pool_price_calls() {
         let result = context.try_sell_rewards().await;
         assert_solido_error!(result, AnkerError::FetchPoolPriceNotCalledRecently);
     }
-    // Confirm that after we complete the `historical_st_sol_prices` array we
-    // can call `sell_rewards`.
+
     context.fetch_pool_price().await;
+
+    // After the final fetch, we still shouldn't be able to _immediately_
+    // sell the rewards, but after MIN_SAMPLE_DISTANCE, we should.
+    let current_slot = context.solido_context.get_clock().await.slot;
+    let result = context.try_sell_rewards().await;
+    assert_solido_error!(result, AnkerError::SellRewardsTooEarly);
+
+    context
+        .solido_context
+        .context
+        .warp_to_slot(current_slot + POOL_PRICE_MIN_SAMPLE_DISTANCE)
+        .unwrap();
+
     context.sell_rewards().await;
 }
 

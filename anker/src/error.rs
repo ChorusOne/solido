@@ -63,6 +63,9 @@ pub enum AnkerError {
 
     /// Value of `sell_rewards_min_out_bps` is greater than 100% (1_000_000).
     InvalidSellRewardsMinOutBps = 4016,
+
+    /// The most recent price sample is too recent, we can’t call `SellRewards` yet.
+    SellRewardsTooEarly = 4017,
 }
 
 // Just reuse the generated Debug impl for Display. It shows the variant names.

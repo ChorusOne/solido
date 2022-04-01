@@ -316,19 +316,14 @@ print('> Anker stSOL reserve now contains 1 SOL.')
 
 print('\nPerforming maintenance 5 times to populate the historical prices ...')
 expected_price_update_result = {'FetchPoolPrice': {'st_sol_price_in_micro_ust': 500000}}
-for i in range(4):
+for i in range(5):
     result = perform_maintenance()
     assert (
         result == expected_price_update_result
     ), f'Expected {result} to be {expected_price_update_result}'
 
-    print(f'> ({i + 1}/4) Waiting for 100 slots for the next price update ...')
+    print(f'> ({i + 1}/5) Waiting for 100 slots for the next price update ...')
     wait_for_slots(100)
-result = perform_maintenance()
-assert (
-    result == expected_price_update_result
-), f'Expected {result} to be {expected_price_update_result}'
-
 
 print('\nPerforming maintenance to swap that stSOL for UST ...')
 result = perform_maintenance()
