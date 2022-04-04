@@ -628,10 +628,10 @@ fn get_expires_header(
         // From the past, set expiration to 1 week from now.
         DateRequestType::Fixed => now + chrono::Duration::weeks(1),
         DateRequestType::MovingTarget => {
-            // We don't have information about the current clock, default to 1hr
-            // cache.
+            // We don't have information about the current clock, default to 5
+            // minutes cache.
             match current_clock {
-                None => now + chrono::Duration::hours(1),
+                None => now + chrono::Duration::minutes(5),
                 Some(clock) => {
                     let epoch_sched = EpochSchedule::without_warmup();
                     let first_slot_next_epoch =
@@ -659,8 +659,8 @@ fn get_expires_header(
         }
     };
 
-    // Set minimum expiration time to 1 hour.
-    let expires_date = expires_date.max(now + chrono::Duration::hours(1));
+    // Set minimum expiration time to 5 minutes.
+    let expires_date = expires_date.max(now + chrono::Duration::minutes(5));
     Header::from_bytes(&b"Expires"[..], &expires_date.to_rfc2822()[..])
         .expect("Static header value, does not fail at runtime.")
 }
@@ -1273,7 +1273,7 @@ mod test {
             HeaderField::from_str("Expires").unwrap()
         );
 
-        let expected_time = epoch_293_minus_1m_datetime + chrono::Duration::hours(1);
+        let expected_time = epoch_293_minus_1m_datetime + chrono::Duration::minutes(5);
         assert_eq!(expiration_header.value, expected_time.to_rfc2822());
     }
 }
