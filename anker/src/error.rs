@@ -51,6 +51,21 @@ pub enum AnkerError {
 
     /// After swapping, we are left with less stSOL than we intended.
     TokenSwapAmountInvalid = 4012,
+
+    /// The most recent price sample is too recent, we can’t call `FetchPoolPrice` yet.
+    FetchPoolPriceTooEarly = 4013,
+
+    /// We failed to compute the price of stSOL in UST.
+    PoolPriceUndefined = 4014,
+
+    /// `FetchPoolPrice` has not been called recently, we must call it before selling the rewards.
+    FetchPoolPriceNotCalledRecently = 4015,
+
+    /// Value of `sell_rewards_min_out_bps` is greater than 100% (1_000_000).
+    InvalidSellRewardsMinOutBps = 4016,
+
+    /// The most recent price sample is too recent, we can’t call `SellRewards` yet.
+    SellRewardsTooEarly = 4017,
 }
 
 // Just reuse the generated Debug impl for Display. It shows the variant names.

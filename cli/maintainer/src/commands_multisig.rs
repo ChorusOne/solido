@@ -7,6 +7,11 @@ use std::str::FromStr;
 
 use anchor_lang::prelude::{AccountMeta, ToAccountMetas};
 use anchor_lang::{Discriminator, InstructionData};
+use anker::instruction::{
+    ChangeSellRewardsMinOutBpsAccountsMeta, ChangeTerraRewardsDestinationAccountsMeta,
+    ChangeTokenSwapPoolAccountsMeta,
+};
+use anker::wormhole::TerraAddress;
 use borsh::de::BorshDeserialize;
 use borsh::ser::BorshSerialize;
 use clap::Clap;
@@ -132,11 +137,17 @@ pub fn main(config: &mut SnapshotClientConfig, multisig_opts: MultisigOpts) {
         }
         SubCommand::ShowTransaction(cmd_opts) => {
             let result = config.with_snapshot(|config| {
+                let anker_program_id = if cmd_opts.anker_program_id() == &Pubkey::default() {
+                    None
+                } else {
+                    Some(*cmd_opts.anker_program_id())
+                };
                 show_transaction(
                     config,
                     cmd_opts.transaction_address(),
                     cmd_opts.multisig_program_id(),
                     cmd_opts.solido_program_id(),
+                    anker_program_id,
                 )
             });
             let output = result.ok_or_abort_with("Failed to read multisig.");
@@ -384,8 +395,10 @@ enum ParsedInstruction {
         new_owners: Vec<Pubkey>,
     },
     SolidoInstruction(SolidoInstruction),
+    AnkerInstruction(AnkerInstruction),
     TokenInstruction(TokenInstruction),
     InvalidSolidoInstruction,
+    InvalidAnkerInstruction,
     Unrecognized,
 }
 
@@ -445,6 +458,46 @@ enum SolidoInstruction {
         manager: Pubkey,
 
         fee_recipients: FeeRecipients,
+    },
+}
+
+#[allow(clippy::enum_variant_names)]
+#[derive(Serialize)]
+enum AnkerInstruction {
+    ChangeTerraRewardsDestination {
+        #[serde(serialize_with = "serialize_b58")]
+        anker_instance: Pubkey,
+
+        #[serde(serialize_with = "serialize_b58")]
+        manager: Pubkey,
+
+        old_terra_rewards_destination: TerraAddress,
+
+        new_terra_rewards_destination: TerraAddress,
+    },
+    ChangeTokenSwapPool {
+        #[serde(serialize_with = "serialize_b58")]
+        anker_instance: Pubkey,
+
+        #[serde(serialize_with = "serialize_b58")]
+        manager: Pubkey,
+
+        #[serde(serialize_with = "serialize_b58")]
+        old_token_swap_pool: Pubkey,
+
+        #[serde(serialize_with = "serialize_b58")]
+        new_token_swap_pool: Pubkey,
+    },
+    ChangeSellRewardsMinOutBps {
+        #[serde(serialize_with = "serialize_b58")]
+        anker_instance: Pubkey,
+
+        #[serde(serialize_with = "serialize_b58")]
+        manager: Pubkey,
+
+        old_sell_rewards_min_out_bps: u64,
+
+        new_sell_rewards_min_out_bps: u64,
     },
 }
 
@@ -662,6 +715,66 @@ impl fmt::Display for ShowTransactionOutput {
                     }
                 }
             }
+            ParsedInstruction::AnkerInstruction(anker_instruction) => match anker_instruction {
+                AnkerInstruction::ChangeTerraRewardsDestination {
+                    anker_instance,
+                    manager,
+                    old_terra_rewards_destination,
+                    new_terra_rewards_destination,
+                } => {
+                    writeln!(f, "It changes the Terra rewards destination in Anker")?;
+                    writeln!(f, "    Anker instance:                {}", anker_instance)?;
+                    writeln!(f, "    Manager:                       {}", manager)?;
+                    writeln!(
+                        f,
+                        "    Old Terra rewards destination: {}",
+                        old_terra_rewards_destination
+                    )?;
+                    writeln!(
+                        f,
+                        "    New Terra rewards destination: {}",
+                        new_terra_rewards_destination
+                    )?;
+                }
+                AnkerInstruction::ChangeTokenSwapPool {
+                    anker_instance,
+                    manager,
+                    old_token_swap_pool,
+                    new_token_swap_pool,
+                } => {
+                    writeln!(f, "It changes the Token Swap Pool in Anker")?;
+                    writeln!(f, "    Anker instance:      {}", anker_instance)?;
+                    writeln!(f, "    Manager:             {}", manager)?;
+                    writeln!(f, "    Old Token Swap Pool: {}", old_token_swap_pool)?;
+                    writeln!(f, "    New Token Swap Pool: {}", new_token_swap_pool)?;
+                }
+                AnkerInstruction::ChangeSellRewardsMinOutBps {
+                    anker_instance,
+                    manager,
+                    old_sell_rewards_min_out_bps,
+                    new_sell_rewards_min_out_bps,
+                } => {
+                    writeln!(f, "It changes the sell rewards min bps in Anker")?;
+                    writeln!(f, "    Anker instance:           {}", anker_instance)?;
+                    writeln!(f, "    Manager:                  {}", manager)?;
+                    writeln!(
+                        f,
+                        "    Old sell rewards min bps: {}",
+                        old_sell_rewards_min_out_bps
+                    )?;
+                    writeln!(
+                        f,
+                        "    New sell rewards min bps: {}",
+                        new_sell_rewards_min_out_bps
+                    )?;
+                }
+            },
+            ParsedInstruction::InvalidAnkerInstruction => {
+                writeln!(
+                    f,
+                    "  Tried to deserialize an Anker instruction, but failed."
+                )?;
+            }
         }
 
         Ok(())
@@ -811,6 +924,7 @@ fn show_transaction(
     transaction_address: &Pubkey,
     multisig_program_id: &Pubkey,
     solido_program_id: &Pubkey,
+    anker_program_id: Option<Pubkey>,
 ) -> Result<ShowTransactionOutput> {
     let transaction: serum_multisig::Transaction =
         config.client.get_account_deserialize(transaction_address)?;
@@ -907,6 +1021,19 @@ fn show_transaction(
                 println!("Warning: Failed to parse Token instruction.");
                 err.print_pretty();
                 ParsedInstruction::InvalidSolidoInstruction
+            }
+        }
+    } else if anker_program_id == Some(instr.program_id) {
+        match try_parse_anker_instruction(config, &instr) {
+            Ok(instr) => instr,
+            Err(SnapshotError::MissingAccount) => return Err(SnapshotError::MissingAccount),
+            Err(SnapshotError::MissingValidatorIdentity(addr)) => {
+                return Err(SnapshotError::MissingValidatorIdentity(addr))
+            }
+            Err(SnapshotError::OtherError(err)) => {
+                println!("Warning: Failed to parse Anker instruction.");
+                err.print_pretty();
+                ParsedInstruction::InvalidAnkerInstruction
             }
         }
     } else {
@@ -1006,6 +1133,51 @@ fn try_parse_token_instruction(
             TokenInstruction::Unsupported,
         )),
     }
+}
+
+fn try_parse_anker_instruction(
+    config: &mut SnapshotConfig,
+    instr: &Instruction,
+) -> Result<ParsedInstruction> {
+    let instruction: anker::instruction::AnkerInstruction =
+        BorshDeserialize::deserialize(&mut instr.data.as_slice())?;
+    Ok(match instruction {
+        anker::instruction::AnkerInstruction::ChangeTerraRewardsDestination {
+            terra_rewards_destination,
+        } => {
+            let accounts =
+                ChangeTerraRewardsDestinationAccountsMeta::try_from_slice(&instr.accounts)?;
+            let current_anker = config.client.get_anker(&accounts.anker)?;
+            ParsedInstruction::AnkerInstruction(AnkerInstruction::ChangeTerraRewardsDestination {
+                anker_instance: accounts.anker,
+                manager: accounts.manager,
+                old_terra_rewards_destination: current_anker.terra_rewards_destination,
+                new_terra_rewards_destination: terra_rewards_destination,
+            })
+        }
+        anker::instruction::AnkerInstruction::ChangeTokenSwapPool => {
+            let accounts = ChangeTokenSwapPoolAccountsMeta::try_from_slice(&instr.accounts)?;
+            ParsedInstruction::AnkerInstruction(AnkerInstruction::ChangeTokenSwapPool {
+                anker_instance: accounts.anker,
+                manager: accounts.manager,
+                old_token_swap_pool: accounts.current_token_swap_pool,
+                new_token_swap_pool: accounts.new_token_swap_pool,
+            })
+        }
+        anker::instruction::AnkerInstruction::ChangeSellRewardsMinOutBps {
+            sell_rewards_min_out_bps,
+        } => {
+            let accounts = ChangeSellRewardsMinOutBpsAccountsMeta::try_from_slice(&instr.accounts)?;
+            let current_anker = config.client.get_anker(&accounts.anker)?;
+            ParsedInstruction::AnkerInstruction(AnkerInstruction::ChangeSellRewardsMinOutBps {
+                anker_instance: accounts.anker,
+                manager: accounts.manager,
+                old_sell_rewards_min_out_bps: current_anker.sell_rewards_min_out_bps,
+                new_sell_rewards_min_out_bps: sell_rewards_min_out_bps,
+            })
+        }
+        _ => ParsedInstruction::InvalidAnkerInstruction,
+    })
 }
 
 #[derive(Serialize)]
@@ -1333,6 +1505,7 @@ fn approve_transaction_interactive(
             transaction_address,
             opts.multisig_program_id(),
             opts.solido_program_id(),
+            None,
         )?;
         println!("{}", output);
         Ok(())

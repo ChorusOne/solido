@@ -541,6 +541,10 @@ cli_opt_struct! {
         /// Address of the Multisig program.
         #[clap(long)]
         multisig_program_id: Pubkey,
+
+        /// Address of the Anker program.
+        #[clap(long, value_name = "address")]
+        anker_program_id: Pubkey => Pubkey::default(),
     }
 }
 
@@ -748,6 +752,28 @@ cli_opt_struct! {
         /// Must be provided in the usual Terra bech32 encoding.
         #[clap(long, value_name = "terra_address")]
         terra_rewards_address: TerraAddress,
+
+        /// Minimum fraction of the expected proceeds for which selling rewards is allowed, in basis points.
+        ///
+        /// To prevent rewards selling from being sandwiched, Anker tracks recent
+        /// prices of the pool. Based on the median of recent prices, it has an
+        /// "expected" amount of the proceeds. If the actual proceeds would be
+        /// lower than `sell_rewards_min_out_bps / 1e4` times the expected proceeds,
+        /// selling rewards is not allowed. Lower values allow more slippage and
+        /// sandwiching, higher values protect against this, but can make it more
+        /// difficult to sell rewards at times of high volatility. To allow 1%
+        /// slippage w.r.t. the expected price, set this value to 9900 bps.
+        ///
+        /// This fraction includes the swap fee. For example, if there is a 5%
+        /// swap fee, then this setting should be set to less than 9500, because
+        /// it is unlikely that the actual proceeds are more than 95% of the
+        /// expected proceeds. In other words, the expected proceeds do not take
+        /// the swap fee into account.
+        ///
+        /// NB: This means that values greater than 9999 will likely prevent
+        /// Anker from ever selling rewards.
+        #[clap(long, value_name = "basis points")]
+        sell_rewards_min_out_bps: u64,
     }
 }
 
@@ -823,5 +849,67 @@ cli_opt_struct! {
         /// Amount to withdraw, in bSOL, using . as decimal separator.
         #[clap(long, value_name = "amount")]
         amount_b_sol: BLamports,
+    }
+}
+
+cli_opt_struct! {
+    AnkerChangeTerraRewardsDestinationOpts {
+        /// Address of the Anker instance.
+        #[clap(long, value_name = "address")]
+        anker_address: Pubkey,
+
+        /// New terra rewards address.
+        #[clap(long, value_name = "address")]
+        terra_rewards_destination: TerraAddress,
+
+        /// Multisig instance.
+        #[clap(long, value_name = "address")]
+        multisig_address: Pubkey,
+
+        /// Address of the Multisig program.
+        #[clap(long)]
+        multisig_program_id: Pubkey,
+    }
+}
+
+cli_opt_struct! {
+    AnkerChangeTokenSwapPoolOpts {
+        /// Address of the Anker instance.
+        #[clap(long, value_name = "address")]
+        anker_address: Pubkey,
+
+        /// New token swap pool address.
+        #[clap(long, value_name = "address")]
+        token_swap_pool: Pubkey,
+
+        /// Multisig instance.
+        #[clap(long, value_name = "address")]
+        multisig_address: Pubkey,
+
+        /// Address of the Multisig program.
+        #[clap(long)]
+        multisig_program_id: Pubkey,
+    }
+}
+
+cli_opt_struct! {
+    AnkerChangeSellRewardsMinOutBpsOpts {
+        /// Address of the Anker instance.
+        #[clap(long, value_name = "address")]
+        anker_address: Pubkey,
+
+        /// New Anker's `sell_rewards_min_out_bps`.
+        //
+        // See also `anker create --sell-rewards-min-out-bps`.
+        #[clap(long, value_name = "basis points")]
+        sell_rewards_min_out_bps: u64,
+
+        /// Multisig instance.
+        #[clap(long, value_name = "address")]
+        multisig_address: Pubkey,
+
+        /// Address of the Multisig program.
+        #[clap(long)]
+        multisig_program_id: Pubkey,
     }
 }

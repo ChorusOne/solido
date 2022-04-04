@@ -3,13 +3,11 @@
 
 use solana_program::pubkey::Pubkey;
 
-mod logic;
-
 #[cfg(not(feature = "no-entrypoint"))]
 pub mod entrypoint;
-
 pub mod error;
 pub mod instruction;
+pub mod logic;
 pub mod metrics;
 pub mod processor;
 pub mod state;
