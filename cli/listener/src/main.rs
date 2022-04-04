@@ -15,7 +15,7 @@ use rusqlite::{params, Connection, Row};
 use serde::{Deserialize, Serialize};
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::{
-    clock::{Epoch, Slot},
+    clock::{Clock, Epoch, Slot, SLOT_MS},
     commitment_config::CommitmentConfig,
     epoch_schedule::EpochSchedule,
     pubkey::Pubkey,
@@ -267,7 +267,15 @@ pub fn insert_price(conn: &Connection, exchange_rate: &ExchangeRate) -> rusqlite
     Ok(())
 }
 
-type MetricsMutex = Mutex<Arc<Metrics>>;
+struct Snapshot {
+    /// Metrics about the daemon.
+    metrics: Metrics,
+
+    /// Clock instance, so we know what time it is.
+    clock: Option<Clock>,
+}
+
+type MetricsMutex = Mutex<Arc<Snapshot>>;
 struct Daemon<'a, 'b> {
     config: &'a mut SnapshotClientConfig<'b>,
     opts: &'a Opts,
@@ -299,10 +307,17 @@ impl<'a, 'b> Daemon<'a, 'b> {
             errors: 0,
             solido_average_30d_interval_price: None,
         };
+        let current_clock = config
+            .with_snapshot(|config| config.client.get_clock())
+            .ok();
+
         Daemon {
             config,
             opts,
-            metrics_snapshot: Arc::new(Mutex::new(Arc::new(empty_metrics.clone()))),
+            metrics_snapshot: Arc::new(Mutex::new(Arc::new(Snapshot {
+                metrics: empty_metrics.clone(),
+                clock: current_clock,
+            }))),
             metrics: empty_metrics,
             rng: rand::thread_rng(),
             last_read_success: Instant::now(),
@@ -313,7 +328,7 @@ impl<'a, 'b> Daemon<'a, 'b> {
     fn run(mut self) -> ! {
         loop {
             self.metrics.polls += 1;
-            let sleep_time = match get_and_save_exchange_rate(
+            let (sleep_time, current_clock) = match get_and_save_exchange_rate(
                 self.config,
                 self.opts,
                 self.db_connection,
@@ -323,9 +338,13 @@ impl<'a, 'b> Daemon<'a, 'b> {
                     println!("Error while obtaining on-chain state.");
                     err.print_pretty();
                     self.metrics.errors += 1;
-                    self.get_sleep_time_after_error()
+                    (self.get_sleep_time_after_error(), None)
                 }
-                ListenerResult::OkListener(exchange_rate, interval_prices_option) => {
+                ListenerResult::OkListener(
+                    exchange_rate,
+                    interval_prices_option,
+                    current_clock,
+                ) => {
                     println!(
                         "Got exchange rate: {}/{}: {} at slot {} and epoch {}.",
                         exchange_rate.price_lamports_numerator,
@@ -345,16 +364,19 @@ impl<'a, 'b> Daemon<'a, 'b> {
                             self.metrics.solido_average_30d_interval_price = Some(interval_prices);
                         }
                     }
-                    self.get_sleep_time()
+                    (self.get_sleep_time(), Some(current_clock))
                 }
-                ListenerResult::ErrListener(err) => {
+                ListenerResult::ErrListener(err, current_clock) => {
                     println!("Error in listener.");
                     err.print_pretty();
-                    self.get_sleep_time_after_error()
+                    (self.get_sleep_time_after_error(), Some(current_clock))
                 }
             };
             // Update metrics snapshot.
-            *self.metrics_snapshot.lock().unwrap() = Arc::new(self.metrics.clone());
+            *self.metrics_snapshot.lock().unwrap() = Arc::new(Snapshot {
+                metrics: self.metrics.clone(),
+                clock: current_clock,
+            });
             std::thread::sleep(sleep_time);
         }
     }
@@ -444,14 +466,24 @@ struct ResponseInterval {
     annual_percentage_yield: f64,
 }
 
-type DateBeginEnd = Range<chrono::DateTime<chrono::Utc>>;
+#[derive(Debug, PartialEq)]
+enum DateRequestType {
+    Fixed,
+    MovingTarget,
+}
+
+#[derive(Debug, PartialEq)]
+struct DateRequest {
+    date_range: Range<chrono::DateTime<chrono::Utc>>,
+    request_type: DateRequestType,
+}
 
 fn get_date_params<'a, I: IntoIterator<Item = (Cow<'a, str>, Cow<'a, str>)>>(
     query_params: I,
     now: chrono::DateTime<chrono::Utc>,
-) -> Result<DateBeginEnd, ResponseError> {
-    let mut begin_opt: Vec<chrono::DateTime<chrono::Utc>> = vec![];
-    let mut end_opt: Vec<chrono::DateTime<chrono::Utc>> = vec![];
+) -> Result<DateRequest, ResponseError> {
+    let mut begin_vec: Vec<chrono::DateTime<chrono::Utc>> = vec![];
+    let mut end_vec: Vec<chrono::DateTime<chrono::Utc>> = vec![];
 
     for (k, v) in query_params {
         match k.as_ref() {
@@ -463,7 +495,7 @@ fn get_date_params<'a, I: IntoIterator<Item = (Cow<'a, str>, Cow<'a, str>)>>(
                     )
                 })?;
 
-                begin_opt.push(t);
+                begin_vec.push(t);
             }
             "end" => {
                 let t = parse_utc_iso8601(&v).map_err(|_| {
@@ -473,7 +505,7 @@ fn get_date_params<'a, I: IntoIterator<Item = (Cow<'a, str>, Cow<'a, str>)>>(
                     )
                 })?;
 
-                end_opt.push(t);
+                end_vec.push(t);
             }
             "days" => {
                 let days = v.parse::<i64>().map_err(|_| {
@@ -487,27 +519,27 @@ fn get_date_params<'a, I: IntoIterator<Item = (Cow<'a, str>, Cow<'a, str>)>>(
                     .checked_sub_signed(chrono::Duration::days(days))
                     .ok_or(ResponseError::BadRequest("Date range too large"))?;
 
-                begin_opt.push(begin);
-                end_opt.push(end);
+                begin_vec.push(begin);
+                end_vec.push(end);
             }
             "since_launch" => {
                 let begin = chrono::Utc.ymd(2021, 9, 1).and_hms(00, 00, 00); // Solido Launch Date
                 let end = now;
 
-                begin_opt.push(begin);
-                end_opt.push(end);
+                begin_vec.push(begin);
+                end_vec.push(end);
             }
             _ => continue,
         }
     }
 
-    let begin = match begin_opt.len() {
+    let begin = match begin_vec.len() {
         0 => {
             return Err(ResponseError::BadRequest(
                 "Missing query parameter: 'begin', 'days' or 'since_launch'",
             ))
         }
-        1 => begin_opt[0],
+        1 => begin_vec[0],
         _ => {
             return Err(ResponseError::BadRequest(
                 "Exactly one of 'begin' or 'days' or 'since_launch' must be specified.",
@@ -515,20 +547,32 @@ fn get_date_params<'a, I: IntoIterator<Item = (Cow<'a, str>, Cow<'a, str>)>>(
         }
     };
 
-    let end = match end_opt.len() {
+    let end = match end_vec.len() {
         0 => {
             return Err(ResponseError::BadRequest(
                 "Missing query parameter: 'end', 'days' or 'since_launch'",
             ))
         }
-        1 => end_opt[0],
+        1 => end_vec[0],
         _ => {
             return Err(ResponseError::BadRequest(
                 "Exactly one of 'end' or 'days' or 'since_launch' must be specified.",
             ))
         }
     };
-    Ok(begin..end)
+    // Requests for `days` and `since_launch` have `end == now`, we include
+    // requests when the end is greater than `now` as well as a `MovingTarget`
+    // request.
+    let request_type = if end >= now {
+        DateRequestType::MovingTarget
+    } else {
+        DateRequestType::Fixed
+    };
+
+    Ok(DateRequest {
+        date_range: begin..end,
+        request_type,
+    })
 }
 
 /// Returns a Request response with an error depending on `err_res` type.
@@ -570,18 +614,71 @@ fn get_success_response(interval_prices: IntervalPrices) -> ResponseBox {
     .boxed()
 }
 
+/// Get a header with `Expires` key.
+/// If the end date for the query is far in the past we set it to expire in 1
+/// week. However, if the end date is in the same epoch, we set it to expire in
+/// the approximate time the next epoch begins.
+fn get_expires_header(
+    now: chrono::DateTime<chrono::Utc>,
+    interval_prices: &IntervalPrices,
+    current_clock: Option<Clock>,
+    date_request_type: &DateRequestType,
+) -> Header {
+    let expires_date = match date_request_type {
+        // From the past, set expiration to 1 week from now.
+        DateRequestType::Fixed => now + chrono::Duration::weeks(1),
+        DateRequestType::MovingTarget => {
+            // We don't have information about the current clock, default to 5
+            // minutes cache.
+            match current_clock {
+                None => now + chrono::Duration::minutes(5),
+                Some(clock) => {
+                    let epoch_sched = EpochSchedule::without_warmup();
+                    let first_slot_next_epoch =
+                        epoch_sched.get_first_slot_in_epoch(clock.epoch + 1);
+                    let slots_diff = first_slot_next_epoch - clock.slot;
+                    if interval_prices.duration_epochs() > 0 {
+                        // We can estimate the epoch duration.
+                        let epoch_duration = interval_prices.duration_wall_time()
+                            / interval_prices.duration_epochs() as i32;
+                        let slot_duration = epoch_duration
+                            / epoch_sched.get_slots_in_epoch(interval_prices.end_epoch) as i32;
+                        // Cache until we estimate that 80% of the current epoch will be complete,
+                        // so that we don’t cache for too long if the epoch suddenly ends faster than expected.
+                        now + slot_duration * (slots_diff * 8 / 10) as i32
+                    } else {
+                        // We can't estimate the epoch duration, use Solana's
+                        // `SLOT_MS`. Empirically, this is lower than than what
+                        // we observe in reality, so we'd cache for less time
+                        // than ideal.
+                        let ms_diff = slots_diff * SLOT_MS;
+                        now + chrono::Duration::milliseconds(ms_diff as i64)
+                    }
+                }
+            }
+        }
+    };
+
+    // Set minimum expiration time to 5 minutes.
+    let expires_date = expires_date.max(now + chrono::Duration::minutes(5));
+    Header::from_bytes(&b"Expires"[..], &expires_date.to_rfc2822()[..])
+        .expect("Static header value, does not fail at runtime.")
+}
+
 /// Gets a response that will be sent to a requesting client for an APY
 /// query.
 fn get_interval_price_request(
     db_connection: &Connection,
-    range_date: &DateBeginEnd,
+    range_date: &DateRequest,
+    now: chrono::DateTime<chrono::Utc>,
+    current_clock: Option<Clock>,
 ) -> ResponseBox {
     let interval_prices = get_interval_price_for_period(
         db_connection
             .unchecked_transaction()
             .expect("Failed to create sqlite transaction."),
-        range_date.start,
-        range_date.end,
+        range_date.date_range.start,
+        range_date.date_range.end,
         SOLIDO_ID.to_owned(),
     );
     match interval_prices {
@@ -593,7 +690,16 @@ fn get_interval_price_request(
         Ok(interval_prices_opt) => {
             if let Some(interval_prices) = interval_prices_opt {
                 // Got interval prices.
-                get_success_response(interval_prices)
+                let expires_header = get_expires_header(
+                    now,
+                    &interval_prices,
+                    current_clock,
+                    &range_date.request_type,
+                );
+                let mut response = get_success_response(interval_prices);
+
+                response.add_header(expires_header);
+                response
             } else {
                 // No interval price could be calculated, probably because of few data points.
                 get_error_response(ResponseError::NotFound(
@@ -606,7 +712,7 @@ fn get_interval_price_request(
 
 enum Endpoint {
     Metrics,
-    IntervalPriceRequest(DateBeginEnd),
+    IntervalPriceRequest(DateRequest),
 }
 
 fn parse_url(
@@ -646,12 +752,12 @@ fn serve_request(
             // Take the current snapshot. This only holds the lock briefly, and does
             // not prevent other threads from updating the snapshot while this request
             // handler is running.
-            let metrics = metrics_mutex.lock().unwrap().clone();
+            let snapshot = metrics_mutex.lock().unwrap().clone();
 
             // We don't even look at the request, for now we always serve the metrics.
 
             let mut out: Vec<u8> = Vec::new();
-            metrics.write_prometheus(&mut out).expect(
+            snapshot.metrics.write_prometheus(&mut out).expect(
                 "We must handle the error because of io::Write, but writing to a Vec does not fail.",
             );
 
@@ -668,7 +774,8 @@ fn serve_request(
             Response::from_data(out).with_header(content_type).boxed()
         }
         Ok(Endpoint::IntervalPriceRequest(range_date)) => {
-            get_interval_price_request(db_connection, &range_date)
+            let current_clock = metrics_mutex.lock().unwrap().clock.clone();
+            get_interval_price_request(db_connection, &range_date, now, current_clock)
         }
         Err(err) => get_error_response(err),
     };
@@ -717,10 +824,10 @@ enum ListenerResult {
     ErrSnapshot(Error),
 
     /// We have a snapshot, and we got the price.
-    OkListener(ExchangeRate, Option<IntervalPrices>),
+    OkListener(ExchangeRate, Option<IntervalPrices>, Clock),
 
     /// We have a snapshot, but failed in-between, e.g. when inserting in database.
-    ErrListener(Error),
+    ErrListener(Error, Clock),
 }
 
 /// Save the exchange rate and get a response for the 30d interval price.
@@ -733,23 +840,28 @@ fn get_and_save_exchange_rate(
     let result = config.with_snapshot(|config| {
         let solido = config.client.get_solido(&opts.solido_address)?;
         let clock = config.client.get_clock()?;
-        Ok(ExchangeRate {
-            id: 0,
-            timestamp: chrono::Utc::now(),
-            slot: clock.slot,
-            epoch: clock.epoch,
-            pool: pool.clone(),
-            price_lamports_numerator: solido.exchange_rate.sol_balance.0,
-            price_lamports_denominator: solido.exchange_rate.st_sol_supply.0,
-        })
+        Ok((
+            ExchangeRate {
+                id: 0,
+                timestamp: chrono::Utc::now(),
+                slot: clock.slot,
+                epoch: clock.epoch,
+                pool: pool.clone(),
+                price_lamports_numerator: solido.exchange_rate.sol_balance.0,
+                price_lamports_denominator: solido.exchange_rate.st_sol_supply.0,
+            },
+            clock,
+        ))
     });
 
     match result {
         Err(err) => ListenerResult::ErrSnapshot(err),
-        Ok(exchange_rate) => {
+        Ok((exchange_rate, clock)) => {
             match insert_price_and_query_30d_price_interval(db_connection, &exchange_rate) {
-                Ok(interval_prices) => ListenerResult::OkListener(exchange_rate, interval_prices),
-                Err(error) => ListenerResult::ErrListener(Box::new(error)),
+                Ok(interval_prices) => {
+                    ListenerResult::OkListener(exchange_rate, interval_prices, clock)
+                }
+                Err(error) => ListenerResult::ErrListener(Box::new(error), clock),
             }
         }
     }
@@ -808,6 +920,8 @@ fn main() {
 
 #[cfg(test)]
 mod test {
+    use tiny_http::HeaderField;
+
     use super::*;
 
     #[test]
@@ -904,10 +1018,11 @@ mod test {
         );
         assert_eq!(
             dates,
-            Ok(
-                parse_utc_iso8601("2022-02-04T11:40:02.683960+00:00").unwrap()
-                    ..parse_utc_iso8601("2022-02-07T14:22:08.826526+00:00").unwrap()
-            ),
+            Ok(DateRequest {
+                date_range: parse_utc_iso8601("2022-02-04T11:40:02.683960+00:00").unwrap()
+                    ..parse_utc_iso8601("2022-02-07T14:22:08.826526+00:00").unwrap(),
+                request_type: DateRequestType::Fixed
+            })
         );
     }
 
@@ -928,10 +1043,11 @@ mod test {
 
         assert_eq!(
             dates,
-            Ok(
-                parse_utc_iso8601("2022-02-05T11:40:02.683960+00:00").unwrap()
-                    ..parse_utc_iso8601("2022-02-07T11:40:02.683960+00:00").unwrap()
-            ),
+            Ok(DateRequest {
+                date_range: parse_utc_iso8601("2022-02-05T11:40:02.683960+00:00").unwrap()
+                    ..parse_utc_iso8601("2022-02-07T11:40:02.683960+00:00").unwrap(),
+                request_type: DateRequestType::MovingTarget
+            })
         );
     }
 
@@ -952,8 +1068,11 @@ mod test {
 
         assert_eq!(
             dates,
-            Ok(parse_utc_iso8601("2021-09-01T00:00:00+00:00").unwrap()
-                ..parse_utc_iso8601("2022-02-07T11:40:02.683960+00:00").unwrap()),
+            Ok(DateRequest {
+                date_range: parse_utc_iso8601("2021-09-01T00:00:00+00:00").unwrap()
+                    ..parse_utc_iso8601("2022-02-07T11:40:02.683960+00:00").unwrap(),
+                request_type: DateRequestType::MovingTarget
+            })
         );
     }
 
@@ -1020,5 +1139,141 @@ mod test {
         )
         .unwrap();
         assert_eq!(apy, None);
+    }
+
+    #[test]
+    fn test_expiration_header_past() {
+        let begin_epoch_291_datetime = chrono::Utc.ymd(2022, 3, 19).and_hms(18, 20, 02);
+        let begin_epoch_292_datetime = chrono::Utc.ymd(2022, 3, 22).and_hms(13, 28, 50);
+
+        let begin_epoch_293_datetime = chrono::Utc.ymd(2022, 3, 25).and_hms(07, 43, 25);
+        let first_slot_epoch_293 = 126_576_000;
+
+        let interval_prices = IntervalPrices {
+            begin_datetime: begin_epoch_291_datetime,
+            end_datetime: begin_epoch_292_datetime,
+            begin_epoch: 291,
+            end_epoch: 292,
+            begin_token_price_sol: Rational {
+                numerator: 1,
+                denominator: 1,
+            },
+            end_token_price_sol: Rational {
+                numerator: 1,
+                denominator: 1,
+            },
+        };
+        let current_clock = Clock {
+            slot: first_slot_epoch_293,
+            epoch_start_timestamp: begin_epoch_293_datetime.timestamp(),
+            epoch: 293,
+            leader_schedule_epoch: 295,
+            unix_timestamp: (begin_epoch_293_datetime + chrono::Duration::hours(8)).timestamp(),
+        };
+
+        let expiration_header = get_expires_header(
+            begin_epoch_293_datetime,
+            &interval_prices,
+            Some(current_clock),
+            &DateRequestType::Fixed,
+        );
+        assert_eq!(
+            expiration_header.field,
+            HeaderField::from_str("Expires").unwrap()
+        );
+        let next_week_expiration = begin_epoch_293_datetime + chrono::Duration::weeks(1);
+        assert_eq!(expiration_header.value, next_week_expiration.to_rfc2822());
+    }
+
+    #[test]
+    fn test_expiration_header_present() {
+        let begin_epoch_291_datetime = chrono::Utc.ymd(2022, 3, 19).and_hms(18, 20, 02);
+        let begin_epoch_292_datetime = chrono::Utc.ymd(2022, 3, 22).and_hms(13, 28, 50);
+        let first_slot_epoch_292 = 126_144_000;
+
+        let interval_prices = IntervalPrices {
+            begin_datetime: begin_epoch_291_datetime,
+            end_datetime: begin_epoch_292_datetime,
+            begin_epoch: 291,
+            end_epoch: 292,
+            begin_token_price_sol: Rational {
+                numerator: 1,
+                denominator: 1,
+            },
+            end_token_price_sol: Rational {
+                numerator: 1,
+                denominator: 1,
+            },
+        };
+
+        let current_clock = Clock {
+            slot: first_slot_epoch_292,
+            epoch_start_timestamp: begin_epoch_292_datetime.timestamp(),
+            epoch: 292,
+            leader_schedule_epoch: 295,
+            unix_timestamp: (begin_epoch_292_datetime + chrono::Duration::hours(8)).timestamp(),
+        };
+
+        let expiration_header = get_expires_header(
+            begin_epoch_292_datetime,
+            &interval_prices,
+            Some(current_clock),
+            &DateRequestType::MovingTarget,
+        );
+        assert_eq!(
+            expiration_header.field,
+            HeaderField::from_str("Expires").unwrap()
+        );
+
+        let expected_time =
+            chrono::DateTime::parse_from_rfc3339("2022-03-24T19:11:52.399808+00:00").unwrap();
+        assert_eq!(expiration_header.value, expected_time.to_rfc2822());
+    }
+
+    #[test]
+    fn test_expiration_header_short_time() {
+        let begin_epoch_291_datetime = chrono::Utc.ymd(2022, 3, 19).and_hms(18, 20, 02);
+        let begin_epoch_292_datetime = chrono::Utc.ymd(2022, 3, 22).and_hms(13, 28, 50);
+
+        let begin_epoch_293_datetime = chrono::Utc.ymd(2022, 3, 25).and_hms(07, 43, 25);
+        let first_slot_epoch_293 = 126_576_000;
+
+        let interval_prices = IntervalPrices {
+            begin_datetime: begin_epoch_291_datetime,
+            end_datetime: begin_epoch_292_datetime,
+            begin_epoch: 291,
+            end_epoch: 292,
+            begin_token_price_sol: Rational {
+                numerator: 1,
+                denominator: 1,
+            },
+            end_token_price_sol: Rational {
+                numerator: 1,
+                denominator: 1,
+            },
+        };
+
+        let epoch_293_minus_1m_datetime = begin_epoch_293_datetime - chrono::Duration::minutes(1);
+        let current_clock = Clock {
+            slot: first_slot_epoch_293 - 10,
+            epoch_start_timestamp: begin_epoch_292_datetime.timestamp(),
+            epoch: 292,
+            leader_schedule_epoch: 295,
+            unix_timestamp: epoch_293_minus_1m_datetime.timestamp(),
+        };
+
+        let expiration_header = get_expires_header(
+            epoch_293_minus_1m_datetime,
+            &interval_prices,
+            Some(current_clock),
+            &DateRequestType::MovingTarget,
+        );
+        assert_eq!(
+            expiration_header.field,
+            HeaderField::from_str("Expires").unwrap()
+        );
+
+        let expected_time = epoch_293_minus_1m_datetime + chrono::Duration::minutes(5);
+        assert_eq!(expiration_header.value, expected_time.to_rfc2822());
     }
 }
