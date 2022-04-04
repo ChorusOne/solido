@@ -640,6 +640,8 @@ fn get_expires_header(
                             / interval_prices.duration_epochs() as i32;
                         let slot_duration = epoch_duration
                             / epoch_sched.get_slots_in_epoch(interval_prices.end_epoch) as i32;
+                        // Cache until we estimate that 80% of the current epoch will be complete,
+                        // so that we don’t cache for too long if the epoch suddenly ends faster than expected.
                         now + slot_duration * (slots_diff * 8 / 10) as i32
                     } else {
                         // We can't estimate the epoch duration, use Solana's
