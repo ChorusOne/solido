@@ -328,15 +328,16 @@ fn process_sell_rewards(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> Pr
     // But if we demand the same distance between the sale and fetching the price,
     // as between price updates, then one could spam `FetchPoolPrice` transactions
     // and hold off the `SellRewards` for a bit. To avoid this, we allow the
-    // `SellRewards` to happen one slot earlier than the price fetch.
+    // `SellRewards` to happen earlier than the price fetch, but still late enough
+    // that no single validator should control that entire span of slots.
     let youngest_sample = anker.historical_st_sol_prices.last();
     let slots_elapsed = clock.slot.saturating_sub(youngest_sample.slot);
-    if slots_elapsed < POOL_PRICE_MIN_SAMPLE_DISTANCE - 1 {
+    if slots_elapsed < POOL_PRICE_MIN_SAMPLE_DISTANCE / 2 {
         msg!(
             "The youngest stSOL/UST price was sampled at slot {}. \
             Wait at least {} slots until selling the rewards..",
             youngest_sample.slot,
-            POOL_PRICE_MIN_SAMPLE_DISTANCE - 1,
+            POOL_PRICE_MIN_SAMPLE_DISTANCE / 2,
         );
         return Err(AnkerError::SellRewardsTooEarly.into());
     }
