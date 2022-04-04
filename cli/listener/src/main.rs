@@ -468,7 +468,7 @@ struct ResponseInterval {
 
 #[derive(Debug, PartialEq)]
 enum DateRequestType {
-    Past,
+    Fixed,
     MovingTarget,
 }
 
@@ -484,7 +484,7 @@ fn get_date_params<'a, I: IntoIterator<Item = (Cow<'a, str>, Cow<'a, str>)>>(
 ) -> Result<DateRequest, ResponseError> {
     let mut begin_vec: Vec<chrono::DateTime<chrono::Utc>> = vec![];
     let mut end_vec: Vec<chrono::DateTime<chrono::Utc>> = vec![];
-    let mut request_date_type = DateRequestType::Past;
+    let mut request_date_type = DateRequestType::Fixed;
 
     for (k, v) in query_params {
         match k.as_ref() {
@@ -497,7 +497,7 @@ fn get_date_params<'a, I: IntoIterator<Item = (Cow<'a, str>, Cow<'a, str>)>>(
                 })?;
 
                 begin_vec.push(t);
-                request_date_type = DateRequestType::Past;
+                request_date_type = DateRequestType::Fixed;
             }
             "end" => {
                 let t = parse_utc_iso8601(&v).map_err(|_| {
@@ -508,7 +508,7 @@ fn get_date_params<'a, I: IntoIterator<Item = (Cow<'a, str>, Cow<'a, str>)>>(
                 })?;
 
                 end_vec.push(t);
-                request_date_type = DateRequestType::Past;
+                request_date_type = DateRequestType::Fixed;
             }
             "days" => {
                 let days = v.parse::<i64>().map_err(|_| {
@@ -623,7 +623,7 @@ fn get_expires_header(
 ) -> Header {
     let expires_date = match date_request_type {
         // From the past, set expiration to 1 week from now.
-        DateRequestType::Past => now + chrono::Duration::weeks(1),
+        DateRequestType::Fixed => now + chrono::Duration::weeks(1),
         DateRequestType::MovingTarget => {
             // We don't have information about the current clock, default to 1hr
             // cache.
@@ -1018,7 +1018,7 @@ mod test {
             Ok(DateRequest {
                 date_range: parse_utc_iso8601("2022-02-04T11:40:02.683960+00:00").unwrap()
                     ..parse_utc_iso8601("2022-02-07T14:22:08.826526+00:00").unwrap(),
-                request_type: DateRequestType::Past
+                request_type: DateRequestType::Fixed
             })
         );
     }
@@ -1172,7 +1172,7 @@ mod test {
             begin_epoch_293_datetime,
             &interval_prices,
             Some(current_clock),
-            &DateRequestType::Past,
+            &DateRequestType::Fixed,
         );
         assert_eq!(
             expiration_header.field,
