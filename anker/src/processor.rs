@@ -323,14 +323,20 @@ fn process_sell_rewards(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> Pr
         return Err(AnkerError::FetchPoolPriceNotCalledRecently.into());
     }
 
+    // The youngest sample must not be too recent, so an adversarial cranker can
+    // not sandwich the `FetchPoolPrice` and `SellRewards` in the same transaction.
+    // But if we demand the same distance between the sale and fetching the price,
+    // as between price updates, then one could spam `FetchPoolPrice` transactions
+    // and hold off the `SellRewards` for a bit. To avoid this, we allow the
+    // `SellRewards` to happen one slot earlier than the price fetch.
     let youngest_sample = anker.historical_st_sol_prices.last();
     let slots_elapsed = clock.slot.saturating_sub(youngest_sample.slot);
-    if slots_elapsed < POOL_PRICE_MIN_SAMPLE_DISTANCE {
+    if slots_elapsed < POOL_PRICE_MIN_SAMPLE_DISTANCE - 1 {
         msg!(
             "The youngest stSOL/UST price was sampled at slot {}. \
             Wait at least {} slots until selling the rewards..",
             youngest_sample.slot,
-            POOL_PRICE_MIN_SAMPLE_DISTANCE,
+            POOL_PRICE_MIN_SAMPLE_DISTANCE - 1,
         );
         return Err(AnkerError::SellRewardsTooEarly.into());
     }
