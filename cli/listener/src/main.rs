@@ -607,10 +607,15 @@ fn get_success_response(interval_prices: IntervalPrices) -> ResponseBox {
         &b"application/json; charset=UTF-8"[..],
     )
     .expect("Static header value, does not fail at runtime.");
+    let allow_access_control_origin =
+        Header::from_bytes(&b"Access-Control-Allow-Origin"[..], &b"*"[..])
+            .expect("Static header value, does not fail at runtime.");
+
     Response::from_data(
         serde_json::to_vec(&response_interval).expect("Serialization shouldn't fail"),
     )
     .with_header(content_type)
+    .with_header(allow_access_control_origin)
     .boxed()
 }
 
