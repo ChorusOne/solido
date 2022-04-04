@@ -1181,8 +1181,8 @@ mod test {
             expiration_header.field,
             HeaderField::from_str("Expires").unwrap()
         );
-        let next_year_expiration = begin_epoch_293_datetime + chrono::Duration::weeks(1);
-        assert_eq!(expiration_header.value, next_year_expiration.to_rfc2822());
+        let next_week_expiration = begin_epoch_293_datetime + chrono::Duration::weeks(1);
+        assert_eq!(expiration_header.value, next_week_expiration.to_rfc2822());
     }
 
     #[test]
