@@ -484,7 +484,6 @@ fn get_date_params<'a, I: IntoIterator<Item = (Cow<'a, str>, Cow<'a, str>)>>(
 ) -> Result<DateRequest, ResponseError> {
     let mut begin_vec: Vec<chrono::DateTime<chrono::Utc>> = vec![];
     let mut end_vec: Vec<chrono::DateTime<chrono::Utc>> = vec![];
-    let mut request_date_type = DateRequestType::Fixed;
 
     for (k, v) in query_params {
         match k.as_ref() {
@@ -497,7 +496,6 @@ fn get_date_params<'a, I: IntoIterator<Item = (Cow<'a, str>, Cow<'a, str>)>>(
                 })?;
 
                 begin_vec.push(t);
-                request_date_type = DateRequestType::Fixed;
             }
             "end" => {
                 let t = parse_utc_iso8601(&v).map_err(|_| {
@@ -508,7 +506,6 @@ fn get_date_params<'a, I: IntoIterator<Item = (Cow<'a, str>, Cow<'a, str>)>>(
                 })?;
 
                 end_vec.push(t);
-                request_date_type = DateRequestType::Fixed;
             }
             "days" => {
                 let days = v.parse::<i64>().map_err(|_| {
@@ -524,7 +521,6 @@ fn get_date_params<'a, I: IntoIterator<Item = (Cow<'a, str>, Cow<'a, str>)>>(
 
                 begin_vec.push(begin);
                 end_vec.push(end);
-                request_date_type = DateRequestType::MovingTarget;
             }
             "since_launch" => {
                 let begin = chrono::Utc.ymd(2021, 9, 1).and_hms(00, 00, 00); // Solido Launch Date
@@ -532,7 +528,6 @@ fn get_date_params<'a, I: IntoIterator<Item = (Cow<'a, str>, Cow<'a, str>)>>(
 
                 begin_vec.push(begin);
                 end_vec.push(end);
-                request_date_type = DateRequestType::MovingTarget;
             }
             _ => continue,
         }
@@ -565,10 +560,18 @@ fn get_date_params<'a, I: IntoIterator<Item = (Cow<'a, str>, Cow<'a, str>)>>(
             ))
         }
     };
+    // Requests for `days` and `since_launch` have `end == now`, we include
+    // requests when the end is greater than `now` as well as a `MovingTarget`
+    // request.
+    let request_type = if end >= now {
+        DateRequestType::MovingTarget
+    } else {
+        DateRequestType::Fixed
+    };
 
     Ok(DateRequest {
         date_range: begin..end,
-        request_type: request_date_type,
+        request_type,
     })
 }
 
