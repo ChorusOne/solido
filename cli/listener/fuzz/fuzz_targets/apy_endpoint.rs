@@ -78,7 +78,7 @@ fuzz_target!(|actions: Vec<Action>| {
                     clock: None,
                 };
                 let metrics_mutex = Mutex::new(Arc::new(snapshot));
-                listener::serve_request(&conn, request, &metrics_mutex);
+                listener::serve_request(&conn, request, &metrics_mutex).unwrap();
             }
         }
     }
