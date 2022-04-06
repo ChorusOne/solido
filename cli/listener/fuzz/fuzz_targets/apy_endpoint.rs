@@ -3,11 +3,14 @@
 
 #![no_main]
 
+use std::sync::{Arc, Mutex};
+
 use arbitrary::Arbitrary;
-use libfuzzer_sys::fuzz_target;
-use rusqlite::{Connection};
-use solana_sdk::{clock::{Epoch, Slot}};
 use chrono;
+use libfuzzer_sys::fuzz_target;
+use rusqlite::Connection;
+use solana_sdk::{clock::{Epoch, Slot}};
+use tiny_http::TestRequest;
 
 use listener::ExchangeRate;
 
@@ -23,7 +26,10 @@ enum Action {
         pool: String,
         price_lamports_numerator: u64,
         price_lamports_denominator: u64,
-    }
+    },
+    Request {
+        path: String,
+    },
 }
 
 fuzz_target!(|actions: Vec<Action>| {
@@ -53,6 +59,23 @@ fuzz_target!(|actions: Vec<Action>| {
                 // SQLite's limits, but that is not what we are fuzzing for here,
                 // so ignore those errors.
                 let _ = listener::insert_price(&conn, &exchange_rate);
+            }
+            Action::Request {
+                path
+            } => {
+                let request = TestRequest::new().with_path(path).into();
+                let metrics = listener::Metrics {
+                    polls: 0,
+                    errors: 0,
+                    solido_average_30d_interval_price: None
+                };
+                let snapshot = listener::Snapshot {
+                    metrics: metrics,
+                    // TODO: Fuzz with clock as well.
+                    clock: None,
+                };
+                let metrics_mutex = Mutex::new(Arc::new(snapshot));
+                listener::serve_request(&conn, request, &metrics_mutex);
             }
         }
     }

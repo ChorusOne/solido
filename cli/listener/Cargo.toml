@@ -14,7 +14,7 @@ solana-logger = "1.7.8"
 clap = { version = "3.1.6", features = ["derive"] }
 chrono = "0.4.19"
 solido-cli-common = { path = "../common" }
-tiny_http = "0.8.2"
+tiny_http = "0.11.0"
 url = "2.2.2"
 num_cpus = "1.0"
 rand = "0.8.3"
