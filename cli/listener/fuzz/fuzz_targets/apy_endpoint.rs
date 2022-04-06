@@ -9,7 +9,7 @@ use arbitrary::Arbitrary;
 use chrono;
 use libfuzzer_sys::fuzz_target;
 use rusqlite::Connection;
-use solana_sdk::{clock::{Epoch, Slot}};
+use solana_sdk::clock::{Epoch, Slot};
 use tiny_http::TestRequest;
 
 use listener::ExchangeRate;
@@ -40,7 +40,12 @@ fuzz_target!(|actions: Vec<Action>| {
     for action in &actions {
         match action {
             Action::Insert {
-                timestamp_millis, slot, epoch, pool, price_lamports_numerator, price_lamports_denominator,
+                timestamp_millis,
+                slot,
+                epoch,
+                pool,
+                price_lamports_numerator,
+                price_lamports_denominator,
             } => {
                 let timestamp = match chrono::Utc.timestamp_millis_opt(*timestamp_millis) {
                     chrono::LocalResult::Single(t) => t,
@@ -60,14 +65,12 @@ fuzz_target!(|actions: Vec<Action>| {
                 // so ignore those errors.
                 let _ = listener::insert_price(&conn, &exchange_rate);
             }
-            Action::Request {
-                path
-            } => {
+            Action::Request { path } => {
                 let request = TestRequest::new().with_path(path).into();
                 let metrics = listener::Metrics {
                     polls: 0,
                     errors: 0,
-                    solido_average_30d_interval_price: None
+                    solido_average_30d_interval_price: None,
                 };
                 let snapshot = listener::Snapshot {
                     metrics: metrics,
