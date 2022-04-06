@@ -1,7 +1,11 @@
-use crate::{error::AnkerError, token::BLamports, ANKER_MINT_AUTHORITY, ANKER_RESERVE_AUTHORITY};
+use crate::{
+    error::AnkerError,
+    token::{BLamports, MicroUst},
+    ANKER_MINT_AUTHORITY, ANKER_RESERVE_AUTHORITY,
+};
 use lido::{
     state::Lido,
-    token::{Lamports, StLamports},
+    token::{ArithmeticError, Lamports, StLamports},
 };
 use solana_program::{
     account_info::AccountInfo,
@@ -14,7 +18,11 @@ use solana_program::{
     rent::Rent,
     system_instruction,
 };
-use spl_token_swap::instruction::Swap;
+use spl_token_swap::{
+    curve::calculator::{CurveCalculator, TradeDirection},
+    instruction::Swap,
+};
+use std::convert::TryFrom;
 
 use crate::{
     instruction::{DepositAccountsInfo, InitializeAccountsInfo, SellRewardsAccountsInfo},
@@ -230,12 +238,13 @@ pub fn swap_rewards(
     amount: StLamports,
     anker: &Anker,
     accounts: &SellRewardsAccountsInfo,
+    minimum_ust_out: MicroUst,
 ) -> ProgramResult {
     if amount == StLamports(0) {
         msg!("Anker rewards must be greater than zero to be claimable.");
         return Err(AnkerError::ZeroRewardsToClaim.into());
     }
-    anker.check_token_swap(program_id, accounts)?;
+    anker.check_token_swap_before_sell(program_id, accounts)?;
 
     let swap_instruction = spl_token_swap::instruction::swap(
         accounts.token_swap_program_id.key,
@@ -252,7 +261,7 @@ pub fn swap_rewards(
         None,
         Swap {
             amount_in: amount.0,
-            minimum_amount_out: 0,
+            minimum_amount_out: minimum_ust_out.0,
         },
     )?;
 
@@ -280,4 +289,62 @@ pub fn swap_rewards(
         ],
         &signers,
     )
+}
+
+/// Get the price for selling 1 stSOL in MicroUst in the token swap pool.
+pub fn get_one_st_sol_for_ust_price_from_pool(
+    curve_calculator: &dyn CurveCalculator,
+    swap_pool_token_a: &Pubkey,
+    pool_ust_address: &Pubkey,
+    pool_st_sol_balance: StLamports,
+    pool_ust_balance: MicroUst,
+) -> Result<MicroUst, ProgramError> {
+    // To sample the price, we go from stSOL to UST.
+    let trade_direction = if swap_pool_token_a == pool_ust_address {
+        TradeDirection::BtoA
+    } else {
+        TradeDirection::AtoB
+    };
+
+    // Check how much UST we get out, if we put in 1 stSOL. With a constant-product
+    // pool, the amount we get out depends not only on the state of the pool, but
+    // also on the amount we put in. We pick 1 stSOL here because it should be
+    // large enough that we don't lose precision in the output, but small enough
+    // to not move the price by a lot if we did swap that amount.
+    let one_st_sol = StLamports(1_000_000_000);
+    let swap_result = curve_calculator
+        .swap_without_fees(
+            one_st_sol.0 as u128,
+            pool_st_sol_balance.0 as u128,
+            pool_ust_balance.0 as u128,
+            trade_direction,
+        )
+        .ok_or(AnkerError::PoolPriceUndefined)?;
+    Ok(MicroUst(
+        u64::try_from(swap_result.destination_amount_swapped).map_err(|_| ArithmeticError)?,
+    ))
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use spl_token_swap::curve::constant_product::ConstantProductCurve;
+
+    #[test]
+    fn test_less_than_one_st_sol_for_ust() {
+        // Previously, we had one assert that stated we sold exactly one stSOL,
+        // sometimes due to precision errors this assertion might fail. We
+        // removed it and put this test that sells `Lamports(999_999_998)`.
+        let curve = ConstantProductCurve::default();
+        let swap_pool_token_a = Pubkey::new_unique();
+        let pool_ust_address = Pubkey::new_unique();
+        let result = get_one_st_sol_for_ust_price_from_pool(
+            &curve,
+            &swap_pool_token_a,
+            &pool_ust_address,
+            StLamports(500_000_000),
+            MicroUst(1_000_000_000),
+        );
+        assert_eq!(result, Ok(MicroUst(666_666_666)));
+    }
 }

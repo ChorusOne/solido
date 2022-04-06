@@ -1,7 +1,9 @@
 // SPDX-FileCopyrightText: 2021 Chorus One AG
 // SPDX-License-Identifier: GPL-3.0
 
-use crate::instruction::{SellRewardsAccountsInfo, SendRewardsAccountsInfo};
+use crate::instruction::{
+    FetchPoolPriceAccountsInfo, SellRewardsAccountsInfo, SendRewardsAccountsInfo,
+};
 use crate::metrics::Metrics;
 use crate::wormhole::{check_wormhole_account, TerraAddress, WormholeTransferArgs};
 use crate::{
@@ -10,20 +12,50 @@ use crate::{
 };
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use lido::state::Lido;
-use lido::token::{Lamports, Rational, StLamports};
+use lido::token::{ArithmeticError, Lamports, Rational, StLamports};
 use lido::util::serialize_b58;
 use serde::Serialize;
 use solana_program::program_error::ProgramError;
 use solana_program::{
-    account_info::AccountInfo, entrypoint::ProgramResult, msg, program_pack::Pack, pubkey::Pubkey,
+    account_info::AccountInfo, clock::Slot, entrypoint::ProgramResult, msg, program_pack::Pack,
+    pubkey::Pubkey,
 };
 use spl_token_swap::state::SwapV1;
 
-use crate::token::{self, BLamports};
+use crate::token::{self, BLamports, MicroUst};
 
 /// Size of the serialized [`Anker`] struct, in bytes.
-pub const ANKER_LEN: usize = 234;
+pub const ANKER_LEN: usize = 322;
 pub const ANKER_VERSION: u8 = 0;
+
+// Next are three constants related to stored stSOL/UST prices. Because Anker is
+// permissionless, everybody can call `SellRewards` if there are rewards to sell.
+// This means that the caller could sandwich the `SellRewards` between two
+// instructions that swap against the same stSOL/UST pool that Anker uses, to
+// give us a bad price, and take the difference. To mitigate this risk, we set a
+// `min_out` on the swap instruction, but in order to do so, we need a "fair"
+// price. For that, we sample 5 past prices, at least some number of slots apart
+// (enough that they are produced by different leaders), but also not too old,
+// to make sure the price is still fresh. Then we take the median of that as a
+// "fair" price and set `min_out` based on that. Now if anybody is trying to
+// sandwich us, they would also have to sandwich 3 of those 5 times where we sample
+// the price (and they pay swap fees), and they are competing with our honest
+// maintenance bot for that (and possibly with others). Also, having a recent
+// price ensures that we don't sell rewards at times of extreme volatility.
+
+/// The number of historical stSOL/UST exchange rates we store.
+pub const POOL_PRICE_NUM_SAMPLES: usize = 5;
+
+/// The minimum number of slots that must elapse after the most recent stSOL/UST price sample,
+/// before we can store a new sample.
+pub const POOL_PRICE_MIN_SAMPLE_DISTANCE: Slot = 100;
+
+/// The maximum age of the oldest stSOL/UST price sample where we still allow `SellRewards`.
+///
+/// This value should be larger than `POOL_PRICE_NUM_SAMPLES * POOL_PRICE_MIN_SAMPLE_DISTANCE`.
+///
+/// At ~550 ms per slot, 1000 slots is roughly 9 minutes.
+pub const POOL_PRICE_MAX_SAMPLE_AGE: Slot = 1000;
 
 #[repr(C)]
 #[derive(
@@ -34,6 +66,105 @@ pub struct WormholeParameters {
     pub core_bridge_program_id: Pubkey,
     /// The Wormhole program for token transfers associated with this instance.
     pub token_bridge_program_id: Pubkey,
+}
+
+/// The price of 1 stSOL expressed in UST, as observed from the pool in a particular slot.
+#[repr(C)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    BorshDeserialize,
+    BorshSerialize,
+    BorshSchema,
+    Eq,
+    PartialEq,
+    Serialize,
+)]
+pub struct HistoricalStSolPrice {
+    /// The slot in which this price was observed.
+    pub slot: Slot,
+
+    /// The price of 1 stSOL (1e9 stLamports).
+    #[serde(rename = "st_sol_price_in_micro_ust")]
+    pub st_sol_price_in_ust: MicroUst,
+}
+
+#[repr(C)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    BorshDeserialize,
+    BorshSerialize,
+    BorshSchema,
+    Eq,
+    PartialEq,
+    Serialize,
+)]
+pub struct HistoricalStSolPriceArray(pub [HistoricalStSolPrice; POOL_PRICE_NUM_SAMPLES]);
+
+impl HistoricalStSolPriceArray {
+    /// Create new `HistorialStSolPriceArray` with slot 0 and 1 UST in each
+    /// position of the array.
+    pub fn new() -> Self {
+        HistoricalStSolPriceArray(
+            [HistoricalStSolPrice {
+                slot: 0,
+                st_sol_price_in_ust: MicroUst(1_000_000),
+            }; 5],
+        )
+    }
+
+    /// Get last price from the array.
+    pub fn last(&self) -> HistoricalStSolPrice {
+        self.0[POOL_PRICE_NUM_SAMPLES - 1]
+    }
+
+    /// Get first price from the array.
+    pub fn first(&self) -> HistoricalStSolPrice {
+        self.0[0]
+    }
+
+    /// Insert `st_sol_price_in_ust` at the end of the array and rotate it.
+    pub fn insert_and_rotate(&mut self, slot: Slot, st_sol_price_in_ust: MicroUst) {
+        // Maintain the invariant that samples are sorted by ascending slot number.
+        // The sample at index 0 is the oldest, so we remove it (well, move it to the
+        // end to be overwritten), and move everything else closer to the beginning
+        // of the array. Then we overwrite the last element with the current price
+        // and slot number, and we confirmed above that that slot number is larger
+        // than the slot number of the sample before it.
+        self.0.rotate_left(1);
+        self.0[POOL_PRICE_NUM_SAMPLES - 1].slot = slot;
+        self.0[POOL_PRICE_NUM_SAMPLES - 1].st_sol_price_in_ust = st_sol_price_in_ust;
+        assert!(self.0[POOL_PRICE_NUM_SAMPLES - 1].slot >= self.0[POOL_PRICE_NUM_SAMPLES - 2].slot);
+    }
+
+    /// Calculate the minimum amount we are willing to pay for the `StLamports`
+    /// rewards based on the median price from the historical price information.
+    pub fn minimum_ust_swap_amount(
+        &self,
+        rewards: StLamports,
+        sell_rewards_min_out_bps: u64,
+    ) -> Result<MicroUst, ArithmeticError> {
+        let mut sorted_arr = self.0;
+        sorted_arr.sort_by_key(|x| x.st_sol_price_in_ust);
+        // Get median historical price.
+        let median_price = sorted_arr[POOL_PRICE_NUM_SAMPLES / 2];
+        let minimum_ust_per_st_sol = (median_price.st_sol_price_in_ust
+            * Rational {
+                numerator: sell_rewards_min_out_bps,
+                denominator: 10_000,
+            })?;
+        let minimum_price = (rewards
+            * Rational {
+                numerator: minimum_ust_per_st_sol.0,
+                denominator: 1_000_000_000,
+            })?;
+        Ok(MicroUst(minimum_price.0))
+    }
 }
 
 #[repr(C)]
@@ -66,8 +197,21 @@ pub struct Anker {
     /// Wormhole parameters associated with this instance.
     pub wormhole_parameters: WormholeParameters,
 
+    /// When we sell rewards, we set the minimum out to stSOL amount times the
+    /// median of the recent price samples times a factor alpha. In other words,
+    /// this factor alpha is `1 - max_slippage`. Alpha is defined as
+    /// `sell_rewards_min_out_bps / 1e4`. The `bps` here means "basis points".
+    /// A basis point is 0.01% = 1e-4.
+    pub sell_rewards_min_out_bps: u64,
+
     /// Metrics for informational purposes.
     pub metrics: Metrics,
+
+    /// Historical stSOL prices, used to prevent sandwiching when we sell rewards.
+    ///
+    /// Invariant: entries are sorted by ascending slot number (so the oldest
+    /// entry is at index 0).
+    pub historical_st_sol_prices: HistoricalStSolPriceArray,
 
     /// Bump seed for the derived address that this Anker instance should live at.
     pub self_bump_seed: u8,
@@ -416,12 +560,59 @@ impl Anker {
         Ok(())
     }
 
+    /// Confirm that the passed accounts match those stored in the pool.
+    pub fn check_token_swap_before_fetch_price(
+        &self,
+        accounts: &FetchPoolPriceAccountsInfo,
+    ) -> ProgramResult {
+        // Check if the token swap account is the same one as the stored in the instance.
+        let token_swap_program_id = accounts.token_swap_pool.owner;
+        let token_swap =
+            self.get_token_swap_instance(accounts.token_swap_pool, token_swap_program_id)?;
+
+        // Check that the pool still has token
+        let (pool_st_sol_account, pool_ust_account) = if &token_swap.token_a
+            == accounts.pool_st_sol_account.key
+        {
+            Ok((token_swap.token_a, token_swap.token_b))
+        } else if &token_swap.token_a == accounts.pool_ust_account.key {
+            Ok((token_swap.token_b, token_swap.token_a))
+        } else {
+            msg!(
+                    "Could not find a match for token swap account {}, candidates were the stSol account {} or UST account {}",
+                    token_swap.token_a,
+                    accounts.pool_st_sol_account.key,
+                    accounts.pool_ust_account.key
+                );
+            Err(AnkerError::WrongSplTokenSwapParameters)
+        }?;
+
+        if &pool_st_sol_account != accounts.pool_st_sol_account.key {
+            msg!(
+                "Token swap stSol token is different from what is stored in the instance, expected {}, found {}",
+                pool_st_sol_account,
+                accounts.pool_st_sol_account.key
+            );
+            return Err(AnkerError::WrongSplTokenSwapParameters.into());
+        }
+        if &pool_ust_account != accounts.pool_ust_account.key {
+            msg!(
+                "Token swap UST token is different from what is stored in the instance, expected {}, found {}",
+                pool_ust_account,
+                accounts.pool_ust_account.key
+            );
+            return Err(AnkerError::WrongSplTokenSwapParameters.into());
+        }
+
+        Ok(())
+    }
+
     /// Check the if the token swap program is the same as the one stored in the
     /// instance.
     ///
     /// Check all the token swap associated accounts.
     /// Check if the rewards destination is the same as the one stored in Anker.
-    pub fn check_token_swap(
+    pub fn check_token_swap_before_sell(
         &self,
         anker_program_id: &Pubkey,
         accounts: &SellRewardsAccountsInfo,
@@ -721,5 +912,77 @@ mod test {
             let anker_recovered = try_from_slice_unchecked(&res[..]).unwrap();
             assert_eq!(anker, anker_recovered);
         }
+    }
+
+    #[test]
+    fn test_historical_price_array_minimum() {
+        let mut price_array = HistoricalStSolPriceArray::new();
+        // 100 UST for each StSol.
+        for slot in 0..POOL_PRICE_NUM_SAMPLES as u64 {
+            price_array.insert_and_rotate(slot, MicroUst(100_000_000));
+        }
+
+        // 1 StSol rewards and 1% slippage.
+        let minimum_ust = price_array
+            .minimum_ust_swap_amount(StLamports(1_000_000_000), 9900)
+            .unwrap();
+        assert_eq!(minimum_ust, MicroUst(99_000_000));
+
+        // 1 StSol rewards and 2% slippage.
+        let minimum_ust = price_array
+            .minimum_ust_swap_amount(StLamports(1_000_000_000), 9800)
+            .unwrap();
+        assert_eq!(minimum_ust, MicroUst(98_000_000));
+
+        // 80 StSol rewards and 5% slippage
+        let minimum_ust = price_array
+            .minimum_ust_swap_amount(StLamports(80_000_000_000), 9500)
+            .unwrap();
+        assert_eq!(minimum_ust, MicroUst(7_600_000_000));
+
+        // 331 StSol rewards and 50% slippage
+        let minimum_ust = price_array
+            .minimum_ust_swap_amount(StLamports(331_000_000_000), 5000)
+            .unwrap();
+        assert_eq!(minimum_ust, MicroUst(16_550_000_000));
+    }
+
+    #[test]
+    fn test_different_prices() {
+        let mut price_array = HistoricalStSolPriceArray::new();
+        // Prices in USD per Sol [100, 90, 95, 105, 101], median: 100
+        for (slot, price) in [100, 90, 95, 105, 101].iter().enumerate() {
+            price_array.insert_and_rotate(slot as Slot, MicroUst(price * 1_000_000));
+        }
+
+        price_array.insert_and_rotate(4, MicroUst(80_000_000));
+        // prices: [90, 95, 105, 101, 80], median: 95
+        let minimum_ust = price_array
+            .minimum_ust_swap_amount(StLamports(331_000_000_000), 5000)
+            .unwrap();
+        assert_eq!(minimum_ust, MicroUst(15_722_500_000));
+
+        price_array.insert_and_rotate(5, MicroUst(70_000_000));
+        price_array.insert_and_rotate(6, MicroUst(85_000_000));
+        // prices: [105, 101, 80, 70, 85], median: 85
+        let minimum_ust = price_array
+            .minimum_ust_swap_amount(StLamports(100_000_000_000), 9800)
+            .unwrap();
+        assert_eq!(minimum_ust, MicroUst(8_330_000_000));
+    }
+
+    #[test]
+    fn test_historical_price_array_limits() {
+        let mut price_array = HistoricalStSolPriceArray::new();
+        // 100 UST for each StSol.
+        for slot in 0..POOL_PRICE_NUM_SAMPLES as u64 {
+            price_array.insert_and_rotate(slot, MicroUst(100_000_000));
+        }
+
+        // 100 StLamports rewards and 1% slippage.
+        let minimum_ust = price_array
+            .minimum_ust_swap_amount(StLamports(100), 9900)
+            .unwrap();
+        assert_eq!(minimum_ust, MicroUst(9));
     }
 }

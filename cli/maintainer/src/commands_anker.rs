@@ -3,24 +3,29 @@
 
 use std::fmt;
 
-use anker::token::{BLamports, MicroUst};
-use anker::wormhole::TerraAddress;
 use clap::Clap;
-use lido::token::{Lamports, StLamports};
-use lido::util::serialize_b58;
 use serde::Serialize;
 use solana_program::pubkey::Pubkey;
 use solana_program::system_instruction;
 use solana_sdk::signature::Keypair;
 use solana_sdk::signer::Signer;
-use solido_cli_common::error::Abort;
-use solido_cli_common::snapshot::{SnapshotClientConfig, SnapshotConfig};
 use spl_token_swap::curve::base::{CurveType, SwapCurve};
 use spl_token_swap::curve::constant_product::ConstantProductCurve;
 
+use anker::state::HistoricalStSolPrice;
+use anker::token::{BLamports, MicroUst};
+use anker::wormhole::TerraAddress;
+use lido::token::{Lamports, StLamports};
+use lido::util::serialize_b58;
+use solido_cli_common::error::Abort;
+use solido_cli_common::snapshot::{SnapshotClientConfig, SnapshotConfig};
+
+use crate::anker_state::AnkerState;
+use crate::commands_multisig::{propose_instruction, ProposeInstructionOutput};
 use crate::config::{
-    AnkerDepositOpts, AnkerWithdrawOpts, ConfigFile, CreateAnkerOpts, CreateTokenPoolOpts,
-    ShowAnkerAuthoritiesOpts, ShowAnkerOpts,
+    AnkerChangeSellRewardsMinOutBpsOpts, AnkerChangeTerraRewardsDestinationOpts,
+    AnkerChangeTokenSwapPoolOpts, AnkerDepositOpts, AnkerWithdrawOpts, ConfigFile, CreateAnkerOpts,
+    CreateTokenPoolOpts, ShowAnkerAuthoritiesOpts, ShowAnkerOpts,
 };
 use crate::print_output;
 use crate::serialization_utils::serialize_bech32;
@@ -45,6 +50,15 @@ enum SubCommand {
 
     /// Return bSOL to Anker to redeem stSOL.
     Withdraw(AnkerWithdrawOpts),
+
+    /// Change Terra rewards destination.
+    ChangeTerraRewardsDestination(AnkerChangeTerraRewardsDestinationOpts),
+
+    /// Change Token Swap pool.
+    ChangeTokenSwapPool(AnkerChangeTokenSwapPoolOpts),
+
+    /// Change Anker's `sell_rewards_min_out_bps`.
+    ChangeSellRewardsMinOutBps(AnkerChangeSellRewardsMinOutBpsOpts),
 }
 
 #[derive(Clap, Debug)]
@@ -64,6 +78,15 @@ impl AnkerOpts {
             SubCommand::Deposit(opts) => opts.merge_with_config_and_environment(config_file),
             SubCommand::Withdraw(opts) => opts.merge_with_config_and_environment(config_file),
             SubCommand::ShowAuthorities(opts) => {
+                opts.merge_with_config_and_environment(config_file)
+            }
+            SubCommand::ChangeTerraRewardsDestination(opts) => {
+                opts.merge_with_config_and_environment(config_file)
+            }
+            SubCommand::ChangeTokenSwapPool(opts) => {
+                opts.merge_with_config_and_environment(config_file)
+            }
+            SubCommand::ChangeSellRewardsMinOutBps(opts) => {
                 opts.merge_with_config_and_environment(config_file)
             }
         }
@@ -100,6 +123,25 @@ pub fn main(config: &mut SnapshotClientConfig, anker_opts: &AnkerOpts) {
         SubCommand::ShowAuthorities(opts) => {
             let result = config.with_snapshot(|_| command_show_anker_authorities(opts));
             let output = result.ok_or_abort_with("Failed to show Anker authorities.");
+            print_output(config.output_mode, &output);
+        }
+        SubCommand::ChangeTerraRewardsDestination(opts) => {
+            let result = config
+                .with_snapshot(|config| command_change_terra_rewards_destination(config, opts));
+            let output = result
+                .ok_or_abort_with("Failed to change Anker Terra rewards destination address.");
+            print_output(config.output_mode, &output);
+        }
+        SubCommand::ChangeTokenSwapPool(opts) => {
+            let result =
+                config.with_snapshot(|config| command_change_token_swap_pool(config, opts));
+            let output = result.ok_or_abort_with("Failed to change Anker token swap pool address.");
+            print_output(config.output_mode, &output);
+        }
+        SubCommand::ChangeSellRewardsMinOutBps(opts) => {
+            let result = config
+                .with_snapshot(|config| command_change_sell_rewards_min_out_bps(config, opts));
+            let output = result.ok_or_abort_with("Failed to change Anker sell_rewards_min_bps.");
             print_output(config.output_mode, &output);
         }
     }
@@ -172,6 +214,7 @@ fn command_create_anker(
             token_swap_pool: *opts.token_swap_pool(),
         },
         opts.terra_rewards_address().clone(),
+        *opts.sell_rewards_min_out_bps(),
     )];
 
     config.sign_and_send_transaction(&instructions[..], &[config.signer])?;
@@ -206,8 +249,19 @@ struct ShowAnkerOutput {
     #[serde(serialize_with = "serialize_b58")]
     b_sol_mint_authority: Pubkey,
 
+    #[serde(serialize_with = "serialize_b58")]
+    token_swap_pool: Pubkey,
+
+    #[serde(serialize_with = "serialize_b58")]
+    token_swap_pool_st_sol_account: Pubkey,
+
+    #[serde(serialize_with = "serialize_b58")]
+    token_swap_pool_ust_account: Pubkey,
+
     #[serde(serialize_with = "serialize_bech32")]
     terra_rewards_destination: TerraAddress,
+
+    sell_rewards_min_out_bps: u64,
 
     #[serde(serialize_with = "serialize_b58")]
     reserve_authority: Pubkey,
@@ -229,32 +283,66 @@ struct ShowAnkerOutput {
 
     #[serde(rename = "b_sol_supply_b_lamports")]
     b_sol_supply: BLamports,
+
+    historical_st_sol_price: Vec<HistoricalStSolPrice>,
 }
 
 impl fmt::Display for ShowAnkerOutput {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        writeln!(f, "Anker address:         {}", self.anker_address)?;
-        writeln!(f, "Anker program id:      {}", self.anker_program_id)?;
-        writeln!(f, "Solido address:        {}", self.solido_address)?;
-        writeln!(f, "Solido program id:     {}", self.solido_program_id)?;
+        writeln!(f, "Anker address:          {}", self.anker_address)?;
+        writeln!(f, "Anker program id:       {}", self.anker_program_id)?;
+        writeln!(f, "Solido address:         {}", self.solido_address)?;
+        writeln!(f, "Solido program id:      {}", self.solido_program_id)?;
         writeln!(
             f,
-            "Rewards destination:   {}",
+            "Rewards destination:    {}",
             self.terra_rewards_destination
         )?;
-        writeln!(f, "bSOL mint:             {}", self.b_sol_mint)?;
-        writeln!(f, "bSOL mint authority:   {}", self.b_sol_mint_authority)?;
-        writeln!(f, "bSOL supply:           {}", self.b_sol_supply)?;
-        writeln!(f, "Reserve authority:     {}", self.reserve_authority)?;
-        writeln!(f, "stSOL reserve address: {}", self.st_sol_reserve)?;
-        writeln!(f, "stSOL reserve balance: {}", self.st_sol_reserve_balance)?;
-        write!(f, "stSOL reserve value:   ")?;
+        writeln!(f, "Token Swap Pool:        {}", self.token_swap_pool)?;
+        writeln!(
+            f,
+            " - Pool stSOL account:  {}",
+            self.token_swap_pool_st_sol_account
+        )?;
+        writeln!(
+            f,
+            " - Pool UST account:    {}",
+            self.token_swap_pool_ust_account
+        )?;
+        if self.sell_rewards_min_out_bps <= 9999 {
+            writeln!(f,
+                     "Sell rewards min out:   {}.{:>02}% of the expected amount ({}.{:>02}% slippage + fees)",
+                     self.sell_rewards_min_out_bps / 100,
+                     self.sell_rewards_min_out_bps % 100,
+                    (10000 - self.sell_rewards_min_out_bps) / 100,
+                     (10000 - self.sell_rewards_min_out_bps) % 100,
+            )?;
+        } else {
+            writeln!(
+                f,
+                "Sell rewards min out:   {}.{:>02}% of the expected amount \
+                     (Warning! Getting >100% out is unlikely to ever happen.)",
+                self.sell_rewards_min_out_bps / 100,
+                self.sell_rewards_min_out_bps % 100,
+            )?;
+        }
+        writeln!(f, "bSOL mint:              {}", self.b_sol_mint)?;
+        writeln!(f, "bSOL mint authority:    {}", self.b_sol_mint_authority)?;
+        writeln!(f, "bSOL supply:            {}", self.b_sol_supply)?;
+        writeln!(f, "Reserve authority:      {}", self.reserve_authority)?;
+        writeln!(f, "stSOL reserve address:  {}", self.st_sol_reserve)?;
+        writeln!(f, "stSOL reserve balance:  {}", self.st_sol_reserve_balance)?;
+        write!(f, "stSOL reserve value:    ")?;
         match self.st_sol_reserve_value {
             Some(sol_value) => writeln!(f, "{}", sol_value),
             None => writeln!(f, "Undefined; does Solido have nonzero deposits?"),
         }?;
-        writeln!(f, "UST reserve address:   {}", self.ust_reserve)?;
-        writeln!(f, "UST reserve balance:   {}", self.ust_reserve_balance)?;
+        writeln!(f, "UST reserve address:    {}", self.ust_reserve)?;
+        writeln!(f, "UST reserve balance:    {}", self.ust_reserve_balance)?;
+        writeln!(f, "Historical stSOL price:")?;
+        for x in &self.historical_st_sol_price {
+            writeln!(f, "  Slot {}: {} per stSOL", x.slot, x.st_sol_price_in_ust)?;
+        }
         Ok(())
     }
 }
@@ -268,6 +356,7 @@ fn command_show_anker(
     let anker_program_id = anker_account.owner;
     let anker = client.get_anker(opts.anker_address())?;
     let solido = client.get_solido(&anker.solido)?;
+    let anker_state = AnkerState::new(config, &anker_program_id, opts.anker_address(), &solido)?;
 
     let (mint_authority, _seed) =
         anker::find_mint_authority(&anker_program_id, opts.anker_address());
@@ -278,15 +367,14 @@ fn command_show_anker(
     let (ust_reserve, _seed) =
         anker::find_ust_reserve_account(&anker_program_id, opts.anker_address());
 
-    let st_sol_reserve_balance = StLamports(client.get_spl_token_balance(&st_sol_reserve)?);
-    let ust_reserve_balance = MicroUst(client.get_spl_token_balance(&ust_reserve)?);
+    let st_sol_reserve_balance = anker_state.st_sol_reserve_balance;
+    let ust_reserve_balance = anker_state.ust_reserve_balance;
 
     let st_sol_reserve_value = solido
         .exchange_rate
         .exchange_st_sol(st_sol_reserve_balance)
         .ok();
-    let b_sol_mint = client.get_spl_token_mint(&anker.b_sol_mint)?;
-    let b_sol_supply = BLamports(b_sol_mint.supply);
+    let b_sol_supply = anker_state.b_sol_total_supply_amount;
 
     let result = ShowAnkerOutput {
         anker_address: *opts.anker_address(),
@@ -295,7 +383,12 @@ fn command_show_anker(
         solido_address: anker.solido,
         solido_program_id: anker.solido_program_id,
 
+        token_swap_pool: anker.token_swap_pool,
+        token_swap_pool_st_sol_account: anker_state.pool_st_sol_account,
+        token_swap_pool_ust_account: anker_state.pool_ust_account,
+
         terra_rewards_destination: anker.terra_rewards_destination,
+        sell_rewards_min_out_bps: anker.sell_rewards_min_out_bps,
 
         b_sol_mint: anker.b_sol_mint,
         b_sol_mint_authority: mint_authority,
@@ -308,6 +401,8 @@ fn command_show_anker(
 
         ust_reserve_balance,
         b_sol_supply,
+
+        historical_st_sol_price: anker.historical_st_sol_prices.0.to_vec(),
     };
 
     Ok(result)
@@ -691,4 +786,86 @@ pub fn command_show_anker_authorities(
         ust_reserve_account,
         reserve_authority,
     })
+}
+
+pub fn command_change_terra_rewards_destination(
+    config: &mut SnapshotConfig,
+    opts: &AnkerChangeTerraRewardsDestinationOpts,
+) -> solido_cli_common::Result<ProposeInstructionOutput> {
+    let client = &mut config.client;
+    let anker_account = client.get_account(opts.anker_address())?;
+    let anker_program_id = anker_account.owner;
+    let anker = client.get_anker(opts.anker_address())?;
+    let solido = config.client.get_solido(&anker.solido)?;
+
+    let instruction = anker::instruction::change_terra_rewards_destination(
+        &anker_program_id,
+        &anker::instruction::ChangeTerraRewardsDestinationAccountsMeta {
+            anker: *opts.anker_address(),
+            solido: anker.solido,
+            manager: solido.manager,
+        },
+        opts.terra_rewards_destination().clone(),
+    );
+    propose_instruction(
+        config,
+        opts.multisig_program_id(),
+        *opts.multisig_address(),
+        instruction,
+    )
+}
+
+pub fn command_change_token_swap_pool(
+    config: &mut SnapshotConfig,
+    opts: &AnkerChangeTokenSwapPoolOpts,
+) -> solido_cli_common::Result<ProposeInstructionOutput> {
+    let client = &mut config.client;
+    let anker_account = client.get_account(opts.anker_address())?;
+    let anker_program_id = anker_account.owner;
+    let anker = client.get_anker(opts.anker_address())?;
+    let solido = config.client.get_solido(&anker.solido)?;
+
+    let instruction = anker::instruction::change_token_swap_pool(
+        &anker_program_id,
+        &anker::instruction::ChangeTokenSwapPoolAccountsMeta {
+            anker: *opts.anker_address(),
+            solido: anker.solido,
+            manager: solido.manager,
+            current_token_swap_pool: anker.token_swap_pool,
+            new_token_swap_pool: *opts.token_swap_pool(),
+        },
+    );
+    propose_instruction(
+        config,
+        opts.multisig_program_id(),
+        *opts.multisig_address(),
+        instruction,
+    )
+}
+
+pub fn command_change_sell_rewards_min_out_bps(
+    config: &mut SnapshotConfig,
+    opts: &AnkerChangeSellRewardsMinOutBpsOpts,
+) -> solido_cli_common::Result<ProposeInstructionOutput> {
+    let client = &mut config.client;
+    let anker_account = client.get_account(opts.anker_address())?;
+    let anker_program_id = anker_account.owner;
+    let anker = client.get_anker(opts.anker_address())?;
+    let solido = config.client.get_solido(&anker.solido)?;
+
+    let instruction = anker::instruction::change_sell_rewards_min_out_bps(
+        &anker_program_id,
+        &anker::instruction::ChangeSellRewardsMinOutBpsAccountsMeta {
+            anker: *opts.anker_address(),
+            solido: anker.solido,
+            manager: solido.manager,
+        },
+        *opts.sell_rewards_min_out_bps(),
+    );
+    propose_instruction(
+        config,
+        opts.multisig_program_id(),
+        *opts.multisig_address(),
+        instruction,
+    )
 }

@@ -19,7 +19,11 @@ use spl_token_swap::instruction::Swap;
 
 use crate::solido_context::send_transaction;
 use crate::solido_context::{self};
-use anker::{find_reserve_authority, find_st_sol_reserve_account, wormhole::TerraAddress};
+use anker::{
+    find_reserve_authority, find_st_sol_reserve_account,
+    state::{POOL_PRICE_MIN_SAMPLE_DISTANCE, POOL_PRICE_NUM_SAMPLES},
+    wormhole::TerraAddress,
+};
 
 // Program id for the Anker program. Only used for tests.
 solana_program::declare_id!("Anker111111111111111111111111111111111111117");
@@ -212,6 +216,10 @@ impl Context {
         let rewards_owner = solido_context.deterministic_keypair.new_keypair();
         let terra_rewards_destination = TerraAddress::default();
 
+        // In the tests, by default we set no bound on slippage when selling rewards.
+        // The min out amount is 0% of the expected amount.
+        let sell_rewards_min_out_bps = 0;
+
         send_transaction(
             &mut solido_context.context,
             &mut solido_context.nonce,
@@ -233,6 +241,7 @@ impl Context {
                     ust_mint: token_pool_context.ust_mint_address,
                 },
                 terra_rewards_destination.clone(),
+                sell_rewards_min_out_bps,
             )],
             vec![],
         )
@@ -557,8 +566,7 @@ impl Context {
             )],
             vec![manager],
         )
-        .await?;
-        Ok(())
+        .await
     }
 
     pub async fn try_change_token_swap_pool(
@@ -583,6 +591,70 @@ impl Context {
         )
         .await?;
         Ok(())
+    }
+
+    pub async fn try_change_sell_rewards_min_out_bps(
+        &mut self,
+        manager: &Keypair,
+        sell_rewards_min_out_bps: u64,
+    ) -> transport::Result<()> {
+        send_transaction(
+            &mut self.solido_context.context,
+            &mut self.solido_context.nonce,
+            &[instruction::change_sell_rewards_min_out_bps(
+                &id(),
+                &instruction::ChangeSellRewardsMinOutBpsAccountsMeta {
+                    anker: self.anker,
+                    solido: self.solido_context.solido.pubkey(),
+                    manager: manager.pubkey(),
+                },
+                sell_rewards_min_out_bps,
+            )],
+            vec![manager],
+        )
+        .await
+    }
+
+    /// Return the `MicroUst` balance of the account in `address`.
+    pub async fn try_fetch_pool_price(&mut self) -> transport::Result<()> {
+        let (ust_address, st_sol_address) = self
+            .token_pool_context
+            .get_ust_stsol_addresses(&mut self.solido_context)
+            .await;
+
+        send_transaction(
+            &mut self.solido_context.context,
+            &mut self.solido_context.nonce,
+            &[instruction::fetch_pool_price(
+                &id(),
+                &instruction::FetchPoolPriceAccountsMeta {
+                    anker: self.anker,
+                    solido: self.solido_context.solido.pubkey(),
+                    token_swap_pool: self.token_pool_context.swap_account.pubkey(),
+                    pool_st_sol_account: st_sol_address,
+                    pool_ust_account: ust_address,
+                },
+            )],
+            vec![],
+        )
+        .await
+    }
+
+    pub async fn fetch_pool_price(&mut self) {
+        self.try_fetch_pool_price()
+            .await
+            .expect("Could not send transaction to fetch pool price.")
+    }
+
+    pub async fn fill_historical_st_sol_price_array(&mut self) {
+        for _ in 0..POOL_PRICE_NUM_SAMPLES {
+            let current_slot = self.solido_context.get_clock().await.slot;
+            self.fetch_pool_price().await;
+            self.solido_context
+                .context
+                .warp_to_slot(current_slot + POOL_PRICE_MIN_SAMPLE_DISTANCE)
+                .unwrap();
+        }
     }
 
     pub async fn get_anker(&mut self) -> anker::state::Anker {

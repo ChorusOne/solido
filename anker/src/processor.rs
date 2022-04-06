@@ -5,6 +5,7 @@ use borsh::BorshDeserialize;
 use lido::token::Lamports;
 use solana_program::{
     account_info::AccountInfo,
+    clock::Clock,
     entrypoint::ProgramResult,
     msg,
     program::{invoke, invoke_signed},
@@ -24,8 +25,9 @@ use crate::{
     find_st_sol_reserve_account,
     instruction::{
         AnkerInstruction, ChangeTerraRewardsDestinationAccountsInfo,
-        ChangeTokenSwapPoolAccountsInfo, DepositAccountsInfo, InitializeAccountsInfo,
-        SellRewardsAccountsInfo, SendRewardsAccountsInfo, WithdrawAccountsInfo,
+        ChangeTokenSwapPoolAccountsInfo, DepositAccountsInfo, FetchPoolPriceAccountsInfo,
+        InitializeAccountsInfo, SellRewardsAccountsInfo, SendRewardsAccountsInfo,
+        WithdrawAccountsInfo,
     },
     logic::{burn_b_sol, deserialize_anker, mint_b_sol_to},
     metrics::Metrics,
@@ -35,15 +37,22 @@ use crate::{
 };
 use crate::{find_ust_reserve_account, ANKER_STSOL_RESERVE_ACCOUNT, ANKER_UST_RESERVE_ACCOUNT};
 use crate::{
+    instruction::ChangeSellRewardsMinOutBpsAccountsInfo,
+    logic::get_one_st_sol_for_ust_price_from_pool,
+    state::{HistoricalStSolPriceArray, POOL_PRICE_MAX_SAMPLE_AGE, POOL_PRICE_MIN_SAMPLE_DISTANCE},
+};
+use crate::{
     logic::{create_account, initialize_spl_account, swap_rewards},
     state::ExchangeRate,
 };
 use crate::{state::ANKER_LEN, ANKER_RESERVE_AUTHORITY};
 
+#[inline(never)]
 fn process_initialize(
     program_id: &Pubkey,
     accounts_raw: &[AccountInfo],
     terra_rewards_destination: TerraAddress,
+    sell_rewards_min_out_bps: u64,
 ) -> ProgramResult {
     let accounts = InitializeAccountsInfo::try_from_slice(accounts_raw)?;
     let rent = Rent::from_account_info(accounts.sysvar_rent)?;
@@ -57,6 +66,9 @@ fn process_initialize(
             accounts.anker.key,
         );
         return Err(AnkerError::InvalidDerivedAccount.into());
+    }
+    if sell_rewards_min_out_bps > 10_000 {
+        return Err(AnkerError::InvalidSellRewardsMinOutBps.into());
     }
 
     let solido = Lido::deserialize_lido(accounts.solido_program.key, accounts.solido)?;
@@ -79,7 +91,11 @@ fn process_initialize(
         &accounts,
         accounts.anker,
         &rent,
-        ANKER_LEN,
+        // At the time of writing, Solana accounts cannot be resized. If we ever
+        // need to store more data in the future, we need to create the headroom
+        // for it now (or switch to a different account later). So add 128 bytes
+        // of headroom for future expansion, in case we need it.
+        ANKER_LEN + 128,
         &anker_seeds,
     )?;
 
@@ -140,7 +156,13 @@ fn process_initialize(
             core_bridge_program_id: *accounts.wormhole_core_bridge_program_id.key,
             token_bridge_program_id: *accounts.wormhole_token_bridge_program_id.key,
         },
+        sell_rewards_min_out_bps,
         metrics: Metrics::new(),
+        // At initialization, we fill the historical prices with a dummy
+        // price of 1 UST per stSOL recorded at slot 0. Because we require
+        // these prices to be recent at `SellRewards` time, these dummy
+        // values are never used.
+        historical_st_sol_prices: HistoricalStSolPriceArray::new(),
         self_bump_seed: anker_bump_seed,
         mint_authority_bump_seed: mint_bump_seed,
         reserve_authority_bump_seed,
@@ -176,6 +198,7 @@ fn process_initialize(
 }
 
 /// Deposit an amount of StLamports and get bSol in return.
+#[inline(never)]
 fn process_deposit(
     program_id: &Pubkey,
     accounts_raw: &[AccountInfo],
@@ -230,6 +253,53 @@ fn process_deposit(
     Ok(())
 }
 
+/// Sample the current pool price, used later to limit slippage in `sell_rewards`.
+#[inline(never)]
+fn process_fetch_pool_price(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> ProgramResult {
+    let accounts = FetchPoolPriceAccountsInfo::try_from_slice(accounts_raw)?;
+    let (solido, mut anker) = deserialize_anker(program_id, accounts.anker, accounts.solido)?;
+
+    // Check that the accounts passed to this instruction are the same as those
+    // stored in the pool. That alone would still enable swapping the stSOL and
+    // UST accounts though, so also confirm the stSOL mint on one.
+    anker.check_token_swap_before_fetch_price(&accounts)?;
+    anker.check_is_st_sol_account(&solido, accounts.pool_st_sol_account)?;
+
+    let token_swap_program_id = accounts.token_swap_pool.owner;
+    let swap_pool =
+        anker.get_token_swap_instance(accounts.token_swap_pool, token_swap_program_id)?;
+    let pool_ust_balance = MicroUst(Anker::get_token_amount(accounts.pool_ust_account)?);
+    let pool_st_sol_balance = StLamports(Anker::get_token_amount(accounts.pool_st_sol_account)?);
+
+    let clock = Clock::from_account_info(accounts.sysvar_clock)?;
+
+    // The price samples must be spaced at least some distance apart.
+    let most_recent_sample = anker.historical_st_sol_prices.last();
+    let slots_elapsed = clock.slot.saturating_sub(most_recent_sample.slot);
+    if slots_elapsed < POOL_PRICE_MIN_SAMPLE_DISTANCE {
+        msg!(
+            "The previous stSOL/UST price was sampled at slot {}. \
+            A new sample cannot be added until slot {}.",
+            most_recent_sample.slot,
+            most_recent_sample.slot + POOL_PRICE_MIN_SAMPLE_DISTANCE,
+        );
+        return Err(AnkerError::FetchPoolPriceTooEarly.into());
+    }
+
+    let st_sol_price_in_ust = get_one_st_sol_for_ust_price_from_pool(
+        &*swap_pool.swap_curve.calculator,
+        &swap_pool.token_a,
+        accounts.pool_ust_account.key,
+        pool_st_sol_balance,
+        pool_ust_balance,
+    )?;
+
+    anker
+        .historical_st_sol_prices
+        .insert_and_rotate(clock.slot, st_sol_price_in_ust);
+    anker.save(accounts.anker)
+}
+
 /// Sell Anker rewards.
 #[inline(never)]
 fn process_sell_rewards(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> ProgramResult {
@@ -240,6 +310,38 @@ fn process_sell_rewards(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> Pr
         accounts.anker.key,
         accounts.st_sol_reserve_account,
     )?;
+
+    let clock = Clock::from_account_info(accounts.sysvar_clock)?;
+    let oldest_sample = anker.historical_st_sol_prices.first();
+    let slots_elapsed = clock.slot.saturating_sub(oldest_sample.slot);
+    if slots_elapsed > POOL_PRICE_MAX_SAMPLE_AGE {
+        msg!(
+            "The oldest stSOL/UST price was sampled at slot {}. \
+            It must have been sampled more recently.",
+            oldest_sample.slot,
+        );
+        return Err(AnkerError::FetchPoolPriceNotCalledRecently.into());
+    }
+
+    // The youngest sample must not be too recent, so an adversarial cranker can
+    // not sandwich the `FetchPoolPrice` and `SellRewards` in the same transaction.
+    // But if we demand the same distance between the sale and fetching the price,
+    // as between price updates, then one could spam `FetchPoolPrice` transactions
+    // and hold off the `SellRewards` for a bit. To avoid this, we allow the
+    // `SellRewards` to happen earlier than the price fetch, but still late enough
+    // that no single validator should control that entire span of slots.
+    let youngest_sample = anker.historical_st_sol_prices.last();
+    let slots_elapsed = clock.slot.saturating_sub(youngest_sample.slot);
+    if slots_elapsed < POOL_PRICE_MIN_SAMPLE_DISTANCE / 2 {
+        msg!(
+            "The youngest stSOL/UST price was sampled at slot {}. \
+            Wait at least {} slots until selling the rewards..",
+            youngest_sample.slot,
+            POOL_PRICE_MIN_SAMPLE_DISTANCE / 2,
+        );
+        return Err(AnkerError::SellRewardsTooEarly.into());
+    }
+
     anker.check_is_st_sol_account(&solido, accounts.st_sol_reserve_account)?;
     anker.check_mint(accounts.b_sol_mint)?;
 
@@ -256,9 +358,14 @@ fn process_sell_rewards(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> Pr
     // If this underflows, something went wrong, and we abort the transaction.
     let rewards = (reserve_st_sol_before - b_sol_supply_value_in_st_sol)?;
 
+    // Get minimum amount we are willing to pay for the rewards in UST.
+    let minimum_ust_out = anker
+        .historical_st_sol_prices
+        .minimum_ust_swap_amount(rewards, anker.sell_rewards_min_out_bps)?;
+
     // Get the amount of UST that we had.
     let ust_before = MicroUst(Anker::get_token_amount(accounts.ust_reserve_account)?);
-    swap_rewards(program_id, rewards, &anker, &accounts)?;
+    swap_rewards(program_id, rewards, &anker, &accounts, minimum_ust_out)?;
     // Get new UST amount.
     let ust_after = MicroUst(Anker::get_token_amount(accounts.ust_reserve_account)?);
     let reserve_st_sol_after =
@@ -287,6 +394,7 @@ fn process_sell_rewards(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> Pr
 }
 
 /// Return some bSOL and get back the underlying stSOL.
+#[inline(never)]
 fn process_withdraw(
     program_id: &Pubkey,
     accounts_raw: &[AccountInfo],
@@ -382,6 +490,7 @@ fn process_withdraw(
 
 /// Change the Terra rewards destination.
 /// Solido's manager needs to sign the transaction.
+#[inline(never)]
 fn process_change_terra_rewards_destination(
     program_id: &Pubkey,
     accounts_raw: &[AccountInfo],
@@ -397,6 +506,7 @@ fn process_change_terra_rewards_destination(
 
 /// Change the Token Pool instance.
 /// Solido's manager needs to sign the transaction.
+#[inline(never)]
 fn process_change_token_swap_pool(
     program_id: &Pubkey,
     accounts_raw: &[AccountInfo],
@@ -420,6 +530,27 @@ fn process_change_token_swap_pool(
         anker.get_token_swap_instance(accounts.new_token_swap_pool, new_token_swap_program_id)?;
 
     anker.check_change_token_swap_pool(&solido, current_token_swap, new_token_swap)?;
+    anker.save(accounts.anker)
+}
+
+/// Change Anker's `sell_rewards_min_out_bps`.
+/// Solido's manager needs to sign the transaction.
+#[inline(never)]
+fn process_change_sell_rewards_min_out_bps(
+    program_id: &Pubkey,
+    accounts_raw: &[AccountInfo],
+    sell_rewards_min_out_bps: u64,
+) -> ProgramResult {
+    let accounts = ChangeSellRewardsMinOutBpsAccountsInfo::try_from_slice(accounts_raw)?;
+    let (solido, mut anker) = deserialize_anker(program_id, accounts.anker, accounts.solido)?;
+    solido.check_manager(accounts.manager)?;
+
+    // Cannot be greater than 100%.
+    if sell_rewards_min_out_bps > 10_000 {
+        return Err(AnkerError::InvalidSellRewardsMinOutBps.into());
+    }
+
+    anker.sell_rewards_min_out_bps = sell_rewards_min_out_bps;
     anker.save(accounts.anker)
 }
 
@@ -530,9 +661,16 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
     match instruction {
         AnkerInstruction::Initialize {
             terra_rewards_destination,
-        } => process_initialize(program_id, accounts, terra_rewards_destination),
+            sell_rewards_min_out_bps,
+        } => process_initialize(
+            program_id,
+            accounts,
+            terra_rewards_destination,
+            sell_rewards_min_out_bps,
+        ),
         AnkerInstruction::Deposit { amount } => process_deposit(program_id, accounts, amount),
         AnkerInstruction::Withdraw { amount } => process_withdraw(program_id, accounts, amount),
+        AnkerInstruction::FetchPoolPrice => process_fetch_pool_price(program_id, accounts),
         AnkerInstruction::SellRewards => process_sell_rewards(program_id, accounts),
         AnkerInstruction::ChangeTerraRewardsDestination {
             terra_rewards_destination,
@@ -546,6 +684,11 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
         }
         AnkerInstruction::SendRewards { wormhole_nonce } => {
             process_send_rewards(program_id, accounts, wormhole_nonce)
+        }
+        AnkerInstruction::ChangeSellRewardsMinOutBps {
+            sell_rewards_min_out_bps,
+        } => {
+            process_change_sell_rewards_min_out_bps(program_id, accounts, sell_rewards_min_out_bps)
         }
     }
 }

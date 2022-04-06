@@ -17,6 +17,7 @@ use solido_cli_common::{
     error::{Error, SerializationError},
     snapshot::SnapshotConfig,
 };
+use spl_token_swap::curve::{constant_product::ConstantProductCurve, fees};
 
 #[derive(Default)]
 pub struct AnkerState {
@@ -30,6 +31,8 @@ pub struct AnkerState {
     pub pool_st_sol_balance: StLamports,
     pub pool_ust_balance: MicroUst,
 
+    pub constant_product_calculator: ConstantProductCurve,
+    pub pool_fees: fees::Fees,
     pub ust_mint: Pubkey,
     pub pool_mint: Pubkey,
     pub pool_fee_account: Pubkey,
@@ -94,6 +97,8 @@ impl AnkerState {
             pool_ust_account,
             pool_st_sol_balance,
             pool_ust_balance,
+            constant_product_calculator: ConstantProductCurve::default(),
+            pool_fees: token_swap.fees,
             ust_mint: ust_account.mint,
             pool_mint: token_swap.pool_mint,
             pool_fee_account: token_swap.pool_fee_account,
@@ -101,6 +106,22 @@ impl AnkerState {
             st_sol_reserve_balance,
             token_swap_program_id,
         })
+    }
+
+    pub fn get_fetch_pool_price_instruction(&self, solido_address: Pubkey) -> Instruction {
+        let (anker_instance, _anker_bump_seed) =
+            find_instance_address(&self.anker_program_id, &solido_address);
+
+        anker::instruction::fetch_pool_price(
+            &self.anker_program_id,
+            &anker::instruction::FetchPoolPriceAccountsMeta {
+                anker: anker_instance,
+                solido: solido_address,
+                token_swap_pool: self.anker.token_swap_pool,
+                pool_st_sol_account: self.pool_st_sol_account,
+                pool_ust_account: self.pool_ust_account,
+            },
+        )
     }
 
     pub fn get_sell_rewards_instruction(

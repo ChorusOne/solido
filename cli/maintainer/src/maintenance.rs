@@ -7,46 +7,50 @@ use std::fmt;
 use std::io;
 use std::time::SystemTime;
 
+use anker::{
+    logic::get_one_st_sol_for_ust_price_from_pool,
+    state::{POOL_PRICE_MAX_SAMPLE_AGE, POOL_PRICE_MIN_SAMPLE_DISTANCE},
+    token::MicroUst,
+};
 use itertools::izip;
 
-use lido::processor::StakeType;
-use lido::token;
-use lido::token::Rational;
-use lido::REWARDS_WITHDRAW_AUTHORITY;
 use serde::Serialize;
-use solana_program::program_pack::Pack;
 use solana_program::{
     clock::{Clock, Slot},
     epoch_schedule::EpochSchedule,
+    program_pack::Pack,
     pubkey::Pubkey,
     rent::Rent,
     stake_history::StakeHistory,
 };
-use solana_sdk::account::ReadableAccount;
-use solana_sdk::fee_calculator::DEFAULT_TARGET_LAMPORTS_PER_SIGNATURE;
-use solana_sdk::signer::{keypair::Keypair, Signer};
-use solana_sdk::{account::Account, instruction::Instruction};
+use solana_sdk::{
+    account::{Account, ReadableAccount},
+    fee_calculator::DEFAULT_TARGET_LAMPORTS_PER_SIGNATURE,
+    instruction::Instruction,
+    signer::{keypair::Keypair, Signer},
+};
 use solana_vote_program::vote_state::VoteState;
-use solido_cli_common::error::MaintenanceError;
-use solido_cli_common::{snapshot::SnapshotConfig, validator_info_utils::ValidatorInfo, Result};
+use solido_cli_common::{
+    error::MaintenanceError, snapshot::SnapshotConfig, validator_info_utils::ValidatorInfo, Result,
+};
 use spl_token::state::Mint;
 
-use anker::token::MicroUst;
-use lido::token::StLamports;
-use lido::{account_map::PubkeyAndEntry, stake_account::StakeAccount, MINT_AUTHORITY};
 use lido::{
+    account_map::PubkeyAndEntry,
+    processor::StakeType,
+    stake_account::StakeAccount,
     stake_account::{deserialize_stake_account, StakeBalance},
-    util::serialize_b58,
-};
-use lido::{
     state::{Lido, Validator},
     token::Lamports,
-    MINIMUM_STAKE_ACCOUNT_BALANCE, STAKE_AUTHORITY,
+    token::Rational,
+    token::StLamports,
+    util::serialize_b58,
+    MINIMUM_STAKE_ACCOUNT_BALANCE, MINT_AUTHORITY, REWARDS_WITHDRAW_AUTHORITY, STAKE_AUTHORITY,
 };
+use spl_token_swap::curve::calculator::{CurveCalculator, TradeDirection};
 
 use crate::anker_state::AnkerState;
-use crate::config::PerformMaintenanceOpts;
-use crate::config::StakeTime;
+use crate::config::{PerformMaintenanceOpts, StakeTime};
 
 /// A brief description of the maintenance performed. Not relevant functionally,
 /// but helpful for automated testing, and just for info.
@@ -113,6 +117,11 @@ pub enum MaintenanceOutput {
         validator_vote_account: Pubkey,
     },
     UnstakeFromActiveValidator(Unstake),
+
+    FetchPoolPrice {
+        #[serde(rename = "st_sol_price_in_micro_ust")]
+        expected_st_sol_price_in_ust: MicroUst,
+    },
 
     SellRewards {
         #[serde(rename = "st_sol_amount_st_lamports")]
@@ -253,6 +262,16 @@ impl fmt::Display for MaintenanceOutput {
             MaintenanceOutput::SendRewards { ust_amount } => {
                 writeln!(f, "Sent Anker UST rewards through Wormhole.")?;
                 writeln!(f, "  Amount: {}", ust_amount)?;
+            }
+            MaintenanceOutput::FetchPoolPrice {
+                expected_st_sol_price_in_ust,
+            } => {
+                writeln!(f, "Fetch Pool Price")?;
+                writeln!(
+                    f,
+                    "  Expected amount per stSOL: {}",
+                    expected_st_sol_price_in_ust
+                )?;
             }
         }
         Ok(())
@@ -744,8 +763,8 @@ impl SolidoState {
         None
     }
 
-    /// Try to sell the extra stSOL rewards for UST tokens.
-    pub fn try_sell_anker_rewards(&self) -> Option<MaintenanceInstruction> {
+    /// Get the amount of rewards we can sell in Anker.
+    fn get_anker_rewards(&self) -> Option<StLamports> {
         let anker_state = self.anker_state.as_ref()?;
         let reserve_st_sol = anker_state.st_sol_reserve_balance;
         let st_sol_amount = self
@@ -754,34 +773,94 @@ impl SolidoState {
             .exchange_sol(Lamports(anker_state.b_sol_total_supply_amount.0))
             .expect("It will not overflow because we always have less than the total amount of minted Sol.");
 
-        let rewards = (reserve_st_sol - st_sol_amount).ok()?;
+        (reserve_st_sol - st_sol_amount).ok()
+    }
 
+    /// Try to sell the extra stSOL rewards for UST tokens or
+    /// to update the historical pool price exchange rate to protect us
+    /// against sandwiching attacks.
+    pub fn try_sell_anker_rewards(&self) -> Option<MaintenanceInstruction> {
+        let anker_state = self.anker_state.as_ref()?;
+
+        let rewards = self.get_anker_rewards()?;
         let min_rewards_to_sell = self
             .solido
             .exchange_rate
             .exchange_sol(Self::MINIMUM_WITHDRAW_AMOUNT)
             .expect("The price of a signature should be small enough that it doesn't overflow.");
-
-        // Estimate the amount of UST that we will get when swapping against the constant product
-        // pool. This is only an approximation because it doesn’t uphold the constant product
-        // invariant, but this is a reasonable approximation when the rewards to sell are small
-        // compared to the pool balance. Also, this ignores swap fees. It would have been nice
-        // to use the actual `spl_token_swap::state::SwapV1` instance, but it is not `Send`, so
-        // we can’t store it in our state.
-        let ust_per_st_sol = Rational {
-            numerator: anker_state.pool_ust_balance.0,
-            denominator: anker_state.pool_st_sol_balance.0,
-        };
-        let expected_proceeds = (rewards * ust_per_st_sol)
-            .map(|x| MicroUst(x.0))
-            .unwrap_or(MicroUst(0));
-        // We want at least 0.01 UST out if we are going to do the swap at all.
-        let min_proceeds = MicroUst(10_000);
-
         // We should not call the instruction if the rewards are 0, or if the rewards are so small
         // that the transaction cost is a significant portion of the rewards.
-        if rewards < min_rewards_to_sell || expected_proceeds < min_proceeds {
-            None
+        if rewards < min_rewards_to_sell {
+            return None;
+        }
+
+        // Fees as in the `spl_token_swap` `SwapCurve::swap` calculation.
+        let trade_fee = anker_state.pool_fees.trading_fee(rewards.0 as u128)?;
+        let owner_fee = anker_state.pool_fees.owner_trading_fee(rewards.0 as u128)?;
+
+        let total_fees = trade_fee.checked_add(owner_fee)?;
+        let rewards_minus_fees = (rewards.0 as u128).checked_sub(total_fees)?;
+
+        let expected_proceeds = anker_state
+            .constant_product_calculator
+            .swap_without_fees(
+                rewards_minus_fees,
+                anker_state.pool_st_sol_balance.0 as u128,
+                anker_state.pool_ust_balance.0 as u128,
+                TradeDirection::AtoB,
+            )?
+            .destination_amount_swapped;
+        let expected_proceeds = MicroUst(expected_proceeds as u64);
+
+        // We want at least 0.01 UST out if we are going to do the swap at all.
+        let min_proceeds = MicroUst(10_000);
+        if expected_proceeds < min_proceeds {
+            return None;
+        }
+
+        // Check if we can sell the rewards with the preset slippage tolerance.
+        // Note that this might change when the instruction gets included in the block.
+        let minimum_ust_amount_for_rewards = anker_state
+            .anker
+            .historical_st_sol_prices
+            .minimum_ust_swap_amount(rewards, anker_state.anker.sell_rewards_min_out_bps)
+            .ok()?;
+        if expected_proceeds < minimum_ust_amount_for_rewards {
+            return None;
+        }
+
+        let oldest_price_sample = anker_state.anker.historical_st_sol_prices.first();
+        let slots_elapsed_since_oldest_sample =
+            self.clock.slot.saturating_sub(oldest_price_sample.slot);
+
+        let youngest_sample = anker_state.anker.historical_st_sol_prices.last();
+        let slots_elapsed_since_youngest_sample =
+            self.clock.slot.saturating_sub(youngest_sample.slot);
+
+        // If the youngest sample is too recent, we are not yet allowed to sell
+        // rewards or update the price.
+        if slots_elapsed_since_youngest_sample < POOL_PRICE_MIN_SAMPLE_DISTANCE {
+            return None;
+        }
+
+        // Time to update the historical price
+        if slots_elapsed_since_oldest_sample > POOL_PRICE_MAX_SAMPLE_AGE
+            || oldest_price_sample.slot == 0
+        {
+            let expected_st_sol_price_in_ust = get_one_st_sol_for_ust_price_from_pool(
+                &anker_state.constant_product_calculator,
+                &anker_state.pool_st_sol_account,
+                &anker_state.pool_ust_account,
+                anker_state.pool_st_sol_balance,
+                anker_state.pool_ust_balance,
+            )
+            .ok()?;
+            Some(MaintenanceInstruction::new(
+                anker_state.get_fetch_pool_price_instruction(self.solido_address),
+                MaintenanceOutput::FetchPoolPrice {
+                    expected_st_sol_price_in_ust,
+                },
+            ))
         } else {
             Some(MaintenanceInstruction::new(
                 anker_state
@@ -926,7 +1005,7 @@ impl SolidoState {
             let current_stake_balance = stake_accounts
                 .iter()
                 .map(|(_addr, detail)| detail.balance.total())
-                .sum::<token::Result<Lamports>>()
+                .sum::<lido::token::Result<Lamports>>()
                 .expect("If this overflows, there would be more than u64::MAX staked.");
 
             let expected_difference_stake =

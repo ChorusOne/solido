@@ -322,3 +322,18 @@ def get_approve_and_execute(
         )
 
     return approve_and_execute
+
+
+def wait_for_slots(slots: int) -> None:
+    import time
+
+    """
+    Blocks waiting until `slots` slots have passed.
+    """
+    slots_beginning = int(solana('get-slot'))
+    while True:
+        # Wait 1 second to poll next slot height (around 2 slots)
+        time.sleep(1)
+        elapsed_slots = int(solana('get-slot')) - slots_beginning
+        if elapsed_slots >= slots:
+            break
