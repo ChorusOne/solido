@@ -10,8 +10,8 @@ use std::{
     vec,
 };
 
-use clap::Parser;
 use chrono::TimeZone;
+use clap::Parser;
 use lido::token::Rational;
 use rand::{rngs::ThreadRng, Rng};
 use rusqlite::{params, Connection, Row};

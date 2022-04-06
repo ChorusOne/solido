@@ -6,7 +6,7 @@ use std::{
     str::FromStr,
 };
 
-use clap::Clap;
+use clap::Parser;
 use serde::Deserialize;
 use serde_json::Value;
 use solana_sdk::pubkey::{ParsePubkeyError, Pubkey};
@@ -114,7 +114,7 @@ macro_rules! cli_opt_struct {
             $(,)?
         }
     } => {
-        #[derive(Debug, Clap, Default)]
+        #[derive(Debug, Parser, Default)]
         pub struct $name {
             $(
                 $(#[$attr])*

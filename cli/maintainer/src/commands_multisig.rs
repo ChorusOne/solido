@@ -14,7 +14,7 @@ use anker::instruction::{
 use anker::wormhole::TerraAddress;
 use borsh::de::BorshDeserialize;
 use borsh::ser::BorshSerialize;
-use clap::Clap;
+use clap::Parser;
 use serde::Serialize;
 use serum_multisig::accounts as multisig_accounts;
 use serum_multisig::instruction as multisig_instruction;
@@ -54,7 +54,7 @@ mod wormhole_ldo_token {
     declare_id!("HZRCwxP2Vq9PCpPXooayhJ2bxTpo5xfpQrwB1svh332p");
 }
 
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 pub struct MultisigOpts {
     #[clap(subcommand)]
     subcommand: SubCommand,
@@ -77,16 +77,12 @@ impl MultisigOpts {
                 opts.merge_with_config_and_environment(config_file)
             }
             SubCommand::ApproveBatch(opts) => opts.merge_with_config_and_environment(config_file),
-            SubCommand::Token(token_sub_command) => match token_sub_command {
-                TokenSubCommand::Transfer(opts) => {
-                    opts.merge_with_config_and_environment(config_file)
-                }
-            },
+            SubCommand::TokenTransfer(opts) => opts.merge_with_config_and_environment(config_file),
         }
     }
 }
 
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 enum SubCommand {
     /// Create a new multisig address.
     CreateMultisig(CreateMultisigOpts),
@@ -112,14 +108,8 @@ enum SubCommand {
     /// Approve a batch of multisig transactions one by one.
     ApproveBatch(ApproveBatchOpts),
 
-    /// Execute SPL token operations.
-    Token(TokenSubCommand),
-}
-
-#[derive(Clap, Debug)]
-enum TokenSubCommand {
-    /// Transfer token.
-    Transfer(TransferTokenOpts),
+    /// Transfer SPL tokens.
+    TokenTransfer(TransferTokenOpts),
 }
 
 pub fn main(config: &mut SnapshotClientConfig, multisig_opts: MultisigOpts) {
@@ -189,13 +179,11 @@ pub fn main(config: &mut SnapshotClientConfig, multisig_opts: MultisigOpts) {
             let result = approve_batch(config, &cmd_opts);
             result.ok_or_abort_with("Failed to batch-approve multisig transactions.");
         }
-        SubCommand::Token(token_sub_command) => match token_sub_command {
-            TokenSubCommand::Transfer(cmd_opts) => {
-                let result = config.with_snapshot(|config| transfer_token(config, &cmd_opts));
-                let output = result.ok_or_abort_with("Failed to transfer token.");
-                print_output(output_mode, &output);
-            }
-        },
+        SubCommand::TokenTransfer(cmd_opts) => {
+            let result = config.with_snapshot(|config| transfer_token(config, &cmd_opts));
+            let output = result.ok_or_abort_with("Failed to transfer token.");
+            print_output(output_mode, &output);
+        }
     }
 }
 
