@@ -18,6 +18,12 @@ export interface ProgramAddresses {
   bSolMintAddress: PublicKey;
 }
 
+export enum TokenType {
+  SOL = 'SOL',
+  bSOL = 'bSOL',
+  stSOL = 'stSOL',
+}
+
 /**
  * Balance of SOL account
  *

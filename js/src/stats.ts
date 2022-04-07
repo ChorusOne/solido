@@ -138,14 +138,21 @@ export const getTotalNumberOfTokenAccounts = async (
  * @param connection Connection to the cluster
  * @param tokenMintAddress Address of the token mint account
  * @param ownerAccountAddress Address of the owner of the token
+ * @param tokenType Type of token to get the accounts and their balances for
  * @returns List of token accounts
  */
 export const getTokenAccountsByOwner = async (
   connection: Connection,
   tokenMintAddress: PublicKey,
-  ownerAccountAddress: PublicKey
-): Promise<{ address: PublicKey; balance: Lamports }[]> => {
-  const tokenAccounts: { address: PublicKey; balance: Lamports }[] = [];
+  ownerAccountAddress: PublicKey,
+  tokenType: TokenType
+): Promise<
+  { address: PublicKey; balance: Lamports | StLamports | BLamports }[]
+> => {
+  const tokenAccounts: {
+    address: PublicKey;
+    balance: Lamports | StLamports | BLamports;
+  }[] = [];
 
   const { value } = await connection.getParsedTokenAccountsByOwner(
     ownerAccountAddress,
@@ -154,9 +161,22 @@ export const getTokenAccountsByOwner = async (
     }
   );
 
+  let balance: Lamports | StLamports | BLamports;
+
   value.forEach((v) => {
     const address = v.pubkey;
-    const balance = new Lamports(v.account.data.parsed.info.tokenAmount.amount);
+
+    switch (tokenType) {
+      case TokenType.SOL:
+        balance = new Lamports(v.account.data.parsed.info.tokenAmount.amount);
+        break;
+      case TokenType.stSOL:
+        balance = new StLamports(v.account.data.parsed.info.tokenAmount.amount);
+        break;
+      case TokenType.bSOL:
+        balance = new BLamports(v.account.data.parsed.info.tokenAmount.amount);
+        break;
+    }
 
     tokenAccounts.push({ address, balance });
   });
