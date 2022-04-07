@@ -36,7 +36,10 @@ export {
 
 export { getDepositInstruction as getSolidoDepositInstruction } from './instructions/deposit';
 export { getWithdrawInstruction as getSolidoWithdrawInstruction } from './instructions/withdraw';
-export { getATAInitializeInstruction } from './instructions/utils';
+export {
+  getATAInitializeInstruction,
+  getMemoInstruction,
+} from './instructions/utils';
 
 // Anker
 export { getDepositInstruction as getAnkerDepositInstruction } from './instructions/anker/deposit';

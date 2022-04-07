@@ -1,7 +1,7 @@
 import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import { Connection, PublicKey } from '@solana/web3.js';
 import BN from 'bn.js';
-import { Lamports, Snapshot, StLamports } from './types';
+import { BLamports, Lamports, Snapshot, StLamports, TokenType } from './types';
 
 /**
  * Get total value locked in the solido program
@@ -15,11 +15,11 @@ export const getTotalValueLocked = (snapshot: Snapshot): Lamports => {
       .map((validator) => validator.stake_accounts_balance)
       .reduce((acc, current) => acc.add(current), new BN(0));
 
-  return {
-    lamports: snapshot.reserveAccountBalance.lamports.add(
+  return new Lamports(
+    snapshot.reserveAccountBalance.lamports.add(
       validatorsStakeAccountsBalanceInLamports
-    ),
-  };
+    )
+  );
 };
 
 /**
@@ -48,9 +48,9 @@ export const getStSolSupply = (
       return snapshot.stSolSupply;
     }
     case 'totalcoins': {
-      return {
-        stLamports: snapshot.stSolSupply.stLamports.add(totalFeeCredits),
-      };
+      return new StLamports(
+        snapshot.stSolSupply.stLamports.add(totalFeeCredits)
+      );
     }
   }
 };

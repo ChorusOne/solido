@@ -15,7 +15,10 @@ export const getTotalValueLocked = (
   const stSolReserveAccountBalance = snapshot.stSolReserveAccountBalance;
 
   return {
-    sol: exchangeStSol(snapshot.solido, stSolReserveAccountBalance),
+    sol: exchangeStSol(
+      snapshot.solido.exchange_rate,
+      stSolReserveAccountBalance
+    ),
     stSol: stSolReserveAccountBalance,
   };
 };
