@@ -1,6 +1,6 @@
 import { PublicKey } from "@solana/web3.js";
 import BN from "bn.js";
-import { Snapshot } from "../../../types";
+import { Snapshot, Lamports, StLamports } from "../../../types";
 
 export const snapshot: Snapshot = {
   solido: {
@@ -39,19 +39,19 @@ export const snapshot: Snapshot = {
       fee_validation_st_sol_total: new BN("0"),
       fee_developer_st_sol_total: new BN("0"),
       deposit_amount: {
-        counts1: new BN("0"),
-        counts2: new BN("0"),
-        counts3: new BN("1"),
-        counts4: new BN("2"),
-        counts5: new BN("4"),
-        counts6: new BN("4"),
-        counts7: new BN("4"),
-        counts8: new BN("4"),
-        counts9: new BN("4"),
-        counts10: new BN("4"),
-        counts11: new BN("4"),
-        counts12: new BN("4"),
-        total: new BN("1610000000"),
+        counts1: new BN("7"),
+        counts2: new BN("7"),
+        counts3: new BN("8"),
+        counts4: new BN("18"),
+        counts5: new BN("25"),
+        counts6: new BN("25"),
+        counts7: new BN("25"),
+        counts8: new BN("25"),
+        counts9: new BN("25"),
+        counts10: new BN("25"),
+        counts11: new BN("25"),
+        counts12: new BN("25"),
+        total: new BN("6824430000"),
       },
       withdraw_amount: {
         total_st_sol_amount: new BN("0"),
@@ -90,8 +90,8 @@ export const snapshot: Snapshot = {
       "3FMBoeddUhtqxepzkrxPrMUV3CL4bZM5QmMoLJfEpirz"
     ),
   },
-  reserveAccountBalance: { lamports: new BN("1810000000") },
-  stSolSupply: { stLamports: new BN("1608888888") },
-  stakeAccountRentExemptionBalance: { lamports: new BN("2282880") },
+  reserveAccountBalance: new Lamports("7024430000"),
+  stSolSupply: new StLamports("6243937759"),
+  stakeAccountRentExemptionBalance: new Lamports("2282880"),
   validatorsStakeAccounts: [],
 };

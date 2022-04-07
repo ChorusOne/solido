@@ -174,7 +174,10 @@ describe('Utility functions', () => {
   it('exchanges SOL to get stSOL', async () => {
     const solToExchange = new Lamports(1 * LAMPORTS_PER_SOL);
 
-    const stSolReceived = exchangeSol(solidoSnapshotDump.solido, solToExchange);
+    const stSolReceived = exchangeSol(
+      solidoSnapshotDump.solido.exchange_rate,
+      solToExchange
+    );
 
     expect(stSolReceived.stLamports.toString()).toBe('888888888');
   });
@@ -183,7 +186,7 @@ describe('Utility functions', () => {
     const stSolToExchange = new StLamports('888888889');
 
     const solReceived = exchangeStSol(
-      solidoSnapshotDump.solido,
+      solidoSnapshotDump.solido.exchange_rate,
       stSolToExchange
     );
 
@@ -194,7 +197,7 @@ describe('Utility functions', () => {
     const stSolToExchange = new StLamports('888888889');
 
     const bSolReceived = convertStSolToBSol(
-      ankerSnapshotDump.solido,
+      ankerSnapshotDump.solido.exchange_rate,
       stSolToExchange
     );
 
@@ -208,25 +211,25 @@ describe('Statistics functions', () => {
   it('gets total value locked in solido program', async () => {
     const tvl = getTotalValueLocked(solidoSnapshotDump);
 
-    expect(tvl.lamports.toNumber()).toBe(1810000000);
+    expect(tvl.lamports.toNumber()).toBe(7024430000);
   });
 
   it('gets total value locked in anker program', async () => {
     const tvl = getTotalValueLockedInAnker(ankerSnapshotDump);
 
-    expect(tvl.sol.lamports.toNumber()).toBe(253577149);
+    expect(tvl.sol.lamports.toNumber()).toBe(2792665904);
   });
 
   it('gets total stsol supply', async () => {
     const stSolSupply = getStSolSupply(solidoSnapshotDump, 'totalcoins');
 
-    expect(stSolSupply.stLamports.toNumber()).toBe(1608888888);
+    expect(stSolSupply.stLamports.toNumber()).toBe(6243937759);
   });
 
   it('gets circulating stsol supply', async () => {
     const stSolSupply = getStSolSupply(solidoSnapshotDump, 'circulating');
 
-    expect(stSolSupply.stLamports.toNumber()).toBe(1608888888);
+    expect(stSolSupply.stLamports.toNumber()).toBe(6243937759);
   });
 
   it('gets exchange rate', async () => {

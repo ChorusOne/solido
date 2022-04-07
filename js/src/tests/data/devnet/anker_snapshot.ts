@@ -1,6 +1,6 @@
 import { PublicKey } from "@solana/web3.js";
 import BN from "bn.js";
-import { AnkerSnapshot } from "../../../types";
+import { AnkerSnapshot, Lamports, StLamports } from "../../../types";
 
 export const snapshot: AnkerSnapshot = {
   anker: {
@@ -70,19 +70,19 @@ export const snapshot: AnkerSnapshot = {
       fee_validation_st_sol_total: new BN("0"),
       fee_developer_st_sol_total: new BN("0"),
       deposit_amount: {
-        counts1: new BN("0"),
-        counts2: new BN("0"),
-        counts3: new BN("1"),
-        counts4: new BN("2"),
-        counts5: new BN("4"),
-        counts6: new BN("4"),
-        counts7: new BN("4"),
-        counts8: new BN("4"),
-        counts9: new BN("4"),
-        counts10: new BN("4"),
-        counts11: new BN("4"),
-        counts12: new BN("4"),
-        total: new BN("1610000000"),
+        counts1: new BN("7"),
+        counts2: new BN("7"),
+        counts3: new BN("8"),
+        counts4: new BN("18"),
+        counts5: new BN("25"),
+        counts6: new BN("25"),
+        counts7: new BN("25"),
+        counts8: new BN("25"),
+        counts9: new BN("25"),
+        counts10: new BN("25"),
+        counts11: new BN("25"),
+        counts12: new BN("25"),
+        total: new BN("6824430000"),
       },
       withdraw_amount: {
         total_st_sol_amount: new BN("0"),
@@ -101,5 +101,5 @@ export const snapshot: AnkerSnapshot = {
       maximum_entries: 3,
     },
   },
-  stSolReserveAccountBalance: { stLamports: new BN("225401911") },
+  stSolReserveAccountBalance: new StLamports("2482369693"),
 };

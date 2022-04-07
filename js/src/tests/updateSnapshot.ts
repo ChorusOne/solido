@@ -57,10 +57,20 @@ const updateSolidoSnapshot = async (
     'entry: Uint8Array.from([]),'
   );
 
+  // Replace token values with the correct class instances
+  rawString = rawString.replace(
+    /{ lamports: new BN\(([\d\"]+)\) }/gi,
+    (_, tag: string) => `new Lamports(${tag.trim()})`
+  );
+  rawString = rawString.replace(
+    /{ stLamports: new BN\(([\d\"]+)\) }/gi,
+    (_, tag: string) => `new StLamports(${tag.trim()})`
+  );
+
   // Added imports for the file
   rawString = `import { PublicKey } from '@solana/web3.js';
   import BN from 'bn.js';
-  import { Snapshot } from '../../../types';
+  import { Snapshot, Lamports, StLamports } from '../../../types';
   
   export const snapshot: Snapshot = ${rawString}`;
 
@@ -122,10 +132,20 @@ const updateAnkerSnapshot = async (
     'entry: Uint8Array.from([]),'
   );
 
+  // Replace token values with the correct class instances
+  rawString = rawString.replace(
+    /{ lamports: new BN\(([\d\"]+)\) }/gi,
+    (_, tag: string) => `new Lamports(${tag.trim()})`
+  );
+  rawString = rawString.replace(
+    /{ stLamports: new BN\(([\d\"]+)\) }/gi,
+    (_, tag: string) => `new StLamports(${tag.trim()})`
+  );
+
   // Added imports for the file
   rawString = `import { PublicKey } from '@solana/web3.js';
   import BN from 'bn.js';
-  import { AnkerSnapshot } from '../../../types';
+  import { AnkerSnapshot, Lamports, StLamports } from '../../../types';
   
   export const snapshot: AnkerSnapshot = ${rawString}`;
 

@@ -25,7 +25,7 @@ const updateSolidoAccountDump = async (
 
     let infoString = JSON.stringify(updatedSolidoInstaceAccountInfo);
 
-    infoString = format(infoString, { parser: 'babel-ts' });
+    infoString = format(infoString, { parser: 'json' });
 
     fs.writeFileSync(
       path.join(__dirname, 'data', cluster, 'solido_instance_info.json'),
@@ -51,7 +51,7 @@ const updateAnkerAccountDump = async (
 
     let infoString = JSON.stringify(updatedAnkerInstaceAccountInfo);
 
-    infoString = format(infoString, { parser: 'babel-ts' });
+    infoString = format(infoString, { parser: 'json' });
 
     fs.writeFileSync(
       path.join(__dirname, 'data', cluster, 'anker_instance_info.json'),
