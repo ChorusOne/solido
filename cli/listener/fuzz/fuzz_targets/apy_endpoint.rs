@@ -9,10 +9,23 @@ use arbitrary::Arbitrary;
 use chrono;
 use libfuzzer_sys::fuzz_target;
 use rusqlite::Connection;
-use solana_sdk::clock::{Epoch, Slot};
+use solana_sdk::clock::{Clock, Epoch, Slot};
 use tiny_http::TestRequest;
 
 use listener::ExchangeRate;
+
+/// Used to generate an arbitrary `solana_sdk::clock::Clock`. There may be some
+/// silent undocumented assumptions in the Solana clock, but we don't respect
+/// those here ... let's see if it breaks anything if we make a weird clock
+/// (like one where the timestamp is lower than the start timestamp).
+#[derive(Arbitrary, Debug)]
+struct ClockFields {
+    slot: u64,
+    epoch_start_timestamp: i64,
+    epoch: u64,
+    leader_schedule_epoch: u64,
+    unix_timestamp: i64,
+}
 
 #[derive(Arbitrary, Debug)]
 enum Action {
@@ -29,6 +42,7 @@ enum Action {
     },
     Request {
         path: String,
+        clock_fields: Option<ClockFields>,
     },
 }
 
@@ -65,18 +79,21 @@ fuzz_target!(|actions: Vec<Action>| {
                 // so ignore those errors.
                 let _ = listener::insert_price(&conn, &exchange_rate);
             }
-            Action::Request { path } => {
+            Action::Request { path, clock_fields } => {
                 let request = TestRequest::new().with_path(path).into();
                 let metrics = listener::Metrics {
                     polls: 0,
                     errors: 0,
                     solido_average_30d_interval_price: None,
                 };
-                let snapshot = listener::Snapshot {
-                    metrics: metrics,
-                    // TODO: Fuzz with clock as well.
-                    clock: None,
-                };
+                let clock = clock_fields.as_ref().map(|f| Clock {
+                    slot: f.slot,
+                    epoch_start_timestamp: f.epoch_start_timestamp,
+                    epoch: f.epoch,
+                    leader_schedule_epoch: f.leader_schedule_epoch,
+                    unix_timestamp: f.unix_timestamp,
+                });
+                let snapshot = listener::Snapshot { metrics, clock };
                 let metrics_mutex = Mutex::new(Arc::new(snapshot));
                 listener::serve_request(&conn, request, &metrics_mutex).unwrap();
             }
