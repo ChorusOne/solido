@@ -5,7 +5,7 @@ import { ProgramAddresses, StLamports } from '../../types';
 
 /**
  * Returns the instruction to deposit stSOL into the Anker program and mint bSOL tokens
- * @param senderStSolAccountOwnerAddress Address of the owner of the sender's stSOL SPL token account
+ * @param senderStSolAccountOwnerAddress Address of the owner of the sender's stSOL SPL token account. Must be a signer of the transaction.
  * @param senderStSolAccountAddress Address of the stSOL SPL token account, whose stSOL balance will be decreased
  * @param recipientBSolAccountAddress Address of the recipient bSOL SPL token account
  * @param programAddresses Solido and Anker program addresses

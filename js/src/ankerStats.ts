@@ -4,7 +4,7 @@ import { exchangeStSol } from './utils';
 /**
  * Get the total value locked in the Anker program
  * @param snapshot Snapshot of the Anker state
- * @returns Total value locked in Anker program in SOL and stSOL
+ * @returns Total value locked in Anker program in SOL and it's corresponding value in stSOL
  */
 export const getTotalValueLocked = (
   snapshot: AnkerSnapshot

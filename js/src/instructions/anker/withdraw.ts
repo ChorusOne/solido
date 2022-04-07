@@ -5,9 +5,9 @@ import { BLamports, ProgramAddresses } from '../../types';
 
 /**
  * Returns the instruction to withdraw stSOL from the Anker program
- * @param senderBSolAccountOwnerAddress Address of the owner of the sender's bSOL SPL token account
+ * @param senderBSolAccountOwnerAddress Address of the owner of the sender's bSOL SPL token account. Must be a signer of the transaction.
  * @param senderBSolAccountAddress Address of the bSOL SPL token account, whose bSOL balance will be decreased
- * @param recipientStSolAccountAddress Address of the recipient bSOL SPL token account
+ * @param recipientStSolAccountAddress Address of the recipient stSOL SPL token account, whose stSOL balance will be increased
  * @param programAddresses Solido and Anker program addresses
  * @param amount Amount of bSOL to be withdrawn
  */

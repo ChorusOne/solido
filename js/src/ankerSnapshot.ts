@@ -69,11 +69,21 @@ class WormholeParameters {
 }
 
 class Metrics {
-  swapped_rewards_st_sol_total: BN;
-  swapped_rewards_ust_total: BN;
+  swapped_rewards_st_sol_total: StLamports;
+  swapped_rewards_micro_ust_total: BN;
 
-  constructor(data: Metrics) {
-    Object.assign(this, data);
+  constructor(data: any) {
+    try {
+      const parsedData = {
+        ...data,
+        swapped_rewards_st_sol_total: new StLamports(
+          data.swapped_rewards_st_sol_total
+        ),
+      };
+      Object.assign(this, parsedData);
+    } catch (error) {
+      console.log('error', error);
+    }
   }
 }
 
@@ -95,7 +105,7 @@ const schema = new Map([
       kind: 'struct',
       fields: [
         ['swapped_rewards_st_sol_total', 'u64'],
-        ['swapped_rewards_ust_total', 'u64'],
+        ['swapped_rewards_micro_ust_total', 'u64'],
       ],
     },
   ],

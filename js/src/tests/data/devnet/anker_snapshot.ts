@@ -1,6 +1,4 @@
-import { PublicKey } from "@solana/web3.js";
-import BN from "bn.js";
-import { AnkerSnapshot, Lamports, StLamports } from "../../../types";
+import { AnkerSnapshot, StLamports } from "../../../types";
 
 export const snapshot: AnkerSnapshot = {
   anker: {
@@ -25,8 +23,8 @@ export const snapshot: AnkerSnapshot = {
       ),
     },
     metrics: {
-      swapped_rewards_st_sol_total: new BN("475155555"),
-      swapped_rewards_ust_total: new BN("27611"),
+      swapped_rewards_st_sol_total: new StLamports("475155555"),
+      swapped_rewards_micro_ust_total: new BN("27611"),
     },
     self_bump_seed: 254,
     mint_authority_bump_seed: 250,

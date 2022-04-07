@@ -145,7 +145,7 @@ const updateAnkerSnapshot = async (
   // Added imports for the file
   rawString = `import { PublicKey } from '@solana/web3.js';
   import BN from 'bn.js';
-  import { AnkerSnapshot, Lamports, StLamports } from '../../../types';
+  import { AnkerSnapshot, StLamports } from '../../../types';
   
   export const snapshot: AnkerSnapshot = ${rawString}`;
 
