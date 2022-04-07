@@ -38,3 +38,10 @@ export const DEVNET_PROGRAM_ADDRESSES: ProgramAddresses = {
     '3FMBoeddUhtqxepzkrxPrMUV3CL4bZM5QmMoLJfEpirz'
   ),
 };
+
+/**
+ * Program Id for the Memo program
+ */
+export const MEMO_PROGRAM_ID = new PublicKey(
+  'MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr'
+);

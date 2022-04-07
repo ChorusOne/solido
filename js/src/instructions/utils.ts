@@ -4,6 +4,7 @@ import {
   TOKEN_PROGRAM_ID,
 } from '@solana/spl-token';
 import { PublicKey, TransactionInstruction } from '@solana/web3.js';
+import { MEMO_PROGRAM_ID } from '../constants';
 
 /**
  * Generates the instruction to create the Associated Token Account for the given mint address
@@ -34,4 +35,23 @@ export const getATAInitializeInstruction = async (
     ownerAddress,
     ownerAddress
   );
+};
+
+/**
+ * Generates the instruction to add a memo instruction to the given transaction
+ * @param memo Any JSON object to be stored in the memo instruction of the transaction
+ * @param feePayerAddress Address of the fee payer for the transaction
+ * @returns Instruction to store the memo in the transaction
+ */
+export const getMemoInstruction = (
+  memo: JSON,
+  feePayerAddress: PublicKey
+): TransactionInstruction => {
+  const instruction = new TransactionInstruction({
+    programId: MEMO_PROGRAM_ID,
+    data: Buffer.from(JSON.stringify(memo)),
+    keys: [{ isSigner: true, isWritable: false, pubkey: feePayerAddress }],
+  });
+
+  return instruction;
 };
