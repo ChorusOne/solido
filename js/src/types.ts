@@ -1,4 +1,4 @@
-import type { PublicKey } from '@solana/web3.js';
+import { PublicKey } from '@solana/web3.js';
 import BN from 'bn.js';
 import { Anker } from './ankerSnapshot';
 import type { Solido } from './solidoSnapshot';
@@ -25,9 +25,32 @@ export interface ProgramAddresses {
  */
 export class Lamports {
   lamports: BN;
+  static readonly decimals = 9;
 
   constructor(lamports: number | string | BN) {
     this.lamports = new BN(lamports);
+  }
+
+  /**
+   * Get the amount of token in SOL
+   * @param withUnit Whether to include the unit
+   * @returns Amount in SOL
+   */
+  toString(withUnit = false, precision = 4) {
+    return `${
+      Math.floor(
+        (this.lamports.toNumber() / 10 ** Lamports.decimals) * 10 ** precision
+      ) /
+      10 ** precision
+    }${withUnit ? ' SOL' : ''}`;
+  }
+
+  /**
+   * Get the token amount in number of lamports
+   * @returns Number of lamports
+   */
+  toNumber() {
+    return this.lamports.toNumber();
   }
 }
 
@@ -38,9 +61,33 @@ export class Lamports {
  */
 export class StLamports {
   stLamports: BN;
+  static readonly decimals = 9;
 
   constructor(stLamports: number | string | BN) {
     this.stLamports = new BN(stLamports);
+  }
+
+  /**
+   * Get the amount of token in stSOL
+   * @param withUnit Whether to include the unit
+   * @returns Amount in stSOL
+   */
+  toString(withUnit = false, precision = 4) {
+    return `${
+      Math.floor(
+        (this.stLamports.toNumber() / 10 ** StLamports.decimals) *
+          10 ** precision
+      ) /
+      10 ** precision
+    }${withUnit ? ' stSOL' : ''}`;
+  }
+
+  /**
+   * Get the token amount in number of lamports
+   * @returns Number of lamports
+   */
+  toNumber() {
+    return this.stLamports.toNumber();
   }
 }
 
@@ -51,9 +98,32 @@ export class StLamports {
  */
 export class BLamports {
   bLamports: BN;
+  static readonly decimals = 9;
 
   constructor(bLamports: number | string | BN) {
     this.bLamports = new BN(bLamports);
+  }
+
+  /**
+   * Get the amount of token in BSol
+   * @param withUnit Whether to include the unit
+   * @returns Amount in BSol
+   */
+  toString(withUnit = false, precision = 4) {
+    return `${
+      Math.floor(
+        (this.bLamports.toNumber() / 10 ** BLamports.decimals) * 10 ** precision
+      ) /
+      10 ** precision
+    }${withUnit ? ' bSOL' : ''}`;
+  }
+
+  /**
+   * Get the token amount in number of lamports
+   * @returns Number of lamports
+   */
+  toNumber() {
+    return this.bLamports.toNumber();
   }
 }
 
