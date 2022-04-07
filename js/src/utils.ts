@@ -85,32 +85,36 @@ export const getHeaviestValidatorStakeAccount = (
 
 /**
  * Exchange SOL to stSOL
- * @param solido Solido state data from snapshot
+ * @param exchangeRate Exchange rate from the solido snapshot
  * @param amount SOL to exchange
  */
-export const exchangeSol = (solido: Solido, amount: Lamports): StLamports => {
-  const exchangeRate = solido.exchange_rate;
-
+export const exchangeSol = (
+  exchangeRate: Solido['exchange_rate'],
+  amount: Lamports
+): StLamports => {
   // The stSOL/SOL ratio is 1:1 for a fresh deployment(i.e., stSolSupply is 0)
   // So the user would get same amount of stSOL as SOL deposited
   if (exchangeRate.st_sol_supply.toString() === '0') {
-    return new StLamports(amount.lamports.toString());
+    return new StLamports(amount.lamports);
   }
 
-  return new StLamports(
+  const stLamports = new StLamports(
     (amount.lamports.toNumber() * exchangeRate.st_sol_supply.toNumber()) /
       exchangeRate.sol_balance.toNumber()
   );
+
+  return stLamports;
 };
 
 /**
  * Exchange stSOL to SOL
- * @param solido Solido state data from snapshot
+ * @param exchangeRate Exchange rate from the solido snapshot
  * @param amount stSOL to exchange
  */
-export const exchangeStSol = (solido: Solido, amount: StLamports): Lamports => {
-  const exchangeRate = solido.exchange_rate;
-
+export const exchangeStSol = (
+  exchangeRate: Solido['exchange_rate'],
+  amount: StLamports
+): Lamports => {
   return new Lamports(
     (amount.stLamports.toNumber() * exchangeRate.sol_balance.toNumber()) /
       exchangeRate.st_sol_supply.toNumber()
