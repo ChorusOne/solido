@@ -3,7 +3,7 @@
 
 use std::fmt;
 
-use clap::Clap;
+use clap::Parser;
 use serde::Serialize;
 use solana_program::pubkey::Pubkey;
 use solana_program::system_instruction;
@@ -31,7 +31,7 @@ use crate::print_output;
 use crate::serialization_utils::serialize_bech32;
 use crate::spl_token_utils::{push_create_spl_token_account, push_create_spl_token_mint};
 
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 enum SubCommand {
     /// Create a new Anker instance.
     Create(Box<CreateAnkerOpts>),
@@ -61,7 +61,7 @@ enum SubCommand {
     ChangeSellRewardsMinOutBps(AnkerChangeSellRewardsMinOutBpsOpts),
 }
 
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 pub struct AnkerOpts {
     #[clap(subcommand)]
     subcommand: SubCommand,

@@ -57,6 +57,8 @@ impl fmt::Display for AddressError {
     }
 }
 
+impl std::error::Error for AddressError {}
+
 #[repr(C)]
 #[derive(
     Clone, Default, Debug, BorshSerialize, BorshDeserialize, BorshSchema, Eq, PartialEq, Serialize,
