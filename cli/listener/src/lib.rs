@@ -76,19 +76,19 @@ pub struct Opts {
 pub struct ExchangeRate {
     /// Id of the data point.
     #[allow(dead_code)]
-    id: i32,
+    pub id: i32,
     /// Time when the data point was logged.
-    timestamp: chrono::DateTime<chrono::Utc>,
+    pub timestamp: chrono::DateTime<chrono::Utc>,
     /// Slot when the data point was logged.
-    slot: Slot,
+    pub slot: Slot,
     /// Epoch when the data point was logged.
-    epoch: Epoch,
+    pub epoch: Epoch,
     /// Pool identifier, e.g. for Solido would be "solido".
-    pool: String,
+    pub pool: String,
     /// Price of token A.
-    price_lamports_numerator: u64,
+    pub price_lamports_numerator: u64,
     /// Price of token B.
-    price_lamports_denominator: u64,
+    pub price_lamports_denominator: u64,
 }
 
 pub fn create_db(conn: &Connection) -> rusqlite::Result<()> {
@@ -270,15 +270,16 @@ pub fn insert_price(conn: &Connection, exchange_rate: &ExchangeRate) -> rusqlite
     Ok(())
 }
 
-struct Snapshot {
+pub struct Snapshot {
     /// Metrics about the daemon.
-    metrics: Metrics,
+    pub metrics: Metrics,
 
     /// Clock instance, so we know what time it is.
-    clock: Option<Clock>,
+    pub clock: Option<Clock>,
 }
 
-type MetricsMutex = Mutex<Arc<Snapshot>>;
+pub type MetricsMutex = Mutex<Arc<Snapshot>>;
+
 struct Daemon<'a, 'b> {
     config: &'a mut SnapshotClientConfig<'b>,
     opts: &'a Opts,
@@ -412,15 +413,15 @@ impl<'a, 'b> Daemon<'a, 'b> {
 }
 
 #[derive(Clone)]
-struct Metrics {
+pub struct Metrics {
     /// Number of times that we checked the price.
-    polls: u64,
+    pub polls: u64,
 
     /// Number of times that we tried to get the exchange rate, but encountered an error.
-    errors: u64,
+    pub errors: u64,
 
     /// Solido's maximum price interval.
-    solido_average_30d_interval_price: Option<IntervalPrices>,
+    pub solido_average_30d_interval_price: Option<IntervalPrices>,
 }
 
 impl Metrics {
@@ -748,7 +749,7 @@ fn parse_url(
     }
 }
 
-fn serve_request(
+pub fn serve_request(
     db_connection: &Connection,
     request: Request,
     metrics_mutex: &MetricsMutex,

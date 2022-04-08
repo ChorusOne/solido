@@ -1,0 +1,17 @@
+# Run the fuzzer as
+#
+#   cargo +nightly-2022-03-22 fuzz run apy_endpoint -- -dict=fuzz/dictionary.txt
+#
+# to use this dictionary, it helps to discover interesting urls faster.
+
+base_apy="/apy"
+base_metrics="/metrics"
+db_pool_solido="solido"
+query_param_start="?"
+query_param_join="&"
+query_param_begin="begin"
+query_param_end="end"
+query_param_days="days"
+query_param_since_launch="since_launch"
+date_iso8601_secs_offset="2022-04-06T17:09:47+02:00"
+date_iso8601_msecs_zulu="2022-04-06T17:09:47.123Z"
