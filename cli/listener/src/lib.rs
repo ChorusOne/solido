@@ -203,7 +203,13 @@ pub fn get_interval_price_for_period(
             Ok(epoch) => epoch,
             Err(_) => return Ok(None),
         };
-        let minimum_slot = epoch_schedule.get_first_slot_in_epoch(epoch) + QUERY_SLOT_OFFSET;
+        let minimum_slot = match epoch_schedule
+            .get_first_slot_in_epoch(epoch)
+            .checked_add(QUERY_SLOT_OFFSET)
+        {
+            Some(s) => s,
+            None => return Ok(None),
+        };
 
         // Get the first row from `epoch` in which the slot is greater than `minimum_slot`.
         let mut exchange_rate_stmt = tx.prepare(
@@ -226,7 +232,13 @@ pub fn get_interval_price_for_period(
             Ok(epoch) => epoch,
             Err(_) => return Ok(None),
         };
-        let minimum_slot = epoch_schedule.get_first_slot_in_epoch(epoch) + QUERY_SLOT_OFFSET;
+        let minimum_slot = match epoch_schedule
+            .get_first_slot_in_epoch(epoch)
+            .checked_add(QUERY_SLOT_OFFSET)
+        {
+            Some(s) => s,
+            None => return Ok(None),
+        };
 
         // Get the first row from `epoch` in which the slot is greater than `minimum_slot`.
         let mut exchange_rate_stmt = tx.prepare(
