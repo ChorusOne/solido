@@ -6,7 +6,6 @@
 use std::sync::{Arc, Mutex};
 
 use arbitrary::Arbitrary;
-use chrono;
 use libfuzzer_sys::fuzz_target;
 use rusqlite::Connection;
 use solana_sdk::clock::{Clock, Epoch, Slot};
@@ -67,7 +66,7 @@ fuzz_target!(|actions: Vec<Action>| {
                 };
                 let exchange_rate = ExchangeRate {
                     id: 0, // id is not used for inserts, only for reads.
-                    timestamp: timestamp,
+                    timestamp,
                     slot: *slot,
                     epoch: *epoch,
                     pool: pool.clone(),
