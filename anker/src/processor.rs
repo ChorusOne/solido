@@ -251,7 +251,7 @@ fn process_deposit(
     );
     anker.metrics.observe_deposit(amount, b_sol_amount)?;
 
-    Ok(())
+    anker.save(accounts.anker)
 }
 
 /// Sample the current pool price, used later to limit slippage in `sell_rewards`.
@@ -487,7 +487,7 @@ fn process_withdraw(
     msg!("Anker: Withdrew {} for {}.", amount, st_sol_amount,);
     anker.metrics.observe_withdraw(st_sol_amount, amount)?;
 
-    Ok(())
+    anker.save(accounts.anker)
 }
 
 /// Change the Terra rewards destination.
