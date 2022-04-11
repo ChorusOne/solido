@@ -211,7 +211,7 @@ fn process_deposit(
         return Err(ProgramError::InvalidArgument);
     }
 
-    let (solido, anker) = deserialize_anker(program_id, accounts.anker, accounts.solido)?;
+    let (solido, mut anker) = deserialize_anker(program_id, accounts.anker, accounts.solido)?;
     anker.check_st_sol_reserve_address(
         program_id,
         accounts.anker.key,
@@ -249,8 +249,9 @@ fn process_deposit(
         amount,
         b_sol_amount,
     );
+    anker.metrics.observe_deposit(amount, b_sol_amount)?;
 
-    Ok(())
+    anker.save(accounts.anker)
 }
 
 /// Sample the current pool price, used later to limit slippage in `sell_rewards`.
@@ -402,7 +403,7 @@ fn process_withdraw(
 ) -> ProgramResult {
     let accounts = WithdrawAccountsInfo::try_from_slice(accounts_raw)?;
 
-    let (solido, anker) = deserialize_anker(program_id, accounts.anker, accounts.solido)?;
+    let (solido, mut anker) = deserialize_anker(program_id, accounts.anker, accounts.solido)?;
     anker.check_is_st_sol_account(&solido, accounts.reserve_account)?;
     anker.check_mint(accounts.b_sol_mint)?;
 
@@ -484,8 +485,9 @@ fn process_withdraw(
     )?;
 
     msg!("Anker: Withdrew {} for {}.", amount, st_sol_amount,);
+    anker.metrics.observe_withdraw(st_sol_amount, amount)?;
 
-    Ok(())
+    anker.save(accounts.anker)
 }
 
 /// Change the Terra rewards destination.
