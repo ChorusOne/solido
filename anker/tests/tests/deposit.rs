@@ -27,6 +27,16 @@ async fn test_successful_deposit_during_first_epoch() {
     // so the amounts in SOL, stSOL, and bSOL are all equal.
     assert_eq!(reserve_balance, TEST_DEPOSIT_AMOUNT);
     assert_eq!(recipient_balance, BLamports(TEST_DEPOSIT_AMOUNT.0));
+    let anker = context.get_anker().await;
+    assert_eq!(
+        anker.metrics.deposit_metric.st_sol_total,
+        TEST_DEPOSIT_AMOUNT
+    );
+    assert_eq!(
+        anker.metrics.deposit_metric.b_sol_total,
+        BLamports(TEST_DEPOSIT_AMOUNT.0)
+    );
+    assert_eq!(anker.metrics.deposit_metric.count, 1);
 }
 
 #[tokio::test]

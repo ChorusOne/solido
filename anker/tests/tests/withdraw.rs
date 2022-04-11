@@ -50,6 +50,10 @@ async fn test_withdraw_single_epoch() {
         .get_st_sol_balance(context.st_sol_reserve)
         .await;
     assert_eq!(reserve_st_sol, StLamports(0));
+    let anker = context.get_anker().await;
+    assert_eq!(anker.metrics.withdraw_metric.st_sol_total, st_sol_balance);
+    assert_eq!(anker.metrics.withdraw_metric.b_sol_total, b_sol_balance);
+    assert_eq!(anker.metrics.withdraw_metric.count, 1);
 }
 
 #[tokio::test]
