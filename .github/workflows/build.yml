@@ -156,7 +156,8 @@ jobs:
           ~/.cargo/registry/cache/
           ~/.cargo/git/db/
           target/
-        key: lint-1.8.16-v3-${{ hashFiles('Cargo.lock') }}
+          cli/listener/fuzz/target/
+        key: lint-1.8.16-v3-${{ hashFiles('Cargo.lock', 'cli/listener/fuzz/Cargo.lock') }}
         restore-keys: lint-1.8.16-v3
 
     - name: Install linters
@@ -174,9 +175,10 @@ jobs:
     - name: Run Clippy
       run: |
         cargo clippy --manifest-path anker/Cargo.toml -- --deny warnings
-        cargo clippy --manifest-path cli/maintainer/Cargo.toml -- --deny warnings
-        cargo clippy --manifest-path cli/listener/Cargo.toml -- --deny warnings
         cargo clippy --manifest-path cli/common/Cargo.toml -- --deny warnings
+        cargo clippy --manifest-path cli/listener/Cargo.toml -- --deny warnings
+        cargo clippy --manifest-path cli/listener/fuzz/Cargo.toml -- --deny warnings
+        cargo clippy --manifest-path cli/maintainer/Cargo.toml -- --deny warnings
         cargo clippy --manifest-path program/Cargo.toml -- --deny warnings
         cargo clippy --manifest-path testlib/Cargo.toml -- --deny warnings
 

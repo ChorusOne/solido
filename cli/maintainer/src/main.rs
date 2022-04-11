@@ -4,7 +4,7 @@
 use std::fmt;
 use std::path::PathBuf;
 
-use clap::Clap;
+use clap::Parser;
 use serde::Serialize;
 use solana_client::rpc_client::RpcClient;
 use solana_remote_wallet::locator::Locator;
@@ -45,7 +45,7 @@ mod spl_token_utils;
 // Some values are going to be overwritten by `GeneralOpts`, but
 // we write the default values on the rustdoc so Clap can print them in help
 // messages.
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 #[clap(after_long_help = r#"CONFIGURATION:
     All of the options of this program can also be provided as an environment
     variable with "SOLIDO_" prefix. E.g. to provide --keypair-path, set the
@@ -124,7 +124,7 @@ impl Opts {
     }
 }
 
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 enum SubCommand {
     /// Create a new Lido for Solana instance.
     #[clap(after_help = r"ACCOUNTS

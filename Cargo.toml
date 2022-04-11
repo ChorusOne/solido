@@ -29,3 +29,6 @@ solana-frozen-abi-macro = { git = "https://github.com/ChorusOne/solana", branch 
 solana-program = { git = "https://github.com/ChorusOne/solana", branch = "program-test-178" }
 solana-program-test = { git = "https://github.com/ChorusOne/solana", branch = "program-test-178" }
 solana-sdk = { git = "https://github.com/ChorusOne/solana", branch = "program-test-178" }
+
+# https://github.com/tiny-http/tiny-http/pull/225
+tiny_http = { git = "https://github.com/ruuda/tiny-http", rev = "3568e8880f995dd0348feff9e29645fce995b534" }

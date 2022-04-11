@@ -509,8 +509,7 @@ print(
     f'> Testing transfering 10 tokens from {test_token_account_1} to {test_token_account_2}.'
 )
 result = multisig(
-    'token',
-    'transfer',
+    'token-transfer',
     '--multisig-program-id',
     multisig_program_id,
     '--multisig-address',
