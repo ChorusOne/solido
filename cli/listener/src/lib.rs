@@ -203,7 +203,13 @@ pub fn get_interval_price_for_period(
             Ok(epoch) => epoch,
             Err(_) => return Ok(None),
         };
-        let minimum_slot = epoch_schedule.get_first_slot_in_epoch(epoch) + QUERY_SLOT_OFFSET;
+        let minimum_slot = match epoch_schedule
+            .get_first_slot_in_epoch(epoch)
+            .checked_add(QUERY_SLOT_OFFSET)
+        {
+            Some(s) => s,
+            None => return Ok(None),
+        };
 
         // Get the first row from `epoch` in which the slot is greater than `minimum_slot`.
         let mut exchange_rate_stmt = tx.prepare(
@@ -226,7 +232,13 @@ pub fn get_interval_price_for_period(
             Ok(epoch) => epoch,
             Err(_) => return Ok(None),
         };
-        let minimum_slot = epoch_schedule.get_first_slot_in_epoch(epoch) + QUERY_SLOT_OFFSET;
+        let minimum_slot = match epoch_schedule
+            .get_first_slot_in_epoch(epoch)
+            .checked_add(QUERY_SLOT_OFFSET)
+        {
+            Some(s) => s,
+            None => return Ok(None),
+        };
 
         // Get the first row from `epoch` in which the slot is greater than `minimum_slot`.
         let mut exchange_rate_stmt = tx.prepare(
@@ -1008,6 +1020,48 @@ mod test {
         .expect("Failed when getting APY for period");
         let growth_factor = apy.unwrap().growth_factor();
         assert_eq!(growth_factor, 1.0005282698770684); //  Checked on WA, precision difference in the last digit.
+    }
+
+    #[test]
+    fn test_get_interval_price_for_period_slot_bounds_do_not_overflow() {
+        let conn = Connection::open_in_memory().expect("Failed to open sqlite connection.");
+        create_db(&conn).unwrap();
+
+        // We insert some bogus exchange rates here with timestamps and epoch/slot
+        // combinations that will not occur in practice, but we still cover the
+        // case to ensure we don't have overflows. The important thing here is
+        // that we set a large epoch number, such that the slot number is going
+        // to be close to `u64::MAX`, and adding `QUERY_SLOT_OFFSET` overflows.
+        let exchange_rate = ExchangeRate {
+            id: 0,
+            timestamp: chrono::Utc.ymd(2022, 1, 1).and_hms(0, 0, 0),
+            slot: 1,
+            epoch: (i64::MAX - 1) as u64,
+            pool: SOLIDO_ID.to_owned(),
+            price_lamports_numerator: 100,
+            price_lamports_denominator: 100,
+        };
+        insert_price(&conn, &exchange_rate).unwrap();
+
+        let exchange_rate = ExchangeRate {
+            id: 0,
+            timestamp: chrono::Utc.ymd(2022, 2, 1).and_hms(0, 0, 0),
+            slot: 2,
+            epoch: i64::MAX as u64,
+            pool: SOLIDO_ID.to_owned(),
+            price_lamports_numerator: 100,
+            price_lamports_denominator: 100,
+        };
+        insert_price(&conn, &exchange_rate).unwrap();
+
+        let interval_price = get_interval_price_for_period(
+            conn.unchecked_transaction().unwrap(),
+            chrono::Utc.ymd(2022, 1, 1).and_hms(0, 0, 0),
+            chrono::Utc.ymd(2022, 1, 1).and_hms(0, 0, 0),
+            SOLIDO_ID.to_owned(),
+        )
+        .expect("Getting interval price should not fail with a SQL error.");
+        assert!(interval_price.is_none());
     }
 
     #[test]
