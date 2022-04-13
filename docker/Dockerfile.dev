@@ -40,12 +40,14 @@ RUN cd $SOLIDOBUILDPATH \
 # Hash on-chain programs
 RUN cd $SOLIDORELEASEPATH/deploy \
     && sha256sum lido.so >> lido.hash \
+    && sha256sum anker.so >> anker.hash \
     && sha256sum serum_multisig.so >> serum_multisig.hash
 
 
 # Hash CLI
 RUN cd $SOLIDORELEASEPATH/cli \
-    && sha256sum solido >> solido.hash
+    && sha256sum solido >> solido.hash \
+    && sha256sum listener >> listener.hash
 
 WORKDIR $SOLPATH
 
