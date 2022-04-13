@@ -2,5 +2,5 @@ FROM rust:1.60-slim-buster as base
 
 # Install base tools
 RUN apt -y update \
-    && apt -y install libssl-dev libudev-dev pkg-config zlib1g-dev llvm clang make curl python3 gcc build-essential
+    && apt -y install libssl-dev libudev-dev pkg-config zlib1g-dev llvm clang make curl python3 gcc build-essential libsqlite3-dev
 
