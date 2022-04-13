@@ -1,9 +1,4 @@
-import {
-  AccountInfo,
-  Connection,
-  ParsedAccountData,
-  PublicKey,
-} from '@solana/web3.js';
+import { Connection, PublicKey } from '@solana/web3.js';
 import BN from 'bn.js';
 import { deserializeUnchecked } from 'borsh';
 import { AnkerSnapshot, getSolido, ProgramAddresses, StLamports } from '.';
@@ -145,15 +140,6 @@ export const getSnapshot = async (
   connection: Connection,
   programAddresses: ProgramAddresses
 ): Promise<AnkerSnapshot> => {
-  // Record of all the account data required for snapshot
-  const accountsInfoRecord: Record<
-    string,
-    AccountInfo<Buffer | ParsedAccountData> | null
-  > = {
-    [programAddresses.ankerInstanceId.toString()]: null,
-    [programAddresses.solidoInstanceId.toString()]: null,
-  };
-
   const [stSolReserveAccountAddress] = await PublicKey.findProgramAddress(
     [
       programAddresses.ankerInstanceId.toBuffer(),
@@ -162,55 +148,40 @@ export const getSnapshot = async (
     programAddresses.ankerProgramId
   );
 
-  accountsInfoRecord[stSolReserveAccountAddress.toString()] = null;
+  const [
+    ankerInstanceAccountInfo,
+    solidoInstanceAccountInfo,
+    stSolReserveAccountInfo,
+  ] = await connection.getMultipleAccountsInfo(
+    [
+      programAddresses.ankerInstanceId,
+      programAddresses.solidoInstanceId,
+      stSolReserveAccountAddress,
+    ],
+    { encoding: 'jsonParsed' }
+  );
 
-  // Iterates over all the required accounts data to be fetched and updates the accountsInfo record
-  // Once, all we have the record of all the accounts data, we can create the snapshot
-  // This way, we avoid torn reads, and fetch all the required data in one go with `getMultipleAccountInfo`
-  while (true) {
-    const addressesToGetAccountInfoFor = Object.keys(accountsInfoRecord).map(
-      (address) => new PublicKey(address)
-    );
-
-    const multipleAccountInfos = await connection.getMultipleAccountsInfo(
-      addressesToGetAccountInfoFor,
-      { encoding: 'jsonParsed' }
-    );
-
-    multipleAccountInfos.forEach((info, i) => {
-      accountsInfoRecord[addressesToGetAccountInfoFor[i].toString()] =
-        info as AccountInfo<Buffer>;
-    });
-
-    const ankerInstanceAccountInfo =
-      accountsInfoRecord[programAddresses.ankerInstanceId.toString()];
-    const solidoInstanceAccountInfo =
-      accountsInfoRecord[programAddresses.solidoInstanceId.toString()];
-    const stSolReserveAccountInfo =
-      accountsInfoRecord[stSolReserveAccountAddress.toString()];
-
-    if (
-      !ankerInstanceAccountInfo ||
-      !solidoInstanceAccountInfo ||
-      !stSolReserveAccountInfo
-    ) {
-      throw new Error('Please check the program deployment addresses');
-    }
-
-    const solido = getSolido(solidoInstanceAccountInfo.data as Buffer);
-
-    const anker = getAnker(ankerInstanceAccountInfo.data as Buffer);
-
-    if (stSolReserveAccountInfo.data instanceof Buffer) {
-      throw new Error('stSOL reserve account info not json parsed');
-    }
-
-    return {
-      anker,
-      solido,
-      stSolReserveAccountBalance: new StLamports(
-        stSolReserveAccountInfo.data.parsed.info.tokenAmount.amount
-      ),
-    };
+  if (
+    !ankerInstanceAccountInfo ||
+    !solidoInstanceAccountInfo ||
+    !stSolReserveAccountInfo
+  ) {
+    throw new Error('Please check the program deployment addresses');
   }
+
+  const solido = getSolido(solidoInstanceAccountInfo.data as Buffer);
+
+  const anker = getAnker(ankerInstanceAccountInfo.data as Buffer);
+
+  if (stSolReserveAccountInfo.data instanceof Buffer) {
+    throw new Error('stSOL reserve account info not json parsed');
+  }
+
+  return {
+    anker,
+    solido,
+    stSolReserveAccountBalance: new StLamports(
+      stSolReserveAccountInfo.data.parsed.info.tokenAmount.amount
+    ),
+  };
 };
