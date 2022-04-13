@@ -1,4 +1,4 @@
-FROM rust:slim-buster@sha256:bbf94ba964b3d9a47600d8f5e2275fc461df300300216dc9f173e42e46300f74 as base
+FROM rust:1.60-slim-buster as base
 
 # Install base tools
 RUN apt -y update \
