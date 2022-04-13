@@ -35,7 +35,7 @@ echo "Running container id is=$CON_ID"
 programs=("lido" "serum_multisig" "anker")
 for i in "${programs[@]}"
 do
-  echo -e $"\nCopying $i program and hash"
+  echo "Copying $i program and hash"
   docker cp $CON_ID:$SOLIPATH/deploy/$i.so ./build/$i.so
   docker cp $CON_ID:$SOLIPATH/deploy/$i.hash ./build/$i.hash
 done
@@ -44,7 +44,7 @@ done
 programs=("solido" "listener")
 for i in "${programs[@]}"
 do
-  echo -e "\nCopying $i cli and hash to build"
+  echo "Copying $i cli and hash to build"
   docker cp $CON_ID:$SOLIPATH/cli/$i ./build/$i
   docker cp $CON_ID:$SOLIPATH/cli/$i.hash ./build/$i.hash
 done
