@@ -32,17 +32,21 @@ echo "Running container id is=$CON_ID"
 
 #6. Copy artefacts locally
 ## a. on-chain
-programs=("lido" "serum_multisig")
+programs=("lido" "serum_multisig" "anker")
 for i in "${programs[@]}"
 do
-  echo -e $"\nCopying $i program and hash"
+  echo "Copying $i program and hash"
   docker cp $CON_ID:$SOLIPATH/deploy/$i.so ./build/$i.so
   docker cp $CON_ID:$SOLIPATH/deploy/$i.hash ./build/$i.hash
 done
 
 ## b. cli
-echo -e  "\nCopying cli and hash to build"
-docker cp $CON_ID:$SOLIPATH/cli/maintainer/solido ./build/solido
-docker cp $CON_ID:$SOLIPATH/cli/maintainer/solido.hash ./build/solido.hash
+programs=("solido" "listener")
+for i in "${programs[@]}"
+do
+  echo "Copying $i cli and hash to build"
+  docker cp $CON_ID:$SOLIPATH/cli/$i ./build/$i
+  docker cp $CON_ID:$SOLIPATH/cli/$i.hash ./build/$i.hash
+done
 
 echo "All build artefacts copied to ./build. Associated container will exit shortly."
