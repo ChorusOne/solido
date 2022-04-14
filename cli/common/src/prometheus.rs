@@ -5,6 +5,7 @@
 //!
 //! See also <https://prometheus.io/docs/instrumenting/exposition_formats/#text-based-format>.
 
+use anker::token::{BLamports, MicroUst};
 use lido::metrics::{LamportsHistogram, Metrics};
 use lido::token::{Lamports, StLamports};
 use std::io;
@@ -30,6 +31,11 @@ pub enum MetricValue {
     ///
     /// E.g. `Nano(12)` renders as `0.000000012`.
     Nano(u64),
+
+    /// Divide the inner value by 10<sup>6</sup> and render as fixed-point number.
+    ///
+    /// E.g. `Nano(12)` renders as `0.000012`.
+    Micro(u64),
 
     Float(f64),
 }
@@ -85,6 +91,18 @@ impl<'a> Metric<'a> {
         Metric::new(MetricValue::Nano(amount.0))
     }
 
+    /// Construct a metric that measures an amount of UST.
+    pub fn new_ust_sol(amount: MicroUst) -> Metric<'a> {
+        // One microUst is 1e-6 UST, so we use micro here.
+        Metric::new(MetricValue::Micro(amount.0))
+    }
+
+    /// Construct a metric that measures an amount of bSOL.
+    pub fn new_b_sol(amount: BLamports) -> Metric<'a> {
+        // One bLamports is 1e-9 bSOL, so we use nano here.
+        Metric::new(MetricValue::Nano(amount.0))
+    }
+
     /// Set the timestamp.
     pub fn at(mut self, at: SystemTime) -> Metric<'a> {
         self.timestamp = Some(at);
@@ -129,6 +147,7 @@ pub fn write_metric<W: Write>(out: &mut W, family: &MetricFamily) -> io::Result<
             MetricValue::Nano(v) => {
                 write!(out, " {}.{:0>9}", v / 1_000_000_000, v % 1_000_000_000)?
             }
+            MetricValue::Micro(v) => write!(out, " {}.{:0>6}", v / 1_000_000, v % 1_000_000)?,
             MetricValue::Float(v) => write!(out, " {}", v)?,
         }
 
@@ -301,6 +320,91 @@ pub fn write_solido_metrics_as_prometheus<W: io::Write>(
             help: "Total amount of stSOL that users returned to us for withdrawals.",
             type_: "counter",
             metrics: vec![Metric::new_st_sol(metrics.withdraw_amount.total_st_sol_amount).at(at)],
+        },
+    )?;
+
+    Ok(())
+}
+
+pub fn write_anker_metrics_as_prometheus<W: io::Write>(
+    metrics: &anker::metrics::Metrics,
+    at: SystemTime,
+    out: &mut W,
+) -> io::Result<()> {
+    write_metric(
+        out,
+        &MetricFamily {
+            name: "anker_swapped_rewards_st_sol_total",
+            help: "Total amount of stSOL rewards swapped by our Anker instance.",
+            type_: "counter",
+            metrics: vec![Metric::new_st_sol(metrics.swapped_rewards_st_sol_total).at(at)],
+        },
+    )?;
+    write_metric(
+        out,
+        &MetricFamily {
+            name: "anker_swapped_rewards_ust_total",
+            help: "Total amount of UST rewards swapped by our Anker instance.",
+            type_: "counter",
+            metrics: vec![Metric::new_ust_sol(metrics.swapped_rewards_ust_total).at(at)],
+        },
+    )?;
+
+    // Deposit metrics
+    write_metric(
+        out,
+        &MetricFamily {
+            name: "anker_deposit_st_sol_total",
+            help: "Total amount stSOL deposited into Anker",
+            type_: "counter",
+            metrics: vec![Metric::new_st_sol(metrics.deposit_metric.st_sol_total).at(at)],
+        },
+    )?;
+    write_metric(
+        out,
+        &MetricFamily {
+            name: "anker_deposit_b_sol_total",
+            help: "Total amount bSOL minted in response to a deposit into Anker",
+            type_: "counter",
+            metrics: vec![Metric::new_b_sol(metrics.deposit_metric.b_sol_total).at(at)],
+        },
+    )?;
+    write_metric(
+        out,
+        &MetricFamily {
+            name: "anker_deposit_count_total",
+            help: "Total number of deposits made by users on Anker.",
+            type_: "counter",
+            metrics: vec![Metric::new(metrics.deposit_metric.count).at(at)],
+        },
+    )?;
+
+    // Withdraw metrics
+    write_metric(
+        out,
+        &MetricFamily {
+            name: "anker_withdraw_st_sol_total",
+            help: "Total amount of stSOL withdrawn in response from burning bSOL from Anker",
+            type_: "counter",
+            metrics: vec![Metric::new_st_sol(metrics.withdraw_metric.st_sol_total).at(at)],
+        },
+    )?;
+    write_metric(
+        out,
+        &MetricFamily {
+            name: "anker_withdraw_b_sol_total",
+            help: "Total amount of bSOL burned in response from withdrawing stSOL from Anker",
+            type_: "counter",
+            metrics: vec![Metric::new_b_sol(metrics.withdraw_metric.b_sol_total).at(at)],
+        },
+    )?;
+    write_metric(
+        out,
+        &MetricFamily {
+            name: "anker_withdraw_count_total",
+            help: "Total number of withdrawals made by users on Anker.",
+            type_: "counter",
+            metrics: vec![Metric::new(metrics.withdraw_metric.count).at(at)],
         },
     )?;
 
