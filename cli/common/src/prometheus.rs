@@ -547,7 +547,7 @@ mod test {
     }
 
     #[test]
-    fn write_metric_nano() {
+    fn write_metric_nano_micro() {
         let mut out: Vec<u8> = Vec::new();
         write_metric(
             &mut out,
@@ -558,8 +558,10 @@ mod test {
                 metrics: vec![
                     // One greater than 1, with no need for zero padding.
                     Metric::new(MetricValue::Nano(67_533_128_017)),
+                    Metric::new(MetricValue::Micro(67_533_128)),
                     // One smaller than 1, with the need for zero padding.
                     Metric::new(MetricValue::Nano(128_017)),
+                    Metric::new(MetricValue::Micro(128)),
                 ],
             },
         )
@@ -570,7 +572,9 @@ mod test {
             Ok("# HELP goat_weight_kg Weight of the goat in kilograms.\n\
                  # TYPE goat_weight_kg gauge\n\
                  goat_weight_kg 67.533128017\n\
-                 goat_weight_kg 0.000128017\n\n\
+                 goat_weight_kg 67.533128\n\
+                 goat_weight_kg 0.000128017\n\
+                 goat_weight_kg 0.000128\n\n\
                 ")
         )
     }
