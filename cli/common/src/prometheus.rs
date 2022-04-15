@@ -34,7 +34,7 @@ pub enum MetricValue {
 
     /// Divide the inner value by 10<sup>6</sup> and render as fixed-point number.
     ///
-    /// E.g. `Nano(12)` renders as `0.000012`.
+    /// E.g. `Micro(12)` renders as `0.000012`.
     Micro(u64),
 
     Float(f64),
