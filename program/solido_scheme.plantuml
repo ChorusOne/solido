@@ -176,7 +176,7 @@ package StakeDeposit {
   condition : stake_account_end == stake_account_merge_into \n<font color="grey">(check if this was the first time we stake in this epoch)
 
   stake_account_end --> condition
-  condition --> StakeDepositAccountsInfo::validator_vote_account : [2] True\n delegate stake to validator \nthrow stake_account_end
+  condition --> StakeDepositAccountsInfo::validator_vote_account : [2] True\n delegate stake to validator \nthrough stake_account_end
   condition --> StakeDepositAccountsInfo::stake_account_merge_into : [2] False\n merge stake_account_end to\n stake_account_merge_into
 
 }
@@ -234,7 +234,7 @@ package WithdrawInactiveStake {
 
    class stake_account{}
 
-   stake_account --> WithdrawInactiveStakeInfo::reserve: [1] withdrew inactive stake back\n to the reserve from\n stake/unstake account
+   stake_account --> WithdrawInactiveStakeInfo::reserve: [1] withdraw inactive stake back\n to the reserve from\n stake/unstake account
    stake_account .. "many" WithdrawInactiveStakeInfo::stake_accounts
 
    WithdrawInactiveStakeInfo::reserve --> Lido::validators : [2] update validaror's\n stake/unstake balance
@@ -265,7 +265,7 @@ package CollectValidatorFee {
   CollectValidatorFeeInfo::developer_st_sol_account .. developer_st_sol_account
   CollectValidatorFeeInfo::validator_vote_account --> treasury_st_sol_account : [1] mint treasury stSOL fee
   CollectValidatorFeeInfo::validator_vote_account --> developer_st_sol_account : [2] mint developer stSOL fee
-  CollectValidatorFeeInfo::validator_vote_account --> Lido::validators : [3] update validator's\n stSOL fee credit
+  CollectValidatorFeeInfo::validator_vote_account --> Lido::validators : [3] distribute remaining fees\n among all validators by\n updating their stSOL fee credit
   CollectValidatorFeeInfo::validator_vote_account --> Lido::metrics : [4] update fee metrics
   CollectValidatorFeeInfo::validator_vote_account --> reserve : [5] withdraw rewards\n to reserve
   reserve .. CollectValidatorFeeInfo::reserve
@@ -313,7 +313,8 @@ package ClaimValidatorFee {
   }
   note top: Claim rewards from the validator\n account and distribute rewards
 
-  Lido::validators --> ClaimValidatorFeeInfo::validator_fee_st_sol_account : [1] mint validator's fee\n credit to it's account
+  ClaimValidatorFeeInfo::validator_fee_st_sol_account --> Lido::validators : [1] set validator's fee_address\n to validator_fee_st_sol_account
+  Lido::validators --> ClaimValidatorFeeInfo::validator_fee_st_sol_account : [2] mint validator's fee\n credit to it's account
 }
 
 package ChangeRewardDistribution {
