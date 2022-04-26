@@ -336,7 +336,7 @@ pub fn write_anker_metrics_as_prometheus<W: io::Write>(
         &MetricFamily {
             name: "anker_swapped_rewards_st_sol_total",
             help: "Total amount of stSOL rewards swapped by our Anker instance.",
-            type_: "counter",
+            type_: "gauge",
             metrics: vec![Metric::new_st_sol(metrics.swapped_rewards_st_sol_total).at(at)],
         },
     )?;
@@ -345,7 +345,7 @@ pub fn write_anker_metrics_as_prometheus<W: io::Write>(
         &MetricFamily {
             name: "anker_swapped_rewards_ust_total",
             help: "Total amount of UST rewards swapped by our Anker instance.",
-            type_: "counter",
+            type_: "gauge",
             metrics: vec![Metric::new_ust_sol(metrics.swapped_rewards_ust_total).at(at)],
         },
     )?;
@@ -356,7 +356,7 @@ pub fn write_anker_metrics_as_prometheus<W: io::Write>(
         &MetricFamily {
             name: "anker_deposit_st_sol_total",
             help: "Total amount stSOL deposited into Anker",
-            type_: "counter",
+            type_: "gauge",
             metrics: vec![Metric::new_st_sol(metrics.deposit_metric.st_sol_total).at(at)],
         },
     )?;
@@ -365,7 +365,7 @@ pub fn write_anker_metrics_as_prometheus<W: io::Write>(
         &MetricFamily {
             name: "anker_deposit_b_sol_total",
             help: "Total amount bSOL minted in response to a deposit into Anker",
-            type_: "counter",
+            type_: "gauge",
             metrics: vec![Metric::new_b_sol(metrics.deposit_metric.b_sol_total).at(at)],
         },
     )?;
@@ -374,7 +374,7 @@ pub fn write_anker_metrics_as_prometheus<W: io::Write>(
         &MetricFamily {
             name: "anker_deposit_count_total",
             help: "Total number of deposits made by users on Anker.",
-            type_: "counter",
+            type_: "gauge",
             metrics: vec![Metric::new(metrics.deposit_metric.count).at(at)],
         },
     )?;
@@ -385,7 +385,7 @@ pub fn write_anker_metrics_as_prometheus<W: io::Write>(
         &MetricFamily {
             name: "anker_withdraw_st_sol_total",
             help: "Total amount of stSOL withdrawn in response from burning bSOL from Anker",
-            type_: "counter",
+            type_: "gauge",
             metrics: vec![Metric::new_st_sol(metrics.withdraw_metric.st_sol_total).at(at)],
         },
     )?;
@@ -394,7 +394,7 @@ pub fn write_anker_metrics_as_prometheus<W: io::Write>(
         &MetricFamily {
             name: "anker_withdraw_b_sol_total",
             help: "Total amount of bSOL burned in response from withdrawing stSOL from Anker",
-            type_: "counter",
+            type_: "gauge",
             metrics: vec![Metric::new_b_sol(metrics.withdraw_metric.b_sol_total).at(at)],
         },
     )?;
@@ -403,7 +403,7 @@ pub fn write_anker_metrics_as_prometheus<W: io::Write>(
         &MetricFamily {
             name: "anker_withdraw_count_total",
             help: "Total number of withdrawals made by users on Anker.",
-            type_: "counter",
+            type_: "gauge",
             metrics: vec![Metric::new(metrics.withdraw_metric.count).at(at)],
         },
     )?;
