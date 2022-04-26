@@ -92,7 +92,7 @@ impl<'a> Metric<'a> {
     }
 
     /// Construct a metric that measures an amount of UST.
-    pub fn new_ust_sol(amount: MicroUst) -> Metric<'a> {
+    pub fn new_ust(amount: MicroUst) -> Metric<'a> {
         // One microUst is 1e-6 UST, so we use micro here.
         Metric::new(MetricValue::Micro(amount.0))
     }
@@ -346,7 +346,7 @@ pub fn write_anker_metrics_as_prometheus<W: io::Write>(
             name: "anker_swapped_rewards_ust_total",
             help: "Total amount of UST rewards swapped by our Anker instance.",
             type_: "gauge",
-            metrics: vec![Metric::new_ust_sol(metrics.swapped_rewards_ust_total).at(at)],
+            metrics: vec![Metric::new_ust(metrics.swapped_rewards_ust_total).at(at)],
         },
     )?;
 
