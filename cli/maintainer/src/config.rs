@@ -156,6 +156,7 @@ macro_rules! cli_opt_struct {
             $(
                 // Implement a getter for every field in the struct
                 #[allow(dead_code)]
+                #[allow(clippy::wrong_self_convention)]
                 pub fn $field(&self) -> &$type {
                     self.$field.as_ref().unwrap()
                 }
