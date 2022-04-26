@@ -1179,7 +1179,8 @@ impl SolidoState {
     /// Write metrics about the current Solido instance in Prometheus format.
     pub fn write_prometheus<W: io::Write>(&self, out: &mut W) -> io::Result<()> {
         use solido_cli_common::prometheus::{
-            write_metric, write_solido_metrics_as_prometheus, Metric, MetricFamily,
+            write_anker_metrics_as_prometheus, write_metric, write_solido_metrics_as_prometheus,
+            Metric, MetricFamily,
         };
 
         write_metric(
@@ -1463,6 +1464,9 @@ impl SolidoState {
         )?;
 
         write_solido_metrics_as_prometheus(&self.solido.metrics, self.produced_at, out)?;
+        if let Some(anker_state) = &self.anker_state {
+            write_anker_metrics_as_prometheus(&anker_state.anker.metrics, self.produced_at, out)?;
+        }
 
         Ok(())
     }
