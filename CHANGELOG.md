@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.3.1
+
+Released 2022-04-29.
+
+The on-chain Solido program remains functionally unchanged since v1.0.0. The
+Anker program remains unchanged since v1.3.0.
+
+New features:
+
+ * Expose Anker metrics in the maintainer Prometheus metrics.
+
 ## v1.3.0
 
 Released 2022-04-14.
