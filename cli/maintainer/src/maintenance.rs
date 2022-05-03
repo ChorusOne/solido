@@ -1465,6 +1465,41 @@ impl SolidoState {
 
         write_solido_metrics_as_prometheus(&self.solido.metrics, self.produced_at, out)?;
         if let Some(anker_state) = &self.anker_state {
+            write_metric(
+                out,
+                &MetricFamily {
+                    name: "anker_token_supply_b_sol",
+                    help: "Amount of bSOL that exists currently.",
+                    type_: "gauge",
+                    metrics: vec![Metric::new_b_sol(anker_state.b_sol_total_supply_amount)
+                        .at(self.produced_at)],
+                },
+            )?;
+
+            write_metric(
+                out,
+                &MetricFamily {
+                    name: "anker_reserve_st_sol",
+                    help: "Amount of stSOL in reserve.",
+                    type_: "gauge",
+                    metrics: vec![
+                        Metric::new_st_sol(anker_state.st_sol_reserve_balance).at(self.produced_at)
+                    ],
+                },
+            )?;
+
+            write_metric(
+                out,
+                &MetricFamily {
+                    name: "anker_reserve_ust",
+                    help: "Amount of UST in reserve.",
+                    type_: "gauge",
+                    metrics: vec![
+                        Metric::new_ust(anker_state.ust_reserve_balance).at(self.produced_at)
+                    ],
+                },
+            )?;
+
             write_anker_metrics_as_prometheus(&anker_state.anker.metrics, self.produced_at, out)?;
         }
 
