@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.3.2
+
+Released 2022-05-04.
+
+The on-chain Solido program remains functionally unchanged since v1.0.0. The
+Anker program remains unchanged since v1.3.0.
+
+New features:
+
+* Expose Anker TVL metrics in the maintainer Prometheus metrics.
+
+Bugfixes:
+
+ * Make dependencies compatible with `cargo vendor`. In particular, this
+   restores the ability to build the CLI with Nix' `buildRustPackage`.
+
 ## v1.3.1
 
 Released 2022-04-29.
