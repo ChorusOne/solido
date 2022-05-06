@@ -1,5 +1,55 @@
 # Changelog
 
+## v1.3.2
+
+Released 2022-05-04.
+
+The on-chain Solido program remains functionally unchanged since v1.0.0. The
+Anker program remains unchanged since v1.3.0.
+
+New features:
+
+* Expose Anker TVL metrics in the maintainer Prometheus metrics.
+
+Bugfixes:
+
+ * Make dependencies compatible with `cargo vendor`. In particular, this
+   restores the ability to build the CLI with Nix' `buildRustPackage`.
+
+## v1.3.1
+
+Released 2022-04-29.
+
+The on-chain Solido program remains functionally unchanged since v1.0.0. The
+Anker program remains unchanged since v1.3.0.
+
+New features:
+
+ * Expose Anker metrics in the maintainer Prometheus metrics.
+
+## v1.3.0
+
+Released 2022-04-14.
+
+This release contains the final version of the Anker program, to be deployed
+on-chain. There are no functional changes to the on-chain Solido program in
+this release. The on-chain Solido program remains functionally unchanged since
+v1.0.0.
+
+**Compatibility**:
+
+ * The data layout of the Anker instance has changed with respect to the
+   previous release, which was a preview release of Anker.
+
+New features:
+
+ * First stable version of the Anker program, and support in the `solido` CLI.
+ * Add the APY daemon, which fetches the stSOL/SOL exchange rate from the chain
+   and stores it in a SQLite database, to be able to compute APY over longer
+   periods of time.
+ * Add a preview version of `solido.js`, a Typescript library to interact with
+   Solido and Anker. This library is not yet stable.
+
 ## v1.2.0
 
 Released 2022-01-11.

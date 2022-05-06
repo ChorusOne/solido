@@ -25,7 +25,7 @@ use spl_token_swap::state::SwapV1;
 use crate::token::{self, BLamports, MicroUst};
 
 /// Size of the serialized [`Anker`] struct, in bytes.
-pub const ANKER_LEN: usize = 322;
+pub const ANKER_LEN: usize = 370;
 pub const ANKER_VERSION: u8 = 0;
 
 // Next are three constants related to stored stSOL/UST prices. Because Anker is

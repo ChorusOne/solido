@@ -166,7 +166,7 @@ accounts_struct! {
     DepositAccountsMeta, DepositAccountsInfo {
         pub anker {
             is_signer: false,
-            is_writable: false,
+            is_writable: true, // We update metrics.
         },
         // For reading the stSOL/SOL exchange rate.
         pub solido {
@@ -222,7 +222,7 @@ accounts_struct! {
     WithdrawAccountsMeta, WithdrawAccountsInfo {
         pub anker {
             is_signer: false,
-            is_writable: false,
+            is_writable: true, // Needed to update metrics.
         },
         // For reading the stSOL/SOL exchange rate.
         pub solido {
