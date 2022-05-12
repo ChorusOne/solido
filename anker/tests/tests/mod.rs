@@ -8,4 +8,5 @@ pub mod deposit;
 pub mod fetch_pool_price;
 pub mod manager;
 pub mod sell_rewards;
+pub mod send_rewards;
 pub mod withdraw;
