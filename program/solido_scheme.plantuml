@@ -313,8 +313,8 @@ package ClaimValidatorFee {
   }
   note top: Claim rewards from the validator\n account and distribute rewards
 
-  ClaimValidatorFeeInfo::validator_fee_st_sol_account --> Lido::validators : [1] set validator's fee_address\n to validator_fee_st_sol_account
-  Lido::validators --> ClaimValidatorFeeInfo::validator_fee_st_sol_account : [2] mint validator's fee\n credit to it's account
+  Lido::validators --> ClaimValidatorFeeInfo::validator_fee_st_sol_account : [1] mint validator's fee credit\n to validator_fee_st_sol_account
+  ClaimValidatorFeeInfo::validator_fee_st_sol_account --> Lido::validators : [2] set validator's\n fee_credit to 0
 }
 
 package ChangeRewardDistribution {
