@@ -513,8 +513,67 @@ impl Context {
             )],
             vec![],
         )
-        .await?;
-        Ok(())
+        .await
+    }
+
+    /// Call the `SendRewards` instruction. Note that this will fail, because we
+    /// don't have the Wormhole programs available in the test context. But we
+    /// can still test everything up to the point where we call Wormhole.
+    pub async fn try_send_rewards(&mut self) -> transport::Result<()> {
+        let solido_address = self.solido_context.solido.pubkey();
+
+        let (anker_instance, _anker_bump_seed) =
+            anker::find_instance_address(&id(), &solido_address);
+
+        let (ust_reserve_account, _ust_reserve_bump_seed) =
+            anker::find_ust_reserve_account(&id(), &anker_instance);
+
+        let (reserve_authority, _reserve_authority_bump_seed) =
+            find_reserve_authority(&id(), &anker_instance);
+
+        let anker = self.get_anker().await;
+        let message = self.solido_context.deterministic_keypair.new_keypair();
+
+        let transfer_args = anker::wormhole::WormholeTransferArgs::new(
+            anker.wormhole_parameters.token_bridge_program_id,
+            anker.wormhole_parameters.core_bridge_program_id,
+            self.token_pool_context.ust_mint_address,
+            self.solido_context.context.payer.pubkey(),
+            ust_reserve_account,
+            reserve_authority,
+            message.pubkey(),
+        );
+
+        let wormhole_nonce = 1;
+
+        send_transaction(
+            &mut self.solido_context.context,
+            &mut self.solido_context.nonce,
+            &[instruction::send_rewards(
+                &id(),
+                &instruction::SendRewardsAccountsMeta {
+                    anker: anker_instance,
+                    solido: solido_address,
+                    reserve_authority,
+                    wormhole_token_bridge_program_id: transfer_args.token_bridge_program_id,
+                    wormhole_core_bridge_program_id: transfer_args.core_bridge_program_id,
+                    payer: transfer_args.payer,
+                    config_key: transfer_args.config_key,
+                    ust_reserve_account,
+                    wrapped_meta_key: transfer_args.wrapped_meta_key,
+                    ust_mint: self.token_pool_context.ust_mint_address,
+                    authority_signer_key: transfer_args.authority_signer_key,
+                    bridge_config: transfer_args.bridge_config,
+                    message: message.pubkey(),
+                    emitter_key: transfer_args.emitter_key,
+                    sequence_key: transfer_args.sequence_key,
+                    fee_collector_key: transfer_args.fee_collector_key,
+                },
+                wormhole_nonce,
+            )],
+            vec![&message],
+        )
+        .await
     }
 
     /// Return the value of the given amount of stSOL in SOL.
