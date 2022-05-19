@@ -304,6 +304,7 @@ impl Context {
 
         let max_validators = 10_000;
         let max_maintainers = 1000;
+        let max_validator_fee = 5;
         let solido_size = Lido::calculate_size(max_validators, max_maintainers);
         let rent = result.context.banks_client.get_rent().await.unwrap();
         let rent_solido = rent.minimum_balance(solido_size);
@@ -330,6 +331,7 @@ impl Context {
                     result.reward_distribution.clone(),
                     max_validators,
                     max_maintainers,
+                    max_validator_fee,
                     &instruction::InitializeAccountsMeta {
                         lido: result.solido.pubkey(),
                         manager: result.manager.pubkey(),

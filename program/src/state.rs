@@ -33,7 +33,7 @@ pub const LIDO_VERSION: u8 = 0;
 /// Size of a serialized `Lido` struct excluding validators and maintainers.
 ///
 /// To update this, run the tests and replace the value here with the test output.
-pub const LIDO_CONSTANT_SIZE: usize = 357;
+pub const LIDO_CONSTANT_SIZE: usize = 358;
 pub const VALIDATOR_CONSTANT_SIZE: usize = 89;
 
 pub type Validators = AccountMap<Validator>;
@@ -220,6 +220,9 @@ pub struct Lido {
 
     /// Map of enrolled validators, maps their vote account to `Validator` details.
     pub validators: Validators,
+
+    /// Maximum validation fee
+    pub max_validator_fee: u8,
 
     /// The set of maintainers.
     ///
@@ -1020,6 +1023,7 @@ mod test_lido {
             metrics: Metrics::new(),
             validators: validators,
             maintainers: maintainers,
+            max_validator_fee: 5,
         };
         let mut data = Vec::new();
         BorshSerialize::serialize(&lido, &mut data).unwrap();

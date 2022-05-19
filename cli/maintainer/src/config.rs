@@ -248,6 +248,10 @@ cli_opt_struct! {
         #[clap(long, value_name = "int")]
         max_maintainers: u32,
 
+        /// The maximum validator fee a validator can have to be accepted by protocol.
+        #[clap(long, value_name = "int")]
+        max_validator_fee: u8,
+
         // See also the docs section of `create-solido` in main.rs for a description
         // of the fee shares.
         /// Treasury fee share of the rewards.

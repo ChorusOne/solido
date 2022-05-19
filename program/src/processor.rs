@@ -61,6 +61,7 @@ pub fn process_initialize(
     reward_distribution: RewardDistribution,
     max_validators: u32,
     max_maintainers: u32,
+    max_validator_fee: u8,
     accounts_raw: &[AccountInfo],
 ) -> ProgramResult {
     let accounts = InitializeAccountsInfo::try_from_slice(accounts_raw)?;
@@ -129,6 +130,7 @@ pub fn process_initialize(
         metrics: Metrics::new(),
         maintainers: Maintainers::new(max_maintainers),
         validators: Validators::new(max_validators),
+        max_validator_fee: max_validator_fee,
     };
 
     // Confirm that the fee recipients are actually stSOL accounts.
@@ -1041,12 +1043,14 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
             reward_distribution,
             max_validators,
             max_maintainers,
+            max_validator_fee,
         } => process_initialize(
             LIDO_VERSION,
             program_id,
             reward_distribution,
             max_validators,
             max_maintainers,
+            max_validator_fee,
             accounts,
         ),
         LidoInstruction::Deposit { amount } => process_deposit(program_id, amount, accounts),
