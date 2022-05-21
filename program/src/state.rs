@@ -821,7 +821,6 @@ impl PubkeyAndEntry<Validator> {
 )]
 pub struct RewardDistribution {
     pub treasury_fee: u32,
-    pub validation_fee: u32,
     pub developer_fee: u32,
     pub st_sol_appreciation: u32,
 }
@@ -840,22 +839,12 @@ pub struct FeeRecipients {
 impl RewardDistribution {
     pub fn sum(&self) -> u64 {
         // These adds don't overflow because we widen from u32 to u64 first.
-        self.treasury_fee as u64
-            + self.validation_fee as u64
-            + self.developer_fee as u64
-            + self.st_sol_appreciation as u64
+        self.treasury_fee as u64 + self.developer_fee as u64 + self.st_sol_appreciation as u64
     }
 
     pub fn treasury_fraction(&self) -> Rational {
         Rational {
             numerator: self.treasury_fee as u64,
-            denominator: self.sum(),
-        }
-    }
-
-    pub fn validation_fraction(&self) -> Rational {
-        Rational {
-            numerator: self.validation_fee as u64,
             denominator: self.sum(),
         }
     }
@@ -986,7 +975,7 @@ mod test_lido {
 
         let mut validators = Validators::new(10_000);
         validators
-            .add(Pubkey::new_unique(), Validator::new(Pubkey::new_unique()))
+            .add(Pubkey::new_unique(), Validator::new())
             .unwrap();
         let maintainers = Maintainers::new(1);
         let lido = Lido {
@@ -1004,7 +993,6 @@ mod test_lido {
             rewards_withdraw_authority_bump_seed: 4,
             reward_distribution: RewardDistribution {
                 treasury_fee: 2,
-                validation_fee: 3,
                 developer_fee: 4,
                 st_sol_appreciation: 7,
             },
@@ -1159,7 +1147,7 @@ mod test_lido {
 
         lido.validators.maximum_entries = 1;
         lido.validators
-            .add(Pubkey::new_unique(), Validator::new(Pubkey::new_unique()))
+            .add(Pubkey::new_unique(), Validator::new())
             .unwrap();
         lido.validators.entries[0].entry.stake_accounts_balance = Lamports(37);
         assert_eq!(
@@ -1237,7 +1225,6 @@ mod test_lido {
     fn test_split_reward() {
         let mut spec = RewardDistribution {
             treasury_fee: 3,
-            validation_fee: 2,
             developer_fee: 1,
             st_sol_appreciation: 0,
         };
@@ -1245,11 +1232,10 @@ mod test_lido {
         assert_eq!(
             // In this case the amount can be split exactly,
             // there is no remainder.
-            spec.split_reward(Lamports(600), 1).unwrap(),
+            spec.split_reward(Lamports(600)).unwrap(),
             Fees {
-                treasury_amount: Lamports(300),
-                reward_per_validator: Lamports(200),
-                developer_amount: Lamports(100),
+                treasury_amount: Lamports(450),
+                developer_amount: Lamports(150),
                 st_sol_appreciation_amount: Lamports(0),
             },
         );
@@ -1257,40 +1243,36 @@ mod test_lido {
         assert_eq!(
             // In this case the amount cannot be split exactly, all fees are
             // rounded down.
-            spec.split_reward(Lamports(1_000), 4).unwrap(),
+            spec.split_reward(Lamports(1_000)).unwrap(),
             Fees {
-                treasury_amount: Lamports(500),
-                reward_per_validator: Lamports(83),
-                developer_amount: Lamports(166),
+                treasury_amount: Lamports(750),
+                developer_amount: Lamports(250),
                 st_sol_appreciation_amount: Lamports(2),
             },
         );
 
         // If we use 3%, 2%, 1% fee, and the remaining 94% go to stSOL appreciation,
         // we should see 3%, 2%, and 1% fee.
-        spec.st_sol_appreciation = 94;
+        spec.st_sol_appreciation = 96;
         assert_eq!(
-            spec.split_reward(Lamports(100), 1).unwrap(),
+            spec.split_reward(Lamports(100)).unwrap(),
             Fees {
                 treasury_amount: Lamports(3),
-                reward_per_validator: Lamports(2),
                 developer_amount: Lamports(1),
-                st_sol_appreciation_amount: Lamports(94),
+                st_sol_appreciation_amount: Lamports(96),
             },
         );
 
         let spec_coprime = RewardDistribution {
             treasury_fee: 17,
-            validation_fee: 23,
             developer_fee: 19,
             st_sol_appreciation: 0,
         };
         assert_eq!(
-            spec_coprime.split_reward(Lamports(1_000), 1).unwrap(),
+            spec_coprime.split_reward(Lamports(1_000)).unwrap(),
             Fees {
-                treasury_amount: Lamports(288),
-                reward_per_validator: Lamports(389),
-                developer_amount: Lamports(322),
+                treasury_amount: Lamports(472),
+                developer_amount: Lamports(527),
                 st_sol_appreciation_amount: Lamports(1),
             },
         );

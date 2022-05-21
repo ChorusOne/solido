@@ -202,7 +202,6 @@ pub fn command_create_solido(
         opts.solido_program_id(),
         RewardDistribution {
             treasury_fee: *opts.treasury_fee_share(),
-            validation_fee: *opts.validation_fee_share(),
             developer_fee: *opts.developer_fee_share(),
             st_sol_appreciation: *opts.st_sol_appreciation_share(),
         },
@@ -416,7 +415,6 @@ impl fmt::Display for ShowSolidoOutput {
         };
         print_reward("stSOL appreciation", |d| d.st_sol_appreciation)?;
         print_reward("Treasury", |d| d.treasury_fee)?;
-        print_reward("Validation fee", |d| d.validation_fee)?;
         print_reward("Developer fee", |d| d.developer_fee)?;
 
         writeln!(f, "\nFee recipients:")?;
@@ -508,9 +506,7 @@ impl fmt::Display for ShowSolidoOutput {
                 Keybase username:          {}\n    \
                 Vote account:              {}\n    \
                 Identity account:          {}\n    \
-                Fee address:               {}\n    \
                 Active:                    {}\n    \
-                Unclaimed fee:             {}\n    \
                 Stake in all accounts:     {}\n    \
                 Stake in stake accounts:   {}\n    \
                 Stake in unstake accounts: {}",
@@ -521,9 +517,7 @@ impl fmt::Display for ShowSolidoOutput {
                 },
                 pe.pubkey,
                 identity,
-                pe.entry.fee_address,
                 pe.entry.active,
-                pe.entry.fee_credit,
                 pe.entry.stake_accounts_balance,
                 pe.entry.effective_stake_balance(),
                 pe.entry.unstake_accounts_balance,

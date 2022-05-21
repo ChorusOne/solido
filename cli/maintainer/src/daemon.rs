@@ -144,13 +144,7 @@ impl MaintenanceMetrics {
             MaintenanceOutput::WithdrawInactiveStake { .. } => {
                 self.transactions_withdraw_inactive_stake += 1;
             }
-            MaintenanceOutput::CollectValidatorFee { .. } => {
-                self.transactions_collect_validator_fee += 1
-            }
             MaintenanceOutput::MergeStake { .. } => self.transactions_merge_stake += 1,
-            MaintenanceOutput::ClaimValidatorFee { .. } => {
-                self.transactions_claim_validator_fee += 1
-            }
             MaintenanceOutput::UnstakeFromInactiveValidator { .. } => {
                 self.transactions_unstake_from_inactive_validator += 1
             }

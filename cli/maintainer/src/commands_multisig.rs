@@ -804,14 +804,6 @@ fn print_changed_reward_distribution(
     )?;
     changed_fee(
         f,
-        current_solido.reward_distribution.validation_fee,
-        reward_distribution.validation_fee,
-        current_sum,
-        new_sum,
-        "validation",
-    )?;
-    changed_fee(
-        f,
         current_solido.reward_distribution.developer_fee,
         reward_distribution.developer_fee,
         current_sum,

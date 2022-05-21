@@ -15,7 +15,6 @@ use solana_program::{borsh::try_from_slice_unchecked, sysvar};
 use solana_program::{clock::Clock, instruction::Instruction};
 use solana_program::{instruction::InstructionError, stake_history::StakeHistory};
 use solana_program_test::{processor, ProgramTest, ProgramTestBanksClientExt, ProgramTestContext};
-use solana_sdk::account::ReadableAccount;
 use solana_sdk::account::{from_account, Account};
 use solana_sdk::account_info::AccountInfo;
 use solana_sdk::pubkey::Pubkey;
@@ -226,10 +225,9 @@ impl Context {
         let solido = deterministic_keypair.new_keypair();
 
         let reward_distribution = RewardDistribution {
-            validation_fee: 5,
             treasury_fee: 3,
             developer_fee: 2,
-            st_sol_appreciation: 90,
+            st_sol_appreciation: 95,
         };
 
         let (reserve_address, _) = Pubkey::find_program_address(
@@ -1169,6 +1167,10 @@ impl Context {
                     stake_accounts: stake_account_addrs,
                     reserve: self.reserve_address,
                     stake_authority: self.stake_authority,
+                    st_sol_mint: self.st_sol_mint,
+                    mint_authority: self.mint_authority,
+                    treasury_st_sol_account: self.treasury_st_sol_account,
+                    developer_st_sol_account: self.developer_st_sol_account,
                 },
             )],
             vec![],
@@ -1180,112 +1182,6 @@ impl Context {
         self.try_withdraw_inactive_stake(validator_vote_account)
             .await
             .expect("Failed to withdraw inactive stake.");
-    }
-
-    /// Observe the new validator balance and write it to the state,
-    /// distribute any rewards received.
-    pub async fn try_collect_validator_fee(
-        &mut self,
-        validator_vote_account: Pubkey,
-    ) -> transport::Result<Lamports> {
-        let solido = self.get_solido().await;
-        let reserve_balance_before = self.get_sol_balance(self.reserve_address).await;
-        let rewards_withdraw_authority = solido
-            .get_rewards_withdraw_authority(&id(), &self.solido.pubkey())
-            .unwrap();
-        let vote_account = self.get_account(validator_vote_account).await;
-        let vote_account_rent = self
-            .get_rent()
-            .await
-            .minimum_balance(vote_account.data.len());
-        send_transaction(
-            &mut self.context,
-            &mut self.nonce,
-            &[instruction::collect_validator_fee(
-                &id(),
-                &instruction::CollectValidatorFeeMeta {
-                    lido: self.solido.pubkey(),
-                    validator_vote_account,
-                    st_sol_mint: self.st_sol_mint,
-                    mint_authority: self.mint_authority,
-                    treasury_st_sol_account: self.treasury_st_sol_account,
-                    developer_st_sol_account: self.developer_st_sol_account,
-                    reserve: self.reserve_address,
-                    rewards_withdraw_authority,
-                },
-            )],
-            vec![],
-        )
-        .await?;
-        let reserve_balance_after = self.get_sol_balance(self.reserve_address).await;
-        let vote_account = self.get_account(validator_vote_account).await;
-        assert_eq!(vote_account.lamports(), vote_account_rent);
-
-        Ok((reserve_balance_after - reserve_balance_before)
-            .expect("Reserve balance should have increased after validator fee collection."))
-    }
-
-    pub async fn collect_validator_fee(&mut self, validator_vote_account: Pubkey) -> Lamports {
-        self.try_collect_validator_fee(validator_vote_account)
-            .await
-            .expect("Failed to collect validator fee.")
-    }
-
-    /// Claim validator fee and return the amount claimed.
-    pub async fn try_claim_validator_fee(
-        &mut self,
-        validator_vote_account: Pubkey,
-    ) -> transport::Result<StLamports> {
-        let solido_before = self.get_solido().await;
-        let validator_before = solido_before
-            .validators
-            .get(&validator_vote_account)
-            .unwrap();
-
-        let validator_balance_before = self
-            .get_st_sol_balance(validator_before.entry.fee_address)
-            .await;
-
-        send_transaction(
-            &mut self.context,
-            &mut self.nonce,
-            &[instruction::claim_validator_fee(
-                &id(),
-                &instruction::ClaimValidatorFeeMeta {
-                    lido: self.solido.pubkey(),
-                    validator_fee_st_sol_account: validator_before.entry.fee_address,
-                    st_sol_mint: self.st_sol_mint,
-                    mint_authority: self.mint_authority,
-                },
-            )],
-            vec![],
-        )
-        .await?;
-        let solido_after = self.get_solido().await;
-        let validator_after = solido_after
-            .validators
-            .get(&validator_vote_account)
-            .unwrap();
-        // Assert all the credits are taken from.
-        assert_eq!(validator_after.entry.fee_credit, StLamports(0));
-
-        let validator_balance_after = self
-            .get_st_sol_balance(validator_before.entry.fee_address)
-            .await;
-
-        // Assert validator's balance increased by the `fee_credit`.
-        assert_eq!(
-            validator_balance_after,
-            (validator_balance_before + validator_before.entry.fee_credit).unwrap()
-        );
-
-        Ok(validator_before.entry.fee_credit)
-    }
-
-    pub async fn claim_validator_fee(&mut self, validator_vote_account: Pubkey) -> StLamports {
-        self.try_claim_validator_fee(validator_vote_account)
-            .await
-            .expect("Failed to claim validator fee.")
     }
 
     pub async fn try_get_account(&mut self, address: Pubkey) -> Option<Account> {
