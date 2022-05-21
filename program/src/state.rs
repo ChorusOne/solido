@@ -634,6 +634,12 @@ pub struct Validator {
     /// Sum of the balances of the unstake accounts.
     pub unstake_accounts_balance: Lamports,
 
+    /// Sum of activating and active balances of the stake accounts.
+    pub activating_active_balance: Lamports,
+
+    /// Sum of deactivating and inactive balances of the unstake accounts.
+    pub deactivating_inactive_balance: Lamports,
+
     /// Controls if a validator is allowed to have new stake deposits.
     /// When removing a validator, this flag should be set to `false`.
     pub active: bool,
@@ -695,6 +701,20 @@ impl Validator {
         (self.stake_accounts_balance - self.unstake_accounts_balance)
             .expect("Unstake balance cannot exceed the validator's total stake balance.")
     }
+
+    pub fn observe_balance(observed: Lamports, tracked: Lamports, info: &str) -> ProgramResult {
+        if observed < tracked {
+            msg!(
+                "{}: observed balance of {} is less than tracked balance of {}.",
+                info,
+                observed,
+                tracked
+            );
+            msg!("This should not happen, aborting ...");
+            return Err(LidoError::ValidatorBalanceDecreased.into());
+        }
+        Ok(())
+    }
 }
 
 impl Default for Validator {
@@ -704,6 +724,8 @@ impl Default for Validator {
             unstake_seeds: SeedRange { begin: 0, end: 0 },
             stake_accounts_balance: Lamports(0),
             unstake_accounts_balance: Lamports(0),
+            activating_active_balance: Lamports(0),
+            deactivating_inactive_balance: Lamports(0),
             active: true,
         }
     }

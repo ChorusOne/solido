@@ -13,9 +13,7 @@ use serde_derive::{Deserialize, Serialize};
 use solana_program::{
     clock::{Slot, UnixTimestamp},
     hash::Hash,
-    instruction::{AccountMeta, Instruction},
     pubkey::Pubkey,
-    vote,
 };
 
 // FIXME: copied from the solana vote program.
@@ -105,24 +103,4 @@ pub enum VoteInstruction {
     ///   2. [] Clock sysvar
     ///   3. [SIGNER] Vote authority
     VoteSwitch(Vote, Hash),
-}
-
-// FIXME: copied from the solana vote program.
-pub fn withdraw(
-    vote_pubkey: &Pubkey,
-    authorized_withdrawer_pubkey: &Pubkey,
-    lamports: u64,
-    to_pubkey: &Pubkey,
-) -> Instruction {
-    let account_metas = vec![
-        AccountMeta::new(*vote_pubkey, false),
-        AccountMeta::new(*to_pubkey, false),
-        AccountMeta::new_readonly(*authorized_withdrawer_pubkey, true),
-    ];
-
-    Instruction::new_with_bincode(
-        vote::program::id(),
-        &VoteInstruction::Withdraw(lamports),
-        account_metas,
-    )
 }
