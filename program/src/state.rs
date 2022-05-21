@@ -34,7 +34,7 @@ pub const LIDO_VERSION: u8 = 0;
 ///
 /// To update this, run the tests and replace the value here with the test output.
 pub const LIDO_CONSTANT_SIZE: usize = 358;
-pub const VALIDATOR_CONSTANT_SIZE: usize = 89;
+pub const VALIDATOR_CONSTANT_SIZE: usize = 49;
 
 pub type Validators = AccountMap<Validator>;
 
@@ -591,20 +591,14 @@ impl Lido {
 
     /// Return the total amount of stSOL in existence.
     ///
-    /// The total is the amount minted so far, plus any unminted rewards that validators
-    /// are entitled to, but haven’t claimed yet.
+    /// The total is the amount minted so far
     pub fn get_st_sol_supply(&self, st_sol_mint: &AccountInfo) -> Result<StLamports, ProgramError> {
         self.check_mint_is_st_sol_mint(st_sol_mint)?;
 
         let st_sol_mint = Mint::unpack_from_slice(&st_sol_mint.data.borrow())?;
         let minted_supply = StLamports(st_sol_mint.supply);
 
-        let credit: token::Result<StLamports> =
-            self.validators.iter_entries().map(|v| v.fee_credit).sum();
-
-        let result = credit.and_then(|s| s + minted_supply)?;
-
-        Ok(result)
+        Ok(minted_supply)
     }
 
     pub fn check_exchange_rate_last_epoch(
@@ -629,13 +623,6 @@ impl Lido {
 #[repr(C)]
 #[derive(Clone, Debug, Eq, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema, Serialize)]
 pub struct Validator {
-    /// Fees in stSOL that the validator is entitled too, but hasn't claimed yet.
-    pub fee_credit: StLamports,
-
-    /// SPL token account denominated in stSOL to transfer fees to when claiming them.
-    #[serde(serialize_with = "serialize_b58")]
-    pub fee_address: Pubkey,
-
     /// Seeds for active stake accounts.
     pub stake_seeds: SeedRange,
     /// Seeds for inactive stake accounts.
@@ -697,9 +684,8 @@ impl IntoIterator for &SeedRange {
 }
 
 impl Validator {
-    pub fn new(fee_address: Pubkey) -> Validator {
+    pub fn new() -> Validator {
         Validator {
-            fee_address,
             ..Default::default()
         }
     }
@@ -714,8 +700,6 @@ impl Validator {
 impl Default for Validator {
     fn default() -> Self {
         Validator {
-            fee_address: Pubkey::default(),
-            fee_credit: StLamports(0),
             stake_seeds: SeedRange { begin: 0, end: 0 },
             unstake_seeds: SeedRange { begin: 0, end: 0 },
             stake_accounts_balance: Lamports(0),
@@ -736,9 +720,6 @@ impl Validator {
     pub fn check_can_be_removed(&self) -> Result<(), LidoError> {
         if self.active {
             return Err(LidoError::ValidatorIsStillActive);
-        }
-        if self.fee_credit != StLamports(0) {
-            return Err(LidoError::ValidatorHasUnclaimedCredit);
         }
         if self.has_stake_accounts() {
             return Err(LidoError::ValidatorShouldHaveNoStakeAccounts);
@@ -876,31 +857,21 @@ impl RewardDistribution {
     /// deposited it. The remaining SOL, which is not taken as a fee, acts as a
     /// donation to the pool, and makes the SOL value of stSOL go up. It is not
     /// included in the output, as nothing needs to be done to handle it.
-    pub fn split_reward(&self, amount: Lamports, num_validators: u64) -> token::Result<Fees> {
+    pub fn split_reward(&self, amount: Lamports) -> token::Result<Fees> {
         use std::ops::Add;
 
         let treasury_amount = (amount * self.treasury_fraction())?;
         let developer_amount = (amount * self.developer_fraction())?;
 
-        // The actual amount that goes to validation can be a tiny bit lower
-        // than the target amount, when the number of validators does not divide
-        // the target amount. The loss is at most `num_validators` Lamports.
-        let validation_amount = (amount * self.validation_fraction())?;
-        let reward_per_validator = (validation_amount / num_validators)?;
-
         // Sanity check: We should not produce more fees than we had to split in
         // the first place.
-        let total_fees = Lamports(0)
-            .add(treasury_amount)?
-            .add(developer_amount)?
-            .add((reward_per_validator * num_validators)?)?;
+        let total_fees = Lamports(0).add(treasury_amount)?.add(developer_amount)?;
         assert!(total_fees <= amount);
 
         let st_sol_appreciation_amount = (amount - total_fees)?;
 
         let result = Fees {
             treasury_amount,
-            reward_per_validator,
             developer_amount,
             st_sol_appreciation_amount,
         };
@@ -916,7 +887,6 @@ impl RewardDistribution {
 #[derive(Debug, PartialEq, Eq)]
 pub struct Fees {
     pub treasury_amount: Lamports,
-    pub reward_per_validator: Lamports,
     pub developer_amount: Lamports,
 
     /// Remainder of the reward.
@@ -1231,16 +1201,6 @@ mod test_lido {
         assert_eq!(
             lido.get_st_sol_supply(&st_sol_mint),
             Ok(StLamports(200_000)),
-        );
-
-        lido.validators.maximum_entries = 1;
-        lido.validators
-            .add(Pubkey::new_unique(), Validator::new(Pubkey::new_unique()))
-            .unwrap();
-        lido.validators.entries[0].entry.fee_credit = StLamports(37);
-        assert_eq!(
-            lido.get_st_sol_supply(&st_sol_mint),
-            Ok(StLamports(200_000 + 37))
         );
 
         lido.st_sol_mint = Pubkey::new_unique();

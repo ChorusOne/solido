@@ -194,7 +194,7 @@ package "Unstake" {
     # stake_program: <font color="grey">AccountInfo
     {method} amount: <font color="grey">u32
     }
-    note top: Unstake from a validator to a new stake account
+    note top: Unstake from a validator to a new unstake account\nCaller must be a maintainer
 
     class destination_unstake_account{
       [2] deactivate this account

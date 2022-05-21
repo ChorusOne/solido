@@ -6,7 +6,7 @@ use solana_program::program_option::COption;
 use solana_program::program_pack::Pack;
 use solana_program::stake::state::StakeAuthorize;
 use solana_program::{
-    account_info::AccountInfo, msg, program::invoke, program::invoke_signed,
+    account_info::AccountInfo, clock::Clock, msg, program::invoke, program::invoke_signed,
     program_error::ProgramError, pubkey::Pubkey, rent::Rent, stake as stake_program,
     system_instruction,
 };
@@ -15,8 +15,7 @@ use crate::processor::StakeType;
 use crate::STAKE_AUTHORITY;
 use crate::{
     error::LidoError,
-    instruction::{CollectValidatorFeeInfo, UnstakeAccountsInfo, WithdrawAccountsInfo},
-    state::Fees,
+    instruction::{UnstakeAccountsInfo, WithdrawAccountsInfo, WithdrawInactiveStakeInfo},
     state::Lido,
     token::{Lamports, StLamports},
     MINT_AUTHORITY, RESERVE_ACCOUNT,
@@ -318,27 +317,39 @@ pub fn transfer_stake_authority(
     )
 }
 
-/// Mint stSOL for the given fees, and transfer them to the appropriate accounts.
-pub fn distribute_fees<'a, 'b>(
-    solido: &mut Lido,
-    accounts: &CollectValidatorFeeInfo<'a, 'b>,
-    fees: Fees,
+/// Mints developer and treasury fees proportional to rewards.
+/// This function can only be called after the exchange rate is updated with
+/// `process_update_exchange_rate`.
+pub fn distribute_fees(
+    lido: &mut Lido,
+    accounts: &WithdrawInactiveStakeInfo,
+    clock: &Clock,
+    rewards: Lamports,
 ) -> ProgramResult {
+    if rewards == Lamports(0) {
+        return Ok(());
+    }
+
+    // Confirm that the passed accounts are the ones configured in the state,
+    // and confirm that they can receive stSOL.
+    lido.check_mint_is_st_sol_mint(accounts.st_sol_mint)?;
+    lido.check_treasury_fee_st_sol_account(accounts.treasury_st_sol_account)?;
+    lido.check_developer_fee_st_sol_account(accounts.developer_st_sol_account)?;
+
+    lido.check_exchange_rate_last_epoch(&clock, "distribute_fees")?;
+
+    let fees = lido.reward_distribution.split_reward(rewards)?;
+
     // Convert all fees to stSOL according to the previously updated exchange rate.
     // In the case of fees, the SOL is already part of one of the stake accounts,
     // but we do still need to mint stSOL to represent it.
 
-    let treasury_amount = solido.exchange_rate.exchange_sol(fees.treasury_amount)?;
-
-    let developer_amount = solido.exchange_rate.exchange_sol(fees.developer_amount)?;
-
-    let per_validator_amount = solido
-        .exchange_rate
-        .exchange_sol(fees.reward_per_validator)?;
+    let treasury_amount = lido.exchange_rate.exchange_sol(fees.treasury_amount)?;
+    let developer_amount = lido.exchange_rate.exchange_sol(fees.developer_amount)?;
 
     // The treasury and developer fee we can mint and pay immediately.
     mint_st_sol_to(
-        solido,
+        lido,
         accounts.lido.key,
         accounts.spl_token_program,
         accounts.st_sol_mint,
@@ -347,7 +358,7 @@ pub fn distribute_fees<'a, 'b>(
         treasury_amount,
     )?;
     mint_st_sol_to(
-        solido,
+        lido,
         accounts.lido.key,
         accounts.spl_token_program,
         accounts.st_sol_mint,
@@ -356,29 +367,12 @@ pub fn distribute_fees<'a, 'b>(
         developer_amount,
     )?;
 
-    // For the validators, as there can be many of them, we can't pay all of
-    // them in a single transaction. Instead, we store how much they are
-    // entitled to, and they can later claim it themselves with `ClaimValidatorFee`.
-    let mut fee_validation_sol = Lamports(0);
-    let mut fee_validation_st_sol = StLamports(0);
-    for validator in solido.validators.iter_entries_mut() {
-        validator.fee_credit = (validator.fee_credit + per_validator_amount)?;
-        fee_validation_sol = (fee_validation_sol + fees.reward_per_validator)?;
-        fee_validation_st_sol = (fee_validation_st_sol + per_validator_amount)?;
-    }
-
     // Also record our rewards in the metrics.
-    solido
-        .metrics
+    lido.metrics
         .observe_fee_treasury(fees.treasury_amount, treasury_amount)?;
-    solido
-        .metrics
-        .observe_fee_validation(fee_validation_sol, fee_validation_st_sol)?;
-    solido
-        .metrics
+    lido.metrics
         .observe_fee_developer(fees.developer_amount, developer_amount)?;
-    solido
-        .metrics
+    lido.metrics
         .observe_reward_st_sol_appreciation(fees.st_sol_appreciation_amount)?;
 
     Ok(())

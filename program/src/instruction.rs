@@ -12,7 +12,6 @@ use solana_program::{
     pubkey::Pubkey,
     stake as stake_program, system_program,
     sysvar::{self, stake_history},
-    vote,
 };
 
 use crate::{
@@ -71,11 +70,9 @@ pub enum LidoInstruction {
     /// Observe any external changes in the balances of a validator's stake accounts.
     ///
     /// If there is inactive balance in stake accounts, withdraw this back to the reserve.
+    /// Distribute fees.
     WithdrawInactiveStake,
 
-    /// Claim rewards from the validator account and distribute rewards.
-    CollectValidatorFee,
-    ClaimValidatorFee,
     ChangeRewardDistribution {
         #[allow(dead_code)] // but it's not
         new_reward_distribution: RewardDistribution,
@@ -467,6 +464,34 @@ accounts_struct! {
             is_writable: true,
         },
 
+        // Updating balances also immediately mints rewards, so we need the stSOL
+        // mint, and the fee accounts to deposit the stSOL into.
+        pub st_sol_mint {
+            is_signer: false,
+            // Is writable due to fee mint (spl_token::instruction::mint_to)
+            is_writable: true,
+        },
+
+        // Mint authority is required to mint tokens.
+        pub mint_authority {
+            is_signer: false,
+            is_writable: false,
+        },
+
+        pub treasury_st_sol_account {
+            is_signer: false,
+            // Is writable due to fee mint (spl_token::instruction::mint_to) to treasury
+            is_writable: true,
+        },
+        pub developer_st_sol_account {
+            is_signer: false,
+            // Is writable due to fee mint (spl_token::instruction::mint_to) to developer
+            is_writable: true,
+        },
+
+        // Needed for minting rewards.
+        const spl_token_program = spl_token::id(),
+
         // We only allow updating balances if the exchange rate is up to date,
         // so we need to know the current epoch.
         const sysvar_clock = sysvar::clock::id(),
@@ -497,85 +522,6 @@ pub fn withdraw_inactive_stake(
         program_id: *program_id,
         accounts: accounts.to_vec(),
         data: LidoInstruction::WithdrawInactiveStake.to_vec(),
-    }
-}
-
-accounts_struct! {
-    // Note: there are no signers among these accounts, updating a validator
-    // account is permissionless, anybody can do it.
-    CollectValidatorFeeMeta, CollectValidatorFeeInfo {
-        pub lido {
-            is_signer: false,
-            is_writable: true,
-        },
-        // The validator to update the balance for.
-        // Needs to be writable so we withdraw from it.
-        pub validator_vote_account {
-            is_signer: false,
-            // Is writable due to withdraw to reserve (vote_instruction::withdraw)
-            is_writable: true,
-        },
-
-        // Updating balances also immediately mints rewards, so we need the stSOL
-        // mint, and the fee accounts to deposit the stSOL into.
-        pub st_sol_mint {
-            is_signer: false,
-            // Is writable due to fee mint (spl_token::instruction::mint_to)
-            is_writable: true,
-        },
-
-        // Mint authority is required to mint tokens.
-        pub mint_authority {
-            is_signer: false,
-            is_writable: false,
-        },
-
-        pub treasury_st_sol_account {
-            is_signer: false,
-            // Is writable due to fee mint (spl_token::instruction::mint_to) to treasury
-            is_writable: true,
-        },
-        pub developer_st_sol_account {
-            is_signer: false,
-            // Is writable due to fee mint (spl_token::instruction::mint_to) to developer
-            is_writable: true,
-        },
-
-        pub reserve {
-            is_signer: false,
-            // Is writable due to withdraw to reserve (vote_instruction::withdraw)
-            is_writable: true,
-        },
-        // Used to get the rewards out of the validator vote account.
-        pub rewards_withdraw_authority {
-            is_signer: false,
-            is_writable: false,
-        },
-
-        // We only allow updating balances if the exchange rate is up to date,
-        // so we need to know the current epoch.
-        const sysvar_clock = sysvar::clock::id(),
-
-        // Needed for minting rewards.
-        const spl_token_program = spl_token::id(),
-
-        // Needed to calculate the validator's vote account rent exempt, so it
-        // can subtracted from the rewards.
-        const sysvar_rent = sysvar::rent::id(),
-
-        // Needed to withdraw from the vote account.
-        const vote_program = vote::program::id(),
-    }
-}
-
-pub fn collect_validator_fee(
-    program_id: &Pubkey,
-    accounts: &CollectValidatorFeeMeta,
-) -> Instruction {
-    Instruction {
-        program_id: *program_id,
-        accounts: accounts.to_vec(),
-        data: LidoInstruction::CollectValidatorFee.to_vec(),
     }
 }
 
@@ -721,14 +667,6 @@ accounts_struct! {
             is_writable: true,
         },
         const spl_token = spl_token::id(),
-    }
-}
-
-pub fn claim_validator_fee(program_id: &Pubkey, accounts: &ClaimValidatorFeeMeta) -> Instruction {
-    Instruction {
-        program_id: *program_id,
-        accounts: accounts.to_vec(),
-        data: LidoInstruction::ClaimValidatorFee.to_vec(),
     }
 }
 

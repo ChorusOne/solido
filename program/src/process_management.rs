@@ -13,12 +13,10 @@ use crate::vote_state::PartialVoteState;
 use crate::{
     error::LidoError,
     instruction::{
-        AddMaintainerInfo, AddValidatorInfo, ChangeRewardDistributionInfo, ClaimValidatorFeeInfo,
-        DeactivateValidatorInfo, MergeStakeInfo, RemoveMaintainerInfo, RemoveValidatorInfo,
+        AddMaintainerInfo, AddValidatorInfo, ChangeRewardDistributionInfo, DeactivateValidatorInfo,
+        MergeStakeInfo, RemoveMaintainerInfo, RemoveValidatorInfo,
     },
-    logic::mint_st_sol_to,
     state::{RewardDistribution, Validator},
-    token::StLamports,
     STAKE_AUTHORITY,
 };
 
@@ -64,10 +62,8 @@ pub fn process_add_validator(program_id: &Pubkey, accounts_raw: &[AccountInfo]) 
         lido.max_validator_fee,
     )?;
 
-    lido.validators.add(
-        *accounts.validator_vote_account.key,
-        Validator::new(*accounts.validator_fee_st_sol_account.key),
-    )?;
+    lido.validators
+        .add(*accounts.validator_vote_account.key, Validator::new())?;
 
     lido.save(accounts.lido)
 }
@@ -116,35 +112,6 @@ pub fn process_deactivate_validator(
     validator.entry.active = false;
     msg!("Validator {} deactivated.", validator.pubkey);
 
-    lido.save(accounts.lido)
-}
-
-pub fn process_claim_validator_fee(
-    program_id: &Pubkey,
-    accounts_raw: &[AccountInfo],
-) -> ProgramResult {
-    let accounts = ClaimValidatorFeeInfo::try_from_slice(accounts_raw)?;
-    let mut lido = Lido::deserialize_lido(program_id, accounts.lido)?;
-
-    let pubkey_entry = lido
-        .validators
-        .entries
-        .iter_mut()
-        .find(|pe| &pe.entry.fee_address == accounts.validator_fee_st_sol_account.key)
-        .ok_or(LidoError::InvalidValidatorCreditAccount)?;
-
-    let amount_claimed = pubkey_entry.entry.fee_credit;
-    pubkey_entry.entry.fee_credit = StLamports(0);
-
-    mint_st_sol_to(
-        &lido,
-        accounts.lido.key,
-        accounts.spl_token,
-        accounts.st_sol_mint,
-        accounts.mint_authority,
-        accounts.validator_fee_st_sol_account,
-        amount_claimed,
-    )?;
     lido.save(accounts.lido)
 }
 
