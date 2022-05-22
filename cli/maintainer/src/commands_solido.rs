@@ -207,7 +207,7 @@ pub fn command_create_solido(
         },
         *opts.max_validators(),
         *opts.max_maintainers(),
-        *opts.max_validator_fee(),
+        *opts.max_validation_fee(),
         &lido::instruction::InitializeAccountsMeta {
             lido: lido_signer.pubkey(),
             st_sol_mint: st_sol_mint_pubkey,

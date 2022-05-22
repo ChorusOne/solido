@@ -34,7 +34,7 @@ impl PartialVoteState {
         program_id: &Pubkey,
         lido_address: &Pubkey,
         validator_vote_account: &AccountInfo,
-        max_validator_fee: u8,
+        max_validation_fee: u8,
     ) -> Result<Self, LidoError> {
         if validator_vote_account.owner != &solana_program::vote::program::id() {
             msg!(
@@ -81,10 +81,10 @@ impl PartialVoteState {
         }
         // Read 1 byte for u8.
         let commission = data[68];
-        if commission > max_validator_fee {
+        if commission > max_validation_fee {
             msg!(
                 "Vote Account's commission should be <= {}, is {} instead",
-                max_validator_fee,
+                max_validation_fee,
                 commission
             );
             return Err(LidoError::InvalidVoteAccount);

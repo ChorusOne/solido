@@ -32,7 +32,7 @@ pub enum LidoInstruction {
         #[allow(dead_code)] // but it's not
         max_maintainers: u32,
         #[allow(dead_code)] // but it's not
-        max_validator_fee: u8,
+        max_validation_fee: u8,
     },
 
     /// Deposit a given amount of SOL.
@@ -149,14 +149,14 @@ pub fn initialize(
     reward_distribution: RewardDistribution,
     max_validators: u32,
     max_maintainers: u32,
-    max_validator_fee: u8,
+    max_validation_fee: u8,
     accounts: &InitializeAccountsMeta,
 ) -> Instruction {
     let data = LidoInstruction::Initialize {
         reward_distribution,
         max_validators,
         max_maintainers,
-        max_validator_fee,
+        max_validation_fee,
     };
     Instruction {
         program_id: *program_id,

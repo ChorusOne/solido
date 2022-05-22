@@ -222,7 +222,7 @@ pub struct Lido {
     pub validators: Validators,
 
     /// Maximum validation fee
-    pub max_validator_fee: u8,
+    pub max_validation_fee: u8,
 
     /// The set of maintainers.
     ///
@@ -995,7 +995,7 @@ mod test_lido {
             metrics: Metrics::new(),
             validators: validators,
             maintainers: maintainers,
-            max_validator_fee: 5,
+            max_validation_fee: 5,
         };
         let mut data = Vec::new();
         BorshSerialize::serialize(&lido, &mut data).unwrap();

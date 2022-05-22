@@ -59,7 +59,7 @@ pub fn process_add_validator(program_id: &Pubkey, accounts_raw: &[AccountInfo]) 
         program_id,
         accounts.lido.key,
         accounts.validator_vote_account,
-        lido.max_validator_fee,
+        lido.max_validation_fee,
     )?;
 
     lido.validators
