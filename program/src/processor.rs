@@ -309,10 +309,6 @@ pub fn process_stake_deposit(
     msg!("Staked {} out of the reserve.", amount);
     validator.entry.stake_accounts_balance = (validator.entry.stake_accounts_balance + amount)?;
 
-    // We are delegating/merging amount of stake, so this amount becomes immediately activating/active
-    validator.entry.activating_active_balance =
-        (validator.entry.activating_active_balance + amount)?;
-
     // Now we have two options:
     //
     // 1. This was the first time we stake in this epoch, so we cannot merge the
@@ -522,12 +518,6 @@ pub fn process_unstake(
     validator.entry.unstake_accounts_balance = (validator.entry.unstake_accounts_balance + amount)?;
     validator.entry.unstake_seeds.end += 1;
 
-    // We are deactivating amount of stake, so it becomes deactivating immediately
-    validator.entry.activating_active_balance =
-        (validator.entry.activating_active_balance - amount)?;
-    validator.entry.deactivating_inactive_balance =
-        (validator.entry.deactivating_inactive_balance + amount)?;
-
     lido.save(accounts.lido)
 }
 
@@ -688,7 +678,6 @@ pub fn process_withdraw_inactive_stake(
 
     let mut stake_observed_total = Lamports(0);
     let mut excess_removed = Lamports(0);
-    let mut activating_active_total = Lamports(0);
     let n_stake_accounts = validator.entry.stake_seeds.end - validator.entry.stake_seeds.begin;
     let n_unstake_accounts =
         validator.entry.unstake_seeds.end - validator.entry.unstake_seeds.begin;
@@ -739,9 +728,6 @@ pub fn process_withdraw_inactive_stake(
 
         excess_removed = (excess_removed + amount)?;
         stake_observed_total = (stake_observed_total + account_balance)?;
-
-        activating_active_total = (activating_active_total + stake_account.balance.activating)?;
-        activating_active_total = (activating_active_total + stake_account.balance.active)?;
     }
 
     // Solana has no slashing at the time of writing, and only Solido can
@@ -751,11 +737,6 @@ pub fn process_withdraw_inactive_stake(
         stake_observed_total,
         validator.entry.effective_stake_balance(),
         "Stake",
-    )?;
-    Validator::observe_balance(
-        activating_active_total,
-        validator.entry.activating_active_balance,
-        "Active and activating",
     )?;
 
     // We tracked in `stake_accounts_balance` what we put in there ourselves, so
@@ -767,7 +748,6 @@ pub fn process_withdraw_inactive_stake(
     // Try to withdraw from unstake accounts.
     let mut unstake_removed = Lamports(0);
     let mut unstake_observed_total = Lamports(0);
-    let mut deactivating_inactive_total = Lamports(0);
     for (seed, unstake_account) in validator // two similar for loops, need refactoring
         .entry
         .unstake_seeds
@@ -817,11 +797,6 @@ pub fn process_withdraw_inactive_stake(
             unstake_removed = (unstake_removed + stake_account.balance.inactive)?;
         }
         unstake_observed_total = (unstake_observed_total + account_balance)?;
-
-        deactivating_inactive_total =
-            (deactivating_inactive_total + stake_account.balance.deactivating)?;
-        deactivating_inactive_total =
-            (deactivating_inactive_total + stake_account.balance.inactive)?;
     }
 
     Validator::observe_balance(
@@ -829,11 +804,12 @@ pub fn process_withdraw_inactive_stake(
         validator.entry.unstake_accounts_balance,
         "Unstake",
     )?;
-    Validator::observe_balance(
-        deactivating_inactive_total,
-        validator.entry.deactivating_inactive_balance,
-        "Deactivating and inactive",
-    )?;
+
+    // we track stake_accounts_balance, so only rewards and
+    // donations (which we consider rewards) can make a difference
+    let stake_total_with_rewards = (stake_observed_total + unstake_observed_total)?;
+    let rewards = (stake_total_with_rewards - validator.entry.stake_accounts_balance)
+        .expect("Does not underflow, because tracked balance <= total.");
 
     // Store the new total. If we withdrew any inactive stake back to the
     // reserve, that is now no longer part of the stake accounts, so subtract
@@ -847,22 +823,6 @@ pub fn process_withdraw_inactive_stake(
         .add(validator.entry.unstake_accounts_balance)
         .expect("If Solido has enough SOL to make this overflow, something has gone very wrong.");
 
-    // Rewards can arrive to stake accounts as active and to unstake accounts as inactive.
-    // We increase activating_active_balance on depositing stake and decrease on unstake and
-    // withdraw. We increase deactivating_inactive_balance on unstake.
-    // When stake is activating and then becomes activate activating_active_balance does not change.
-    // When stake is deactivating and then becomes inactive deactivating_inactive_balance does not change.
-    // So when we get here only rewards can change the balances. We take the difference between
-    // a current value and a saved one as rewards.
-    let rewards_stake = (activating_active_total - validator.entry.activating_active_balance)?;
-    let rewards_unstake =
-        (deactivating_inactive_total - validator.entry.deactivating_inactive_balance)?;
-
-    // Update in case rewards arrived.
-    validator.entry.activating_active_balance = activating_active_total;
-    validator.entry.deactivating_inactive_balance = deactivating_inactive_total;
-
-    let rewards = (rewards_stake + rewards_unstake)?;
     distribute_fees(&mut lido, &accounts, &clock, rewards)?;
 
     lido.save(accounts.lido)
@@ -973,10 +933,6 @@ pub fn process_withdraw(
 
     provided_validator.entry.stake_accounts_balance =
         (provided_validator.entry.stake_accounts_balance - sol_to_withdraw)?;
-
-    // we transfer authority to a user, so the amount is not a validator's active stake anymore
-    provided_validator.entry.activating_active_balance =
-        (provided_validator.entry.activating_active_balance - sol_to_withdraw)?;
 
     // Burn stSol tokens
     burn_st_sol(&lido, &accounts, amount)?;
