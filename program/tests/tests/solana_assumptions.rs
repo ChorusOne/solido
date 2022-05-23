@@ -92,8 +92,8 @@ async fn measure_staking_rewards(mode: StakeMode) -> Lamports {
 
     context.advance_to_normal_epoch(0);
 
-    // Create a stake account and delegate it to the vote account, which is a
-    // 100% commission vote account, so all rewards go to the vote account.
+    // Create a stake account and delegate it to the vote account, which is not a
+    // 100% commission vote account, so rewards go to the vote account and stake accounts.
     let stake_account = context
         .create_stake_account(amount, authority.pubkey())
         .await;
@@ -110,7 +110,8 @@ async fn measure_staking_rewards(mode: StakeMode) -> Lamports {
     // Move ahead one epoch so the stake becomes active.
     context.advance_to_normal_epoch(1);
 
-    let balance_t0 = context.get_sol_balance(vote_account).await;
+    let mut balance_t0 = context.get_sol_balance(vote_account).await;
+    balance_t0 = (balance_t0 + context.get_sol_balance(stake_account).await).unwrap();
 
     // Deactivate the stake if needed.
     match mode {
@@ -128,7 +129,8 @@ async fn measure_staking_rewards(mode: StakeMode) -> Lamports {
         .increment_vote_account_credits(&vote_account, 1);
     context.advance_to_normal_epoch(2);
 
-    let balance_t1 = context.get_sol_balance(vote_account).await;
+    let mut balance_t1 = context.get_sol_balance(vote_account).await;
+    balance_t1 = (balance_t1 + context.get_sol_balance(stake_account).await).unwrap();
 
     (balance_t1 - balance_t0).unwrap()
 }
@@ -148,7 +150,7 @@ async fn test_deactivating_stake_earns_rewards() {
     // does not prevent rewards.
     assert_eq!(rewards_inactive, Lamports(0));
     assert_eq!(rewards_active, Lamports(1_244_922_235_900));
-    assert_eq!(rewards_deactivating, Lamports(1_244_922_235_898));
+    assert_eq!(rewards_deactivating, Lamports(1_244_922_235_897));
 }
 
 #[tokio::test]

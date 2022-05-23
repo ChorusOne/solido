@@ -33,7 +33,7 @@ pub const LIDO_VERSION: u8 = 0;
 /// Size of a serialized `Lido` struct excluding validators and maintainers.
 ///
 /// To update this, run the tests and replace the value here with the test output.
-pub const LIDO_CONSTANT_SIZE: usize = 358;
+pub const LIDO_CONSTANT_SIZE: usize = 354;
 pub const VALIDATOR_CONSTANT_SIZE: usize = 49;
 
 pub type Validators = AccountMap<Validator>;
@@ -318,10 +318,7 @@ impl Lido {
 
     /// Checks if the passed maintainer belong to the list of maintainers
     pub fn check_maintainer(&self, maintainer: &AccountInfo) -> ProgramResult {
-        if !&self.maintainers.entries.contains(&PubkeyAndEntry {
-            pubkey: *maintainer.key,
-            entry: (),
-        }) {
+        if let Err(_) = self.maintainers.get(maintainer.key) {
             msg!(
                 "Invalid maintainer, account {} is not present in the maintainers list.",
                 maintainer.key
@@ -488,7 +485,6 @@ impl Lido {
     pub fn check_can_stake_amount(
         &self,
         reserve: &AccountInfo,
-        sysvar_rent: &AccountInfo,
         amount: Lamports,
     ) -> Result<(), ProgramError> {
         if amount < MINIMUM_STAKE_ACCOUNT_BALANCE {
@@ -501,7 +497,7 @@ impl Lido {
             return Err(LidoError::InvalidAmount.into());
         }
 
-        let rent: Rent = Rent::from_account_info(sysvar_rent)?;
+        let rent: Rent = Rent::get()?;
 
         let available_reserve_amount = get_reserve_available_balance(&rent, reserve)?;
         if amount > available_reserve_amount {
@@ -1239,7 +1235,7 @@ mod test_lido {
             Fees {
                 treasury_amount: Lamports(750),
                 developer_amount: Lamports(250),
-                st_sol_appreciation_amount: Lamports(2),
+                st_sol_appreciation_amount: Lamports(0),
             },
         );
 

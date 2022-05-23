@@ -65,7 +65,7 @@ pub fn process_initialize(
     accounts_raw: &[AccountInfo],
 ) -> ProgramResult {
     let accounts = InitializeAccountsInfo::try_from_slice(accounts_raw)?;
-    let rent = &Rent::from_account_info(accounts.sysvar_rent)?;
+    let rent = &Rent::get()?;
     check_rent_exempt(rent, accounts.lido, "Solido account")?;
     check_rent_exempt(rent, accounts.reserve_account, "Reserve account")?;
 
@@ -202,7 +202,7 @@ pub fn process_stake_deposit(
     lido.check_maintainer(accounts.maintainer)?;
     lido.check_reserve_account(program_id, accounts.lido.key, accounts.reserve)?;
     lido.check_stake_authority(program_id, accounts.lido.key, accounts.stake_authority)?;
-    lido.check_can_stake_amount(accounts.reserve, accounts.sysvar_rent, amount)?;
+    lido.check_can_stake_amount(accounts.reserve, amount)?;
 
     let validator = lido.validators.get(accounts.validator_vote_account.key)?;
 
@@ -529,8 +529,8 @@ pub fn process_update_exchange_rate(
     let mut lido = Lido::deserialize_lido(program_id, accounts.lido)?;
     lido.check_reserve_account(program_id, accounts.lido.key, accounts.reserve)?;
 
-    let clock = Clock::from_account_info(accounts.sysvar_clock)?;
-    let rent = Rent::from_account_info(accounts.sysvar_rent)?;
+    let clock = Clock::get()?;
+    let rent = Rent::get()?;
 
     if lido.exchange_rate.computed_in_epoch >= clock.epoch {
         msg!(
@@ -665,8 +665,8 @@ pub fn process_withdraw_inactive_stake(
     let accounts = WithdrawInactiveStakeInfo::try_from_slice(raw_accounts)?;
     let mut lido = Lido::deserialize_lido(program_id, accounts.lido)?;
     let stake_history = StakeHistory::from_account_info(accounts.sysvar_stake_history)?;
-    let clock = Clock::from_account_info(accounts.sysvar_clock)?;
-    let rent = Rent::from_account_info(accounts.sysvar_rent)?;
+    let clock = Clock::get()?;
+    let rent = Rent::get()?;
 
     // Confirm that the passed accounts are the ones configured in the state,
     // and confirm that they can receive stSOL.
@@ -838,7 +838,7 @@ pub fn process_withdraw(
 ) -> ProgramResult {
     let accounts = WithdrawAccountsInfo::try_from_slice(raw_accounts)?;
     let mut lido = Lido::deserialize_lido(program_id, accounts.lido)?;
-    let clock = Clock::from_account_info(accounts.sysvar_clock)?;
+    let clock = Clock::get()?;
     lido.check_exchange_rate_last_epoch(&clock, "Withdraw")?;
 
     // We should withdraw from the validator that has the most effective stake.

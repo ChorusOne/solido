@@ -5,10 +5,10 @@ use solana_program_test::tokio;
 use solana_sdk::signer::Signer;
 
 use testlib::assert_solido_error;
-use testlib::solido_context::{Context, StakeDeposit, ValidatorAccounts};
+use testlib::solido_context::{Context, ValidatorAccounts};
 
 use lido::error::LidoError;
-use lido::token::{Lamports, StLamports};
+use lido::token::Lamports;
 
 pub const TEST_DEPOSIT_AMOUNT: Lamports = Lamports(100_000_000_000);
 pub const TEST_STAKE_DEPOSIT_AMOUNT: Lamports = Lamports(10_000_000_000);
@@ -25,10 +25,6 @@ async fn test_successful_add_validator() {
     let solido = context.get_solido().await;
     assert_eq!(solido.validators.len(), 1);
     assert_eq!(solido.validators.entries[0].pubkey, validator.vote_account);
-    assert_eq!(
-        solido.validators.entries[0].entry.fee_address,
-        validator.fee_account
-    );
 
     // Adding the validator a second time should fail.
     let result = context.try_add_validator(&validator).await;
@@ -77,45 +73,6 @@ async fn test_successful_remove_validator() {
 
     let solido = context.get_solido().await;
     assert_eq!(solido.validators.len(), 0);
-}
-
-#[tokio::test]
-async fn test_remove_validator_with_unclaimed_credits() {
-    let mut context = Context::new_with_maintainer().await;
-    let validator = context.add_validator().await;
-    let initial_amount = Lamports(1_000_000_000);
-    context.deposit(initial_amount).await;
-    context
-        .stake_deposit(validator.vote_account, StakeDeposit::Append, initial_amount)
-        .await;
-
-    context
-        .context
-        .increment_vote_account_credits(&validator.vote_account, 1);
-
-    // Skip ahead a number of epochs.
-    context.advance_to_normal_epoch(0);
-    context
-        .context
-        .increment_vote_account_credits(&validator.vote_account, 1);
-
-    context.update_exchange_rate().await;
-    context.advance_to_normal_epoch(1);
-    context.update_exchange_rate().await;
-    context.collect_validator_fee(validator.vote_account).await;
-
-    let solido = context.get_solido().await;
-    let vote_account = solido.validators.entries[0].pubkey;
-    assert_eq!(
-        solido.validators.entries[0].entry.fee_credit,
-        StLamports(62_301_530_769)
-    );
-
-    context.deactivate_validator(vote_account).await;
-    // let solido = context.get_solido().await;
-    // let vote_account = solido.validators.entries[0].pubkey;
-    let result = context.try_remove_validator(vote_account).await;
-    assert_solido_error!(result, LidoError::ValidatorHasUnclaimedCredit);
 }
 
 #[tokio::test]

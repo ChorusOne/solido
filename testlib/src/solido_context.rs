@@ -93,6 +93,8 @@ pub struct Context {
     pub stake_authority: Pubkey,
     pub mint_authority: Pubkey,
     pub withdraw_authority: Pubkey,
+
+    pub max_validation_fee: u8,
 }
 
 pub struct ValidatorAccounts {
@@ -288,6 +290,7 @@ impl Context {
             mint_authority,
             withdraw_authority,
             deterministic_keypair,
+            max_validation_fee: 5,
         };
 
         result.st_sol_mint = result.create_mint(result.mint_authority).await;
@@ -302,7 +305,6 @@ impl Context {
 
         let max_validators = 10_000;
         let max_maintainers = 1000;
-        let max_validation_fee = 5;
         let solido_size = Lido::calculate_size(max_validators, max_maintainers);
         let rent = result.context.banks_client.get_rent().await.unwrap();
         let rent_solido = rent.minimum_balance(solido_size);
@@ -329,7 +331,7 @@ impl Context {
                     result.reward_distribution.clone(),
                     max_validators,
                     max_maintainers,
-                    max_validation_fee,
+                    result.max_validation_fee,
                     &instruction::InitializeAccountsMeta {
                         lido: result.solido.pubkey(),
                         manager: result.manager.pubkey(),
@@ -763,7 +765,11 @@ impl Context {
         let node_account = self.deterministic_keypair.new_keypair();
         let fee_account = self.create_st_sol_account(node_account.pubkey()).await;
         let vote_account = self
-            .create_vote_account(&node_account, self.withdraw_authority, 100)
+            .create_vote_account(
+                &node_account,
+                self.withdraw_authority,
+                self.max_validation_fee,
+            )
             .await;
 
         let accounts = ValidatorAccounts {

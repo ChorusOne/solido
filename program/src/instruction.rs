@@ -139,7 +139,6 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
-        const sysvar_rent = sysvar::rent::id(),
         const spl_token = spl_token::id(),
     }
 }
@@ -420,8 +419,6 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
-        const sysvar_clock = sysvar::clock::id(),
-        const sysvar_rent = sysvar::rent::id(),
     }
 }
 
@@ -495,9 +492,6 @@ accounts_struct! {
         // We only allow updating balances if the exchange rate is up to date,
         // so we need to know the current epoch.
         const sysvar_clock = sysvar::clock::id(),
-
-        // Needed to determine if there is excess balance in a stake account.
-        const sysvar_rent = sysvar::rent::id(),
 
         // Needed for the stake program, to withdraw from stake accounts.
         const sysvar_stake_history = sysvar::stake_history::id(),
@@ -583,7 +577,6 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
-        const sysvar_rent = sysvar::rent::id(),
     }
 }
 

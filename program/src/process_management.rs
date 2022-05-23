@@ -42,7 +42,7 @@ pub fn process_change_reward_distribution(
 pub fn process_add_validator(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> ProgramResult {
     let accounts = AddValidatorInfo::try_from_slice(accounts_raw)?;
     let mut lido = Lido::deserialize_lido(program_id, accounts.lido)?;
-    let rent = &Rent::from_account_info(accounts.sysvar_rent)?;
+    let rent = &Rent::get()?;
     lido.check_manager(accounts.manager)?;
     lido.check_is_st_sol_account(accounts.validator_fee_st_sol_account)?;
 
