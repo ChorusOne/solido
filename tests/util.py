@@ -10,6 +10,9 @@ import os.path
 import subprocess
 import sys
 
+from urllib import request
+from uuid import uuid4
+
 from typing import List, NamedTuple, Any, Optional, Callable, Dict
 
 
@@ -337,3 +340,43 @@ def wait_for_slots(slots: int) -> None:
         elapsed_slots = int(solana('get-slot')) - slots_beginning
         if elapsed_slots >= slots:
             break
+
+
+def solana_rpc(method: str, params: List[Any]) -> Any:
+    """
+    Make a Solana RPC call.
+
+    This function is very sloppy, doesn't do proper error handling, and is not
+    suitable for serious use, but for tests or checking things on devnet it's
+    useful.
+    """
+    body = {
+        'jsonrpc': '2.0',
+        'id': str(uuid4()),
+        'method': method,
+        'params': params,
+    }
+    req = request.Request(
+        get_network(),
+        method='POST',
+        data=json.dumps(body).encode('utf-8'),
+        headers={
+            'Content-Type': 'application/json',
+        },
+    )
+    response = request.urlopen(req)
+    return json.load(response)
+
+
+def rpc_get_account_info(address: str) -> Optional[Dict[str, Any]]:
+    """
+    Call getAccountInfo, see https://docs.solana.com/developing/clients/jsonrpc-api#getaccountinfo.
+    """
+    result: Dict[str, Any] = solana_rpc(
+        method='getAccountInfo',
+        params=[address, {'encoding': 'jsonParsed'}],
+    )
+    # The value is either an object with decoded account info, or None, if the
+    # account does not exist.
+    account_info: Optional[Dict[str, Any]] = result['result']['value']
+    return account_info
