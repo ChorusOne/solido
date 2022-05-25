@@ -28,6 +28,7 @@ from util import (
     solana_program_deploy,
     solido,
     spl_token,
+    MAX_VALIDATION_FEE
 )
 
 from typing import Any, Dict, NamedTuple, Tuple
@@ -135,14 +136,14 @@ result = solido(
     '9',
     '--max-maintainers',
     '1',
+    '--max-validation-fee',
+    str(MAX_VALIDATION_FEE),
     '--treasury-fee-share',
     '5',
-    '--validation-fee-share',
-    '3',
     '--developer-fee-share',
     '2',
     '--st-sol-appreciation-share',
-    '90',
+    '93',
     '--treasury-account-owner',
     treasury_account_owner.pubkey,
     '--developer-account-owner',
@@ -169,14 +170,14 @@ result = solido(
     '9',
     '--max-maintainers',
     '1',
+    '--max-validation-fee',
+    str(MAX_VALIDATION_FEE),
     '--treasury-fee-share',
     '5',
-    '--validation-fee-share',
-    '3',
     '--developer-fee-share',
     '2',
     '--st-sol-appreciation-share',
-    '90',
+    '93',
     '--treasury-account-owner',
     treasury_account_owner.pubkey,
     '--developer-account-owner',
@@ -208,9 +209,8 @@ assert solido_instance['solido']['exchange_rate'] == {
 }
 assert solido_instance['solido']['reward_distribution'] == {
     'treasury_fee': 5,
-    'validation_fee': 3,
     'developer_fee': 2,
-    'st_sol_appreciation': 90,
+    'st_sol_appreciation': 93,
 }
 
 validator_fee_account_owner = create_test_account(
@@ -241,6 +241,7 @@ def add_validator(
         f'tests/.keys/{keypath_vote}.json',
         account.keypair_path,
         solido_instance['rewards_withdraw_authority'],
+        MAX_VALIDATION_FEE
     )
     print(f'> Creating validator vote account {vote_account}')
     print(
@@ -324,8 +325,6 @@ solido_instance = solido(
 assert solido_instance['solido']['validators']['entries'][0] == {
     'pubkey': validator.vote_account.pubkey,
     'entry': {
-        'fee_credit': 0,
-        'fee_address': validator.fee_account,
         'stake_seeds': {
             'begin': 0,
             'end': 0,

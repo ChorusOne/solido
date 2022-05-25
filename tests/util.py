@@ -15,6 +15,8 @@ from uuid import uuid4
 
 from typing import List, NamedTuple, Any, Optional, Callable, Dict
 
+MAX_VALIDATION_FEE = 5
+
 
 class TestAccount(NamedTuple):
     pubkey: str
@@ -206,7 +208,8 @@ def create_stake_account(keypair_fname: str) -> TestAccount:
 
 
 def create_vote_account(
-    vote_key_fname: str, validator_key_fname: str, authorized_withdrawer: str
+    vote_key_fname: str, validator_key_fname: str, authorized_withdrawer: str,
+    commission: int
 ) -> TestAccount:
     """
     Generate a vote account for the validator
@@ -218,7 +221,7 @@ def create_vote_account(
         validator_key_fname,
         authorized_withdrawer,
         '--commission',
-        '100',
+        str(commission),
     )
     # Publish validator info for this new validator, because `show-solido`
     # requires validator info to be present.

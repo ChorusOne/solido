@@ -258,10 +258,6 @@ cli_opt_struct! {
         #[clap(long, value_name = "int")]
         treasury_fee_share: u32,
 
-        /// Validation fee share of the rewards.
-        #[clap(long, value_name = "int")]
-        validation_fee_share: u32,
-
         /// Developer fee share of the rewards.
         #[clap(long, value_name = "int")]
         developer_fee_share: u32,

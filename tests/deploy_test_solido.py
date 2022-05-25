@@ -23,6 +23,7 @@ from util import (
     multisig,
     get_approve_and_execute,
     get_solido_program_path,
+    MAX_VALIDATION_FEE
 )
 
 print('\nUploading Solido program ...')
@@ -64,14 +65,14 @@ result = solido(
     '9',
     '--max-maintainers',
     '3',
+    '--max-validation-fee',
+    str(MAX_VALIDATION_FEE),
     '--treasury-fee-share',
     '5',
-    '--validation-fee-share',
-    '3',
     '--developer-fee-share',
     '2',
     '--st-sol-appreciation-share',
-    '90',
+    '93',
     '--treasury-account-owner',
     st_sol_accounts_owner.pubkey,
     '--developer-account-owner',
