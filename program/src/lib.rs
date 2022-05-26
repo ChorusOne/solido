@@ -37,9 +37,6 @@ pub const VALIDATOR_STAKE_ACCOUNT: &[u8] = b"validator_stake_account";
 /// Additional seed for inactive/deactivating validator stake accounts.
 pub const VALIDATOR_UNSTAKE_ACCOUNT: &[u8] = b"validator_unstake_account";
 
-/// Authority responsible for withdrawing the stake rewards.
-pub const REWARDS_WITHDRAW_AUTHORITY: &[u8] = b"rewards_withdraw_authority";
-
 /// Finds the public key and bump seed for a given authority.  Since this
 /// function can take some time to run, it's preferred to use
 /// `Pubkey::create_program_address(seeds, program_id)` inside programs.

@@ -31,9 +31,7 @@ use lido::account_map::PubkeyAndEntry;
 use lido::processor::StakeType;
 use lido::stake_account::StakeAccount;
 use lido::token::{Lamports, StLamports};
-use lido::{
-    error::LidoError, instruction, RESERVE_ACCOUNT, REWARDS_WITHDRAW_AUTHORITY, STAKE_AUTHORITY,
-};
+use lido::{error::LidoError, instruction, RESERVE_ACCOUNT, STAKE_AUTHORITY};
 use lido::{
     state::{FeeRecipients, Lido, RewardDistribution, Validator},
     MINT_AUTHORITY,
@@ -92,7 +90,6 @@ pub struct Context {
     pub reserve_address: Pubkey,
     pub stake_authority: Pubkey,
     pub mint_authority: Pubkey,
-    pub withdraw_authority: Pubkey,
 
     pub max_validation_fee: u8,
 }
@@ -243,11 +240,6 @@ impl Context {
         let (mint_authority, _) =
             Pubkey::find_program_address(&[&solido.pubkey().to_bytes()[..], MINT_AUTHORITY], &id());
 
-        let (withdraw_authority, _) = Pubkey::find_program_address(
-            &[&solido.pubkey().to_bytes()[..], REWARDS_WITHDRAW_AUTHORITY],
-            &id(),
-        );
-
         let mut program_test = ProgramTest::default();
         // Note: the program name *must* match the name of the .so file that contains
         // the program. If it does not, then it will still partially work, but we get
@@ -287,7 +279,6 @@ impl Context {
             reserve_address,
             stake_authority,
             mint_authority,
-            withdraw_authority,
             deterministic_keypair,
             max_validation_fee: 5,
         };
@@ -762,11 +753,7 @@ impl Context {
     pub async fn add_validator(&mut self) -> ValidatorAccounts {
         let node_account = self.deterministic_keypair.new_keypair();
         let vote_account = self
-            .create_vote_account(
-                &node_account,
-                self.withdraw_authority,
-                self.max_validation_fee,
-            )
+            .create_vote_account(&node_account, Pubkey::new_unique(), self.max_validation_fee)
             .await;
 
         let accounts = ValidatorAccounts {

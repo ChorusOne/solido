@@ -190,7 +190,7 @@ async fn test_collect_validator_fee_rejects_foreign_validators() {
     // withdraw authority set to the instance).
     let validator_identity = context.deterministic_keypair.new_keypair();
     let vote_account = context
-        .create_vote_account(&validator_identity, context.withdraw_authority, 100)
+        .create_vote_account(&validator_identity, Pubkey::new_unique(), 100)
         .await;
     context.fund(vote_account, Lamports(1_000_000_000)).await;
 

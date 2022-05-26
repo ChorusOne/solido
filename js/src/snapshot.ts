@@ -27,7 +27,6 @@ export class Solido {
   metrics: Metrics;
   mint_authority_bump_seed: number;
   reward_distribution: RewardDistribution;
-  rewards_withdraw_authority_bump_seed: number;
   sol_reserve_authority_bump_seed: number;
   st_sol_mint: PublicKey;
   stake_authority_bump_seed: number;
@@ -394,7 +393,6 @@ export const schema = new Map([
         ['sol_reserve_authority_bump_seed', 'u8'],
         ['stake_authority_bump_seed', 'u8'],
         ['mint_authority_bump_seed', 'u8'],
-        ['rewards_withdraw_authority_bump_seed', 'u8'],
 
         ['reward_distribution', RewardDistribution],
 

@@ -18,7 +18,7 @@ use lido::{
     state::{Lido, RewardDistribution},
     token::{Lamports, StLamports},
     util::serialize_b58,
-    MINT_AUTHORITY, RESERVE_ACCOUNT, REWARDS_WITHDRAW_AUTHORITY, STAKE_AUTHORITY,
+    MINT_AUTHORITY, RESERVE_ACCOUNT, STAKE_AUTHORITY,
 };
 use solido_cli_common::{
     error::{CliError, Error},
@@ -614,20 +614,12 @@ pub struct ShowSolidoAuthoritiesOutput {
 
     #[serde(serialize_with = "serialize_b58")]
     pub mint_authority: Pubkey,
-
-    #[serde(serialize_with = "serialize_b58")]
-    pub rewards_withdraw_authority: Pubkey,
 }
 
 impl fmt::Display for ShowSolidoAuthoritiesOutput {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         writeln!(f, "Stake authority:            {}", self.stake_authority,)?;
         writeln!(f, "Mint authority:             {}", self.mint_authority)?;
-        writeln!(
-            f,
-            "Rewards withdraw authority: {}",
-            self.rewards_withdraw_authority,
-        )?;
         writeln!(f, "Reserve account:            {}", self.reserve_account)?;
         Ok(())
     }
@@ -651,18 +643,12 @@ pub fn command_show_solido_authorities(
         opts.solido_address(),
         STAKE_AUTHORITY,
     );
-    let (rewards_withdraw_authority, _) = find_authority_program_address(
-        opts.solido_program_id(),
-        opts.solido_address(),
-        REWARDS_WITHDRAW_AUTHORITY,
-    );
     Ok(ShowSolidoAuthoritiesOutput {
         solido_program_id: *opts.solido_program_id(),
         solido_address: *opts.solido_address(),
         reserve_account,
         stake_authority,
         mint_authority,
-        rewards_withdraw_authority,
     })
 }
 

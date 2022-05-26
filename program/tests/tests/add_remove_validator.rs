@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0
 
 use solana_program_test::tokio;
+use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signer::Signer;
 
 use testlib::assert_solido_error;
@@ -39,7 +40,7 @@ async fn test_add_validator_with_invalid_owner() {
     assert_eq!(solido.validators.len(), 0);
     let node_key = context.deterministic_keypair.new_keypair();
     let real_vote_account = context
-        .create_vote_account(&node_key, context.withdraw_authority, 100)
+        .create_vote_account(&node_key, Pubkey::new_unique(), 100)
         .await;
 
     let vote_account = context.get_account(real_vote_account).await;
