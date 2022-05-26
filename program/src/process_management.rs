@@ -44,7 +44,6 @@ pub fn process_add_validator(program_id: &Pubkey, accounts_raw: &[AccountInfo]) 
     let mut lido = Lido::deserialize_lido(program_id, accounts.lido)?;
     let rent = &Rent::get()?;
     lido.check_manager(accounts.manager)?;
-    lido.check_is_st_sol_account(accounts.validator_fee_st_sol_account)?;
 
     check_rent_exempt(
         rent,
@@ -134,16 +133,6 @@ pub fn process_remove_maintainer(
     lido.maintainers.remove(accounts.maintainer.key)?;
 
     lido.save(accounts.lido)
-}
-
-/// TODO(#186) Allow validator to change fee account
-/// Called by the validator, changes the fee account which the validator
-/// receives tokens
-pub fn _process_change_validator_fee_account(
-    _program_id: &Pubkey,
-    _accounts: &[AccountInfo],
-) -> ProgramResult {
-    unimplemented!()
 }
 
 /// Merge two stake accounts from the beginning of the validator's stake

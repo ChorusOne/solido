@@ -317,7 +317,7 @@ impl Lido {
 
     /// Checks if the passed maintainer belong to the list of maintainers
     pub fn check_maintainer(&self, maintainer: &AccountInfo) -> ProgramResult {
-        if let Err(_) = self.maintainers.get(maintainer.key) {
+        if self.maintainers.get(maintainer.key).is_err() {
             msg!(
                 "Invalid maintainer, account {} is not present in the maintainers list.",
                 maintainer.key

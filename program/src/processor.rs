@@ -123,7 +123,7 @@ pub fn process_initialize(
         metrics: Metrics::new(),
         maintainers: Maintainers::new(max_maintainers),
         validators: Validators::new(max_validators),
-        max_validation_fee: max_validation_fee,
+        max_validation_fee,
     };
 
     // Confirm that the fee recipients are actually stSOL accounts.

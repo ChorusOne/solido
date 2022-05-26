@@ -573,10 +573,6 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
-        pub validator_fee_st_sol_account {
-            is_signer: false,
-            is_writable: false,
-        },
     }
 }
 
@@ -634,32 +630,6 @@ pub fn deactivate_validator(
         program_id: *program_id,
         accounts: accounts.to_vec(),
         data: LidoInstruction::DeactivateValidator.to_vec(),
-    }
-}
-
-accounts_struct! {
-    ClaimValidatorFeeMeta, ClaimValidatorFeeInfo {
-        pub lido {
-            is_signer: false,
-            is_writable: true,
-        },
-        pub st_sol_mint {
-            is_signer: false,
-            // Is writable due to fee mint (spl_token::instruction::mint_to) to validator fee
-            // st_sol account
-            is_writable: true,
-        },
-        pub mint_authority {
-            is_signer: false,
-            is_writable: false,
-        },
-        pub validator_fee_st_sol_account {
-            is_signer: false,
-            // Is writable due to fee mint (spl_token::instruction::mint_to) to validator fee
-            // st_sol account
-            is_writable: true,
-        },
-        const spl_token = spl_token::id(),
     }
 }
 

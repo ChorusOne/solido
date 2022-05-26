@@ -100,7 +100,6 @@ pub struct Context {
 pub struct ValidatorAccounts {
     pub node_account: Keypair,
     pub vote_account: Pubkey,
-    pub fee_account: Pubkey,
 }
 
 /// Sign and send a transaction with a fresh block hash.
@@ -752,7 +751,6 @@ impl Context {
                     lido: self.solido.pubkey(),
                     manager: self.manager.pubkey(),
                     validator_vote_account: accounts.vote_account,
-                    validator_fee_st_sol_account: accounts.fee_account,
                 },
             )],
             vec![&self.manager],
@@ -763,7 +761,6 @@ impl Context {
     /// Create a new key pair and add it as maintainer.
     pub async fn add_validator(&mut self) -> ValidatorAccounts {
         let node_account = self.deterministic_keypair.new_keypair();
-        let fee_account = self.create_st_sol_account(node_account.pubkey()).await;
         let vote_account = self
             .create_vote_account(
                 &node_account,
@@ -775,7 +772,6 @@ impl Context {
         let accounts = ValidatorAccounts {
             node_account,
             vote_account,
-            fee_account,
         };
 
         self.try_add_validator(&accounts)

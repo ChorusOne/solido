@@ -28,7 +28,7 @@ from util import (
     solana_program_deploy,
     solido,
     spl_token,
-    MAX_VALIDATION_FEE
+    MAX_VALIDATION_FEE,
 )
 
 from typing import Any, Dict, NamedTuple, Tuple
@@ -213,23 +213,10 @@ assert solido_instance['solido']['reward_distribution'] == {
     'st_sol_appreciation': 93,
 }
 
-validator_fee_account_owner = create_test_account(
-    'tests/.keys/validator-token-account-key.json'
-)
-
-print(f'> Validator token account owner: {validator_fee_account_owner}')
-
-# Create SPL token
-fee_account = create_spl_token_account(
-    f'tests/.keys/validator-token-account-key.json', st_sol_mint_account
-)
-print(f'> Validator stSol token account: {fee_account}')
-
 
 class Validator(NamedTuple):
     account: TestAccount
     vote_account: TestAccount
-    fee_account: str
 
 
 def add_validator(
@@ -241,16 +228,11 @@ def add_validator(
         f'tests/.keys/{keypath_vote}.json',
         account.keypair_path,
         f'tests/.keys/{keypath_vote}_withdrawer.json',
-        MAX_VALIDATION_FEE
+        MAX_VALIDATION_FEE,
     )
     print(f'> Creating validator vote account {vote_account}')
-    print(
-        f'> Creating validator token account with owner {validator_fee_account_owner}'
-    )
 
-    validator = Validator(
-        account=account, vote_account=vote_account, fee_account=fee_account
-    )
+    validator = Validator(account=account, vote_account=vote_account)
 
     transaction_result = solido(
         'add-validator',
@@ -262,8 +244,6 @@ def add_validator(
         solido_address,
         '--validator-vote-account',
         vote_account.pubkey,
-        '--validator-fee-account',
-        fee_account,
         '--multisig-address',
         multisig_instance,
         keypair_path=test_addrs[1].keypair_path,

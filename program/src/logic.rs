@@ -336,7 +336,7 @@ pub fn distribute_fees(
     lido.check_treasury_fee_st_sol_account(accounts.treasury_st_sol_account)?;
     lido.check_developer_fee_st_sol_account(accounts.developer_st_sol_account)?;
 
-    lido.check_exchange_rate_last_epoch(&clock, "distribute_fees")?;
+    lido.check_exchange_rate_last_epoch(clock, "distribute_fees")?;
 
     let fees = lido.reward_distribution.split_reward(rewards)?;
 

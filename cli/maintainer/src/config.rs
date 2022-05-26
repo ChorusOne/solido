@@ -339,10 +339,6 @@ cli_opt_struct! {
         #[clap(long, value_name = "address")]
         validator_vote_account: Pubkey,
 
-        /// Validator stSol token account.
-        #[clap(long, value_name = "address")]
-        validator_fee_account: Pubkey,
-
         /// Multisig instance.
         #[clap(long, value_name = "address")]
         multisig_address: Pubkey,

@@ -37,8 +37,6 @@ def main() -> None:
                 'add-validator',
                 '--validator-vote-account',
                 row.vote_account_address,
-                '--validator-fee-account',
-                row.st_sol_account_address,
             ]
             try:
                 result = subprocess.run(

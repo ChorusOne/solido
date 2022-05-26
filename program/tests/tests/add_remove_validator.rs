@@ -50,12 +50,10 @@ async fn test_add_validator_with_invalid_owner() {
         .await;
 
     let node_account = context.deterministic_keypair.new_keypair();
-    let fee_account = context.create_st_sol_account(node_account.pubkey()).await;
     let result = context
         .try_add_validator(&ValidatorAccounts {
             node_account: node_account,
             vote_account: invalid_vote_account.pubkey(),
-            fee_account: fee_account,
         })
         .await;
     assert_solido_error!(result, LidoError::ValidatorVoteAccountHasDifferentOwner);

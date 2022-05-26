@@ -210,23 +210,6 @@ def check_validator_response(
     else:
         print_error('Could not verify validator identity through Keybase.')
 
-    token_account = get_token_account(self.st_sol_account_address)
-    if token_account is not None:
-        print_ok('Fee account exists.')
-    else:
-        print_error(f'Fee account {self.st_sol_account_address} does not exist.')
-        return
-
-    if token_account.state == "initialized":
-        print_ok('Token account is in an initialized state.')
-    else:
-        print_error('Token account is not initialized state.')
-
-    if token_account.mint_address == ST_SOL_MINT:
-        print_ok('Fee account is an stSOL account (it has the correct mint).')
-    else:
-        print_error('Fee account is not an stSOL account, the mint is wrong.')
-
     name = vote_accounts.setdefault(self.vote_account_address, self.validator_name)
     if name != self.validator_name:
         print_error(f'Vote account is already in use by {name}.')
@@ -241,21 +224,10 @@ def check_validator_response(
     else:
         print_ok('Identity account is unique among responses seen so far.')
 
-    name = st_sol_accounts.setdefault(self.st_sol_account_address, self.validator_name)
-    if name != self.validator_name:
-        print_error(f'Fee stSOL account is already in use by {name}.')
-    else:
-        print_ok('Fee stSOL account is unique among responses seen so far.')
-
     if get_account_owner(self.vote_account_address) == VOTE_PROGRAM:
         print_ok('Vote account is owned by the vote program.')
     else:
         print_error('Vote account is not owned by the vote program.')
-
-    if get_account_owner(self.st_sol_account_address) == SPL_TOKEN_PROGRAM:
-        print_ok('Fee stSOL account is owned by the SPL token program.')
-    else:
-        print_error('Fee stSOL account is not owned by the SPL token program.')
 
 
 def main() -> None:

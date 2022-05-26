@@ -246,7 +246,6 @@ pub fn command_add_validator(
             lido: *opts.solido_address(),
             manager: multisig_address,
             validator_vote_account: *opts.validator_vote_account(),
-            validator_fee_st_sol_account: *opts.validator_fee_account(),
         },
     );
     propose_instruction(

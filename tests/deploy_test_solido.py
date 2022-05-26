@@ -23,7 +23,7 @@ from util import (
     multisig,
     get_approve_and_execute,
     get_solido_program_path,
-    MAX_VALIDATION_FEE
+    MAX_VALIDATION_FEE,
 )
 
 print('\nUploading Solido program ...')
@@ -103,15 +103,6 @@ def add_validator(index: int, vote_account: Optional[str]) -> str:
     one. Returns the vote account address.
     """
     print(f'\nCreating validator {index} ...')
-    validator_fee_st_sol_account_owner = create_test_account(
-        f'tests/.keys/validator-{index}-fee-st-sol-account.json'
-    )
-    validator_fee_st_sol_account = create_spl_token_account(
-        validator_fee_st_sol_account_owner.keypair_path,
-        st_sol_mint_account,
-    )
-    print(f'> Validator token account owner: {validator_fee_st_sol_account_owner}')
-    print(f'> Validator stSOL token account: {validator_fee_st_sol_account}')
 
     if vote_account is None:
         solido_instance = solido(
@@ -126,7 +117,7 @@ def add_validator(index: int, vote_account: Optional[str]) -> str:
             f'tests/.keys/validator-{index}-vote-account.json',
             validator.keypair_path,
             f'tests/.keys/validator-{index}-withdraw-account.json',
-            MAX_VALIDATION_FEE
+            MAX_VALIDATION_FEE,
         )
         vote_account = validator_vote_account.pubkey
 
@@ -143,8 +134,6 @@ def add_validator(index: int, vote_account: Optional[str]) -> str:
         solido_address,
         '--validator-vote-account',
         vote_account,
-        '--validator-fee-account',
-        validator_fee_st_sol_account,
         '--multisig-address',
         multisig_instance,
         keypair_path=maintainer.keypair_path,
@@ -185,7 +174,6 @@ if get_network() == 'http://127.0.0.1:8899':
     )
 
 
-
 # Allow only validators that are voting, have 100% commission, and have their
 # withdrawer set to Solido's rewards withdraw authority. On a local testnet,
 # this will only contain the test validator, but on devnet or testnet, there can
@@ -193,8 +181,7 @@ if get_network() == 'http://127.0.0.1:8899':
 active_validators = [
     v
     for v in current_validators['validators']
-    if (not v['delinquent'])
-    and v['commission'] == str(MAX_VALIDATION_FEE)
+    if (not v['delinquent']) and v['commission'] == str(MAX_VALIDATION_FEE)
 ]
 
 # Add up to 5 of the active validators. Locally there will only be one, but on

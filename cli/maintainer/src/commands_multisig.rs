@@ -401,9 +401,6 @@ enum SolidoInstruction {
 
         #[serde(serialize_with = "serialize_b58")]
         validator_vote_account: Pubkey,
-
-        #[serde(serialize_with = "serialize_b58")]
-        validator_fee_st_sol_account: Pubkey,
     },
     DeactivateValidator {
         #[serde(serialize_with = "serialize_b58")]
@@ -599,17 +596,11 @@ impl fmt::Display for ShowTransactionOutput {
                         solido_instance,
                         manager,
                         validator_vote_account,
-                        validator_fee_st_sol_account,
                     } => {
                         writeln!(f, "It adds a validator to Solido")?;
                         writeln!(f, "    Solido instance:        {}", solido_instance)?;
                         writeln!(f, "    Manager:                {}", manager)?;
                         writeln!(f, "    Validator vote account: {}", validator_vote_account)?;
-                        writeln!(
-                            f,
-                            "    Validator fee account:  {}",
-                            validator_fee_st_sol_account
-                        )?;
                     }
                     SolidoInstruction::DeactivateValidator {
                         solido_instance,
@@ -1058,7 +1049,6 @@ fn try_parse_solido_instruction(
                 solido_instance: accounts.lido,
                 manager: accounts.manager,
                 validator_vote_account: accounts.validator_vote_account,
-                validator_fee_st_sol_account: accounts.validator_fee_st_sol_account,
             })
         }
         LidoInstruction::DeactivateValidator => {
