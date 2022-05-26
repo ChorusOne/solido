@@ -208,18 +208,19 @@ def create_stake_account(keypair_fname: str) -> TestAccount:
 
 
 def create_vote_account(
-    vote_key_fname: str, validator_key_fname: str, authorized_withdrawer: str,
+    vote_key_fname: str, validator_key_fname: str, authorized_withdrawer_key_fname: str,
     commission: int
 ) -> TestAccount:
     """
-    Generate a vote account for the validator
+    Generate a vote account for the validatora and authorized withdrawer account
     """
     test_account = create_test_account(vote_key_fname, fund=False)
+    create_test_account(authorized_withdrawer_key_fname, fund=True)
     solana(
         'create-vote-account',
         vote_key_fname,
         validator_key_fname,
-        authorized_withdrawer,
+        authorized_withdrawer_key_fname,
         '--commission',
         str(commission),
     )

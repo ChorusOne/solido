@@ -26,14 +26,14 @@ use crate::{
     account_map::{AccountMap, AccountSet, EntryConstantSize, PubkeyAndEntry},
     MINIMUM_STAKE_ACCOUNT_BALANCE, MINT_AUTHORITY, RESERVE_ACCOUNT, STAKE_AUTHORITY,
 };
-use crate::{REWARDS_WITHDRAW_AUTHORITY, VALIDATOR_STAKE_ACCOUNT, VALIDATOR_UNSTAKE_ACCOUNT};
+use crate::{VALIDATOR_STAKE_ACCOUNT, VALIDATOR_UNSTAKE_ACCOUNT};
 
 pub const LIDO_VERSION: u8 = 0;
 
 /// Size of a serialized `Lido` struct excluding validators and maintainers.
 ///
 /// To update this, run the tests and replace the value here with the test output.
-pub const LIDO_CONSTANT_SIZE: usize = 354;
+pub const LIDO_CONSTANT_SIZE: usize = 353;
 pub const VALIDATOR_CONSTANT_SIZE: usize = 49;
 
 pub type Validators = AccountMap<Validator>;
@@ -203,7 +203,6 @@ pub struct Lido {
     pub sol_reserve_account_bump_seed: u8,
     pub stake_authority_bump_seed: u8,
     pub mint_authority_bump_seed: u8,
-    pub rewards_withdraw_authority_bump_seed: u8,
 
     /// How rewards are distributed.
     pub reward_distribution: RewardDistribution,
@@ -422,44 +421,6 @@ impl Lido {
                 stake_authority_account_info.key
             );
             return Err(LidoError::InvalidStakeAuthority.into());
-        }
-        Ok(authority)
-    }
-
-    /// Return the address of the rewards withdraw authority, the
-    /// program-derived address that can sign on behalf of vote accounts.
-    pub fn get_rewards_withdraw_authority(
-        &self,
-        program_id: &Pubkey,
-        solido_address: &Pubkey,
-    ) -> Result<Pubkey, ProgramError> {
-        Pubkey::create_program_address(
-            &[
-                &solido_address.to_bytes()[..],
-                REWARDS_WITHDRAW_AUTHORITY,
-                &[self.rewards_withdraw_authority_bump_seed],
-            ],
-            program_id,
-        )
-        .map_err(|_| ProgramError::InvalidSeeds)
-    }
-
-    /// Confirm that the rewards withdraw authority belongs to this Lido
-    /// instance, return the rewards authority address.
-    pub fn check_rewards_withdraw_authority(
-        &self,
-        program_id: &Pubkey,
-        solido_address: &Pubkey,
-        rewards_withdraw_authority_account_info: &AccountInfo,
-    ) -> Result<Pubkey, ProgramError> {
-        let authority = self.get_rewards_withdraw_authority(program_id, solido_address)?;
-        if &authority != rewards_withdraw_authority_account_info.key {
-            msg!(
-                "Invalid rewards withdraw authority, expected {} but got {}.",
-                authority,
-                rewards_withdraw_authority_account_info.key
-            );
-            return Err(LidoError::InvalidRewardsWithdrawAuthority.into());
         }
         Ok(authority)
     }
@@ -978,7 +939,6 @@ mod test_lido {
             sol_reserve_account_bump_seed: 1,
             stake_authority_bump_seed: 2,
             mint_authority_bump_seed: 3,
-            rewards_withdraw_authority_bump_seed: 4,
             reward_distribution: RewardDistribution {
                 treasury_fee: 2,
                 developer_fee: 4,

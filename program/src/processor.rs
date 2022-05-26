@@ -31,8 +31,7 @@ use crate::{
     },
     token::{Lamports, Rational, StLamports},
     MAXIMUM_UNSTAKE_ACCOUNTS, MINIMUM_STAKE_ACCOUNT_BALANCE, MINT_AUTHORITY, RESERVE_ACCOUNT,
-    REWARDS_WITHDRAW_AUTHORITY, STAKE_AUTHORITY, VALIDATOR_STAKE_ACCOUNT,
-    VALIDATOR_UNSTAKE_ACCOUNT,
+    STAKE_AUTHORITY, VALIDATOR_STAKE_ACCOUNT, VALIDATOR_UNSTAKE_ACCOUNT,
 };
 
 use solana_program::stake::{self as stake_program};
@@ -107,11 +106,6 @@ pub fn process_initialize(
     // Check if the token has no minted tokens and right mint authority.
     check_mint(rent, accounts.st_sol_mint, &mint_authority)?;
 
-    let (_, rewards_withdraw_authority_bump_seed) = Pubkey::find_program_address(
-        &[&accounts.lido.key.to_bytes(), REWARDS_WITHDRAW_AUTHORITY],
-        program_id,
-    );
-
     // Initialize fee structure
     let lido = Lido {
         lido_version: version,
@@ -121,7 +115,6 @@ pub fn process_initialize(
         sol_reserve_account_bump_seed: reserve_bump_seed,
         mint_authority_bump_seed: mint_bump_seed,
         stake_authority_bump_seed: deposit_bump_seed,
-        rewards_withdraw_authority_bump_seed,
         reward_distribution,
         fee_recipients: FeeRecipients {
             treasury_account: *accounts.treasury_account.key,

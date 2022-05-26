@@ -346,9 +346,6 @@ pub struct ShowSolidoOutput {
     #[serde(serialize_with = "serialize_b58")]
     pub mint_authority: Pubkey,
 
-    #[serde(serialize_with = "serialize_b58")]
-    pub rewards_withdraw_authority: Pubkey,
-
     /// Identity account address for all validators in the same order as `solido.validators`.
     pub validator_identities: Vec<Pubkey>,
 
@@ -392,11 +389,6 @@ impl fmt::Display for ShowSolidoOutput {
             f,
             "Mint authority:             {}, {}",
             self.mint_authority, self.solido.mint_authority_bump_seed
-        )?;
-        writeln!(
-            f,
-            "Rewards withdraw authority: {}, {}",
-            self.rewards_withdraw_authority, self.solido.rewards_withdraw_authority_bump_seed,
         )?;
         writeln!(
             f,
@@ -585,8 +577,6 @@ pub fn command_show_solido(
         lido.get_stake_authority(opts.solido_program_id(), opts.solido_address())?;
     let mint_authority =
         lido.get_mint_authority(opts.solido_program_id(), opts.solido_address())?;
-    let rewards_withdraw_authority =
-        lido.get_rewards_withdraw_authority(opts.solido_program_id(), opts.solido_address())?;
 
     let mut validator_identities = Vec::new();
     let mut validator_infos = Vec::new();
@@ -606,7 +596,6 @@ pub fn command_show_solido(
         reserve_account,
         stake_authority,
         mint_authority,
-        rewards_withdraw_authority,
     })
 }
 

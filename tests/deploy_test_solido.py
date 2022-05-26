@@ -125,7 +125,7 @@ def add_validator(index: int, vote_account: Optional[str]) -> str:
         validator_vote_account = create_vote_account(
             f'tests/.keys/validator-{index}-vote-account.json',
             validator.keypair_path,
-            solido_instance['rewards_withdraw_authority'],
+            f'tests/.keys/validator-{index}-withdraw-account.json',
             MAX_VALIDATION_FEE
         )
         vote_account = validator_vote_account.pubkey
@@ -153,13 +153,6 @@ def add_validator(index: int, vote_account: Optional[str]) -> str:
     return vote_account
 
 
-# Compares a validator structure
-def get_vote_account_withdrawer(vote_account: str) -> str:
-    result = solana('vote-account', vote_account, '--output', 'json')
-    authorized_withdrawer: str = json.loads(result)['authorizedWithdrawer']
-    return authorized_withdrawer
-
-
 # For the first validator, add the test validator itself, so we include a
 # validator that is actually voting, and earning rewards.
 current_validators = json.loads(solana('validators', '--output', 'json'))
@@ -183,13 +176,6 @@ if get_network() == 'http://127.0.0.1:8899':
         str(MAX_VALIDATION_FEE),
         './test-ledger/vote-account-keypair.json',
     )
-    print(f'> Changing validator\'s withdrawer to Solido\'s ...')
-    solana(
-        'vote-authorize-withdrawer',
-        validator['voteAccountPubkey'],
-        './test-ledger/vote-account-keypair.json',
-        solido_instance['rewards_withdraw_authority'],
-    )
     solana(
         'validator-info',
         'publish',
@@ -209,8 +195,6 @@ active_validators = [
     for v in current_validators['validators']
     if (not v['delinquent'])
     and v['commission'] == str(MAX_VALIDATION_FEE)
-    and get_vote_account_withdrawer(v['voteAccountPubkey'])
-    == solido_instance['rewards_withdraw_authority']
 ]
 
 # Add up to 5 of the active validators. Locally there will only be one, but on

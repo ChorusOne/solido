@@ -240,7 +240,7 @@ def add_validator(
     vote_account = create_vote_account(
         f'tests/.keys/{keypath_vote}.json',
         account.keypair_path,
-        solido_instance['rewards_withdraw_authority'],
+        f'tests/.keys/{keypath_vote}_withdrawer.json',
         MAX_VALIDATION_FEE
     )
     print(f'> Creating validator vote account {vote_account}')

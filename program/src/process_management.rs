@@ -55,12 +55,8 @@ pub fn process_add_validator(program_id: &Pubkey, accounts_raw: &[AccountInfo]) 
     // account: The vote account should be owned by the vote program, the
     // withdraw authority should be set to the program_id, and it should
     // sattisfy commission limit.
-    let _partial_vote_state = PartialVoteState::deserialize(
-        program_id,
-        accounts.lido.key,
-        accounts.validator_vote_account,
-        lido.max_validation_fee,
-    )?;
+    let _partial_vote_state =
+        PartialVoteState::deserialize(accounts.validator_vote_account, lido.max_validation_fee)?;
 
     lido.validators
         .add(*accounts.validator_vote_account.key, Validator::new())?;
