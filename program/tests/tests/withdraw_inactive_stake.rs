@@ -1,8 +1,10 @@
 // SPDX-FileCopyrightText: 2021 Chorus One AG
 // SPDX-License-Identifier: GPL-3.0
 
+use lido::error::LidoError;
 use lido::token::Lamports;
 use solana_program_test::tokio;
+use testlib::assert_solido_error;
 use testlib::solido_context::{Context, StakeDeposit};
 
 #[tokio::test]
@@ -69,4 +71,94 @@ async fn test_withdraw_inactive_stake() {
     // The donation should have been withdrawn back to the reserve.
     let increase = (reserve_after - reserve_before).unwrap();
     assert_eq!(increase, (donation * 2).unwrap());
+
+    // =============== fee distribution ===============
+
+    // Increment the vote account credits, to simulate the validator voting in
+    // this epoch, which means it will receive rewards at the start of the next
+    // epoch. The number of votes is not relevant, as long as it is positive;
+    // Rewards should be observed in stake accounts.
+    context
+        .context
+        .increment_vote_account_credits(&validator.vote_account, 1);
+
+    // We are going to skip ahead one more epoch. The number of SOL we receive
+    // is not a nice round number, so instead of hard-coding the numbers here,
+    // record the change in balances, so we can perform some checks on those.
+    let vote_account_before = context.get_sol_balance(validator.vote_account).await;
+    let treasury_before = context
+        .get_st_sol_balance(context.treasury_st_sol_account)
+        .await;
+    let developer_before = context
+        .get_st_sol_balance(context.developer_st_sol_account)
+        .await;
+    let solido_before = context.get_solido().await;
+    let validator_before = solido_before
+        .validators
+        .get(&validator.vote_account)
+        .unwrap();
+
+    let account = context.get_account(validator.vote_account).await;
+    let vote_account_rent = Lamports(context.get_rent().await.minimum_balance(account.data.len()));
+    assert_eq!(vote_account_before, vote_account_rent);
+
+    context.advance_to_normal_epoch(1);
+
+    // In this new epoch, we should not be allowed to distribute fees,
+    // yet, because we haven’t updated the exchange rate yet.
+    let result = context
+        .try_withdraw_inactive_stake(validator.vote_account)
+        .await;
+    assert_solido_error!(result, LidoError::ExchangeRateNotUpdatedInThisEpoch);
+
+    // The rewards received is the reward accumulated in stake accounts. The
+    // number looks arbitrary, but this is the amount that the current reward
+    // configuration yields, so we have to deal with it.
+    context.update_exchange_rate().await;
+    let arbitrary_rewards: u64 = 1_183_729_084_610;
+    context
+        .withdraw_inactive_stake(validator.vote_account)
+        .await;
+    let vote_account_after = context.get_sol_balance(validator.vote_account).await;
+    let treasury_after = context
+        .get_st_sol_balance(context.treasury_st_sol_account)
+        .await;
+    let developer_after = context
+        .get_st_sol_balance(context.developer_st_sol_account)
+        .await;
+    let solido_after = context.get_solido().await;
+    let validator_after = solido_after
+        .validators
+        .get(&validator.vote_account)
+        .unwrap();
+
+    let rewards = (validator_after.entry.stake_accounts_balance
+        - validator_before.entry.stake_accounts_balance)
+        .expect("Does not underflow, because we received rewards.");
+    assert_eq!(rewards, Lamports(arbitrary_rewards));
+
+    let validation_fee = (vote_account_after - vote_account_before).unwrap();
+    // validation fee is 5% of total rewards, solido_rewards is 95% of total rewards
+    assert_eq!(
+        validation_fee,
+        Lamports((5f64 * (rewards.0 as f64) / 95f64) as u64)
+    );
+
+    // The treasury balance increase, when converted back to SOL, should be equal
+    // to 3% of the rewards. Three lamports differ due to rounding errors.
+    let treasury_fee = (treasury_after - treasury_before).unwrap();
+    let treasury_fee_sol = solido_after
+        .exchange_rate
+        .exchange_st_sol(treasury_fee)
+        .unwrap();
+    assert_eq!(treasury_fee_sol, Lamports(rewards.0 / 100 * 3 - 1));
+
+    // The developer balance increase, when converted back to SOL, should be equal
+    // to 2% of the rewards. Two lamport differ due to rounding errors.
+    let developer_fee = (developer_after - developer_before).unwrap();
+    let developer_fee_sol = solido_after
+        .exchange_rate
+        .exchange_st_sol(developer_fee)
+        .unwrap();
+    assert_eq!(developer_fee_sol, Lamports(rewards.0 / 100 * 2 - 1));
 }
