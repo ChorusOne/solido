@@ -374,6 +374,18 @@ cli_opt_struct! {
 }
 
 cli_opt_struct! {
+    CheckMaxCommissionViolationOpts {
+        /// Address of the Solido program.
+        #[clap(long, value_name = "address")]
+        solido_program_id: Pubkey,
+
+        /// Account that stores the data for this Solido instance.
+        #[clap(long, value_name = "address")]
+        solido_address: Pubkey,
+    }
+}
+
+cli_opt_struct! {
     AddRemoveMaintainerOpts {
         /// Address of the Solido program.
         #[clap(long, value_name = "address")]

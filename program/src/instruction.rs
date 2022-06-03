@@ -100,6 +100,12 @@ pub enum LidoInstruction {
     AddMaintainer,
     RemoveMaintainer,
     MergeStake,
+
+    /// Check if validator increased his commission over maximum allowed
+    /// and deactivate him if hi did
+    ///
+    /// Requires no permission
+    CheckMaxCommissionViolation,
 }
 
 impl LidoInstruction {
@@ -630,6 +636,30 @@ pub fn deactivate_validator(
         program_id: *program_id,
         accounts: accounts.to_vec(),
         data: LidoInstruction::DeactivateValidator.to_vec(),
+    }
+}
+
+accounts_struct! {
+    CheckMaxCommissionViolationMeta, CheckMaxCommissionViolationInfo {
+        pub lido {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub validator_vote_account_to_deactivate {
+            is_signer: false,
+            is_writable: false,
+        },
+    }
+}
+
+pub fn check_max_commission_violation(
+    program_id: &Pubkey,
+    accounts: &CheckMaxCommissionViolationMeta,
+) -> Instruction {
+    Instruction {
+        program_id: *program_id,
+        accounts: accounts.to_vec(),
+        data: LidoInstruction::CheckMaxCommissionViolation.to_vec(),
     }
 }
 

@@ -21,8 +21,8 @@ use crate::{
     metrics::Metrics,
     process_management::{
         process_add_maintainer, process_add_validator, process_change_reward_distribution,
-        process_deactivate_validator, process_merge_stake, process_remove_maintainer,
-        process_remove_validator,
+        process_check_max_commission_violation, process_deactivate_validator, process_merge_stake,
+        process_remove_maintainer, process_remove_validator,
     },
     stake_account::{deserialize_stake_account, StakeAccount},
     state::{
@@ -995,5 +995,8 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
         LidoInstruction::AddMaintainer => process_add_maintainer(program_id, accounts),
         LidoInstruction::RemoveMaintainer => process_remove_maintainer(program_id, accounts),
         LidoInstruction::MergeStake => process_merge_stake(program_id, accounts),
+        LidoInstruction::CheckMaxCommissionViolation => {
+            process_check_max_commission_violation(program_id, accounts)
+        }
     }
 }

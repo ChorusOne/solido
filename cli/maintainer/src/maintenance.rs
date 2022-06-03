@@ -102,6 +102,10 @@ pub enum MaintenanceOutput {
         #[serde(serialize_with = "serialize_b58")]
         validator_vote_account: Pubkey,
     },
+    CheckMaxCommissionViolation {
+        #[serde(serialize_with = "serialize_b58")]
+        validator_vote_account: Pubkey,
+    },
     UnstakeFromActiveValidator(Unstake),
 
     FetchPoolPrice {
@@ -222,6 +226,12 @@ impl fmt::Display for MaintenanceOutput {
                 validator_vote_account,
             } => {
                 writeln!(f, "Remove validator")?;
+                writeln!(f, "  Validator vote account: {}", validator_vote_account)?;
+            }
+            MaintenanceOutput::CheckMaxCommissionViolation {
+                validator_vote_account,
+            } => {
+                writeln!(f, "Check max commission violation")?;
                 writeln!(f, "  Validator vote account: {}", validator_vote_account)?;
             }
             MaintenanceOutput::SellRewards { st_sol_amount } => {
@@ -705,6 +715,36 @@ impl SolidoState {
             });
 
             return Some(MaintenanceInstruction::new(unstake_instruction, task));
+        }
+        None
+    }
+
+    /// If there is a validator which exceeded commission limit, try to deactivate it.
+    pub fn try_check_max_commission_violation(&self) -> Option<MaintenanceInstruction> {
+        for (validator, vote_state) in self
+            .solido
+            .validators
+            .entries
+            .iter()
+            .zip(self.validator_vote_accounts.iter())
+        {
+            // We are only interested in validators that violate commission limit
+            if !validator.entry.active || vote_state.commission <= self.solido.max_validation_fee {
+                continue;
+            }
+
+            let task = MaintenanceOutput::CheckMaxCommissionViolation {
+                validator_vote_account: validator.pubkey,
+            };
+
+            let instruction = lido::instruction::check_max_commission_violation(
+                &self.solido_program_id,
+                &lido::instruction::CheckMaxCommissionViolationMeta {
+                    lido: self.solido_address,
+                    validator_vote_account_to_deactivate: validator.pubkey,
+                },
+            );
+            return Some(MaintenanceInstruction::new(instruction, task));
         }
         None
     }
@@ -1593,6 +1633,7 @@ pub fn try_perform_maintenance(
         .or_else(|| state.try_withdraw_inactive_stake())
         .or_else(|| state.try_stake_deposit())
         .or_else(|| state.try_unstake_from_active_validators())
+        .or_else(|| state.try_check_max_commission_violation())
         .or_else(|| state.try_remove_validator())
         .or_else(|| state.try_sell_anker_rewards())
         .or_else(|| state.try_send_anker_rewards());

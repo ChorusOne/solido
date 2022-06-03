@@ -34,8 +34,9 @@ use crate::{
 };
 use crate::{
     config::{
-        AddRemoveMaintainerOpts, AddValidatorOpts, CreateSolidoOpts, DeactivateValidatorOpts,
-        DepositOpts, ShowSolidoAuthoritiesOpts, ShowSolidoOpts, WithdrawOpts,
+        AddRemoveMaintainerOpts, AddValidatorOpts, CheckMaxCommissionViolationOpts,
+        CreateSolidoOpts, DeactivateValidatorOpts, DepositOpts, ShowSolidoAuthoritiesOpts,
+        ShowSolidoOpts, WithdrawOpts,
     },
     get_signer_from_path,
 };
@@ -278,6 +279,74 @@ pub fn command_deactivate_validator(
         *opts.multisig_address(),
         instruction,
     )
+}
+
+#[derive(Serialize)]
+pub struct CheckMaxCommissionViolationOutput {
+    // List of validators that exceeded max commission
+    entries: Vec<ValidatorViolationInfo>,
+    max_validation_fee: u8,
+}
+
+#[derive(Serialize)]
+struct ValidatorViolationInfo {
+    #[serde(serialize_with = "serialize_b58")]
+    pub validator_vote_account: Pubkey,
+    pub validation_fee: u8,
+}
+
+impl fmt::Display for CheckMaxCommissionViolationOutput {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        writeln!(f, "Maximum validation fee: {}", self.max_validation_fee)?;
+
+        for entry in &self.entries {
+            writeln!(
+                f,
+                "Validator vote account: {}, validation fee: {}",
+                entry.validator_vote_account, entry.validation_fee
+            )?;
+        }
+        Ok(())
+    }
+}
+
+/// CLI entry point to punish validator for commission violation.
+pub fn command_check_max_commission_violation(
+    config: &mut SnapshotConfig,
+    opts: &CheckMaxCommissionViolationOpts,
+) -> solido_cli_common::Result<CheckMaxCommissionViolationOutput> {
+    let solido = config.client.get_solido(opts.solido_address())?;
+
+    let mut violations = vec![];
+    for pubkey_entry in solido.validators.entries {
+        let validator = pubkey_entry.entry;
+        let vote_pubkey = pubkey_entry.pubkey;
+        let validator_account = config.client.get_account(&vote_pubkey)?;
+        let commission = validator_account.data[68]; // Read 1 byte for u8
+
+        // dbg!(pubkey_entry.pubkey, commission, validator.active);
+        if !validator.active || commission <= solido.max_validation_fee {
+            continue;
+        }
+
+        let instruction = lido::instruction::check_max_commission_violation(
+            opts.solido_program_id(),
+            &lido::instruction::CheckMaxCommissionViolationMeta {
+                lido: *opts.solido_address(),
+                validator_vote_account_to_deactivate: vote_pubkey,
+            },
+        );
+        config.sign_and_send_transaction(&[instruction], &[config.signer])?;
+        violations.push(ValidatorViolationInfo {
+            validator_vote_account: vote_pubkey,
+            validation_fee: commission,
+        });
+    }
+
+    Ok(CheckMaxCommissionViolationOutput {
+        entries: violations,
+        max_validation_fee: solido.max_validation_fee,
+    })
 }
 
 /// CLI entry point to to add a maintainer to Solido.

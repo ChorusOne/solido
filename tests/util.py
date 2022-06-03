@@ -13,7 +13,7 @@ import sys
 from urllib import request
 from uuid import uuid4
 
-from typing import List, NamedTuple, Any, Optional, Callable, Dict
+from typing import List, NamedTuple, Any, Optional, Callable, Dict, Tuple
 
 MAX_VALIDATION_FEE = 5
 
@@ -212,12 +212,12 @@ def create_vote_account(
     validator_key_fname: str,
     authorized_withdrawer_key_fname: str,
     commission: int,
-) -> TestAccount:
+) -> Tuple[TestAccount, TestAccount]:
     """
     Generate a vote account for the validatora and authorized withdrawer account
     """
     test_account = create_test_account(vote_key_fname, fund=False)
-    create_test_account(authorized_withdrawer_key_fname, fund=True)
+    withdrawer_account = create_test_account(authorized_withdrawer_key_fname, fund=True)
     solana(
         'create-vote-account',
         vote_key_fname,
@@ -236,7 +236,7 @@ def create_vote_account(
         validator_key_fname,
         name,
     )
-    return test_account
+    return test_account, withdrawer_account
 
 
 def create_spl_token_account(owner_keypair_fname: str, minter: str) -> str:

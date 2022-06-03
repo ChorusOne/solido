@@ -113,7 +113,7 @@ def add_validator(index: int, vote_account: Optional[str]) -> str:
             solido_address,
         )
         validator = create_test_account(f'tests/.keys/validator-{index}-account.json')
-        validator_vote_account = create_vote_account(
+        validator_vote_account, _ = create_vote_account(
             f'tests/.keys/validator-{index}-vote-account.json',
             validator.keypair_path,
             f'tests/.keys/validator-{index}-withdraw-account.json',

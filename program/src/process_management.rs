@@ -13,8 +13,9 @@ use crate::vote_state::PartialVoteState;
 use crate::{
     error::LidoError,
     instruction::{
-        AddMaintainerInfo, AddValidatorInfo, ChangeRewardDistributionInfo, DeactivateValidatorInfo,
-        MergeStakeInfo, RemoveMaintainerInfo, RemoveValidatorInfo,
+        AddMaintainerInfo, AddValidatorInfo, ChangeRewardDistributionInfo,
+        CheckMaxCommissionViolationInfo, DeactivateValidatorInfo, MergeStakeInfo,
+        RemoveMaintainerInfo, RemoveValidatorInfo,
     },
     state::{RewardDistribution, Validator},
     STAKE_AUTHORITY,
@@ -90,8 +91,7 @@ pub fn process_remove_validator(
 /// Set the `active` flag to false for a given validator.
 ///
 /// This prevents new funds from being staked with this validator, and enables
-/// removing the validator once no stake is delegated to it any more, and once
-/// it has no unclaimed fee credit.
+/// removing the validator once no stake is delegated to it any more.
 pub fn process_deactivate_validator(
     program_id: &Pubkey,
     accounts_raw: &[AccountInfo],
@@ -103,6 +103,39 @@ pub fn process_deactivate_validator(
     let validator = lido
         .validators
         .get_mut(accounts.validator_vote_account_to_deactivate.key)?;
+
+    validator.entry.active = false;
+    msg!("Validator {} deactivated.", validator.pubkey);
+
+    lido.save(accounts.lido)
+}
+
+/// Set the `active` flag to false for a given validator if it's commission is
+/// bigger then max allowed. It is permissionless.
+///
+/// This prevents new funds from being staked with this validator, and enables
+/// removing the validator once no stake is delegated to it any more.
+pub fn process_check_max_commission_violation(
+    program_id: &Pubkey,
+    accounts_raw: &[AccountInfo],
+) -> ProgramResult {
+    let accounts = CheckMaxCommissionViolationInfo::try_from_slice(accounts_raw)?;
+    let mut lido = Lido::deserialize_lido(program_id, accounts.lido)?;
+
+    let data = accounts.validator_vote_account_to_deactivate.data.borrow();
+    let commission = data[68]; // Read 1 byte for u8
+
+    if commission <= lido.max_validation_fee {
+        return Ok(());
+    }
+
+    let validator = lido
+        .validators
+        .get_mut(accounts.validator_vote_account_to_deactivate.key)?;
+
+    if !validator.entry.active {
+        return Ok(());
+    }
 
     validator.entry.active = false;
     msg!("Validator {} deactivated.", validator.pubkey);

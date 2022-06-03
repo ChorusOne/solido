@@ -217,6 +217,7 @@ assert solido_instance['solido']['reward_distribution'] == {
 class Validator(NamedTuple):
     account: TestAccount
     vote_account: TestAccount
+    withdrawer_account: TestAccount
 
 
 def add_validator(
@@ -224,7 +225,7 @@ def add_validator(
 ) -> Tuple[Validator, Dict[str, Any]]:
     print('\nAdding a validator ...')
     account = create_test_account(f'tests/.keys/{keypath_account}.json')
-    vote_account = create_vote_account(
+    vote_account, withdrawer_account = create_vote_account(
         f'tests/.keys/{keypath_vote}.json',
         account.keypair_path,
         f'tests/.keys/{keypath_vote}_withdrawer.json',
@@ -232,7 +233,11 @@ def add_validator(
     )
     print(f'> Creating validator vote account {vote_account}')
 
-    validator = Validator(account=account, vote_account=vote_account)
+    validator = Validator(
+        account=account,
+        vote_account=vote_account,
+        withdrawer_account=withdrawer_account,
+    )
 
     transaction_result = solido(
         'add-validator',
@@ -685,3 +690,23 @@ number_validators = len(solido_instance['solido']['validators']['entries'])
 assert (
     number_validators == 1
 ), f'\nExpected no validators\nGot: {number_validators} validators'
+
+# change validator commission above limit
+solana(
+    "vote-update-commission",
+    validator_1.vote_account.pubkey,
+    str(MAX_VALIDATION_FEE + 1),  # exceed maximum allowed limit
+    validator_1.withdrawer_account.keypair_path,
+)
+
+print(
+    '\nRunning maintenance (should deactivate a validator that exceed max validation fee) ...'
+)
+result = perform_maintenance()
+# check validator_1 is deactivated
+expected_result = {
+    'CheckMaxCommissionViolation': {
+        'validator_vote_account': validator_1.vote_account.pubkey
+    }
+}
+assert result == expected_result, f'\nExpected: {expected_result}\nActual:   {result}'
