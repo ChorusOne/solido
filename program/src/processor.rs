@@ -90,7 +90,6 @@ pub fn process_initialize(
         return Err(LidoError::InvalidLidoSize.into());
     }
 
-    // find_program_address should be called off-chain and only checked with create_program_address on-chain
     let (_, reserve_bump_seed) = Pubkey::find_program_address(
         &[&accounts.lido.key.to_bytes(), RESERVE_ACCOUNT],
         program_id,
@@ -165,7 +164,7 @@ pub fn process_deposit(
         accounts.spl_token,
         accounts.st_sol_mint,
         accounts.mint_authority,
-        accounts.recipient, // who is recipient? Lido? - YES
+        accounts.recipient,
         st_sol_amount,
     )?;
 
@@ -191,7 +190,6 @@ pub fn process_stake_deposit(
 
     let mut lido = Lido::deserialize_lido(program_id, accounts.lido)?;
 
-    // does't check if the maintainer has permissions, being in the maintainer list isn't enough
     lido.check_maintainer(accounts.maintainer)?;
     lido.check_reserve_account(program_id, accounts.lido.key, accounts.reserve)?;
     lido.check_stake_authority(program_id, accounts.lido.key, accounts.stake_authority)?;
@@ -236,14 +234,11 @@ pub fn process_stake_deposit(
     // From now on we will not reference other Lido fields, so we can get the
     // validator as mutable. This is a bit wasteful, but we can optimize when we
     // need dozens of validators, for now we are under the compute limit.
-    let validator = lido // why not taking mute ref right away? It is wasteful indeed.
+    let validator = lido
         .validators
         .get_mut(accounts.validator_vote_account.key)?;
 
-    // check_stake_account() calls find_program_address() which should be called
-    // off-chain and only checked with create_program_address() on-chain
     let stake_account_bump_seed = Lido::check_stake_account(
-        // is't it called on-chain here? Why did't you call it off-chain?
         program_id,
         accounts.lido.key,
         validator,
@@ -357,7 +352,7 @@ pub fn process_stake_deposit(
             accounts.lido.key,
             validator,
             // Does not underflow, because end > begin >= 0.
-            validator.entry.stake_seeds.end - 1, // who guarantees that `stake_account` is the account at end-1 seed for the validator?
+            validator.entry.stake_seeds.end - 1,
             accounts.stake_account_merge_into,
             VALIDATOR_STAKE_ACCOUNT,
         )?;
@@ -412,7 +407,7 @@ pub fn process_unstake(
     lido.check_stake_authority(program_id, accounts.lido.key, accounts.stake_authority)?;
     let destination_bump_seed = check_unstake_accounts(program_id, &lido, &accounts)?;
 
-    let validator = lido.validators.get(accounts.validator_vote_account.key)?; // already called lido.validators.get() in check_unstake_accounts()
+    let validator = lido.validators.get(accounts.validator_vote_account.key)?;
 
     // Because `WithdrawInactiveStake` needs to reference all stake and unstake
     // accounts in a single transaction, we shouldn't have too many of them.
@@ -741,7 +736,7 @@ pub fn process_withdraw_inactive_stake(
     // Try to withdraw from unstake accounts.
     let mut unstake_removed = Lamports(0);
     let mut unstake_observed_total = Lamports(0);
-    for (seed, unstake_account) in validator // two similar for loops, need refactoring
+    for (seed, unstake_account) in validator
         .entry
         .unstake_seeds
         .into_iter()

@@ -109,7 +109,6 @@ pub struct CreateAccountOptions<'a, 'b> {
 /// stake accounts, then someone could transfer a small amount to the next stake
 /// account for a validator, and that would prevent us from delegating more stake
 /// to that validator.
-// please clearify how is that possible
 pub fn create_account_even_if_funded<'a, 'b>(
     solido_address: &Pubkey,
     options: CreateAccountOptions<'a, 'b>,
@@ -398,7 +397,6 @@ pub fn check_unstake_accounts(
     let source_stake_seed = validator.entry.stake_seeds.begin;
     let destination_stake_seed = validator.entry.unstake_seeds.end;
 
-    // why not use create_program_address() instead? - you don't need bump here
     let (source_stake_account, _) = validator.find_stake_account_address(
         program_id,
         accounts.lido.key,
@@ -416,7 +414,6 @@ pub fn check_unstake_accounts(
         return Err(LidoError::InvalidStakeAccount.into());
     }
 
-    // why not calculate destination_bump_seed on a client?
     let (destination_stake_account, destination_bump_seed) = validator.find_stake_account_address(
         program_id,
         accounts.lido.key,

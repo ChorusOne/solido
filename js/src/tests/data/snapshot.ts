@@ -15,6 +15,7 @@ export const snapshot: Snapshot = {
     sol_reserve_authority_bump_seed: 255,
     stake_authority_bump_seed: 251,
     mint_authority_bump_seed: 255,
+    rewards_withdraw_authority_bump_seed: 254,
     reward_distribution: {
       treasury_fee: 4,
       validation_fee: 5,

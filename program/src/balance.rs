@@ -120,7 +120,6 @@ pub fn get_unstake_validator_index(
             .iter()
             .zip(target_balance.iter())
             .any(|(validator, target)| {
-                // should't we take a difference by modulus?
                 let target_difference = target
                     .0
                     .saturating_sub(validator.entry.effective_stake_balance().0);
@@ -133,7 +132,6 @@ pub fn get_unstake_validator_index(
                 } >= threshold
             });
 
-    // second iteration on validators, could use just one
     let ((idx, validator), target) = validators
         .entries
         .iter()
@@ -163,8 +161,6 @@ pub fn get_unstake_validator_index(
     }
 }
 
-// Looks like this function is similar to get_unstake_validator_index() and
-// they could be merged in one
 /// Given a list of validators and their target balance, return the index of the
 /// validator that has less stake, and the amount by which it is below its target.
 ///

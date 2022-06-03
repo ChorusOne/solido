@@ -503,7 +503,7 @@ impl Lido {
             msg!(
                 "Note: this can happen during normal operation when instructions \
                 race, and one updates the validator's seeds before the other executes."
-            ); // if it is normal, why then return error?
+            );
             return Err(LidoError::InvalidStakeAccount.into());
         }
         Ok(stake_addr_bump_seed)

@@ -102,7 +102,7 @@ pub enum LidoInstruction {
     MergeStake,
 
     /// Check if validator increased his commission over maximum allowed
-    /// and deactivate him if hi did
+    /// and deactivate him if he did
     ///
     /// Requires no permission
     CheckMaxCommissionViolation,
