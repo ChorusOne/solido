@@ -18,6 +18,7 @@ use lido::{
     state::{Lido, RewardDistribution},
     token::{Lamports, StLamports},
     util::serialize_b58,
+    vote_state::get_vote_account_commission,
     MINT_AUTHORITY, RESERVE_ACCOUNT, STAKE_AUTHORITY,
 };
 use solido_cli_common::{
@@ -322,7 +323,8 @@ pub fn command_check_max_commission_violation(
         let validator = pubkey_entry.entry;
         let vote_pubkey = pubkey_entry.pubkey;
         let validator_account = config.client.get_account(&vote_pubkey)?;
-        let commission = validator_account.data[68]; // Read 1 byte for u8
+        let commission = get_vote_account_commission(&validator_account.data)
+            .ok_or_else(|| CliError::new("Validator account data too small"))?;
 
         // dbg!(pubkey_entry.pubkey, commission, validator.active);
         if !validator.active || commission <= solido.max_validation_fee {

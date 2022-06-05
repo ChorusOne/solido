@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: 2021 Chorus One AG
 // SPDX-License-Identifier: GPL-3.0
 
-use solana_program::program::invoke_signed;
 use solana_program::rent::Rent;
 use solana_program::sysvar::Sysvar;
 use solana_program::{account_info::AccountInfo, entrypoint::ProgramResult, msg, pubkey::Pubkey};
+use solana_program::{program::invoke_signed, program_error::ProgramError};
 
 use crate::logic::check_rent_exempt;
 use crate::processor::StakeType;
@@ -18,6 +18,7 @@ use crate::{
         RemoveMaintainerInfo, RemoveValidatorInfo,
     },
     state::{RewardDistribution, Validator},
+    vote_state::get_vote_account_commission,
     STAKE_AUTHORITY,
 };
 
@@ -123,7 +124,7 @@ pub fn process_check_max_commission_violation(
     let mut lido = Lido::deserialize_lido(program_id, accounts.lido)?;
 
     let data = accounts.validator_vote_account_to_deactivate.data.borrow();
-    let commission = data[68]; // Read 1 byte for u8
+    let commission = get_vote_account_commission(&data).ok_or(ProgramError::AccountDataTooSmall)?;
 
     if commission <= lido.max_validation_fee {
         return Ok(());
