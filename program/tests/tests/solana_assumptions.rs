@@ -267,7 +267,6 @@ async fn update_commission(
 ) -> solana_sdk::transport::Result<()> {
     send_transaction(
         &mut context.context,
-        &mut context.nonce,
         &[vote_instruction::update_commission(
             &vote_account,
             withdraw_authority,
@@ -314,7 +313,6 @@ async fn test_only_withdrawer_can_change_commission() {
     // Change withdraw authority
     send_transaction(
         &mut context.context,
-        &mut context.nonce,
         &[vote_instruction::authorize(
             &vote_account,
             &withdraw_authority.pubkey(),

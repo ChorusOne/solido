@@ -110,11 +110,10 @@ pub struct ValidatorAccounts {
 /// in distinct transactions. This function increments the nonce after using it.
 pub async fn send_transaction(
     context: &mut ProgramTestContext,
-    nonce: &mut u64,
     instructions: &[Instruction],
     additional_signers: Vec<&Keypair>,
 ) -> transport::Result<()> {
-    let mut instructions_mut = instructions.to_vec();
+    let instructions_mut = instructions.to_vec();
 
     // If we try to send exactly the same transaction twice, the second one will
     // not be considered distinct by the runtime, and it will not execute, but
@@ -123,26 +122,11 @@ pub async fn send_transaction(
     // rate twice in the same epoch, and confirm that the second one is rejected.
     // Normally the way to do this in Solana is to wait for a new recent block
     // hash. If the block hash is different, the transactions will be distinct.
-    // Unfortunately, `get_new_blockhash` interacts badly with `warp_to_slot`.
-    // See also https://github.com/solana-labs/solana/issues/18201. To work
-    // around this, instead of changing the block hash, add a memo instruction
-    // with a nonce to every transaction, to make the transactions distinct.
-    let memo = spl_memo::build_memo(format!("nonce={}", *nonce).as_bytes(), &[]);
-    instructions_mut.push(memo);
-    *nonce += 1;
-
-    // However, if we execute many transactions and don't request a new block
-    // hash, the block hash will eventually be too old. `solana_program_test`
-    // doesn’t tell you that this is the problem, instead `process_transaction`
-    // will fail with a timeout `IoError`. So do refresh the block hash every
-    // 300 transactions.
-    if *nonce % 300 == 199 {
-        context.last_blockhash = context
-            .banks_client
-            .get_new_latest_blockhash(&context.last_blockhash)
-            .await
-            .expect("Failed to get a new blockhash.");
-    }
+    context.last_blockhash = context
+        .banks_client
+        .get_new_latest_blockhash(&context.last_blockhash)
+        .await
+        .expect("Failed to get a new blockhash.");
 
     // Change this to true to enable more verbose test output.
     if false {
@@ -315,7 +299,6 @@ impl Context {
         let payer = result.context.payer.pubkey();
         send_transaction(
             &mut result.context,
-            &mut result.nonce,
             &[
                 system_instruction::create_account(
                     &payer,
@@ -389,7 +372,7 @@ impl Context {
     /// logs.
     pub async fn memo(&mut self, message: &str) {
         let memo_instr = spl_memo::build_memo(message.as_bytes(), &[]);
-        send_transaction(&mut self.context, &mut self.nonce, &[memo_instr], vec![])
+        send_transaction(&mut self.context, &[memo_instr], vec![])
             .await
             .expect("Failed to send memo transaction.")
     }
@@ -417,7 +400,6 @@ impl Context {
         let payer = self.context.payer.pubkey();
         send_transaction(
             &mut self.context,
-            &mut self.nonce,
             &[
                 system_instruction::create_account(
                     &payer,
@@ -452,7 +434,6 @@ impl Context {
         let payer = self.context.payer.pubkey();
         send_transaction(
             &mut self.context,
-            &mut self.nonce,
             &[
                 system_instruction::create_account(
                     &payer,
@@ -503,14 +484,9 @@ impl Context {
             &Lockup::default(),
             fund_amount.0,
         );
-        send_transaction(
-            &mut self.context,
-            &mut self.nonce,
-            &instructions[..],
-            vec![&keypair],
-        )
-        .await
-        .expect("Failed to initialize stake account.");
+        send_transaction(&mut self.context, &instructions[..], vec![&keypair])
+            .await
+            .expect("Failed to initialize stake account.");
 
         keypair.pubkey()
     }
@@ -525,14 +501,9 @@ impl Context {
         use solana_program::stake::instruction as stake;
         let instr =
             stake::delegate_stake(&stake_account, &authorized_staker.pubkey(), &vote_account);
-        send_transaction(
-            &mut self.context,
-            &mut self.nonce,
-            &[instr],
-            vec![authorized_staker],
-        )
-        .await
-        .expect("Failed to delegate stake.");
+        send_transaction(&mut self.context, &[instr], vec![authorized_staker])
+            .await
+            .expect("Failed to delegate stake.");
     }
 
     /// Merge two stake accounts, outside of Solido.
@@ -552,7 +523,6 @@ impl Context {
         );
         send_transaction(
             &mut self.context,
-            &mut self.nonce,
             &instructions,
             vec![authorized_staker_withdrawer],
         )
@@ -568,14 +538,9 @@ impl Context {
     ) {
         use solana_program::stake::instruction as stake;
         let instruction = stake::deactivate_stake(&stake_account, &authorized_staker.pubkey());
-        send_transaction(
-            &mut self.context,
-            &mut self.nonce,
-            &[instruction],
-            vec![authorized_staker],
-        )
-        .await
-        .expect("Failed to deactivate stake.");
+        send_transaction(&mut self.context, &[instruction], vec![authorized_staker])
+            .await
+            .expect("Failed to deactivate stake.");
     }
 
     /// Create a vote account for the given validator.
@@ -615,7 +580,6 @@ impl Context {
         ));
         send_transaction(
             &mut self.context,
-            &mut self.nonce,
             &instructions,
             vec![node_key, &vote_account],
         )
@@ -633,7 +597,6 @@ impl Context {
 
         send_transaction(
             &mut self.context,
-            &mut self.nonce,
             &[system_instruction::create_account(
                 &payer,
                 &account.pubkey(),
@@ -673,7 +636,6 @@ impl Context {
         let payer = self.context.payer.pubkey();
         send_transaction(
             &mut self.context,
-            &mut self.nonce,
             &[system_instruction::transfer(&payer, &recipient, amount.0)],
             vec![],
         )
@@ -696,7 +658,6 @@ impl Context {
     pub async fn try_add_maintainer(&mut self, maintainer: Pubkey) -> transport::Result<()> {
         send_transaction(
             &mut self.context,
-            &mut self.nonce,
             &[lido::instruction::add_maintainer(
                 &id(),
                 &lido::instruction::AddMaintainerMeta {
@@ -722,7 +683,6 @@ impl Context {
     pub async fn try_remove_maintainer(&mut self, maintainer: Pubkey) -> transport::Result<()> {
         send_transaction(
             &mut self.context,
-            &mut self.nonce,
             &[lido::instruction::remove_maintainer(
                 &id(),
                 &lido::instruction::RemoveMaintainerMeta {
@@ -742,7 +702,6 @@ impl Context {
     ) -> transport::Result<()> {
         send_transaction(
             &mut self.context,
-            &mut self.nonce,
             &[lido::instruction::add_validator(
                 &id(),
                 &lido::instruction::AddValidatorMeta {
@@ -781,7 +740,6 @@ impl Context {
     pub async fn deactivate_validator(&mut self, vote_account: Pubkey) {
         send_transaction(
             &mut self.context,
-            &mut self.nonce,
             &[lido::instruction::deactivate_validator(
                 &id(),
                 &lido::instruction::DeactivateValidatorMeta {
@@ -799,7 +757,6 @@ impl Context {
     pub async fn try_remove_validator(&mut self, vote_account: Pubkey) -> transport::Result<()> {
         send_transaction(
             &mut self.context,
-            &mut self.nonce,
             &[lido::instruction::remove_validator(
                 &id(),
                 &lido::instruction::RemoveValidatorMeta {
@@ -825,7 +782,6 @@ impl Context {
 
         send_transaction(
             &mut self.context,
-            &mut self.nonce,
             &[instruction::deposit(
                 &id(),
                 &instruction::DepositAccountsMeta {
@@ -865,7 +821,6 @@ impl Context {
 
         send_transaction(
             &mut self.context,
-            &mut self.nonce,
             &[instruction::withdraw(
                 &id(),
                 &instruction::WithdrawAccountsMeta {
@@ -947,7 +902,6 @@ impl Context {
 
         send_transaction(
             &mut self.context,
-            &mut self.nonce,
             &[instruction::stake_deposit(
                 &id(),
                 &instruction::StakeDepositAccountsMeta {
@@ -1005,7 +959,6 @@ impl Context {
 
         send_transaction(
             &mut self.context,
-            &mut self.nonce,
             &[instruction::unstake(
                 &id(),
                 &instruction::UnstakeAccountsMeta {
@@ -1039,7 +992,6 @@ impl Context {
     ) -> transport::Result<()> {
         send_transaction(
             &mut self.context,
-            &mut self.nonce,
             &[instruction::change_reward_distribution(
                 &id(),
                 new_reward_distribution.clone(),
@@ -1058,7 +1010,6 @@ impl Context {
     pub async fn try_update_exchange_rate(&mut self) -> transport::Result<()> {
         send_transaction(
             &mut self.context,
-            &mut self.nonce,
             &[instruction::update_exchange_rate(
                 &id(),
                 &instruction::UpdateExchangeRateAccountsMeta {
@@ -1103,7 +1054,6 @@ impl Context {
 
         send_transaction(
             &mut self.context,
-            &mut self.nonce,
             &[instruction::merge_stake(
                 &id(),
                 &instruction::MergeStakeMeta {
@@ -1157,7 +1107,6 @@ impl Context {
 
         send_transaction(
             &mut self.context,
-            &mut self.nonce,
             &[instruction::withdraw_inactive_stake(
                 &id(),
                 &instruction::WithdrawInactiveStakeMeta {
@@ -1197,7 +1146,6 @@ impl Context {
             .minimum_balance(vote_account.data.len());
         send_transaction(
             &mut self.context,
-            &mut self.nonce,
             &[instruction::collect_validator_fee(
                 &id(),
                 &instruction::CollectValidatorFeeMeta {
@@ -1245,7 +1193,6 @@ impl Context {
 
         send_transaction(
             &mut self.context,
-            &mut self.nonce,
             &[instruction::claim_validator_fee(
                 &id(),
                 &instruction::ClaimValidatorFeeMeta {
@@ -1333,7 +1280,6 @@ impl Context {
     ) {
         send_transaction(
             &mut self.context,
-            &mut self.nonce,
             &[spl_token::instruction::transfer(
                 &spl_token::id(),
                 source,
