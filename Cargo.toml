@@ -17,26 +17,8 @@ panic = "abort"
 [profile.release]
 panic = "abort"
 
-# We take our fork of Solana 1.9.28, which has one patch applied:
-# https://github.com/solana-labs/solana/pull/21415.
-# This patch enables testing more situations using solana-program-test.
-# We need to override the other Solana packages as well because they are interdependent,
-# and if we don’t override them, Cargo will include two incompatible versions of those
-# packages (one from crates.io and one from the fork).
+# patch Anchor 0.13 to be able to use Solana 1.9.28
 [patch.crates-io]
-# solana-config-program = { git = "https://github.com/ChorusOne/solana", branch = "program-test-178" }
-# solana-frozen-abi = { git = "https://github.com/ChorusOne/solana", branch = "program-test-178" }
-# solana-frozen-abi-macro = { git = "https://github.com/ChorusOne/solana", branch = "program-test-178" }
-# solana-logger = { git = "https://github.com/ChorusOne/solana", branch = "program-test-178" }
-# solana-measure = { git = "https://github.com/ChorusOne/solana", branch = "program-test-178" }
-# solana-metrics = { git = "https://github.com/ChorusOne/solana", branch = "program-test-178" }
-# solana-program = { git = "https://github.com/ChorusOne/solana", branch = "program-test-178" }
-# solana-program-test = { git = "https://github.com/ChorusOne/solana", branch = "program-test-178" }
-# solana-rayon-threadlimit = { git = "https://github.com/ChorusOne/solana", branch = "program-test-178" }
-# solana-runtime = { git = "https://github.com/ChorusOne/solana", branch = "program-test-178" }
-# solana-sdk = { git = "https://github.com/ChorusOne/solana", branch = "program-test-178" }
-# solana-stake-program = { git = "https://github.com/ChorusOne/solana", branch = "program-test-178" }
-# solana-vote-program = { git = "https://github.com/ChorusOne/solana", branch = "program-test-178" }
 anchor-lang = { git = "https://github.com/lidofinance/anchor", branch = "solana-v1.9.28" }
 
 # https://github.com/tiny-http/tiny-http/pull/225
