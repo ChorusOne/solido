@@ -7,13 +7,13 @@ version = "1.2.0"
 
 [dependencies]
 anker = { path = "../anker" }
-borsh = "0.9.1"
+borsh = "0.9.3"
 lido = { path = "../program" }
 num-derive = "0.3"
 num-traits = "0.2"
 rand = "0.7.3"
-serde = "1.0.121"
-serde_derive = "1.0.103"
+serde = "1.0.137"
+serde_derive = "1.0.137"
 solana-program = "1.9.28"
 solana-program-test = "1.9.28"
 solana-sdk = "1.9.28"

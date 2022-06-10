@@ -9,14 +9,14 @@ version = "1.3.2"
 [dependencies]
 anchor-lang = "0.13.0"
 anker = { path = "../../anker", features = ["no-entrypoint"] }
-bincode = "1.3.1"
-borsh = "0.9.1"
+bincode = "1.3"
+borsh = "0.9"
 bs58 = "0.4.0"
-clap = { version = "3.1.6", features = ["derive"] }
+clap = { version = "3.1.18", features = ["derive"] }
 derivation-path = "0.1.3"
 lido = {path = "../../program", features = ["no-entrypoint"]}
 num-traits = "0.2"
-num_cpus = "1.0"
+num_cpus = "1.13"
 rand = "0.8.3"
 serde = "1.0"
 serde_json = "1.0"
@@ -36,8 +36,8 @@ spl-associated-token-account = "1.0.2"
 spl-token = "3.1.1"
 spl-token-swap = "2.1.0"
 tiny_http = "0.8.2"
-uriparse = "0.6.3"
-itertools = "0.10.1"
+uriparse = "0.6.4"
+itertools = "0.10.3"
 solido-cli-common = { path = "../common" }
 
 [[bin]]

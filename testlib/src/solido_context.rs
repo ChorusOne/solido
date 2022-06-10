@@ -26,6 +26,7 @@ use solana_sdk::transport;
 use solana_sdk::transport::TransportError;
 use solana_vote_program::vote_instruction;
 use solana_vote_program::vote_state::{VoteInit, VoteState};
+use std::sync::Once;
 
 use anker::error::AnkerError;
 use lido::account_map::PubkeyAndEntry;
@@ -39,6 +40,8 @@ use lido::{
     state::{FeeRecipients, Lido, RewardDistribution, Validator},
     MINT_AUTHORITY,
 };
+
+static INIT: Once = Once::new();
 
 pub struct DeterministicKeypairGen {
     rng: StdRng,
@@ -249,7 +252,10 @@ impl Context {
 
         // Add the actual Orca token swap program, so we test against the real thing.
         // If we don't have it locally, download it from the chain.
-        crate::util::ensure_orca_program_exists();
+        INIT.call_once(|| {
+            // call it once so that Solana rpc would not block us by IP
+            crate::util::ensure_orca_program_exists();
+        });
         program_test.add_program("orca_token_swap_v2", anker::orca_token_swap_v2::id(), None);
         program_test.add_program(
             "orca_token_swap_v2",
