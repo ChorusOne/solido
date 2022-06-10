@@ -90,8 +90,8 @@ jobs:
 
         # But only run the tests for Solido itself, the SPL tests are already
         # executed upstream.
-        cargo test-bpf --manifest-path program/Cargo.toml
-        cargo test-bpf --manifest-path anker/Cargo.toml
+        RUST_BACKTRACE=1 cargo test-bpf --manifest-path program/Cargo.toml
+        RUST_BACKTRACE=1 cargo test-bpf --manifest-path anker/Cargo.toml
 
     - name: Build CLI client
       run: cargo build --bin solido
