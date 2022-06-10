@@ -41,10 +41,7 @@ use solana_sdk::signature::Signature;
 use solana_sdk::signer::Signer;
 use solana_sdk::signers::Signers;
 use solana_sdk::sysvar::stake_history::StakeHistory;
-use solana_sdk::sysvar::{
-    self, clock::Clock, epoch_schedule::EpochSchedule, recent_blockhashes::RecentBlockhashes,
-    rent::Rent, Sysvar,
-};
+use solana_sdk::sysvar::{self, clock::Clock, epoch_schedule::EpochSchedule, rent::Rent, Sysvar};
 use solana_sdk::transaction::Transaction;
 use solana_vote_program::vote_state::VoteState;
 
@@ -260,16 +257,9 @@ impl<'a> Snapshot<'a> {
         self.get_bincode(&sysvar::stake_history::id())
     }
 
-    /// Read `sysvar::recent_blockhashes`.
-    pub fn get_recent_blockhashes(&mut self) -> crate::Result<RecentBlockhashes> {
-        self.get_bincode(&sysvar::recent_blockhashes::id())
-    }
-
     /// Return the most recent block hash at the time of the snapshot.
-    pub fn get_recent_blockhash(&mut self) -> crate::Result<Hash> {
-        let blockhashes = self.get_recent_blockhashes()?;
-        // The blockhashes are ordered from most recent to least recent.
-        Ok(blockhashes[0].blockhash)
+    pub fn get_latest_blockhash(&mut self) -> crate::Result<Hash> {
+        Ok(self.rpc_client.get_latest_blockhash()?)
     }
 
     /// Read and parse the vote account at the given address.
@@ -750,7 +740,7 @@ impl<'a> SnapshotConfig<'a> {
         signers: &T,
     ) -> crate::Result<Transaction> {
         let mut tx = Transaction::new_with_payer(instructions, Some(&self.signer.pubkey()));
-        let recent_blockhash = self.client.get_recent_blockhash()?;
+        let recent_blockhash = self.client.get_latest_blockhash()?;
         tx.try_sign(signers, recent_blockhash).map_err(|err| {
             let boxed_error: Error = Box::new(err);
             boxed_error
