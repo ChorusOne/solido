@@ -2,7 +2,7 @@ name: build
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, solana-v1.9.28 ]
   pull_request:
     branches: '*'
 
@@ -59,14 +59,14 @@ jobs:
           ~/.cargo/registry/cache/
           ~/.cargo/git/db/
           target/
-        key: build-1.8.16-v3-${{ hashFiles('Cargo.lock') }}
-        restore-keys: build-1.8.16-v3
+        key: build-1.9.28-v1-${{ hashFiles('Cargo.lock') }}
+        restore-keys: build-1.9.28-v1
 
     - name: Install development tools
       run: |
         sudo apt update
         sudo apt-get install -y libudev-dev
-        sh -c "$(curl -sSfL https://release.solana.com/v1.8.16/install)"
+        sh -c "$(curl -sSfL https://release.solana.com/v1.9.28/install)"
 
     - name: Run unit tests
       run: |
@@ -157,8 +157,8 @@ jobs:
           ~/.cargo/git/db/
           target/
           cli/listener/fuzz/target/
-        key: lint-1.8.16-v3-${{ hashFiles('Cargo.lock', 'cli/listener/fuzz/Cargo.lock') }}
-        restore-keys: lint-1.8.16-v3
+        key: lint-1.9.28-v1-${{ hashFiles('Cargo.lock', 'cli/listener/fuzz/Cargo.lock') }}
+        restore-keys: lint-1.9.28-v1
 
     - name: Install linters
       run: |
