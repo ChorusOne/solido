@@ -39,6 +39,8 @@ ALLOWED_DEPENDENCIES = [
     # All runtime code that we depend on is covered by an ISC-style license.
     'webpki',
     # https://github.com/hsivonen/encoding_rs#licensing
+    # Some parts of it are (Apache2 OR MIT) and some parts of it are 3-clause BSD
+    # but all of these are whitelisted separately
     'encoding_rs',
 ]
 

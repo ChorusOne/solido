@@ -176,6 +176,10 @@ pub struct Snapshot<'a> {
     /// retry sending the transaction. If that happens, we need to update the
     /// program, so it reads everything it needs before sending a transaction.
     sent_transaction: &'a mut bool,
+
+    /// The most recent block hash at the time of the snapshot.
+    /// Is saved on the first call to `get_latest_blockhash` and then reused
+    blockhash: Option<Hash>,
 }
 
 impl<'a> Snapshot<'a> {
@@ -259,7 +263,14 @@ impl<'a> Snapshot<'a> {
 
     /// Return the most recent block hash at the time of the snapshot.
     pub fn get_latest_blockhash(&mut self) -> crate::Result<Hash> {
-        Ok(self.rpc_client.get_latest_blockhash()?)
+        match self.blockhash {
+            Some(blockhash) => Ok(blockhash),
+            None => {
+                let blockhash = self.rpc_client.get_latest_blockhash()?;
+                self.blockhash = Some(blockhash);
+                Ok(blockhash)
+            }
+        }
     }
 
     /// Read and parse the vote account at the given address.
@@ -605,6 +616,7 @@ impl SnapshotClient {
                 validator_info_addrs: &self.validator_info_addrs,
                 rpc_client: &self.rpc_client,
                 sent_transaction: &mut sent_transaction,
+                blockhash: None,
             };
 
             match f(snapshot) {
