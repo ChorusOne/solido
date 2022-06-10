@@ -194,13 +194,9 @@ impl StakeAccount {
         let target_epoch = clock.epoch;
         let history = Some(stake_history);
 
-        // This toggle is a historical quirk in Solana and should always be set
-        // to true. See also https://github.com/ChorusOne/solido/issues/184#issuecomment-861653316.
-        let fix_stake_deactivate = true;
-
-        let (mut active_lamports, activating_lamports, deactivating_lamports) = stake
+        let mut state = stake
             .delegation
-            .stake_activating_and_deactivating(target_epoch, history, fix_stake_deactivate);
+            .stake_activating_and_deactivating(target_epoch, history);
 
         // `stake_activating_and_deactivating` counts deactivating stake both as
         // part of the active lamports, and as part of the deactivating
@@ -208,21 +204,21 @@ impl StakeAccount {
         // categories, so for us, active should not include deactivating
         // lamports. There cannot be more lamports deactivating than there are
         // active lamports, so this does not underflow.
-        active_lamports -= deactivating_lamports;
+        state.effective -= state.deactivating;
         let inactive_lamports = account_lamports.0
-            .checked_sub(active_lamports)
+            .checked_sub(state.effective)
             .expect("Active stake cannot be larger than stake account balance.")
-            .checked_sub(activating_lamports)
+            .checked_sub(state.activating)
             .expect("Activating stake cannot be larger than stake account balance - active.")
-            .checked_sub(deactivating_lamports)
+            .checked_sub(state.deactivating)
             .expect("Deactivating stake cannot be larger than stake account balance - active - activating.");
 
         StakeAccount {
             balance: StakeBalance {
                 inactive: Lamports(inactive_lamports),
-                activating: Lamports(activating_lamports),
-                active: Lamports(active_lamports),
-                deactivating: Lamports(deactivating_lamports),
+                activating: Lamports(state.activating),
+                active: Lamports(state.effective),
+                deactivating: Lamports(state.deactivating),
             },
             credits_observed: stake.credits_observed,
             activation_epoch: stake.delegation.activation_epoch,

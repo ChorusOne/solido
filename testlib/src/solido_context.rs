@@ -139,10 +139,9 @@ pub async fn send_transaction(
     if *nonce % 300 == 299 {
         context.last_blockhash = context
             .banks_client
-            .get_new_blockhash(&context.last_blockhash)
+            .get_new_latest_blockhash(&context.last_blockhash)
             .await
-            .expect("Failed to get a new blockhash.")
-            .0;
+            .expect("Failed to get a new blockhash.");
     }
 
     // Change this to true to enable more verbose test output.
@@ -589,7 +588,7 @@ impl Context {
         let rent = self.context.banks_client.get_rent().await.unwrap();
         let rent_voter = rent.minimum_balance(VoteState::size_of());
 
-        let initial_balance = Lamports(42);
+        let initial_balance = Lamports(rent.minimum_balance(0));
         let size_bytes = 0;
 
         let vote_account = self.deterministic_keypair.new_keypair();

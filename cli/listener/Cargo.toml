@@ -8,9 +8,9 @@ version = "1.3.2"
 
 [dependencies]
 rusqlite = "0.26.3"
-solana-client = "1.7.8"
-solana-sdk = "1.7.8"
-solana-logger = "1.7.8"
+solana-client = "1.9.28"
+solana-sdk = "1.9.28"
+solana-logger = "1.9.28"
 clap = { version = "3.1.6", features = ["derive"] }
 chrono = "0.4.19"
 solido-cli-common = { path = "../common" }
