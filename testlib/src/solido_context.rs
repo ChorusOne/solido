@@ -136,7 +136,7 @@ pub async fn send_transaction(
     // doesn’t tell you that this is the problem, instead `process_transaction`
     // will fail with a timeout `IoError`. So do refresh the block hash every
     // 300 transactions.
-    if *nonce % 300 == 299 {
+    if *nonce % 300 == 199 {
         context.last_blockhash = context
             .banks_client
             .get_new_latest_blockhash(&context.last_blockhash)
