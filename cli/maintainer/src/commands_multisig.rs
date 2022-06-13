@@ -28,8 +28,8 @@ use solana_sdk::sysvar;
 
 use lido::{
     instruction::{
-        AddMaintainerMeta, AddValidatorMeta, ChangeRewardDistributionMeta, DeactivateValidatorMeta,
-        LidoInstruction, RemoveMaintainerMeta,
+        AddMaintainerMeta, AddValidatorMetaV2, ChangeRewardDistributionMeta,
+        DeactivateValidatorMeta, LidoInstruction, RemoveMaintainerMeta,
     },
     state::{FeeRecipients, Lido, RewardDistribution},
     util::{serialize_b58, serialize_b58_slice},
@@ -1043,8 +1043,8 @@ fn try_parse_solido_instruction(
                 },
             })
         }
-        LidoInstruction::AddValidator => {
-            let accounts = AddValidatorMeta::try_from_slice(&instr.accounts)?;
+        LidoInstruction::AddValidatorV2 => {
+            let accounts = AddValidatorMetaV2::try_from_slice(&instr.accounts)?;
             ParsedInstruction::SolidoInstruction(SolidoInstruction::AddValidator {
                 solido_instance: accounts.lido,
                 manager: accounts.manager,

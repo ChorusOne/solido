@@ -12,6 +12,7 @@ use solana_program::{
     pubkey::Pubkey,
     stake as stake_program, system_program,
     sysvar::{self, stake_history},
+    vote,
 };
 
 use crate::{
@@ -70,9 +71,12 @@ pub enum LidoInstruction {
     /// Observe any external changes in the balances of a validator's stake accounts.
     ///
     /// If there is inactive balance in stake accounts, withdraw this back to the reserve.
-    /// Distribute fees.
+    /// Deprecated in favour of WithdrawInactiveStakeV2
     WithdrawInactiveStake,
 
+    /// Claim rewards from the validator account and distribute rewards.
+    CollectValidatorFee,
+    ClaimValidatorFee,
     ChangeRewardDistribution {
         #[allow(dead_code)] // but it's not
         new_reward_distribution: RewardDistribution,
@@ -81,6 +85,7 @@ pub enum LidoInstruction {
     /// Add a new validator to the validator set.
     ///
     /// Requires the manager to sign.
+    /// Deprecated in favour of AddValidatorV2
     AddValidator,
 
     /// Set the `active` flag to false for a given validator.
@@ -101,11 +106,22 @@ pub enum LidoInstruction {
     RemoveMaintainer,
     MergeStake,
 
+    /// Observe any external changes in the balances of a validator's stake accounts.
+    ///
+    /// If there is inactive balance in stake accounts, withdraw this back to the reserve.
+    /// Distribute fees.
+    WithdrawInactiveStakeV2,
+
+    /// Add a new validator to the validator set.
+    ///
+    /// Requires the manager to sign.
+    AddValidatorV2,
+
     /// Check if validator increased his commission over maximum allowed
     /// and deactivate him if he did
     ///
     /// Requires no permission
-    CheckMaxCommissionViolation,
+    DeactivateValidatorIfCommissionExceedsMax,
 }
 
 impl LidoInstruction {
@@ -114,7 +130,7 @@ impl LidoInstruction {
         // `Borsh::serialize`, which takes an arbitrary writer, and which can
         // therefore return an IoError. But when serializing to a vec, there
         // is no IO, so for this particular writer, it should never fail.
-        self.try_to_vec() // actually it can fail on OutOfMemory error
+        self.try_to_vec()
             .expect("Serializing an Instruction to Vec<u8> does not fail.")
     }
 }
@@ -145,6 +161,7 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
+        const sysvar_rent = sysvar::rent::id(),
         const spl_token = spl_token::id(),
     }
 }
@@ -425,6 +442,8 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
+        const sysvar_clock = sysvar::clock::id(),
+        const sysvar_rent = sysvar::rent::id(),
     }
 }
 
@@ -467,6 +486,55 @@ accounts_struct! {
             is_writable: true,
         },
 
+        // We only allow updating balances if the exchange rate is up to date,
+        // so we need to know the current epoch.
+        const sysvar_clock = sysvar::clock::id(),
+
+        // Needed to determine if there is excess balance in a stake account.
+        const sysvar_rent = sysvar::rent::id(),
+
+        // Needed for the stake program, to withdraw from stake accounts.
+        const sysvar_stake_history = sysvar::stake_history::id(),
+
+        // Needed to withdraw from stake accounts.
+        const stake_program = stake_program::program::id(),
+
+        // The validator's stake accounts, from the begin seed until (but
+        // excluding) the end seed.
+        pub ...stake_accounts {
+            is_signer: false,
+            is_writable: true,
+        },
+    }
+}
+
+pub fn withdraw_inactive_stake(
+    program_id: &Pubkey,
+    accounts: &WithdrawInactiveStakeMeta,
+) -> Instruction {
+    Instruction {
+        program_id: *program_id,
+        accounts: accounts.to_vec(),
+        data: LidoInstruction::WithdrawInactiveStake.to_vec(),
+    }
+}
+
+accounts_struct! {
+    // Note: there are no signers among these accounts, updating a validator
+    // account is permissionless, anybody can do it.
+    CollectValidatorFeeMeta, CollectValidatorFeeInfo {
+        pub lido {
+            is_signer: false,
+            is_writable: true,
+        },
+        // The validator to update the balance for.
+        // Needs to be writable so we withdraw from it.
+        pub validator_vote_account {
+            is_signer: false,
+            // Is writable due to withdraw to reserve (vote_instruction::withdraw)
+            is_writable: true,
+        },
+
         // Updating balances also immediately mints rewards, so we need the stSOL
         // mint, and the fee accounts to deposit the stSOL into.
         pub st_sol_mint {
@@ -492,36 +560,41 @@ accounts_struct! {
             is_writable: true,
         },
 
-        // Needed for minting rewards.
-        const spl_token_program = spl_token::id(),
+        pub reserve {
+            is_signer: false,
+            // Is writable due to withdraw to reserve (vote_instruction::withdraw)
+            is_writable: true,
+        },
+        // Used to get the rewards out of the validator vote account.
+        pub rewards_withdraw_authority {
+            is_signer: false,
+            is_writable: false,
+        },
 
         // We only allow updating balances if the exchange rate is up to date,
         // so we need to know the current epoch.
         const sysvar_clock = sysvar::clock::id(),
 
-        // Needed for the stake program, to withdraw from stake accounts.
-        const sysvar_stake_history = sysvar::stake_history::id(),
+        // Needed for minting rewards.
+        const spl_token_program = spl_token::id(),
 
-        // Needed to withdraw from stake accounts.
-        const stake_program = stake_program::program::id(),
+        // Needed to calculate the validator's vote account rent exempt, so it
+        // can subtracted from the rewards.
+        const sysvar_rent = sysvar::rent::id(),
 
-        // The validator's stake accounts, from the begin seed until (but
-        // excluding) the end seed.
-        pub ...stake_accounts {
-            is_signer: false,
-            is_writable: true,
-        },
+        // Needed to withdraw from the vote account.
+        const vote_program = vote::program::id(),
     }
 }
 
-pub fn withdraw_inactive_stake(
+pub fn collect_validator_fee(
     program_id: &Pubkey,
-    accounts: &WithdrawInactiveStakeMeta,
+    accounts: &CollectValidatorFeeMeta,
 ) -> Instruction {
     Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
-        data: LidoInstruction::WithdrawInactiveStake.to_vec(),
+        data: LidoInstruction::CollectValidatorFee.to_vec(),
     }
 }
 
@@ -579,6 +652,11 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
+        pub validator_fee_st_sol_account {
+            is_signer: false,
+            is_writable: false,
+        },
+        const sysvar_rent = sysvar::rent::id(),
     }
 }
 
@@ -640,26 +718,36 @@ pub fn deactivate_validator(
 }
 
 accounts_struct! {
-    CheckMaxCommissionViolationMeta, CheckMaxCommissionViolationInfo {
+    ClaimValidatorFeeMeta, ClaimValidatorFeeInfo {
         pub lido {
             is_signer: false,
             is_writable: true,
         },
-        pub validator_vote_account_to_deactivate {
+        pub st_sol_mint {
+            is_signer: false,
+            // Is writable due to fee mint (spl_token::instruction::mint_to) to validator fee
+            // st_sol account
+            is_writable: true,
+        },
+        pub mint_authority {
             is_signer: false,
             is_writable: false,
         },
+        pub validator_fee_st_sol_account {
+            is_signer: false,
+            // Is writable due to fee mint (spl_token::instruction::mint_to) to validator fee
+            // st_sol account
+            is_writable: true,
+        },
+        const spl_token = spl_token::id(),
     }
 }
 
-pub fn check_max_commission_violation(
-    program_id: &Pubkey,
-    accounts: &CheckMaxCommissionViolationMeta,
-) -> Instruction {
+pub fn claim_validator_fee(program_id: &Pubkey, accounts: &ClaimValidatorFeeMeta) -> Instruction {
     Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
-        data: LidoInstruction::CheckMaxCommissionViolation.to_vec(),
+        data: LidoInstruction::ClaimValidatorFee.to_vec(),
     }
 }
 
@@ -752,5 +840,140 @@ pub fn merge_stake(program_id: &Pubkey, accounts: &MergeStakeMeta) -> Instructio
         accounts: accounts.to_vec(),
         // this can fail on OutOfMemory
         data: LidoInstruction::MergeStake.try_to_vec().unwrap(), // This should never fail.
+    }
+}
+
+accounts_struct! {
+    AddValidatorMetaV2, AddValidatorInfoV2 {
+        pub lido {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub manager {
+            is_signer: true,
+            is_writable: false,
+        },
+        pub validator_vote_account {
+            is_signer: false,
+            is_writable: false,
+        },
+    }
+}
+
+pub fn add_validator_v2(program_id: &Pubkey, accounts: &AddValidatorMetaV2) -> Instruction {
+    Instruction {
+        program_id: *program_id,
+        accounts: accounts.to_vec(),
+        data: LidoInstruction::AddValidatorV2.to_vec(),
+    }
+}
+
+accounts_struct! {
+    // Note: there are no signers among these accounts, updating validator
+    // balance is permissionless, anybody can do it.
+    WithdrawInactiveStakeMetaV2, WithdrawInactiveStakeInfoV2 {
+        pub lido {
+            is_signer: false,
+            is_writable: true,
+        },
+        // The validator to update the balance for.
+        pub validator_vote_account {
+            is_signer: false,
+            is_writable: false,
+        },
+
+        // This instruction withdraws any excess stake from the stake accounts
+        // back to the reserve. The stake authority needs to sign off on those
+        // (but program-derived, so it is not a signer here), and we need access
+        // to the reserve.
+        pub stake_authority {
+            is_signer: false,
+            is_writable: false,
+        },
+        pub reserve {
+            is_signer: false,
+            // Is writable due to withdraw from stake account to reserve (StakeAccount::stake_account_withdraw)
+            is_writable: true,
+        },
+
+        // Updating balances also immediately mints rewards, so we need the stSOL
+        // mint, and the fee accounts to deposit the stSOL into.
+        pub st_sol_mint {
+            is_signer: false,
+            // Is writable due to fee mint (spl_token::instruction::mint_to)
+            is_writable: true,
+        },
+
+        // Mint authority is required to mint tokens.
+        pub mint_authority {
+            is_signer: false,
+            is_writable: false,
+        },
+
+        pub treasury_st_sol_account {
+            is_signer: false,
+            // Is writable due to fee mint (spl_token::instruction::mint_to) to treasury
+            is_writable: true,
+        },
+        pub developer_st_sol_account {
+            is_signer: false,
+            // Is writable due to fee mint (spl_token::instruction::mint_to) to developer
+            is_writable: true,
+        },
+
+        // Needed for minting rewards.
+        const spl_token_program = spl_token::id(),
+
+        // We only allow updating balances if the exchange rate is up to date,
+        // so we need to know the current epoch.
+        const sysvar_clock = sysvar::clock::id(),
+
+        // Needed for the stake program, to withdraw from stake accounts.
+        const sysvar_stake_history = sysvar::stake_history::id(),
+
+        // Needed to withdraw from stake accounts.
+        const stake_program = stake_program::program::id(),
+
+        // The validator's stake accounts, from the begin seed until (but
+        // excluding) the end seed.
+        pub ...stake_accounts {
+            is_signer: false,
+            is_writable: true,
+        },
+    }
+}
+
+pub fn withdraw_inactive_stake_v2(
+    program_id: &Pubkey,
+    accounts: &WithdrawInactiveStakeMetaV2,
+) -> Instruction {
+    Instruction {
+        program_id: *program_id,
+        accounts: accounts.to_vec(),
+        data: LidoInstruction::WithdrawInactiveStakeV2.to_vec(),
+    }
+}
+
+accounts_struct! {
+    DeactivateValidatorIfCommissionExceedsMaxMeta, DeactivateValidatorIfCommissionExceedsMaxInfo {
+        pub lido {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub validator_vote_account_to_deactivate {
+            is_signer: false,
+            is_writable: false,
+        },
+    }
+}
+
+pub fn check_max_commission_violation(
+    program_id: &Pubkey,
+    accounts: &DeactivateValidatorIfCommissionExceedsMaxMeta,
+) -> Instruction {
+    Instruction {
+        program_id: *program_id,
+        accounts: accounts.to_vec(),
+        data: LidoInstruction::DeactivateValidatorIfCommissionExceedsMax.to_vec(),
     }
 }

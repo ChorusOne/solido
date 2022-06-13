@@ -164,7 +164,7 @@ REWARDS
 
     /// Deactivates a validator and initiates the removal process if
     /// validator exceeds maximum validation commission. Requires no permission.
-    CheckMaxCommissionViolation(CheckMaxCommissionViolationOpts),
+    DeactivateValidatorIfCommissionExceedsMax(DeactivateValidatorIfCommissionExceedsMaxOpts),
 
     /// Adds a maintainer to the Solido instance.
     AddMaintainer(AddRemoveMaintainerOpts),
@@ -292,7 +292,7 @@ fn main() {
             let output = result.ok_or_abort_with("Failed to deactivate validator.");
             print_output(output_mode, &output);
         }
-        SubCommand::CheckMaxCommissionViolation(cmd_opts) => {
+        SubCommand::DeactivateValidatorIfCommissionExceedsMax(cmd_opts) => {
             let result = config
                 .with_snapshot(|config| command_check_max_commission_violation(config, &cmd_opts));
             let output = result.ok_or_abort_with("Failed to check max commission violation.");
@@ -345,7 +345,7 @@ fn merge_with_config_and_environment(
         SubCommand::DeactivateValidator(opts) => {
             opts.merge_with_config_and_environment(config_file)
         }
-        SubCommand::CheckMaxCommissionViolation(opts) => {
+        SubCommand::DeactivateValidatorIfCommissionExceedsMax(opts) => {
             opts.merge_with_config_and_environment(config_file)
         }
         SubCommand::AddMaintainer(opts) | SubCommand::RemoveMaintainer(opts) => {

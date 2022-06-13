@@ -736,9 +736,9 @@ impl Context {
         send_transaction(
             &mut self.context,
             &mut self.nonce,
-            &[lido::instruction::add_validator(
+            &[lido::instruction::add_validator_v2(
                 &id(),
-                &lido::instruction::AddValidatorMeta {
+                &lido::instruction::AddValidatorMetaV2 {
                     lido: self.solido.pubkey(),
                     manager: self.manager.pubkey(),
                     validator_vote_account: accounts.vote_account,
@@ -1148,9 +1148,9 @@ impl Context {
         send_transaction(
             &mut self.context,
             &mut self.nonce,
-            &[instruction::withdraw_inactive_stake(
+            &[instruction::withdraw_inactive_stake_v2(
                 &id(),
-                &instruction::WithdrawInactiveStakeMeta {
+                &instruction::WithdrawInactiveStakeMetaV2 {
                     lido: self.solido.pubkey(),
                     validator_vote_account,
                     stake_accounts: stake_account_addrs,

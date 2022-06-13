@@ -13,8 +13,8 @@ use crate::vote_state::PartialVoteState;
 use crate::{
     error::LidoError,
     instruction::{
-        AddMaintainerInfo, AddValidatorInfo, ChangeRewardDistributionInfo,
-        CheckMaxCommissionViolationInfo, DeactivateValidatorInfo, MergeStakeInfo,
+        AddMaintainerInfo, AddValidatorInfoV2, ChangeRewardDistributionInfo,
+        DeactivateValidatorIfCommissionExceedsMaxInfo, DeactivateValidatorInfo, MergeStakeInfo,
         RemoveMaintainerInfo, RemoveValidatorInfo,
     },
     state::{RewardDistribution, Validator},
@@ -41,8 +41,15 @@ pub fn process_change_reward_distribution(
     lido.save(accounts.lido)
 }
 
-pub fn process_add_validator(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> ProgramResult {
-    let accounts = AddValidatorInfo::try_from_slice(accounts_raw)?;
+pub fn process_add_validator(_program_id: &Pubkey, _accounts_raw: &[AccountInfo]) -> ProgramResult {
+    Err(LidoError::InstructionIsDeprecated.into())
+}
+
+pub fn process_add_validator_v2(
+    program_id: &Pubkey,
+    accounts_raw: &[AccountInfo],
+) -> ProgramResult {
+    let accounts = AddValidatorInfoV2::try_from_slice(accounts_raw)?;
     let mut lido = Lido::deserialize_lido(program_id, accounts.lido)?;
     let rent = &Rent::get()?;
     lido.check_manager(accounts.manager)?;
@@ -111,6 +118,13 @@ pub fn process_deactivate_validator(
     lido.save(accounts.lido)
 }
 
+pub fn process_claim_validator_fee(
+    _program_id: &Pubkey,
+    _accounts_raw: &[AccountInfo],
+) -> ProgramResult {
+    Err(LidoError::InstructionIsDeprecated.into())
+}
+
 /// Set the `active` flag to false for a given validator if it's commission is
 /// bigger then max allowed. It is permissionless.
 ///
@@ -120,7 +134,7 @@ pub fn process_check_max_commission_violation(
     program_id: &Pubkey,
     accounts_raw: &[AccountInfo],
 ) -> ProgramResult {
-    let accounts = CheckMaxCommissionViolationInfo::try_from_slice(accounts_raw)?;
+    let accounts = DeactivateValidatorIfCommissionExceedsMaxInfo::try_from_slice(accounts_raw)?;
     let mut lido = Lido::deserialize_lido(program_id, accounts.lido)?;
 
     let data = accounts.validator_vote_account_to_deactivate.data.borrow();
@@ -167,6 +181,16 @@ pub fn process_remove_maintainer(
     lido.maintainers.remove(accounts.maintainer.key)?;
 
     lido.save(accounts.lido)
+}
+
+/// TODO(#186) Allow validator to change fee account
+/// Called by the validator, changes the fee account which the validator
+/// receives tokens
+pub fn _process_change_validator_fee_account(
+    _program_id: &Pubkey,
+    _accounts: &[AccountInfo],
+) -> ProgramResult {
+    unimplemented!()
 }
 
 /// Merge two stake accounts from the beginning of the validator's stake

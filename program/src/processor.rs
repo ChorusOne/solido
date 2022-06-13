@@ -10,7 +10,7 @@ use crate::{
     instruction::{
         DepositAccountsInfo, InitializeAccountsInfo, LidoInstruction, StakeDepositAccountsInfo,
         UnstakeAccountsInfo, UpdateExchangeRateAccountsInfo, WithdrawAccountsInfo,
-        WithdrawInactiveStakeInfo,
+        WithdrawInactiveStakeInfoV2,
     },
     logic::{
         burn_st_sol, check_mint, check_rent_exempt, check_unstake_accounts,
@@ -20,8 +20,9 @@ use crate::{
     },
     metrics::Metrics,
     process_management::{
-        process_add_maintainer, process_add_validator, process_change_reward_distribution,
-        process_check_max_commission_violation, process_deactivate_validator, process_merge_stake,
+        process_add_maintainer, process_add_validator, process_add_validator_v2,
+        process_change_reward_distribution, process_check_max_commission_violation,
+        process_claim_validator_fee, process_deactivate_validator, process_merge_stake,
         process_remove_maintainer, process_remove_validator,
     },
     stake_account::{deserialize_stake_account, StakeAccount},
@@ -552,7 +553,7 @@ impl std::fmt::Display for StakeType {
 }
 
 pub struct WithdrawExcessOpts<'a, 'b> {
-    accounts: &'a WithdrawInactiveStakeInfo<'a, 'b>,
+    accounts: &'a WithdrawInactiveStakeInfoV2<'a, 'b>,
     clock: &'a Clock,
     stake_history: &'a StakeHistory,
     stake_account: &'a AccountInfo<'b>,
@@ -642,15 +643,23 @@ pub fn check_address_and_get_balance(
     Ok(account_balance)
 }
 
+/// Instruction is deprecated in favour of process_withdraw_inactive_stake_v2
+pub fn process_withdraw_inactive_stake(
+    _program_id: &Pubkey,
+    _raw_accounts: &[AccountInfo],
+) -> ProgramResult {
+    Err(LidoError::InstructionIsDeprecated.into())
+}
+
 /// Recover any inactive balance from the validator's stake/unstake accounts to
 /// the reserve account.
 /// Updates the validator's balance and distribute rewards.
 /// This function is permissionless and can be called by anyone.
-pub fn process_withdraw_inactive_stake(
+pub fn process_withdraw_inactive_stake_v2(
     program_id: &Pubkey,
     raw_accounts: &[AccountInfo],
 ) -> ProgramResult {
-    let accounts = WithdrawInactiveStakeInfo::try_from_slice(raw_accounts)?;
+    let accounts = WithdrawInactiveStakeInfoV2::try_from_slice(raw_accounts)?;
     let mut lido = Lido::deserialize_lido(program_id, accounts.lido)?;
     let stake_history = StakeHistory::from_account_info(accounts.sysvar_stake_history)?;
     let clock = Clock::get()?;
@@ -814,6 +823,13 @@ pub fn process_withdraw_inactive_stake(
     distribute_fees(&mut lido, &accounts, &clock, rewards)?;
 
     lido.save(accounts.lido)
+}
+
+pub fn process_collect_validator_fee(
+    _program_id: &Pubkey,
+    _raw_accounts: &[AccountInfo],
+) -> ProgramResult {
+    Err(LidoError::InstructionIsDeprecated.into())
 }
 
 /// Splits a stake account from a validator's stake account.
@@ -980,17 +996,23 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
         LidoInstruction::WithdrawInactiveStake => {
             process_withdraw_inactive_stake(program_id, accounts)
         }
+        LidoInstruction::WithdrawInactiveStakeV2 => {
+            process_withdraw_inactive_stake_v2(program_id, accounts)
+        }
+        LidoInstruction::CollectValidatorFee => process_collect_validator_fee(program_id, accounts),
         LidoInstruction::Withdraw { amount } => process_withdraw(program_id, amount, accounts),
+        LidoInstruction::ClaimValidatorFee => process_claim_validator_fee(program_id, accounts),
         LidoInstruction::ChangeRewardDistribution {
             new_reward_distribution,
         } => process_change_reward_distribution(program_id, new_reward_distribution, accounts),
         LidoInstruction::AddValidator => process_add_validator(program_id, accounts),
+        LidoInstruction::AddValidatorV2 => process_add_validator_v2(program_id, accounts),
         LidoInstruction::RemoveValidator => process_remove_validator(program_id, accounts),
         LidoInstruction::DeactivateValidator => process_deactivate_validator(program_id, accounts),
         LidoInstruction::AddMaintainer => process_add_maintainer(program_id, accounts),
         LidoInstruction::RemoveMaintainer => process_remove_maintainer(program_id, accounts),
         LidoInstruction::MergeStake => process_merge_stake(program_id, accounts),
-        LidoInstruction::CheckMaxCommissionViolation => {
+        LidoInstruction::DeactivateValidatorIfCommissionExceedsMax => {
             process_check_max_commission_violation(program_id, accounts)
         }
     }

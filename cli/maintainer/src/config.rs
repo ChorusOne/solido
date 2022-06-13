@@ -374,7 +374,7 @@ cli_opt_struct! {
 }
 
 cli_opt_struct! {
-    CheckMaxCommissionViolationOpts {
+    DeactivateValidatorIfCommissionExceedsMaxOpts {
         /// Address of the Solido program.
         #[clap(long, value_name = "address")]
         solido_program_id: Pubkey,

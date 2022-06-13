@@ -35,9 +35,9 @@ use crate::{
 };
 use crate::{
     config::{
-        AddRemoveMaintainerOpts, AddValidatorOpts, CheckMaxCommissionViolationOpts,
-        CreateSolidoOpts, DeactivateValidatorOpts, DepositOpts, ShowSolidoAuthoritiesOpts,
-        ShowSolidoOpts, WithdrawOpts,
+        AddRemoveMaintainerOpts, AddValidatorOpts, CreateSolidoOpts,
+        DeactivateValidatorIfCommissionExceedsMaxOpts, DeactivateValidatorOpts, DepositOpts,
+        ShowSolidoAuthoritiesOpts, ShowSolidoOpts, WithdrawOpts,
     },
     get_signer_from_path,
 };
@@ -242,9 +242,9 @@ pub fn command_add_validator(
     let (multisig_address, _) =
         get_multisig_program_address(opts.multisig_program_id(), opts.multisig_address());
 
-    let instruction = lido::instruction::add_validator(
+    let instruction = lido::instruction::add_validator_v2(
         opts.solido_program_id(),
-        &lido::instruction::AddValidatorMeta {
+        &lido::instruction::AddValidatorMetaV2 {
             lido: *opts.solido_address(),
             manager: multisig_address,
             validator_vote_account: *opts.validator_vote_account(),
@@ -283,7 +283,7 @@ pub fn command_deactivate_validator(
 }
 
 #[derive(Serialize)]
-pub struct CheckMaxCommissionViolationOutput {
+pub struct DeactivateValidatorIfCommissionExceedsMaxOutput {
     // List of validators that exceeded max commission
     entries: Vec<ValidatorViolationInfo>,
     max_validation_fee: u8,
@@ -296,7 +296,7 @@ struct ValidatorViolationInfo {
     pub validation_fee: u8,
 }
 
-impl fmt::Display for CheckMaxCommissionViolationOutput {
+impl fmt::Display for DeactivateValidatorIfCommissionExceedsMaxOutput {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         writeln!(f, "Maximum validation fee: {}", self.max_validation_fee)?;
 
@@ -314,8 +314,8 @@ impl fmt::Display for CheckMaxCommissionViolationOutput {
 /// CLI entry point to punish validator for commission violation.
 pub fn command_check_max_commission_violation(
     config: &mut SnapshotConfig,
-    opts: &CheckMaxCommissionViolationOpts,
-) -> solido_cli_common::Result<CheckMaxCommissionViolationOutput> {
+    opts: &DeactivateValidatorIfCommissionExceedsMaxOpts,
+) -> solido_cli_common::Result<DeactivateValidatorIfCommissionExceedsMaxOutput> {
     let solido = config.client.get_solido(opts.solido_address())?;
 
     let mut violations = vec![];
@@ -333,7 +333,7 @@ pub fn command_check_max_commission_violation(
 
         let instruction = lido::instruction::check_max_commission_violation(
             opts.solido_program_id(),
-            &lido::instruction::CheckMaxCommissionViolationMeta {
+            &lido::instruction::DeactivateValidatorIfCommissionExceedsMaxMeta {
                 lido: *opts.solido_address(),
                 validator_vote_account_to_deactivate: vote_pubkey,
             },
@@ -345,7 +345,7 @@ pub fn command_check_max_commission_violation(
         });
     }
 
-    Ok(CheckMaxCommissionViolationOutput {
+    Ok(DeactivateValidatorIfCommissionExceedsMaxOutput {
         entries: violations,
         max_validation_fee: solido.max_validation_fee,
     })

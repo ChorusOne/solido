@@ -102,7 +102,7 @@ pub enum MaintenanceOutput {
         #[serde(serialize_with = "serialize_b58")]
         validator_vote_account: Pubkey,
     },
-    CheckMaxCommissionViolation {
+    DeactivateValidatorIfCommissionExceedsMax {
         #[serde(serialize_with = "serialize_b58")]
         validator_vote_account: Pubkey,
     },
@@ -228,7 +228,7 @@ impl fmt::Display for MaintenanceOutput {
                 writeln!(f, "Remove validator")?;
                 writeln!(f, "  Validator vote account: {}", validator_vote_account)?;
             }
-            MaintenanceOutput::CheckMaxCommissionViolation {
+            MaintenanceOutput::DeactivateValidatorIfCommissionExceedsMax {
                 validator_vote_account,
             } => {
                 writeln!(f, "Check max commission violation")?;
@@ -733,13 +733,13 @@ impl SolidoState {
                 continue;
             }
 
-            let task = MaintenanceOutput::CheckMaxCommissionViolation {
+            let task = MaintenanceOutput::DeactivateValidatorIfCommissionExceedsMax {
                 validator_vote_account: validator.pubkey,
             };
 
             let instruction = lido::instruction::check_max_commission_violation(
                 &self.solido_program_id,
-                &lido::instruction::CheckMaxCommissionViolationMeta {
+                &lido::instruction::DeactivateValidatorIfCommissionExceedsMaxMeta {
                     lido: self.solido_address,
                     validator_vote_account_to_deactivate: validator.pubkey,
                 },
@@ -1046,9 +1046,9 @@ impl SolidoState {
                 let mut stake_account_addrs = Vec::new();
                 stake_account_addrs.extend(stake_accounts.iter().map(|(addr, _)| *addr));
                 stake_account_addrs.extend(unstake_accounts.iter().map(|(addr, _)| *addr));
-                let instruction = lido::instruction::withdraw_inactive_stake(
+                let instruction = lido::instruction::withdraw_inactive_stake_v2(
                     &self.solido_program_id,
-                    &lido::instruction::WithdrawInactiveStakeMeta {
+                    &lido::instruction::WithdrawInactiveStakeMetaV2 {
                         lido: self.solido_address,
                         validator_vote_account: validator.pubkey,
                         stake_accounts: stake_account_addrs,
