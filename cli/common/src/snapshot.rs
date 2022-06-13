@@ -266,7 +266,10 @@ impl<'a> Snapshot<'a> {
         match self.blockhash {
             Some(blockhash) => Ok(blockhash),
             None => {
-                let blockhash = self.rpc_client.get_latest_blockhash()?;
+                let blockhash = {
+                    let block = self.rpc_client.get_block(self.get_clock()?.slot)?;
+                    Hash::new(block.blockhash.as_bytes())
+                };
                 self.blockhash = Some(blockhash);
                 Ok(blockhash)
             }
