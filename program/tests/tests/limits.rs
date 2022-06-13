@@ -7,7 +7,7 @@
 //! expectations; there is no "right" answer, but we would like to know what
 //! how many accounts Solido can handle.
 
-use testlib::solido_context::{Context, StakeDeposit};
+use testlib::solido_context::{Context, StakeDeposit, ValidatorAccounts};
 
 use lido::token::Lamports;
 
@@ -26,7 +26,7 @@ async fn test_withdraw_inactive_stake_max_accounts() {
 
     // The maximum number of stake accounts per validator that we can support,
     // before WithdrawInactiveStake fails.
-    let max_accounts = 9;
+    let max_accounts = 10;
 
     for i in 0..=max_accounts {
         let amount = Lamports(2_000_000_000);
@@ -67,6 +67,7 @@ async fn test_max_validators_maintainers() {
     // StakeDeposit fails.
     let max_validators: u32 = 64;
 
+    let mut validator: Option<ValidatorAccounts> = None;
     for i in 0..max_validators {
         context
             .memo(&format!("Adding maintainer and validator {}.", i + 1))
@@ -79,7 +80,11 @@ async fn test_max_validators_maintainers() {
         let maintainer = context.add_maintainer().await;
         context.maintainer = Some(maintainer);
 
-        let validator = context.add_validator().await;
+        validator = Some(context.add_validator().await);
+    }
+
+    // take out of the loop to reduce the time to wait
+    if let Some(validator) = validator {
         let amount = Lamports(2_000_000_000);
         context.deposit(amount).await;
         context

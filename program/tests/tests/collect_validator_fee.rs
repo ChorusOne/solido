@@ -78,7 +78,7 @@ async fn test_collect_validator_fee() {
     // configuration yields, so we have to deal with it.
     context.update_exchange_rate().await;
     let rewards = context.collect_validator_fee(validator.vote_account).await;
-    assert_eq!(rewards, Lamports(1_246_030_615_387));
+    assert_eq!(rewards, Lamports(19_975_171_979));
     let treasury_after = context
         .get_st_sol_balance(context.treasury_st_sol_account)
         .await;
@@ -114,8 +114,8 @@ async fn test_collect_validator_fee() {
         .exchange_st_sol(validator_fee)
         .unwrap();
 
-    // Four lamports differ due to rounding errors.
-    assert_eq!(validator_fee_sol, Lamports(rewards.0 / 100 * 5 + 4));
+    // Three lamports differ due to rounding errors.
+    assert_eq!(validator_fee_sol, Lamports(rewards.0 / 100 * 5 + 3));
 
     // Claim validator fee
     let claimed_fee = context.claim_validator_fee(validator.vote_account).await;

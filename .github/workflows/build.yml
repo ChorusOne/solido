@@ -59,14 +59,14 @@ jobs:
           ~/.cargo/registry/cache/
           ~/.cargo/git/db/
           target/
-        key: build-1.8.16-v3-${{ hashFiles('Cargo.lock') }}
-        restore-keys: build-1.8.16-v3
+        key: build-1.9.28-v1-${{ hashFiles('Cargo.lock') }}
+        restore-keys: build-1.9.28-v1
 
     - name: Install development tools
       run: |
         sudo apt update
         sudo apt-get install -y libudev-dev
-        sh -c "$(curl -sSfL https://release.solana.com/v1.8.16/install)"
+        sh -c "$(curl -sSfL https://release.solana.com/v1.9.28/install)"
 
     - name: Run unit tests
       run: |
@@ -90,8 +90,8 @@ jobs:
 
         # But only run the tests for Solido itself, the SPL tests are already
         # executed upstream.
-        cargo test-bpf --manifest-path program/Cargo.toml
-        cargo test-bpf --manifest-path anker/Cargo.toml
+        RUST_BACKTRACE=1 cargo test-bpf --manifest-path program/Cargo.toml
+        RUST_BACKTRACE=1 cargo test-bpf --manifest-path anker/Cargo.toml
 
     - name: Build CLI client
       run: cargo build --bin solido
@@ -157,8 +157,8 @@ jobs:
           ~/.cargo/git/db/
           target/
           cli/listener/fuzz/target/
-        key: lint-1.8.16-v3-${{ hashFiles('Cargo.lock', 'cli/listener/fuzz/Cargo.lock') }}
-        restore-keys: lint-1.8.16-v3
+        key: lint-1.9.28-v1-${{ hashFiles('Cargo.lock', 'cli/listener/fuzz/Cargo.lock') }}
+        restore-keys: lint-1.9.28-v1
 
     - name: Install linters
       run: |
