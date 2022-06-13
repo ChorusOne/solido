@@ -1,7 +1,7 @@
 import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import { Connection, PublicKey } from '@solana/web3.js';
 import BN from 'bn.js';
-import { Lamports, Snapshot, StLamports } from './types';
+import { BLamports, Lamports, Snapshot, StLamports, TokenType } from './types';
 
 /**
  * Get total value locked in the solido program
@@ -15,11 +15,11 @@ export const getTotalValueLocked = (snapshot: Snapshot): Lamports => {
       .map((validator) => validator.stake_accounts_balance)
       .reduce((acc, current) => acc.add(current), new BN(0));
 
-  return {
-    lamports: snapshot.reserveAccountBalance.lamports.add(
+  return new Lamports(
+    snapshot.reserveAccountBalance.lamports.add(
       validatorsStakeAccountsBalanceInLamports
-    ),
-  };
+    )
+  );
 };
 
 /**
@@ -48,9 +48,9 @@ export const getStSolSupply = (
       return snapshot.stSolSupply;
     }
     case 'totalcoins': {
-      return {
-        stLamports: snapshot.stSolSupply.stLamports.add(totalFeeCredits),
-      };
+      return new StLamports(
+        snapshot.stSolSupply.stLamports.add(totalFeeCredits)
+      );
     }
   }
 };
@@ -79,22 +79,58 @@ export const getExchangeRate = (snapshot: Snapshot): number => {
 export const getTotalNumberOfTokenAccounts = async (
   connection: Connection,
   tokenMintAddress: PublicKey
-): Promise<number> => {
-  const memcmpFilter = {
+): Promise<{ accountsTotal: number; accountsEmpty: number }> => {
+  // All SPL token accounts should have a size of 165 bytes.
+  const filterSize = { dataSize: 165 };
+  // The first 32 bytes of an SPL token account store its mint address.
+  const filterMint = {
     memcmp: { bytes: tokenMintAddress.toString(), offset: 0 },
   };
-  const config = {
-    filters: [{ dataSize: 165 }, memcmpFilter],
-    dataSlice: { offset: 0, length: 0 },
-    encoding: 'base64',
+
+  // If we want to find all empty accounts, we must find all accounts where the
+  // `amount` field (a little-endian 64-bit unsigned integer) is 0 (all ones
+  // when encoded as base58). The offset of the `amount` field is at 64 bytes:
+  // it follows the mint and owner pubkey (each 32 bytes). See also
+  // https://github.com/solana-labs/solana-program-library/blob/583afbd35f8ad16bf844386183c2cfd5cbd6fac3/token/program/src/state.rs#L92
+  const filterEmpty = { memcmp: { bytes: '11111111', offset: 64 } };
+
+  const countAccounts = async (filters: any[]) => {
+    const config = {
+      filters,
+      // We are not interested in the account data, only in the number of matching
+      // accounts, so request a zero-sized slice of the data, to reduce the amount
+      // of data that needs to be sent.
+      encoding: 'base64',
+      dataSlice: {
+        offsset: 0,
+        length: 0,
+      },
+    };
+    const accounts = await connection.getParsedProgramAccounts(
+      TOKEN_PROGRAM_ID,
+      config
+    );
+    return accounts.length;
   };
 
-  const accounts = await connection.getParsedProgramAccounts(
-    TOKEN_PROGRAM_ID,
-    config
-  );
+  // To get the number of non-empty stSOL accounts, we make two queries: one to
+  // get all of them, one to get just the empty ones. Then the non-empty ones is
+  // the difference. This approach is incorrect, because accounts could change
+  // in between the two reads, and then we return a bogus result. Unfortunately,
+  // there is no way to avoid this, the Solana RPC offers only one primitive for
+  // atomic reads (getMultipleAccounts), and it can’t be used to find all stSOL
+  // accounts. :'(
+  const accountsTotalAsync = countAccounts([filterSize, filterMint]);
+  const accountsEmptyAsync = countAccounts([
+    filterSize,
+    filterMint,
+    filterEmpty,
+  ]);
 
-  return accounts.length;
+  return {
+    accountsTotal: await accountsTotalAsync,
+    accountsEmpty: await accountsEmptyAsync,
+  };
 };
 
 /**
@@ -102,14 +138,21 @@ export const getTotalNumberOfTokenAccounts = async (
  * @param connection Connection to the cluster
  * @param tokenMintAddress Address of the token mint account
  * @param ownerAccountAddress Address of the owner of the token
+ * @param tokenType Type of token to get the accounts and their balances for
  * @returns List of token accounts
  */
 export const getTokenAccountsByOwner = async (
   connection: Connection,
   tokenMintAddress: PublicKey,
-  ownerAccountAddress: PublicKey
-): Promise<{ address: PublicKey; balance: Lamports }[]> => {
-  const tokenAccounts: { address: PublicKey; balance: Lamports }[] = [];
+  ownerAccountAddress: PublicKey,
+  tokenType: TokenType
+): Promise<
+  { address: PublicKey; balance: Lamports | StLamports | BLamports }[]
+> => {
+  const tokenAccounts: {
+    address: PublicKey;
+    balance: Lamports | StLamports | BLamports;
+  }[] = [];
 
   const { value } = await connection.getParsedTokenAccountsByOwner(
     ownerAccountAddress,
@@ -118,9 +161,22 @@ export const getTokenAccountsByOwner = async (
     }
   );
 
+  let balance: Lamports | StLamports | BLamports;
+
   value.forEach((v) => {
     const address = v.pubkey;
-    const balance = new Lamports(v.account.data.parsed.info.tokenAmount.amount);
+
+    switch (tokenType) {
+      case TokenType.SOL:
+        balance = new Lamports(v.account.data.parsed.info.tokenAmount.amount);
+        break;
+      case TokenType.stSOL:
+        balance = new StLamports(v.account.data.parsed.info.tokenAmount.amount);
+        break;
+      case TokenType.bSOL:
+        balance = new BLamports(v.account.data.parsed.info.tokenAmount.amount);
+        break;
+    }
 
     tokenAccounts.push({ address, balance });
   });
