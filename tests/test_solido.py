@@ -705,7 +705,7 @@ print(
 result = perform_maintenance()
 # check validator_1 is deactivated
 expected_result = {
-    'CheckMaxCommissionViolation': {
+    'DeactivateValidatorIfCommissionExceedsMax': {
         'validator_vote_account': validator_1.vote_account.pubkey
     }
 }

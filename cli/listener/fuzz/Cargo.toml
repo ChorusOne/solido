@@ -13,7 +13,7 @@ arbitrary = { version = "1.1.0", features = ["derive"] }
 chrono = "0.4.19"
 libfuzzer-sys = "0.4"
 rusqlite = "0.26.3"
-solana-sdk = "1.7.8"
+solana-sdk = "1.9.28"
 tiny_http = "0.11.0"
 
 [dependencies.listener]
@@ -22,6 +22,7 @@ path = ".."
 [patch.crates-io]
 # https://github.com/tiny-http/tiny-http/pull/225
 tiny_http = { git = "https://github.com/ruuda/tiny-http", rev = "3568e8880f995dd0348feff9e29645fce995b534" }
+anchor-lang = { git = "https://github.com/lidofinance/anchor", branch = "solana-v1.9.28" }
 
 # Prevent this from interfering with workspaces
 [workspace]

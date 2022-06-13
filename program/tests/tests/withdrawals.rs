@@ -212,7 +212,6 @@ async fn test_withdrawal_result() {
     );
     send_transaction(
         &mut context.context.context,
-        &mut context.context.nonce,
         &[withdraw_from_stake_instruction],
         vec![&context.user],
     )

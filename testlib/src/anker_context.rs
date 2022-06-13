@@ -66,7 +66,6 @@ impl TokenPoolContext {
         .expect("Failed to generate UST mint instruction.");
         send_transaction(
             &mut solido_context.context,
-            &mut solido_context.nonce,
             &[mint_instruction],
             vec![&self.ust_mint_authority],
         )
@@ -162,7 +161,6 @@ impl TokenPoolContext {
 
         send_transaction(
             &mut solido_context.context,
-            &mut solido_context.nonce,
             &[pool_instruction],
             vec![&self.swap_account],
         )
@@ -222,7 +220,6 @@ impl Context {
 
         send_transaction(
             &mut solido_context.context,
-            &mut solido_context.nonce,
             &[instruction::initialize(
                 &id(),
                 &instruction::InitializeAccountsMeta {
@@ -323,7 +320,6 @@ impl Context {
 
         send_transaction(
             &mut self.solido_context.context,
-            &mut self.solido_context.nonce,
             &[instruction::deposit(
                 &id(),
                 &instruction::DepositAccountsMeta {
@@ -383,7 +379,6 @@ impl Context {
 
         send_transaction(
             &mut self.solido_context.context,
-            &mut self.solido_context.nonce,
             &[instruction::withdraw(
                 &id(),
                 &instruction::WithdrawAccountsMeta {
@@ -461,7 +456,6 @@ impl Context {
         .expect("Could not create swap instruction.");
         send_transaction(
             &mut self.solido_context.context,
-            &mut self.solido_context.nonce,
             &[swap_instruction],
             vec![authority],
         )
@@ -490,7 +484,6 @@ impl Context {
 
         send_transaction(
             &mut self.solido_context.context,
-            &mut self.solido_context.nonce,
             &[instruction::sell_rewards(
                 &id(),
                 &instruction::SellRewardsAccountsMeta {
@@ -548,7 +541,6 @@ impl Context {
 
         send_transaction(
             &mut self.solido_context.context,
-            &mut self.solido_context.nonce,
             &[instruction::send_rewards(
                 &id(),
                 &instruction::SendRewardsAccountsMeta {
@@ -613,7 +605,6 @@ impl Context {
     ) -> transport::Result<()> {
         send_transaction(
             &mut self.solido_context.context,
-            &mut self.solido_context.nonce,
             &[instruction::change_terra_rewards_destination(
                 &id(),
                 &instruction::ChangeTerraRewardsDestinationAccountsMeta {
@@ -635,7 +626,6 @@ impl Context {
         let anker = self.get_anker().await;
         send_transaction(
             &mut self.solido_context.context,
-            &mut self.solido_context.nonce,
             &[instruction::change_token_swap_pool(
                 &id(),
                 &instruction::ChangeTokenSwapPoolAccountsMeta {
@@ -659,7 +649,6 @@ impl Context {
     ) -> transport::Result<()> {
         send_transaction(
             &mut self.solido_context.context,
-            &mut self.solido_context.nonce,
             &[instruction::change_sell_rewards_min_out_bps(
                 &id(),
                 &instruction::ChangeSellRewardsMinOutBpsAccountsMeta {
@@ -683,7 +672,6 @@ impl Context {
 
         send_transaction(
             &mut self.solido_context.context,
-            &mut self.solido_context.nonce,
             &[instruction::fetch_pool_price(
                 &id(),
                 &instruction::FetchPoolPriceAccountsMeta {

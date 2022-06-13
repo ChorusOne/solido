@@ -1173,7 +1173,7 @@ impl SolidoState {
         // the current epoch, it returns None. So unfortunately we can only get the state of the
         // previous epoch. If the total amount staked changes slowly, we can still used it to
         // roughly estimate Solido's share of the stake.
-        if let Some(entry) = self.stake_history.get(&(self.clock.epoch - 1)) {
+        if let Some(entry) = self.stake_history.get(self.clock.epoch - 1) {
             write_metric(
                 out,
                 &MetricFamily {

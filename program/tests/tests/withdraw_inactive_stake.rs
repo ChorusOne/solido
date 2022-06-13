@@ -115,7 +115,7 @@ async fn test_withdraw_inactive_stake() {
     // number looks arbitrary, but this is the amount that the current reward
     // configuration yields, so we have to deal with it.
     context.update_exchange_rate().await;
-    let arbitrary_rewards: u64 = 1_183_729_084_610;
+    let arbitrary_rewards: u64 = 18_976_413_379;
     context
         .withdraw_inactive_stake(validator.vote_account)
         .await;
@@ -151,7 +151,7 @@ async fn test_withdraw_inactive_stake() {
         .exchange_rate
         .exchange_st_sol(treasury_fee)
         .unwrap();
-    assert_eq!(treasury_fee_sol, Lamports(rewards.0 / 100 * 3 - 1));
+    assert_eq!(treasury_fee_sol, Lamports(rewards.0 / 100 * 3 + 1));
 
     // The developer balance increase, when converted back to SOL, should be equal
     // to 2% of the rewards. Two lamport differ due to rounding errors.
@@ -160,5 +160,5 @@ async fn test_withdraw_inactive_stake() {
         .exchange_rate
         .exchange_st_sol(developer_fee)
         .unwrap();
-    assert_eq!(developer_fee_sol, Lamports(rewards.0 / 100 * 2 - 1));
+    assert_eq!(developer_fee_sol, Lamports(rewards.0 / 100 * 2));
 }

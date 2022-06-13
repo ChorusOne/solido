@@ -149,8 +149,8 @@ async fn test_deactivating_stake_earns_rewards() {
     // 1.2k SOL is a negligible difference, so we'll assume that deactivation
     // does not prevent rewards.
     assert_eq!(rewards_inactive, Lamports(0));
-    assert_eq!(rewards_active, Lamports(1_244_922_235_901));
-    assert_eq!(rewards_deactivating, Lamports(1_244_922_235_900));
+    assert_eq!(rewards_active, Lamports(19_974_887_558));
+    assert_eq!(rewards_deactivating, Lamports(19_974_887_558));
 }
 
 #[tokio::test]
@@ -269,7 +269,6 @@ async fn update_commission(
 ) -> solana_sdk::transport::Result<()> {
     send_transaction(
         &mut context.context,
-        &mut context.nonce,
         &[vote_instruction::update_commission(
             &vote_account,
             withdraw_authority,
@@ -316,7 +315,6 @@ async fn test_only_withdrawer_can_change_commission() {
     // Change withdraw authority
     send_transaction(
         &mut context.context,
-        &mut context.nonce,
         &[vote_instruction::authorize(
             &vote_account,
             &withdraw_authority.pubkey(),
