@@ -29,12 +29,12 @@ use std::time::Duration;
 use anchor_lang::AccountDeserialize;
 use solana_client::client_error::{ClientError, ClientErrorKind};
 use solana_client::rpc_client::RpcClient;
-use solana_client::rpc_config::RpcSendTransactionConfig;
+use solana_client::rpc_config::{RpcBlockConfig, RpcSendTransactionConfig};
 use solana_client::rpc_request::RpcError;
 use solana_program::instruction::Instruction;
 use solana_sdk::account::{Account, ReadableAccount};
 use solana_sdk::borsh::try_from_slice_unchecked;
-use solana_sdk::commitment_config::CommitmentLevel;
+use solana_sdk::commitment_config::{CommitmentConfig, CommitmentLevel};
 use solana_sdk::program_pack::{IsInitialized, Pack};
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::Signature;
@@ -43,6 +43,7 @@ use solana_sdk::signers::Signers;
 use solana_sdk::sysvar::stake_history::StakeHistory;
 use solana_sdk::sysvar::{self, clock::Clock, epoch_schedule::EpochSchedule, rent::Rent, Sysvar};
 use solana_sdk::transaction::Transaction;
+use solana_transaction_status::{TransactionDetails, UiTransactionEncoding};
 use solana_vote_program::vote_state::VoteState;
 
 use anker::state::Anker;
@@ -267,8 +268,19 @@ impl<'a> Snapshot<'a> {
             Some(blockhash) => Ok(blockhash),
             None => {
                 let blockhash = {
-                    let block = self.rpc_client.get_block(self.get_clock()?.slot)?;
-                    Hash::new(block.blockhash.as_bytes())
+                    let config = RpcBlockConfig {
+                        encoding: Some(UiTransactionEncoding::Json),
+                        transaction_details: Some(TransactionDetails::None),
+                        rewards: Some(false),
+                        commitment: Some(CommitmentConfig {
+                            commitment: CommitmentLevel::Confirmed,
+                        }),
+                    };
+
+                    let block = self
+                        .rpc_client
+                        .get_block_with_config(self.get_clock()?.slot, config)?;
+                    Hash::from_str(&block.blockhash)?
                 };
                 self.blockhash = Some(blockhash);
                 Ok(blockhash)
