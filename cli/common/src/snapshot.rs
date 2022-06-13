@@ -29,23 +29,21 @@ use std::time::Duration;
 use anchor_lang::AccountDeserialize;
 use solana_client::client_error::{ClientError, ClientErrorKind};
 use solana_client::rpc_client::RpcClient;
-use solana_client::rpc_config::RpcSendTransactionConfig;
+use solana_client::rpc_config::{RpcBlockConfig, RpcSendTransactionConfig};
 use solana_client::rpc_request::RpcError;
 use solana_program::instruction::Instruction;
 use solana_sdk::account::{Account, ReadableAccount};
 use solana_sdk::borsh::try_from_slice_unchecked;
-use solana_sdk::commitment_config::CommitmentLevel;
+use solana_sdk::commitment_config::{CommitmentConfig, CommitmentLevel};
 use solana_sdk::program_pack::{IsInitialized, Pack};
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::Signature;
 use solana_sdk::signer::Signer;
 use solana_sdk::signers::Signers;
 use solana_sdk::sysvar::stake_history::StakeHistory;
-use solana_sdk::sysvar::{
-    self, clock::Clock, epoch_schedule::EpochSchedule, recent_blockhashes::RecentBlockhashes,
-    rent::Rent, Sysvar,
-};
+use solana_sdk::sysvar::{self, clock::Clock, epoch_schedule::EpochSchedule, rent::Rent, Sysvar};
 use solana_sdk::transaction::Transaction;
+use solana_transaction_status::{TransactionDetails, UiTransactionEncoding};
 use solana_vote_program::vote_state::VoteState;
 
 use anker::state::Anker;
@@ -179,6 +177,10 @@ pub struct Snapshot<'a> {
     /// retry sending the transaction. If that happens, we need to update the
     /// program, so it reads everything it needs before sending a transaction.
     sent_transaction: &'a mut bool,
+
+    /// The most recent block hash at the time of the snapshot.
+    /// Is saved on the first call to `get_latest_blockhash` and then reused
+    blockhash: Option<Hash>,
 }
 
 impl<'a> Snapshot<'a> {
@@ -260,16 +262,30 @@ impl<'a> Snapshot<'a> {
         self.get_bincode(&sysvar::stake_history::id())
     }
 
-    /// Read `sysvar::recent_blockhashes`.
-    pub fn get_recent_blockhashes(&mut self) -> crate::Result<RecentBlockhashes> {
-        self.get_bincode(&sysvar::recent_blockhashes::id())
-    }
-
     /// Return the most recent block hash at the time of the snapshot.
-    pub fn get_recent_blockhash(&mut self) -> crate::Result<Hash> {
-        let blockhashes = self.get_recent_blockhashes()?;
-        // The blockhashes are ordered from most recent to least recent.
-        Ok(blockhashes[0].blockhash)
+    pub fn get_latest_blockhash(&mut self) -> crate::Result<Hash> {
+        match self.blockhash {
+            Some(blockhash) => Ok(blockhash),
+            None => {
+                let blockhash = {
+                    let config = RpcBlockConfig {
+                        encoding: Some(UiTransactionEncoding::Json),
+                        transaction_details: Some(TransactionDetails::None),
+                        rewards: Some(false),
+                        commitment: Some(CommitmentConfig {
+                            commitment: CommitmentLevel::Confirmed,
+                        }),
+                    };
+
+                    let block = self
+                        .rpc_client
+                        .get_block_with_config(self.get_clock()?.slot, config)?;
+                    Hash::from_str(&block.blockhash)?
+                };
+                self.blockhash = Some(blockhash);
+                Ok(blockhash)
+            }
+        }
     }
 
     /// Read and parse the vote account at the given address.
@@ -615,6 +631,7 @@ impl SnapshotClient {
                 validator_info_addrs: &self.validator_info_addrs,
                 rpc_client: &self.rpc_client,
                 sent_transaction: &mut sent_transaction,
+                blockhash: None,
             };
 
             match f(snapshot) {
@@ -750,7 +767,7 @@ impl<'a> SnapshotConfig<'a> {
         signers: &T,
     ) -> crate::Result<Transaction> {
         let mut tx = Transaction::new_with_payer(instructions, Some(&self.signer.pubkey()));
-        let recent_blockhash = self.client.get_recent_blockhash()?;
+        let recent_blockhash = self.client.get_latest_blockhash()?;
         tx.try_sign(signers, recent_blockhash).map_err(|err| {
             let boxed_error: Error = Box::new(err);
             boxed_error
