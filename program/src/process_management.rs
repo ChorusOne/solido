@@ -15,7 +15,7 @@ use crate::{
     instruction::{
         AddMaintainerInfo, AddValidatorInfoV2, ChangeRewardDistributionInfo,
         DeactivateValidatorIfCommissionExceedsMaxInfo, DeactivateValidatorInfo, MergeStakeInfo,
-        RemoveMaintainerInfo, RemoveValidatorInfo,
+        RemoveMaintainerInfo, RemoveValidatorInfo, SetMaxValidationFeeInfo,
     },
     state::{RewardDistribution, Validator},
     vote_state::get_vote_account_commission,
@@ -130,7 +130,7 @@ pub fn process_claim_validator_fee(
 ///
 /// This prevents new funds from being staked with this validator, and enables
 /// removing the validator once no stake is delegated to it any more.
-pub fn process_check_max_commission_violation(
+pub fn process_deactivate_validator_if_commission_exceeds_max(
     program_id: &Pubkey,
     accounts_raw: &[AccountInfo],
 ) -> ProgramResult {
@@ -179,6 +179,27 @@ pub fn process_remove_maintainer(
     lido.check_manager(accounts.manager)?;
 
     lido.maintainers.remove(accounts.maintainer.key)?;
+
+    lido.save(accounts.lido)
+}
+
+/// Sets max validation fee for Lido. If validators exeed the threshold
+/// they will be deactivated by DeactivateValidatorIfCommissionExceedsMax
+pub fn process_set_max_validation_fee(
+    program_id: &Pubkey,
+    max_validation_fee: u8,
+    accounts_raw: &[AccountInfo],
+) -> ProgramResult {
+    if max_validation_fee > 100 {
+        return Err(LidoError::ValidationFeeOutOfBounds.into());
+    }
+
+    let accounts = SetMaxValidationFeeInfo::try_from_slice(accounts_raw)?;
+    let mut lido = Lido::deserialize_lido(program_id, accounts.lido)?;
+
+    lido.check_manager(accounts.manager)?;
+
+    lido.max_validation_fee = max_validation_fee;
 
     lido.save(accounts.lido)
 }

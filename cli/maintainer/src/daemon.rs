@@ -59,7 +59,7 @@ struct MaintenanceMetrics {
     transactions_remove_validator: u64,
 
     /// Number of times we performed `DeactivateValidatorIfCommissionExceedsMax`.
-    transactions_check_max_commission_violation: u64,
+    transactions_deactivate_validator_if_commission_exceeds_max: u64,
 
     /// Number of times we performed `Unstake` on an active validator for balancing purposes.
     transactions_unstake_from_active_validator: u64,
@@ -144,7 +144,7 @@ impl MaintenanceMetrics {
             }
             MaintenanceOutput::RemoveValidator { .. } => self.transactions_remove_validator += 1,
             MaintenanceOutput::DeactivateValidatorIfCommissionExceedsMax { .. } => {
-                self.transactions_check_max_commission_violation += 1
+                self.transactions_deactivate_validator_if_commission_exceeds_max += 1
             }
             MaintenanceOutput::UnstakeFromActiveValidator { .. } => {
                 self.transactions_unstake_from_active_validator += 1
@@ -311,7 +311,7 @@ impl<'a, 'b> Daemon<'a, 'b> {
             transactions_merge_stake: 0,
             transactions_unstake_from_inactive_validator: 0,
             transactions_remove_validator: 0,
-            transactions_check_max_commission_violation: 0,
+            transactions_deactivate_validator_if_commission_exceeds_max: 0,
             transactions_unstake_from_active_validator: 0,
             transactions_sell_rewards: 0,
             transactions_send_rewards: 0,

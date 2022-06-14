@@ -485,24 +485,32 @@ result = perform_maintenance()
 assert result is None, f'Huh, perform-maintenance performed {result}'
 print('> There was nothing to do, as expected.')
 
-# Adding another validator
-print('\nAdd another validator')
-(validator_1, transaction_result) = add_validator(
-    'validator-account-key-1',
-    'validator-vote-account-key-1',
-)
 
-transaction_address = transaction_result['transaction_address']
-transaction_status = multisig(
-    'show-transaction',
-    '--multisig-program-id',
-    multisig_program_id,
-    '--solido-program-id',
-    solido_program_id,
-    '--transaction-address',
-    transaction_address,
+def add_validator_and_approve(keypath_account: str, keypath_vote: str) -> Validator:
+    # Adding another validator
+    (validator, transaction_result) = add_validator(
+        'validator-account-key-1',
+        'validator-vote-account-key-1',
+    )
+
+    transaction_address = transaction_result['transaction_address']
+    approve_and_execute(transaction_address, test_addrs[0])
+    transaction_status = multisig(
+        'show-transaction',
+        '--multisig-program-id',
+        multisig_program_id,
+        '--solido-program-id',
+        solido_program_id,
+        '--transaction-address',
+        transaction_address,
+    )
+    assert transaction_status['did_execute'] == True
+    return validator
+
+
+validator_1 = add_validator_and_approve(
+    'validator-account-key-1', 'validator-vote-account-key-1'
 )
-approve_and_execute(transaction_address, test_addrs[0])
 
 # Should unstake 1/2 (1.5 - 0.0005/2 Sol) of the validator's balance.
 result = perform_maintenance()
@@ -710,3 +718,76 @@ expected_result = {
     }
 }
 assert result == expected_result, f'\nExpected: {expected_result}\nActual:   {result}'
+
+
+def consume_maintainence_instructions(verbose: bool = False) -> None:
+    """
+    Perform maintenance instructions till no more left
+    """
+    while True:
+        maintainance_result = perform_maintenance()
+        if maintainance_result is not None:
+            if verbose:
+                print(maintainance_result)
+        else:
+            break
+
+
+print('\nConsuming all maintainence instructions')
+consume_maintainence_instructions(False)
+
+# Adding another validator
+validator_2 = add_validator_and_approve(
+    'validator-account-key-2', 'validator-vote-account-key-2'
+)
+
+
+def set_max_validation_fee(fee: int) -> Any:
+    transaction_result = solido(
+        'set-max-validation-fee',
+        '--multisig-program-id',
+        multisig_program_id,
+        '--solido-program-id',
+        solido_program_id,
+        '--solido-address',
+        solido_address,
+        '--max-validation-fee',
+        str(fee),
+        '--multisig-address',
+        multisig_instance,
+        keypair_path=test_addrs[1].keypair_path,
+    )
+    assert transaction_result['transaction_address'] != None
+
+    approve_and_execute(transaction_result['transaction_address'], test_addrs[0])
+    transaction_status = multisig(
+        'show-transaction',
+        '--multisig-program-id',
+        multisig_program_id,
+        '--solido-program-id',
+        solido_program_id,
+        '--transaction-address',
+        transaction_result['transaction_address'],
+    )
+    return transaction_status
+
+
+print('\nLowering max validation fee to %d%% ...' % (MAX_VALIDATION_FEE - 1))
+transaction_status = set_max_validation_fee(MAX_VALIDATION_FEE - 1)
+assert transaction_status['did_execute'] == True
+
+
+print(
+    '\nRunning maintenance (should deactivate all validators, because they exceed max validation fee) ...'
+)
+
+maintainance_result = perform_maintenance()
+expected_result = {
+    'DeactivateValidatorIfCommissionExceedsMax': {
+        'validator_vote_account': validator_2.vote_account.pubkey
+    }
+}
+# check validator_2 is deactivated
+assert (
+    maintainance_result == expected_result
+), f'\nExpected: {expected_result}\nActual:   {maintainance_result}'

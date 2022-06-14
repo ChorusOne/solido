@@ -168,6 +168,9 @@ pub enum LidoError {
 
     /// Tried to use a deprecated instruction
     InstructionIsDeprecated = 47,
+
+    /// Validation fee is more than 100%
+    ValidationFeeOutOfBounds = 48,
 }
 
 // Just reuse the generated Debug impl for Display. It shows the variant names.

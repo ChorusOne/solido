@@ -220,7 +220,7 @@ pub struct Lido {
     /// Map of enrolled validators, maps their vote account to `Validator` details.
     pub validators: Validators,
 
-    /// Maximum validation fee
+    /// Maximum validation fee, percent in [0, 100]
     pub max_validation_fee: u8,
 
     /// The set of maintainers.

@@ -29,7 +29,7 @@ use solana_sdk::sysvar;
 use lido::{
     instruction::{
         AddMaintainerMeta, AddValidatorMetaV2, ChangeRewardDistributionMeta,
-        DeactivateValidatorMeta, LidoInstruction, RemoveMaintainerMeta,
+        DeactivateValidatorMeta, LidoInstruction, RemoveMaintainerMeta, SetMaxValidationFeeMeta,
     },
     state::{FeeRecipients, Lido, RewardDistribution},
     util::{serialize_b58, serialize_b58_slice},
@@ -444,6 +444,15 @@ enum SolidoInstruction {
 
         fee_recipients: FeeRecipients,
     },
+    SetMaxValidationFee {
+        #[serde(serialize_with = "serialize_b58")]
+        solido_instance: Pubkey,
+
+        max_validation_fee: u8,
+
+        #[serde(serialize_with = "serialize_b58")]
+        manager: Pubkey,
+    },
 }
 
 #[allow(clippy::enum_variant_names)]
@@ -645,6 +654,16 @@ impl fmt::Display for ShowTransactionOutput {
                         writeln!(f)?;
                         print_changed_reward_distribution(f, current_solido, reward_distribution)?;
                         print_changed_recipients(f, current_solido, fee_recipients)?;
+                    }
+                    SolidoInstruction::SetMaxValidationFee {
+                        solido_instance,
+                        max_validation_fee,
+                        manager,
+                    } => {
+                        writeln!(f, "It sets a maximun validation fee")?;
+                        writeln!(f, "    Solido instance:    {}", solido_instance)?;
+                        writeln!(f, "    Manager:            {}", manager)?;
+                        writeln!(f, "    Max validation fee: {}", max_validation_fee)?;
                     }
                 }
             }
@@ -1075,6 +1094,15 @@ fn try_parse_solido_instruction(
                 maintainer: accounts.maintainer,
             })
         }
+        LidoInstruction::SetMaxValidationFee { max_validation_fee } => {
+            let accounts = SetMaxValidationFeeMeta::try_from_slice(&instr.accounts)?;
+            ParsedInstruction::SolidoInstruction(SolidoInstruction::SetMaxValidationFee {
+                solido_instance: accounts.lido,
+                max_validation_fee,
+                manager: accounts.manager,
+            })
+        }
+
         _ => ParsedInstruction::InvalidSolidoInstruction,
     })
 }

@@ -1281,6 +1281,42 @@ impl Context {
         let vote_acc = self.get_account(vote_account).await;
         VoteState::deserialize(&vote_acc.data)
     }
+
+    pub async fn try_set_max_validation_fee(&mut self, fee: u8) -> transport::Result<()> {
+        send_transaction(
+            &mut self.context,
+            &[lido::instruction::set_max_validation_fee(
+                &id(),
+                &lido::instruction::SetMaxValidationFeeMeta {
+                    lido: self.solido.pubkey(),
+                    manager: self.manager.pubkey(),
+                },
+                fee,
+            )],
+            vec![&self.manager],
+        )
+        .await
+    }
+
+    pub async fn try_deactivate_validator_if_commission_exceeds_max(
+        &mut self,
+        vote_account: Pubkey,
+    ) -> transport::Result<()> {
+        send_transaction(
+            &mut self.context,
+            &[
+                lido::instruction::deactivate_validator_if_commission_exceeds_max(
+                    &id(),
+                    &lido::instruction::DeactivateValidatorIfCommissionExceedsMaxMeta {
+                        lido: self.solido.pubkey(),
+                        validator_vote_account_to_deactivate: vote_account,
+                    },
+                ),
+            ],
+            vec![],
+        )
+        .await
+    }
 }
 
 /// Return an `AccountInfo` for the given account, with `is_signer` and `is_writable` set to false.

@@ -20,10 +20,10 @@ use solido_cli_common::snapshot::{Config, OutputMode, SnapshotClient};
 use crate::commands_anker::AnkerOpts;
 use crate::commands_multisig::MultisigOpts;
 use crate::commands_solido::{
-    command_add_maintainer, command_add_validator, command_check_max_commission_violation,
-    command_create_solido, command_deactivate_validator, command_deposit,
-    command_remove_maintainer, command_show_solido, command_show_solido_authorities,
-    command_withdraw,
+    command_add_maintainer, command_add_validator, command_create_solido,
+    command_deactivate_validator, command_deactivate_validator_if_commission_exceeds_max,
+    command_deposit, command_remove_maintainer, command_set_max_validation_fee,
+    command_show_solido, command_show_solido_authorities, command_withdraw,
 };
 use crate::config::*;
 
@@ -206,6 +206,13 @@ REWARDS
 
     /// Interact with the Anker (Anchor Protocol integration) program.
     Anker(AnkerOpts),
+
+    /// Set max_validation_fee to control validator's fees.
+    /// If validators exeed the threshold they will be deactivated by
+    /// a maintainer.
+    ///
+    /// Requires the manager to sign.
+    SetMaxValidationFee(SetMaxValidationFeeOpts),
 }
 
 fn print_output<Output: fmt::Display + Serialize>(mode: OutputMode, output: &Output) {
@@ -293,8 +300,9 @@ fn main() {
             print_output(output_mode, &output);
         }
         SubCommand::DeactivateValidatorIfCommissionExceedsMax(cmd_opts) => {
-            let result = config
-                .with_snapshot(|config| command_check_max_commission_violation(config, &cmd_opts));
+            let result = config.with_snapshot(|config| {
+                command_deactivate_validator_if_commission_exceeds_max(config, &cmd_opts)
+            });
             let output = result.ok_or_abort_with("Failed to check max commission violation.");
             print_output(output_mode, &output);
         }
@@ -331,6 +339,12 @@ fn main() {
             let output = result.ok_or_abort_with("Failed to withdraw.");
             print_output(output_mode, &output);
         }
+        SubCommand::SetMaxValidationFee(cmd_opts) => {
+            let result =
+                config.with_snapshot(|config| command_set_max_validation_fee(config, &cmd_opts));
+            let output = result.ok_or_abort_with("Failed to set max validation fee.");
+            print_output(output_mode, &output);
+        }
     }
 }
 
@@ -358,6 +372,9 @@ fn merge_with_config_and_environment(
         SubCommand::PerformMaintenance(opts) => opts.merge_with_config_and_environment(config_file),
         SubCommand::Multisig(opts) => opts.merge_with_config_and_environment(config_file),
         SubCommand::RunMaintainer(opts) => opts.merge_with_config_and_environment(config_file),
+        SubCommand::SetMaxValidationFee(opts) => {
+            opts.merge_with_config_and_environment(config_file)
+        }
     }
 }
 

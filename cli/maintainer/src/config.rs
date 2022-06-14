@@ -374,18 +374,6 @@ cli_opt_struct! {
 }
 
 cli_opt_struct! {
-    DeactivateValidatorIfCommissionExceedsMaxOpts {
-        /// Address of the Solido program.
-        #[clap(long, value_name = "address")]
-        solido_program_id: Pubkey,
-
-        /// Account that stores the data for this Solido instance.
-        #[clap(long, value_name = "address")]
-        solido_address: Pubkey,
-    }
-}
-
-cli_opt_struct! {
     AddRemoveMaintainerOpts {
         /// Address of the Solido program.
         #[clap(long, value_name = "address")]
@@ -463,6 +451,42 @@ cli_opt_struct! {
         /// "anytime" option is only intended for testing purposes.
         #[clap(long, value_name = "anytime/only-near-epoch-end")]
         stake_time: StakeTime => StakeTime::OnlyNearEpochEnd,
+    }
+}
+
+cli_opt_struct! {
+    DeactivateValidatorIfCommissionExceedsMaxOpts {
+        /// Address of the Solido program.
+        #[clap(long, value_name = "address")]
+        solido_program_id: Pubkey,
+
+        /// Account that stores the data for this Solido instance.
+        #[clap(long, value_name = "address")]
+        solido_address: Pubkey,
+    }
+}
+
+cli_opt_struct! {
+    SetMaxValidationFeeOpts {
+        /// Address of the Solido program.
+        #[clap(long, value_name = "address")]
+        solido_program_id: Pubkey,
+
+        /// Account that stores the data for this Solido instance.
+        #[clap(long, value_name = "address")]
+        solido_address: Pubkey,
+
+        /// Max percent of rewards a validator can recieve (validation fee), in range [0, 100]
+        #[clap(long, value_name = "fee")]
+        max_validation_fee: u8,
+
+        /// Multisig instance.
+        #[clap(long, value_name = "address")]
+        multisig_address: Pubkey,
+
+        /// Address of the Multisig program.
+        #[clap(long, value_name = "address")]
+        multisig_program_id: Pubkey,
     }
 }
 

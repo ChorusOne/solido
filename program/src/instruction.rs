@@ -122,6 +122,16 @@ pub enum LidoInstruction {
     ///
     /// Requires no permission
     DeactivateValidatorIfCommissionExceedsMax,
+
+    /// Set max_validation_fee to control validator's fees.
+    /// If validators exeed the threshold they will be deactivated by
+    /// DeactivateValidatorIfCommissionExceedsMax.
+    ///
+    /// Requires the manager to sign.
+    SetMaxValidationFee {
+        #[allow(dead_code)] // but it's not
+        max_validation_fee: u8, // percent in [0, 100]
+    },
 }
 
 impl LidoInstruction {
@@ -955,7 +965,8 @@ pub fn withdraw_inactive_stake_v2(
 }
 
 accounts_struct! {
-    DeactivateValidatorIfCommissionExceedsMaxMeta, DeactivateValidatorIfCommissionExceedsMaxInfo {
+    DeactivateValidatorIfCommissionExceedsMaxMeta,
+    DeactivateValidatorIfCommissionExceedsMaxInfo {
         pub lido {
             is_signer: false,
             is_writable: true,
@@ -967,7 +978,7 @@ accounts_struct! {
     }
 }
 
-pub fn check_max_commission_violation(
+pub fn deactivate_validator_if_commission_exceeds_max(
     program_id: &Pubkey,
     accounts: &DeactivateValidatorIfCommissionExceedsMaxMeta,
 ) -> Instruction {
@@ -975,5 +986,31 @@ pub fn check_max_commission_violation(
         program_id: *program_id,
         accounts: accounts.to_vec(),
         data: LidoInstruction::DeactivateValidatorIfCommissionExceedsMax.to_vec(),
+    }
+}
+
+accounts_struct! {
+    SetMaxValidationFeeMeta, SetMaxValidationFeeInfo {
+        pub lido {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub manager {
+            is_signer: true,
+            is_writable: false,
+        },
+    }
+}
+
+pub fn set_max_validation_fee(
+    program_id: &Pubkey,
+    accounts: &SetMaxValidationFeeMeta,
+    max_validation_fee: u8,
+) -> Instruction {
+    let data = LidoInstruction::SetMaxValidationFee { max_validation_fee };
+    Instruction {
+        program_id: *program_id,
+        accounts: accounts.to_vec(),
+        data: data.to_vec(),
     }
 }

@@ -21,9 +21,10 @@ use crate::{
     metrics::Metrics,
     process_management::{
         process_add_maintainer, process_add_validator, process_add_validator_v2,
-        process_change_reward_distribution, process_check_max_commission_violation,
-        process_claim_validator_fee, process_deactivate_validator, process_merge_stake,
-        process_remove_maintainer, process_remove_validator,
+        process_change_reward_distribution, process_claim_validator_fee,
+        process_deactivate_validator, process_deactivate_validator_if_commission_exceeds_max,
+        process_merge_stake, process_remove_maintainer, process_remove_validator,
+        process_set_max_validation_fee,
     },
     stake_account::{deserialize_stake_account, StakeAccount},
     state::{
@@ -105,6 +106,10 @@ pub fn process_initialize(
         Pubkey::find_program_address(&[&accounts.lido.key.to_bytes(), MINT_AUTHORITY], program_id);
     // Check if the token has no minted tokens and right mint authority.
     check_mint(rent, accounts.st_sol_mint, &mint_authority)?;
+
+    if max_validation_fee > 100 {
+        return Err(LidoError::ValidationFeeOutOfBounds.into());
+    }
 
     // Initialize fee structure
     let lido = Lido {
@@ -1013,7 +1018,10 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
         LidoInstruction::RemoveMaintainer => process_remove_maintainer(program_id, accounts),
         LidoInstruction::MergeStake => process_merge_stake(program_id, accounts),
         LidoInstruction::DeactivateValidatorIfCommissionExceedsMax => {
-            process_check_max_commission_violation(program_id, accounts)
+            process_deactivate_validator_if_commission_exceeds_max(program_id, accounts)
+        }
+        LidoInstruction::SetMaxValidationFee { max_validation_fee } => {
+            process_set_max_validation_fee(program_id, max_validation_fee, accounts)
         }
     }
 }

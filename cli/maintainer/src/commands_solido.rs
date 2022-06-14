@@ -37,7 +37,7 @@ use crate::{
     config::{
         AddRemoveMaintainerOpts, AddValidatorOpts, CreateSolidoOpts,
         DeactivateValidatorIfCommissionExceedsMaxOpts, DeactivateValidatorOpts, DepositOpts,
-        ShowSolidoAuthoritiesOpts, ShowSolidoOpts, WithdrawOpts,
+        SetMaxValidationFeeOpts, ShowSolidoAuthoritiesOpts, ShowSolidoOpts, WithdrawOpts,
     },
     get_signer_from_path,
 };
@@ -282,75 +282,6 @@ pub fn command_deactivate_validator(
     )
 }
 
-#[derive(Serialize)]
-pub struct DeactivateValidatorIfCommissionExceedsMaxOutput {
-    // List of validators that exceeded max commission
-    entries: Vec<ValidatorViolationInfo>,
-    max_validation_fee: u8,
-}
-
-#[derive(Serialize)]
-struct ValidatorViolationInfo {
-    #[serde(serialize_with = "serialize_b58")]
-    pub validator_vote_account: Pubkey,
-    pub validation_fee: u8,
-}
-
-impl fmt::Display for DeactivateValidatorIfCommissionExceedsMaxOutput {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        writeln!(f, "Maximum validation fee: {}", self.max_validation_fee)?;
-
-        for entry in &self.entries {
-            writeln!(
-                f,
-                "Validator vote account: {}, validation fee: {}",
-                entry.validator_vote_account, entry.validation_fee
-            )?;
-        }
-        Ok(())
-    }
-}
-
-/// CLI entry point to punish validator for commission violation.
-pub fn command_check_max_commission_violation(
-    config: &mut SnapshotConfig,
-    opts: &DeactivateValidatorIfCommissionExceedsMaxOpts,
-) -> solido_cli_common::Result<DeactivateValidatorIfCommissionExceedsMaxOutput> {
-    let solido = config.client.get_solido(opts.solido_address())?;
-
-    let mut violations = vec![];
-    for pubkey_entry in solido.validators.entries {
-        let validator = pubkey_entry.entry;
-        let vote_pubkey = pubkey_entry.pubkey;
-        let validator_account = config.client.get_account(&vote_pubkey)?;
-        let commission = get_vote_account_commission(&validator_account.data)
-            .ok_or_else(|| CliError::new("Validator account data too small"))?;
-
-        // dbg!(pubkey_entry.pubkey, commission, validator.active);
-        if !validator.active || commission <= solido.max_validation_fee {
-            continue;
-        }
-
-        let instruction = lido::instruction::check_max_commission_violation(
-            opts.solido_program_id(),
-            &lido::instruction::DeactivateValidatorIfCommissionExceedsMaxMeta {
-                lido: *opts.solido_address(),
-                validator_vote_account_to_deactivate: vote_pubkey,
-            },
-        );
-        config.sign_and_send_transaction(&[instruction], &[config.signer])?;
-        violations.push(ValidatorViolationInfo {
-            validator_vote_account: vote_pubkey,
-            validation_fee: commission,
-        });
-    }
-
-    Ok(DeactivateValidatorIfCommissionExceedsMaxOutput {
-        entries: violations,
-        max_validation_fee: solido.max_validation_fee,
-    })
-}
-
 /// CLI entry point to to add a maintainer to Solido.
 pub fn command_add_maintainer(
     config: &mut SnapshotConfig,
@@ -421,6 +352,9 @@ pub struct ShowSolidoOutput {
 
     /// Contains validator info in the same order as `solido.validators`.
     pub validator_infos: Vec<ValidatorInfo>,
+
+    /// Contains validator fees
+    pub validator_fees: Vec<u8>,
 }
 
 impl fmt::Display for ShowSolidoOutput {
@@ -491,6 +425,8 @@ impl fmt::Display for ShowSolidoOutput {
             self.solido.fee_recipients.developer_account
         )?;
 
+        writeln!(f, "Max validation fee: {}%", self.solido.max_validation_fee)?;
+
         writeln!(f, "\nMetrics:")?;
         writeln!(
             f,
@@ -553,13 +489,14 @@ impl fmt::Display for ShowSolidoOutput {
             self.solido.validators.len(),
             self.solido.validators.maximum_entries
         )?;
-        for ((pe, identity), info) in self
+        for (((pe, identity), info), fee) in self
             .solido
             .validators
             .entries
             .iter()
             .zip(&self.validator_identities)
             .zip(&self.validator_infos)
+            .zip(&self.validator_fees)
         {
             writeln!(
                 f,
@@ -568,6 +505,7 @@ impl fmt::Display for ShowSolidoOutput {
                 Keybase username:          {}\n    \
                 Vote account:              {}\n    \
                 Identity account:          {}\n    \
+		Validation fee:            {}%\n    \
                 Active:                    {}\n    \
                 Stake in all accounts:     {}\n    \
                 Stake in stake accounts:   {}\n    \
@@ -579,6 +517,7 @@ impl fmt::Display for ShowSolidoOutput {
                 },
                 pe.pubkey,
                 identity,
+                fee,
                 pe.entry.active,
                 pe.entry.stake_accounts_balance,
                 pe.entry.effective_stake_balance(),
@@ -650,11 +589,16 @@ pub fn command_show_solido(
 
     let mut validator_identities = Vec::new();
     let mut validator_infos = Vec::new();
+    let mut validator_fees = Vec::new();
     for validator in lido.validators.entries.iter() {
         let vote_state = config.client.get_vote_account(&validator.pubkey)?;
         validator_identities.push(vote_state.node_pubkey);
         let info = config.client.get_validator_info(&vote_state.node_pubkey)?;
         validator_infos.push(info);
+        let vote_account = config.client.get_account(&validator.pubkey)?;
+        let commission = get_vote_account_commission(&vote_account.data)
+            .ok_or_else(|| CliError::new("Validator account data too small"))?;
+        validator_fees.push(commission);
     }
 
     Ok(ShowSolidoOutput {
@@ -663,6 +607,7 @@ pub fn command_show_solido(
         solido: lido,
         validator_identities,
         validator_infos,
+        validator_fees,
         reserve_account,
         stake_authority,
         mint_authority,
@@ -931,4 +876,97 @@ pub fn command_withdraw(
         new_stake_account: new_stake_account.pubkey(),
     };
     Ok(result)
+}
+
+#[derive(Serialize)]
+pub struct DeactivateValidatorIfCommissionExceedsMaxOutput {
+    // List of validators that exceeded max commission
+    entries: Vec<ValidatorViolationInfo>,
+    max_validation_fee: u8,
+}
+
+#[derive(Serialize)]
+struct ValidatorViolationInfo {
+    #[serde(serialize_with = "serialize_b58")]
+    pub validator_vote_account: Pubkey,
+    pub validation_fee: u8,
+}
+
+impl fmt::Display for DeactivateValidatorIfCommissionExceedsMaxOutput {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        writeln!(f, "Maximum validation fee: {}", self.max_validation_fee)?;
+
+        for entry in &self.entries {
+            writeln!(
+                f,
+                "Validator vote account: {}, validation fee: {}",
+                entry.validator_vote_account, entry.validation_fee
+            )?;
+        }
+        Ok(())
+    }
+}
+
+/// CLI entry point to punish validator for commission violation.
+pub fn command_deactivate_validator_if_commission_exceeds_max(
+    config: &mut SnapshotConfig,
+    opts: &DeactivateValidatorIfCommissionExceedsMaxOpts,
+) -> solido_cli_common::Result<DeactivateValidatorIfCommissionExceedsMaxOutput> {
+    let solido = config.client.get_solido(opts.solido_address())?;
+
+    let mut violations = vec![];
+    for pubkey_entry in solido.validators.entries {
+        let validator = pubkey_entry.entry;
+        let vote_pubkey = pubkey_entry.pubkey;
+        let validator_account = config.client.get_account(&vote_pubkey)?;
+        let commission = get_vote_account_commission(&validator_account.data)
+            .ok_or_else(|| CliError::new("Validator account data too small"))?;
+
+        // dbg!(pubkey_entry.pubkey, commission, validator.active);
+        if !validator.active || commission <= solido.max_validation_fee {
+            continue;
+        }
+
+        let instruction = lido::instruction::deactivate_validator_if_commission_exceeds_max(
+            opts.solido_program_id(),
+            &lido::instruction::DeactivateValidatorIfCommissionExceedsMaxMeta {
+                lido: *opts.solido_address(),
+                validator_vote_account_to_deactivate: vote_pubkey,
+            },
+        );
+        config.sign_and_send_transaction(&[instruction], &[config.signer])?;
+        violations.push(ValidatorViolationInfo {
+            validator_vote_account: vote_pubkey,
+            validation_fee: commission,
+        });
+    }
+
+    Ok(DeactivateValidatorIfCommissionExceedsMaxOutput {
+        entries: violations,
+        max_validation_fee: solido.max_validation_fee,
+    })
+}
+
+/// CLI entry point to set max validation fee
+pub fn command_set_max_validation_fee(
+    config: &mut SnapshotConfig,
+    opts: &SetMaxValidationFeeOpts,
+) -> solido_cli_common::Result<ProposeInstructionOutput> {
+    let (multisig_address, _) =
+        get_multisig_program_address(opts.multisig_program_id(), opts.multisig_address());
+
+    let instruction = lido::instruction::set_max_validation_fee(
+        opts.solido_program_id(),
+        &lido::instruction::SetMaxValidationFeeMeta {
+            lido: *opts.solido_address(),
+            manager: multisig_address,
+        },
+        *opts.max_validation_fee(),
+    );
+    propose_instruction(
+        config,
+        opts.multisig_program_id(),
+        *opts.multisig_address(),
+        instruction,
+    )
 }

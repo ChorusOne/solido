@@ -720,7 +720,9 @@ impl SolidoState {
     }
 
     /// If there is a validator which exceeded commission limit, try to deactivate it.
-    pub fn try_check_max_commission_violation(&self) -> Option<MaintenanceInstruction> {
+    pub fn try_deactivate_validator_if_commission_exceeds_max(
+        &self,
+    ) -> Option<MaintenanceInstruction> {
         for (validator, vote_state) in self
             .solido
             .validators
@@ -737,7 +739,7 @@ impl SolidoState {
                 validator_vote_account: validator.pubkey,
             };
 
-            let instruction = lido::instruction::check_max_commission_violation(
+            let instruction = lido::instruction::deactivate_validator_if_commission_exceeds_max(
                 &self.solido_program_id,
                 &lido::instruction::DeactivateValidatorIfCommissionExceedsMaxMeta {
                     lido: self.solido_address,
@@ -1631,9 +1633,9 @@ pub fn try_perform_maintenance(
         // because it may be rejected if the exchange rate is outdated.
         // Same for updating the validator balance.
         .or_else(|| state.try_withdraw_inactive_stake())
+        .or_else(|| state.try_deactivate_validator_if_commission_exceeds_max())
         .or_else(|| state.try_stake_deposit())
         .or_else(|| state.try_unstake_from_active_validators())
-        .or_else(|| state.try_check_max_commission_violation())
         .or_else(|| state.try_remove_validator())
         .or_else(|| state.try_sell_anker_rewards())
         .or_else(|| state.try_send_anker_rewards());
