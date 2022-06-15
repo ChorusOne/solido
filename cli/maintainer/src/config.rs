@@ -250,7 +250,7 @@ cli_opt_struct! {
 
         /// The maximum validator fee a validator can have to be accepted by protocol.
         #[clap(long, value_name = "int")]
-        max_validation_fee: u8,
+        max_commission_percentage: u8,
 
         // See also the docs section of `create-solido` in main.rs for a description
         // of the fee shares.
@@ -467,7 +467,7 @@ cli_opt_struct! {
 }
 
 cli_opt_struct! {
-    SetMaxValidationFeeOpts {
+    SetMaxValidationCommissionOpts {
         /// Address of the Solido program.
         #[clap(long, value_name = "address")]
         solido_program_id: Pubkey,
@@ -476,9 +476,9 @@ cli_opt_struct! {
         #[clap(long, value_name = "address")]
         solido_address: Pubkey,
 
-        /// Max percent of rewards a validator can recieve (validation fee), in range [0, 100]
+        /// Max percent of rewards a validator can recieve (validation commission), in range [0, 100]
         #[clap(long, value_name = "fee")]
-        max_validation_fee: u8,
+        max_commission_percentage: u8,
 
         /// Multisig instance.
         #[clap(long, value_name = "address")]

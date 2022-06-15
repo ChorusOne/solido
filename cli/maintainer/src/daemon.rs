@@ -120,6 +120,11 @@ impl MaintenanceMetrics {
                         .with_label("operation", "SendRewards".to_string()),
                     Metric::new(self.transactions_fetch_pool_price)
                         .with_label("operation", "FetchPoolPrice".to_string()),
+                    Metric::new(self.transactions_deactivate_validator_if_commission_exceeds_max)
+                        .with_label(
+                            "operation",
+                            "DeactivateValidatorIfCommissionExceedsMax".to_string(),
+                        ),
                 ],
             },
         )?;

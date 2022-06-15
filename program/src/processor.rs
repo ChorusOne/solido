@@ -20,11 +20,10 @@ use crate::{
     },
     metrics::Metrics,
     process_management::{
-        process_add_maintainer, process_add_validator, process_add_validator_v2,
-        process_change_reward_distribution, process_claim_validator_fee,
+        process_add_maintainer, process_add_validator, process_change_reward_distribution,
         process_deactivate_validator, process_deactivate_validator_if_commission_exceeds_max,
         process_merge_stake, process_remove_maintainer, process_remove_validator,
-        process_set_max_validation_fee,
+        process_set_max_commission_percentage,
     },
     stake_account::{deserialize_stake_account, StakeAccount},
     state::{
@@ -62,7 +61,7 @@ pub fn process_initialize(
     reward_distribution: RewardDistribution,
     max_validators: u32,
     max_maintainers: u32,
-    max_validation_fee: u8,
+    max_commission_percentage: u8,
     accounts_raw: &[AccountInfo],
 ) -> ProgramResult {
     let accounts = InitializeAccountsInfo::try_from_slice(accounts_raw)?;
@@ -107,8 +106,8 @@ pub fn process_initialize(
     // Check if the token has no minted tokens and right mint authority.
     check_mint(rent, accounts.st_sol_mint, &mint_authority)?;
 
-    if max_validation_fee > 100 {
-        return Err(LidoError::ValidationFeeOutOfBounds.into());
+    if max_commission_percentage > 100 {
+        return Err(LidoError::ValidationCommissionOutOfBounds.into());
     }
 
     // Initialize fee structure
@@ -128,7 +127,7 @@ pub fn process_initialize(
         metrics: Metrics::new(),
         maintainers: Maintainers::new(max_maintainers),
         validators: Validators::new(max_validators),
-        max_validation_fee,
+        max_commission_percentage,
     };
 
     // Confirm that the fee recipients are actually stSOL accounts.
@@ -648,19 +647,11 @@ pub fn check_address_and_get_balance(
     Ok(account_balance)
 }
 
-/// Instruction is deprecated in favour of process_withdraw_inactive_stake_v2
-pub fn process_withdraw_inactive_stake(
-    _program_id: &Pubkey,
-    _raw_accounts: &[AccountInfo],
-) -> ProgramResult {
-    Err(LidoError::InstructionIsDeprecated.into())
-}
-
 /// Recover any inactive balance from the validator's stake/unstake accounts to
 /// the reserve account.
 /// Updates the validator's balance and distribute rewards.
 /// This function is permissionless and can be called by anyone.
-pub fn process_withdraw_inactive_stake_v2(
+pub fn process_withdraw_inactive_stake(
     program_id: &Pubkey,
     raw_accounts: &[AccountInfo],
 ) -> ProgramResult {
@@ -830,13 +821,6 @@ pub fn process_withdraw_inactive_stake_v2(
     lido.save(accounts.lido)
 }
 
-pub fn process_collect_validator_fee(
-    _program_id: &Pubkey,
-    _raw_accounts: &[AccountInfo],
-) -> ProgramResult {
-    Err(LidoError::InstructionIsDeprecated.into())
-}
-
 /// Splits a stake account from a validator's stake account.
 /// This function can only be called after the exchange rate is updated with
 /// `process_update_exchange_rate`.
@@ -982,14 +966,14 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
             reward_distribution,
             max_validators,
             max_maintainers,
-            max_validation_fee,
+            max_commission_percentage,
         } => process_initialize(
             LIDO_VERSION,
             program_id,
             reward_distribution,
             max_validators,
             max_maintainers,
-            max_validation_fee,
+            max_commission_percentage,
             accounts,
         ),
         LidoInstruction::Deposit { amount } => process_deposit(program_id, amount, accounts),
@@ -998,20 +982,21 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
         }
         LidoInstruction::Unstake { amount } => process_unstake(program_id, amount, accounts),
         LidoInstruction::UpdateExchangeRate => process_update_exchange_rate(program_id, accounts),
-        LidoInstruction::WithdrawInactiveStake => {
-            process_withdraw_inactive_stake(program_id, accounts)
+        LidoInstruction::WithdrawInactiveStake
+        | LidoInstruction::CollectValidatorFee
+        | LidoInstruction::ClaimValidatorFee
+        | LidoInstruction::AddValidator => {
+            msg!("Please use a new instruction {:?}", instruction);
+            Err(LidoError::InstructionIsDeprecated.into())
         }
         LidoInstruction::WithdrawInactiveStakeV2 => {
-            process_withdraw_inactive_stake_v2(program_id, accounts)
+            process_withdraw_inactive_stake(program_id, accounts)
         }
-        LidoInstruction::CollectValidatorFee => process_collect_validator_fee(program_id, accounts),
         LidoInstruction::Withdraw { amount } => process_withdraw(program_id, amount, accounts),
-        LidoInstruction::ClaimValidatorFee => process_claim_validator_fee(program_id, accounts),
         LidoInstruction::ChangeRewardDistribution {
             new_reward_distribution,
         } => process_change_reward_distribution(program_id, new_reward_distribution, accounts),
-        LidoInstruction::AddValidator => process_add_validator(program_id, accounts),
-        LidoInstruction::AddValidatorV2 => process_add_validator_v2(program_id, accounts),
+        LidoInstruction::AddValidatorV2 => process_add_validator(program_id, accounts),
         LidoInstruction::RemoveValidator => process_remove_validator(program_id, accounts),
         LidoInstruction::DeactivateValidator => process_deactivate_validator(program_id, accounts),
         LidoInstruction::AddMaintainer => process_add_maintainer(program_id, accounts),
@@ -1020,8 +1005,8 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
         LidoInstruction::DeactivateValidatorIfCommissionExceedsMax => {
             process_deactivate_validator_if_commission_exceeds_max(program_id, accounts)
         }
-        LidoInstruction::SetMaxValidationFee { max_validation_fee } => {
-            process_set_max_validation_fee(program_id, max_validation_fee, accounts)
-        }
+        LidoInstruction::SetMaxValidationCommission {
+            max_commission_percentage,
+        } => process_set_max_commission_percentage(program_id, max_commission_percentage, accounts),
     }
 }

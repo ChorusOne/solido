@@ -33,7 +33,7 @@ pub enum LidoInstruction {
         #[allow(dead_code)] // but it's not
         max_maintainers: u32,
         #[allow(dead_code)] // but it's not
-        max_validation_fee: u8,
+        max_commission_percentage: u8,
     },
 
     /// Deposit a given amount of SOL.
@@ -123,14 +123,14 @@ pub enum LidoInstruction {
     /// Requires no permission
     DeactivateValidatorIfCommissionExceedsMax,
 
-    /// Set max_validation_fee to control validator's fees.
+    /// Set max_commission_percentage to control validator's fees.
     /// If validators exeed the threshold they will be deactivated by
     /// DeactivateValidatorIfCommissionExceedsMax.
     ///
     /// Requires the manager to sign.
-    SetMaxValidationFee {
+    SetMaxValidationCommission {
         #[allow(dead_code)] // but it's not
-        max_validation_fee: u8, // percent in [0, 100]
+        max_commission_percentage: u8, // percent in [0, 100]
     },
 }
 
@@ -181,14 +181,14 @@ pub fn initialize(
     reward_distribution: RewardDistribution,
     max_validators: u32,
     max_maintainers: u32,
-    max_validation_fee: u8,
+    max_commission_percentage: u8,
     accounts: &InitializeAccountsMeta,
 ) -> Instruction {
     let data = LidoInstruction::Initialize {
         reward_distribution,
         max_validators,
         max_maintainers,
-        max_validation_fee,
+        max_commission_percentage,
     };
     Instruction {
         program_id: *program_id,
@@ -469,67 +469,6 @@ pub fn update_exchange_rate(
 }
 
 accounts_struct! {
-    // Note: there are no signers among these accounts, updating validator
-    // balance is permissionless, anybody can do it.
-    WithdrawInactiveStakeMeta, WithdrawInactiveStakeInfo {
-        pub lido {
-            is_signer: false,
-            is_writable: true,
-        },
-        // The validator to update the balance for.
-        pub validator_vote_account {
-            is_signer: false,
-            is_writable: false,
-        },
-
-        // This instruction withdraws any excess stake from the stake accounts
-        // back to the reserve. The stake authority needs to sign off on those
-        // (but program-derived, so it is not a signer here), and we need access
-        // to the reserve.
-        pub stake_authority {
-            is_signer: false,
-            is_writable: false,
-        },
-        pub reserve {
-            is_signer: false,
-            // Is writable due to withdraw from stake account to reserve (StakeAccount::stake_account_withdraw)
-            is_writable: true,
-        },
-
-        // We only allow updating balances if the exchange rate is up to date,
-        // so we need to know the current epoch.
-        const sysvar_clock = sysvar::clock::id(),
-
-        // Needed to determine if there is excess balance in a stake account.
-        const sysvar_rent = sysvar::rent::id(),
-
-        // Needed for the stake program, to withdraw from stake accounts.
-        const sysvar_stake_history = sysvar::stake_history::id(),
-
-        // Needed to withdraw from stake accounts.
-        const stake_program = stake_program::program::id(),
-
-        // The validator's stake accounts, from the begin seed until (but
-        // excluding) the end seed.
-        pub ...stake_accounts {
-            is_signer: false,
-            is_writable: true,
-        },
-    }
-}
-
-pub fn withdraw_inactive_stake(
-    program_id: &Pubkey,
-    accounts: &WithdrawInactiveStakeMeta,
-) -> Instruction {
-    Instruction {
-        program_id: *program_id,
-        accounts: accounts.to_vec(),
-        data: LidoInstruction::WithdrawInactiveStake.to_vec(),
-    }
-}
-
-accounts_struct! {
     // Note: there are no signers among these accounts, updating a validator
     // account is permissionless, anybody can do it.
     CollectValidatorFeeMeta, CollectValidatorFeeInfo {
@@ -645,36 +584,6 @@ pub fn change_reward_distribution(
         // Serializing the instruction should never fail.
         .try_to_vec()
         .unwrap(),
-    }
-}
-
-accounts_struct! {
-    AddValidatorMeta, AddValidatorInfo {
-        pub lido {
-            is_signer: false,
-            is_writable: true,
-        },
-        pub manager {
-            is_signer: true,
-            is_writable: false,
-        },
-        pub validator_vote_account {
-            is_signer: false,
-            is_writable: false,
-        },
-        pub validator_fee_st_sol_account {
-            is_signer: false,
-            is_writable: false,
-        },
-        const sysvar_rent = sysvar::rent::id(),
-    }
-}
-
-pub fn add_validator(program_id: &Pubkey, accounts: &AddValidatorMeta) -> Instruction {
-    Instruction {
-        program_id: *program_id,
-        accounts: accounts.to_vec(),
-        data: LidoInstruction::AddValidator.to_vec(),
     }
 }
 
@@ -870,7 +779,7 @@ accounts_struct! {
     }
 }
 
-pub fn add_validator_v2(program_id: &Pubkey, accounts: &AddValidatorMetaV2) -> Instruction {
+pub fn add_validator(program_id: &Pubkey, accounts: &AddValidatorMetaV2) -> Instruction {
     Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
@@ -953,7 +862,7 @@ accounts_struct! {
     }
 }
 
-pub fn withdraw_inactive_stake_v2(
+pub fn withdraw_inactive_stake(
     program_id: &Pubkey,
     accounts: &WithdrawInactiveStakeMetaV2,
 ) -> Instruction {
@@ -990,7 +899,7 @@ pub fn deactivate_validator_if_commission_exceeds_max(
 }
 
 accounts_struct! {
-    SetMaxValidationFeeMeta, SetMaxValidationFeeInfo {
+    SetMaxValidationCommissionMeta, SetMaxValidationCommissionInfo {
         pub lido {
             is_signer: false,
             is_writable: true,
@@ -1002,12 +911,14 @@ accounts_struct! {
     }
 }
 
-pub fn set_max_validation_fee(
+pub fn set_max_commission_percentage(
     program_id: &Pubkey,
-    accounts: &SetMaxValidationFeeMeta,
-    max_validation_fee: u8,
+    accounts: &SetMaxValidationCommissionMeta,
+    max_commission_percentage: u8,
 ) -> Instruction {
-    let data = LidoInstruction::SetMaxValidationFee { max_validation_fee };
+    let data = LidoInstruction::SetMaxValidationCommission {
+        max_commission_percentage,
+    };
     Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),

@@ -22,7 +22,7 @@ use crate::commands_multisig::MultisigOpts;
 use crate::commands_solido::{
     command_add_maintainer, command_add_validator, command_create_solido,
     command_deactivate_validator, command_deactivate_validator_if_commission_exceeds_max,
-    command_deposit, command_remove_maintainer, command_set_max_validation_fee,
+    command_deposit, command_remove_maintainer, command_set_max_commission_percentage,
     command_show_solido, command_show_solido_authorities, command_withdraw,
 };
 use crate::config::*;
@@ -138,21 +138,21 @@ enum SubCommand {
 
 REWARDS
 
-    Solido takes a fraction of the rewards that it receives as fees. The
-    remainder gets distributed implicitly to stSOL holders because they now own
-    a share of a larger pool of SOL.
+    Solido takes a fraction of the rewards that it receives as fees and
+    validators get their commission. The remainder gets distributed
+    implicitly to stSOL holders because they now own a share of a larger
+    pool of SOL.
 
-    The SOL rewards get split according to the ratio T : V : D : A, where
+    The SOL rewards after validators receive commission get split according
+    to the ratio T : D : A, where
 
       T: Treasury fee share
-      V: Validation fee share (this is for all validators combined)
       D: Developer fee share
       A: stSOL value appreciation share
 
-    For example, if the reward distribution is set to '5 : 3 : 2 : 90', then 90%
-    of the rewards go to stSOL value appreciation, and 10% go to fees. Of those
-    fees, 50% go to the treasury, 30% are divided among validators, and 20% goes
-    to the developer.
+    For example, if the reward distribution is set to '5 : 3 : 92', then 92%
+    of the rewards go to stSOL value appreciation, and 8% go to fees. Of those
+    fees, 62.5% go to the treasury, and 37.5% goes to the developer.
     ")]
     CreateSolido(CreateSolidoOpts),
 
@@ -207,12 +207,12 @@ REWARDS
     /// Interact with the Anker (Anchor Protocol integration) program.
     Anker(AnkerOpts),
 
-    /// Set max_validation_fee to control validator's fees.
+    /// Set max_commission_percentage to control validator's fees.
     /// If validators exeed the threshold they will be deactivated by
     /// a maintainer.
     ///
     /// Requires the manager to sign.
-    SetMaxValidationFee(SetMaxValidationFeeOpts),
+    SetMaxValidationCommission(SetMaxValidationCommissionOpts),
 }
 
 fn print_output<Output: fmt::Display + Serialize>(mode: OutputMode, output: &Output) {
@@ -339,10 +339,10 @@ fn main() {
             let output = result.ok_or_abort_with("Failed to withdraw.");
             print_output(output_mode, &output);
         }
-        SubCommand::SetMaxValidationFee(cmd_opts) => {
-            let result =
-                config.with_snapshot(|config| command_set_max_validation_fee(config, &cmd_opts));
-            let output = result.ok_or_abort_with("Failed to set max validation fee.");
+        SubCommand::SetMaxValidationCommission(cmd_opts) => {
+            let result = config
+                .with_snapshot(|config| command_set_max_commission_percentage(config, &cmd_opts));
+            let output = result.ok_or_abort_with("Failed to set max validation commission.");
             print_output(output_mode, &output);
         }
     }
@@ -372,7 +372,7 @@ fn merge_with_config_and_environment(
         SubCommand::PerformMaintenance(opts) => opts.merge_with_config_and_environment(config_file),
         SubCommand::Multisig(opts) => opts.merge_with_config_and_environment(config_file),
         SubCommand::RunMaintainer(opts) => opts.merge_with_config_and_environment(config_file),
-        SubCommand::SetMaxValidationFee(opts) => {
+        SubCommand::SetMaxValidationCommission(opts) => {
             opts.merge_with_config_and_environment(config_file)
         }
     }

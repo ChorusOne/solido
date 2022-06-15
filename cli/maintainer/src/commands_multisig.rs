@@ -29,7 +29,8 @@ use solana_sdk::sysvar;
 use lido::{
     instruction::{
         AddMaintainerMeta, AddValidatorMetaV2, ChangeRewardDistributionMeta,
-        DeactivateValidatorMeta, LidoInstruction, RemoveMaintainerMeta, SetMaxValidationFeeMeta,
+        DeactivateValidatorMeta, LidoInstruction, RemoveMaintainerMeta,
+        SetMaxValidationCommissionMeta,
     },
     state::{FeeRecipients, Lido, RewardDistribution},
     util::{serialize_b58, serialize_b58_slice},
@@ -444,11 +445,11 @@ enum SolidoInstruction {
 
         fee_recipients: FeeRecipients,
     },
-    SetMaxValidationFee {
+    SetMaxValidationCommission {
         #[serde(serialize_with = "serialize_b58")]
         solido_instance: Pubkey,
 
-        max_validation_fee: u8,
+        max_commission_percentage: u8,
 
         #[serde(serialize_with = "serialize_b58")]
         manager: Pubkey,
@@ -655,15 +656,19 @@ impl fmt::Display for ShowTransactionOutput {
                         print_changed_reward_distribution(f, current_solido, reward_distribution)?;
                         print_changed_recipients(f, current_solido, fee_recipients)?;
                     }
-                    SolidoInstruction::SetMaxValidationFee {
+                    SolidoInstruction::SetMaxValidationCommission {
                         solido_instance,
-                        max_validation_fee,
+                        max_commission_percentage,
                         manager,
                     } => {
-                        writeln!(f, "It sets a maximun validation fee")?;
+                        writeln!(f, "It sets the maximun validation commission")?;
                         writeln!(f, "    Solido instance:    {}", solido_instance)?;
                         writeln!(f, "    Manager:            {}", manager)?;
-                        writeln!(f, "    Max validation fee: {}", max_validation_fee)?;
+                        writeln!(
+                            f,
+                            "    Max validation commission: {}%",
+                            max_commission_percentage
+                        )?;
                     }
                 }
             }
@@ -1094,11 +1099,13 @@ fn try_parse_solido_instruction(
                 maintainer: accounts.maintainer,
             })
         }
-        LidoInstruction::SetMaxValidationFee { max_validation_fee } => {
-            let accounts = SetMaxValidationFeeMeta::try_from_slice(&instr.accounts)?;
-            ParsedInstruction::SolidoInstruction(SolidoInstruction::SetMaxValidationFee {
+        LidoInstruction::SetMaxValidationCommission {
+            max_commission_percentage,
+        } => {
+            let accounts = SetMaxValidationCommissionMeta::try_from_slice(&instr.accounts)?;
+            ParsedInstruction::SolidoInstruction(SolidoInstruction::SetMaxValidationCommission {
                 solido_instance: accounts.lido,
-                max_validation_fee,
+                max_commission_percentage,
                 manager: accounts.manager,
             })
         }

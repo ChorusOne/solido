@@ -28,7 +28,7 @@ use crate::{
 };
 use crate::{VALIDATOR_STAKE_ACCOUNT, VALIDATOR_UNSTAKE_ACCOUNT};
 
-pub const LIDO_VERSION: u8 = 0;
+pub const LIDO_VERSION: u8 = 1;
 
 /// Size of a serialized `Lido` struct excluding validators and maintainers.
 ///
@@ -220,8 +220,8 @@ pub struct Lido {
     /// Map of enrolled validators, maps their vote account to `Validator` details.
     pub validators: Validators,
 
-    /// Maximum validation fee, percent in [0, 100]
-    pub max_validation_fee: u8,
+    /// Maximum validation commission percentage in [0, 100]
+    pub max_commission_percentage: u8,
 
     /// The set of maintainers.
     ///
@@ -951,7 +951,7 @@ mod test_lido {
             metrics: Metrics::new(),
             validators: validators,
             maintainers: maintainers,
-            max_validation_fee: 5,
+            max_commission_percentage: 5,
         };
         let mut data = Vec::new();
         BorshSerialize::serialize(&lido, &mut data).unwrap();

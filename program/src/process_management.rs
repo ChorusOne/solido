@@ -15,7 +15,7 @@ use crate::{
     instruction::{
         AddMaintainerInfo, AddValidatorInfoV2, ChangeRewardDistributionInfo,
         DeactivateValidatorIfCommissionExceedsMaxInfo, DeactivateValidatorInfo, MergeStakeInfo,
-        RemoveMaintainerInfo, RemoveValidatorInfo, SetMaxValidationFeeInfo,
+        RemoveMaintainerInfo, RemoveValidatorInfo, SetMaxValidationCommissionInfo,
     },
     state::{RewardDistribution, Validator},
     vote_state::get_vote_account_commission,
@@ -41,14 +41,7 @@ pub fn process_change_reward_distribution(
     lido.save(accounts.lido)
 }
 
-pub fn process_add_validator(_program_id: &Pubkey, _accounts_raw: &[AccountInfo]) -> ProgramResult {
-    Err(LidoError::InstructionIsDeprecated.into())
-}
-
-pub fn process_add_validator_v2(
-    program_id: &Pubkey,
-    accounts_raw: &[AccountInfo],
-) -> ProgramResult {
+pub fn process_add_validator(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> ProgramResult {
     let accounts = AddValidatorInfoV2::try_from_slice(accounts_raw)?;
     let mut lido = Lido::deserialize_lido(program_id, accounts.lido)?;
     let rent = &Rent::get()?;
@@ -63,8 +56,10 @@ pub fn process_add_validator_v2(
     // account: The vote account should be owned by the vote program, the
     // withdraw authority should be set to the program_id, and it should
     // sattisfy commission limit.
-    let _partial_vote_state =
-        PartialVoteState::deserialize(accounts.validator_vote_account, lido.max_validation_fee)?;
+    let _partial_vote_state = PartialVoteState::deserialize(
+        accounts.validator_vote_account,
+        lido.max_commission_percentage,
+    )?;
 
     lido.validators
         .add(*accounts.validator_vote_account.key, Validator::new())?;
@@ -118,13 +113,6 @@ pub fn process_deactivate_validator(
     lido.save(accounts.lido)
 }
 
-pub fn process_claim_validator_fee(
-    _program_id: &Pubkey,
-    _accounts_raw: &[AccountInfo],
-) -> ProgramResult {
-    Err(LidoError::InstructionIsDeprecated.into())
-}
-
 /// Set the `active` flag to false for a given validator if it's commission is
 /// bigger then max allowed. It is permissionless.
 ///
@@ -140,7 +128,7 @@ pub fn process_deactivate_validator_if_commission_exceeds_max(
     let data = accounts.validator_vote_account_to_deactivate.data.borrow();
     let commission = get_vote_account_commission(&data).ok_or(ProgramError::AccountDataTooSmall)?;
 
-    if commission <= lido.max_validation_fee {
+    if commission <= lido.max_commission_percentage {
         return Ok(());
     }
 
@@ -183,23 +171,23 @@ pub fn process_remove_maintainer(
     lido.save(accounts.lido)
 }
 
-/// Sets max validation fee for Lido. If validators exeed the threshold
+/// Sets max validation commission for Lido. If validators exeed the threshold
 /// they will be deactivated by DeactivateValidatorIfCommissionExceedsMax
-pub fn process_set_max_validation_fee(
+pub fn process_set_max_commission_percentage(
     program_id: &Pubkey,
-    max_validation_fee: u8,
+    max_commission_percentage: u8,
     accounts_raw: &[AccountInfo],
 ) -> ProgramResult {
-    if max_validation_fee > 100 {
-        return Err(LidoError::ValidationFeeOutOfBounds.into());
+    if max_commission_percentage > 100 {
+        return Err(LidoError::ValidationCommissionOutOfBounds.into());
     }
 
-    let accounts = SetMaxValidationFeeInfo::try_from_slice(accounts_raw)?;
+    let accounts = SetMaxValidationCommissionInfo::try_from_slice(accounts_raw)?;
     let mut lido = Lido::deserialize_lido(program_id, accounts.lido)?;
 
     lido.check_manager(accounts.manager)?;
 
-    lido.max_validation_fee = max_validation_fee;
+    lido.max_commission_percentage = max_commission_percentage;
 
     lido.save(accounts.lido)
 }

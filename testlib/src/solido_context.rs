@@ -94,7 +94,7 @@ pub struct Context {
     pub stake_authority: Pubkey,
     pub mint_authority: Pubkey,
 
-    pub max_validation_fee: u8,
+    pub max_commission_percentage: u8,
 }
 
 pub struct ValidatorAccounts {
@@ -269,7 +269,7 @@ impl Context {
             stake_authority,
             mint_authority,
             deterministic_keypair,
-            max_validation_fee: 5,
+            max_commission_percentage: 5,
         };
 
         result.st_sol_mint = result.create_mint(result.mint_authority).await;
@@ -309,7 +309,7 @@ impl Context {
                     result.reward_distribution.clone(),
                     max_validators,
                     max_maintainers,
-                    result.max_validation_fee,
+                    result.max_commission_percentage,
                     &instruction::InitializeAccountsMeta {
                         lido: result.solido.pubkey(),
                         manager: result.manager.pubkey(),
@@ -700,7 +700,7 @@ impl Context {
     ) -> transport::Result<()> {
         send_transaction(
             &mut self.context,
-            &[lido::instruction::add_validator_v2(
+            &[lido::instruction::add_validator(
                 &id(),
                 &lido::instruction::AddValidatorMetaV2 {
                     lido: self.solido.pubkey(),
@@ -717,7 +717,11 @@ impl Context {
     pub async fn add_validator(&mut self) -> ValidatorAccounts {
         let node_account = self.deterministic_keypair.new_keypair();
         let vote_account = self
-            .create_vote_account(&node_account, Pubkey::new_unique(), self.max_validation_fee)
+            .create_vote_account(
+                &node_account,
+                Pubkey::new_unique(),
+                self.max_commission_percentage,
+            )
             .await;
 
         let accounts = ValidatorAccounts {
@@ -1102,7 +1106,7 @@ impl Context {
 
         send_transaction(
             &mut self.context,
-            &[instruction::withdraw_inactive_stake_v2(
+            &[instruction::withdraw_inactive_stake(
                 &id(),
                 &instruction::WithdrawInactiveStakeMetaV2 {
                     lido: self.solido.pubkey(),
@@ -1282,12 +1286,12 @@ impl Context {
         VoteState::deserialize(&vote_acc.data)
     }
 
-    pub async fn try_set_max_validation_fee(&mut self, fee: u8) -> transport::Result<()> {
+    pub async fn try_set_max_commission_percentage(&mut self, fee: u8) -> transport::Result<()> {
         send_transaction(
             &mut self.context,
-            &[lido::instruction::set_max_validation_fee(
+            &[lido::instruction::set_max_commission_percentage(
                 &id(),
-                &lido::instruction::SetMaxValidationFeeMeta {
+                &lido::instruction::SetMaxValidationCommissionMeta {
                     lido: self.solido.pubkey(),
                     manager: self.manager.pubkey(),
                 },

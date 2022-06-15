@@ -231,7 +231,11 @@ impl fmt::Display for MaintenanceOutput {
             MaintenanceOutput::DeactivateValidatorIfCommissionExceedsMax {
                 validator_vote_account,
             } => {
-                writeln!(f, "Check max commission violation")?;
+                writeln!(f, "Check max commission violation.")?;
+                writeln!(
+                    f,
+                    "Deactivate validator that charges more commission than we allow."
+                )?;
                 writeln!(f, "  Validator vote account: {}", validator_vote_account)?;
             }
             MaintenanceOutput::SellRewards { st_sol_amount } => {
@@ -731,7 +735,9 @@ impl SolidoState {
             .zip(self.validator_vote_accounts.iter())
         {
             // We are only interested in validators that violate commission limit
-            if !validator.entry.active || vote_state.commission <= self.solido.max_validation_fee {
+            if !validator.entry.active
+                || vote_state.commission <= self.solido.max_commission_percentage
+            {
                 continue;
             }
 
@@ -1048,7 +1054,7 @@ impl SolidoState {
                 let mut stake_account_addrs = Vec::new();
                 stake_account_addrs.extend(stake_accounts.iter().map(|(addr, _)| *addr));
                 stake_account_addrs.extend(unstake_accounts.iter().map(|(addr, _)| *addr));
-                let instruction = lido::instruction::withdraw_inactive_stake_v2(
+                let instruction = lido::instruction::withdraw_inactive_stake(
                     &self.solido_program_id,
                     &lido::instruction::WithdrawInactiveStakeMetaV2 {
                         lido: self.solido_address,

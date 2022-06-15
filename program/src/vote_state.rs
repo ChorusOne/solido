@@ -26,10 +26,10 @@ pub struct PartialVoteState {
 impl PartialVoteState {
     /// Deserialize and test if a Vote Account is a Solido valid account.
     /// Solido vote accounts should be owned by the vote program, must have a
-    /// fee no more then max_validation_fee
+    /// fee no more then max_commission_percentage
     pub fn deserialize(
         validator_vote_account: &AccountInfo,
-        max_validation_fee: u8,
+        max_commission_percentage: u8,
     ) -> Result<Self, LidoError> {
         if validator_vote_account.owner != &solana_program::vote::program::id() {
             msg!(
@@ -62,10 +62,10 @@ impl PartialVoteState {
         let node_pubkey = Pubkey::new_from_array(pubkey_buf);
 
         let commission = get_vote_account_commission(&data).ok_or(LidoError::InvalidVoteAccount)?;
-        if commission > max_validation_fee {
+        if commission > max_commission_percentage {
             msg!(
                 "Vote Account's commission should be <= {}, is {} instead",
-                max_validation_fee,
+                max_commission_percentage,
                 commission
             );
             return Err(LidoError::InvalidVoteAccount);

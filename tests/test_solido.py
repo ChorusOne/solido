@@ -28,7 +28,7 @@ from util import (
     solana_program_deploy,
     solido,
     spl_token,
-    MAX_VALIDATION_FEE,
+    MAX_VALIDATION_COMMISSION_PERCENTAGE,
 )
 
 from typing import Any, Dict, NamedTuple, Tuple
@@ -136,8 +136,8 @@ result = solido(
     '9',
     '--max-maintainers',
     '1',
-    '--max-validation-fee',
-    str(MAX_VALIDATION_FEE),
+    '--max-commission-percentage',
+    str(MAX_VALIDATION_COMMISSION_PERCENTAGE),
     '--treasury-fee-share',
     '5',
     '--developer-fee-share',
@@ -170,8 +170,8 @@ result = solido(
     '9',
     '--max-maintainers',
     '1',
-    '--max-validation-fee',
-    str(MAX_VALIDATION_FEE),
+    '--max-commission-percentage',
+    str(MAX_VALIDATION_COMMISSION_PERCENTAGE),
     '--treasury-fee-share',
     '5',
     '--developer-fee-share',
@@ -229,7 +229,7 @@ def add_validator(
         f'tests/.keys/{keypath_vote}.json',
         account.keypair_path,
         f'tests/.keys/{keypath_vote}_withdrawer.json',
-        MAX_VALIDATION_FEE,
+        MAX_VALIDATION_COMMISSION_PERCENTAGE,
     )
     print(f'> Creating validator vote account {vote_account}')
 
@@ -703,12 +703,12 @@ assert (
 solana(
     "vote-update-commission",
     validator_1.vote_account.pubkey,
-    str(MAX_VALIDATION_FEE + 1),  # exceed maximum allowed limit
+    str(MAX_VALIDATION_COMMISSION_PERCENTAGE + 1),  # exceed maximum allowed limit
     validator_1.withdrawer_account.keypair_path,
 )
 
 print(
-    '\nRunning maintenance (should deactivate a validator that exceed max validation fee) ...'
+    '\nRunning maintenance (should deactivate a validator that exceed max validation commission) ...'
 )
 result = perform_maintenance()
 # check validator_1 is deactivated
@@ -742,16 +742,16 @@ validator_2 = add_validator_and_approve(
 )
 
 
-def set_max_validation_fee(fee: int) -> Any:
+def set_max_validation_commission(fee: int) -> Any:
     transaction_result = solido(
-        'set-max-validation-fee',
+        'set-max-validation-commission',
         '--multisig-program-id',
         multisig_program_id,
         '--solido-program-id',
         solido_program_id,
         '--solido-address',
         solido_address,
-        '--max-validation-fee',
+        '--max-commission-percentage',
         str(fee),
         '--multisig-address',
         multisig_instance,
@@ -772,13 +772,18 @@ def set_max_validation_fee(fee: int) -> Any:
     return transaction_status
 
 
-print('\nLowering max validation fee to %d%% ...' % (MAX_VALIDATION_FEE - 1))
-transaction_status = set_max_validation_fee(MAX_VALIDATION_FEE - 1)
+print(
+    '\nLowering max validation commission to %d%% ...'
+    % (MAX_VALIDATION_COMMISSION_PERCENTAGE - 1)
+)
+transaction_status = set_max_validation_commission(
+    MAX_VALIDATION_COMMISSION_PERCENTAGE - 1
+)
 assert transaction_status['did_execute'] == True
 
 
 print(
-    '\nRunning maintenance (should deactivate all validators, because they exceed max validation fee) ...'
+    '\nRunning maintenance (should deactivate all validators, because they exceed max validation commission) ...'
 )
 
 maintainance_result = perform_maintenance()

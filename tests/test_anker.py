@@ -100,7 +100,7 @@ result = solido(
     '9',
     '--max-maintainers',
     '1',
-    '--max-validation-fee',
+    '--max-commission-percentage',
     '5',
     '--treasury-fee-share',
     '4',

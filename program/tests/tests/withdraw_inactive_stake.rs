@@ -137,10 +137,10 @@ async fn test_withdraw_inactive_stake() {
         .expect("Does not underflow, because we received rewards.");
     assert_eq!(rewards, Lamports(arbitrary_rewards));
 
-    let validation_fee = (vote_account_after - vote_account_before).unwrap();
-    // validation fee is 5% of total rewards, solido_rewards is 95% of total rewards
+    let validation_commission = (vote_account_after - vote_account_before).unwrap();
+    // validation commission is 5% of total rewards, solido_rewards is 95% of total rewards
     assert_eq!(
-        validation_fee,
+        validation_commission,
         Lamports((5f64 * (rewards.0 as f64) / 95f64) as u64)
     );
 

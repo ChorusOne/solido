@@ -23,7 +23,7 @@ from util import (
     multisig,
     get_approve_and_execute,
     get_solido_program_path,
-    MAX_VALIDATION_FEE,
+    MAX_VALIDATION_COMMISSION_PERCENTAGE,
 )
 
 print('\nUploading Solido program ...')
@@ -65,8 +65,8 @@ result = solido(
     '9',
     '--max-maintainers',
     '3',
-    '--max-validation-fee',
-    str(MAX_VALIDATION_FEE),
+    '--max-commission-percentage',
+    str(MAX_VALIDATION_COMMISSION_PERCENTAGE),
     '--treasury-fee-share',
     '5',
     '--developer-fee-share',
@@ -117,7 +117,7 @@ def add_validator(index: int, vote_account: Optional[str]) -> str:
             f'tests/.keys/validator-{index}-vote-account.json',
             validator.keypair_path,
             f'tests/.keys/validator-{index}-withdraw-account.json',
-            MAX_VALIDATION_FEE,
+            MAX_VALIDATION_COMMISSION_PERCENTAGE,
         )
         vote_account = validator_vote_account.pubkey
 
@@ -156,13 +156,17 @@ if get_network() == 'http://127.0.0.1:8899':
         '--solido-address',
         solido_address,
     )
-    print('> Changing validator\'s comission to {}% ...'.format(MAX_VALIDATION_FEE))
+    print(
+        '> Changing validator\'s comission to {}% ...'.format(
+            MAX_VALIDATION_COMMISSION_PERCENTAGE
+        )
+    )
     validator = current_validators['validators'][0]
-    validator['commission'] = str(MAX_VALIDATION_FEE)
+    validator['commission'] = str(MAX_VALIDATION_COMMISSION_PERCENTAGE)
     solana(
         'vote-update-commission',
         validator['voteAccountPubkey'],
-        str(MAX_VALIDATION_FEE),
+        str(MAX_VALIDATION_COMMISSION_PERCENTAGE),
         './test-ledger/vote-account-keypair.json',
     )
     solana(
@@ -181,7 +185,8 @@ if get_network() == 'http://127.0.0.1:8899':
 active_validators = [
     v
     for v in current_validators['validators']
-    if (not v['delinquent']) and v['commission'] == str(MAX_VALIDATION_FEE)
+    if (not v['delinquent'])
+    and v['commission'] == str(MAX_VALIDATION_COMMISSION_PERCENTAGE)
 ]
 
 # Add up to 5 of the active validators. Locally there will only be one, but on

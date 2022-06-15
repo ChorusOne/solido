@@ -20,7 +20,6 @@ pub mod state;
 pub mod token;
 pub mod util;
 
-mod vote_instruction;
 pub mod vote_state;
 
 /// Seed for reserve account that holds SOL.

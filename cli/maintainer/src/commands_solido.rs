@@ -37,7 +37,7 @@ use crate::{
     config::{
         AddRemoveMaintainerOpts, AddValidatorOpts, CreateSolidoOpts,
         DeactivateValidatorIfCommissionExceedsMaxOpts, DeactivateValidatorOpts, DepositOpts,
-        SetMaxValidationFeeOpts, ShowSolidoAuthoritiesOpts, ShowSolidoOpts, WithdrawOpts,
+        SetMaxValidationCommissionOpts, ShowSolidoAuthoritiesOpts, ShowSolidoOpts, WithdrawOpts,
     },
     get_signer_from_path,
 };
@@ -209,7 +209,7 @@ pub fn command_create_solido(
         },
         *opts.max_validators(),
         *opts.max_maintainers(),
-        *opts.max_validation_fee(),
+        *opts.max_commission_percentage(),
         &lido::instruction::InitializeAccountsMeta {
             lido: lido_signer.pubkey(),
             st_sol_mint: st_sol_mint_pubkey,
@@ -242,7 +242,7 @@ pub fn command_add_validator(
     let (multisig_address, _) =
         get_multisig_program_address(opts.multisig_program_id(), opts.multisig_address());
 
-    let instruction = lido::instruction::add_validator_v2(
+    let instruction = lido::instruction::add_validator(
         opts.solido_program_id(),
         &lido::instruction::AddValidatorMetaV2 {
             lido: *opts.solido_address(),
@@ -353,8 +353,8 @@ pub struct ShowSolidoOutput {
     /// Contains validator info in the same order as `solido.validators`.
     pub validator_infos: Vec<ValidatorInfo>,
 
-    /// Contains validator fees
-    pub validator_fees: Vec<u8>,
+    /// Contains validator fees in the same order as `solido.validators`.
+    pub validator_commission_percentages: Vec<u8>,
 }
 
 impl fmt::Display for ShowSolidoOutput {
@@ -425,7 +425,11 @@ impl fmt::Display for ShowSolidoOutput {
             self.solido.fee_recipients.developer_account
         )?;
 
-        writeln!(f, "Max validation fee: {}%", self.solido.max_validation_fee)?;
+        writeln!(
+            f,
+            "Max validation commission: {}%",
+            self.solido.max_commission_percentage
+        )?;
 
         writeln!(f, "\nMetrics:")?;
         writeln!(
@@ -433,12 +437,6 @@ impl fmt::Display for ShowSolidoOutput {
             "  Total treasury fee:       {}, valued at {} when it was paid",
             self.solido.metrics.fee_treasury_st_sol_total,
             self.solido.metrics.fee_treasury_sol_total,
-        )?;
-        writeln!(
-            f,
-            "  Total validation fee:     {}, valued at {} when it was paid",
-            self.solido.metrics.fee_validation_st_sol_total,
-            self.solido.metrics.fee_validation_sol_total,
         )?;
         writeln!(
             f,
@@ -489,14 +487,14 @@ impl fmt::Display for ShowSolidoOutput {
             self.solido.validators.len(),
             self.solido.validators.maximum_entries
         )?;
-        for (((pe, identity), info), fee) in self
+        for (((pe, identity), info), commission) in self
             .solido
             .validators
             .entries
             .iter()
             .zip(&self.validator_identities)
             .zip(&self.validator_infos)
-            .zip(&self.validator_fees)
+            .zip(&self.validator_commission_percentages)
         {
             writeln!(
                 f,
@@ -505,7 +503,7 @@ impl fmt::Display for ShowSolidoOutput {
                 Keybase username:          {}\n    \
                 Vote account:              {}\n    \
                 Identity account:          {}\n    \
-		Validation fee:            {}%\n    \
+                Commission:                {}%\n   \
                 Active:                    {}\n    \
                 Stake in all accounts:     {}\n    \
                 Stake in stake accounts:   {}\n    \
@@ -517,7 +515,7 @@ impl fmt::Display for ShowSolidoOutput {
                 },
                 pe.pubkey,
                 identity,
-                fee,
+                commission,
                 pe.entry.active,
                 pe.entry.stake_accounts_balance,
                 pe.entry.effective_stake_balance(),
@@ -589,7 +587,7 @@ pub fn command_show_solido(
 
     let mut validator_identities = Vec::new();
     let mut validator_infos = Vec::new();
-    let mut validator_fees = Vec::new();
+    let mut validator_commission_percentages = Vec::new();
     for validator in lido.validators.entries.iter() {
         let vote_state = config.client.get_vote_account(&validator.pubkey)?;
         validator_identities.push(vote_state.node_pubkey);
@@ -598,7 +596,7 @@ pub fn command_show_solido(
         let vote_account = config.client.get_account(&validator.pubkey)?;
         let commission = get_vote_account_commission(&vote_account.data)
             .ok_or_else(|| CliError::new("Validator account data too small"))?;
-        validator_fees.push(commission);
+        validator_commission_percentages.push(commission);
     }
 
     Ok(ShowSolidoOutput {
@@ -607,7 +605,7 @@ pub fn command_show_solido(
         solido: lido,
         validator_identities,
         validator_infos,
-        validator_fees,
+        validator_commission_percentages,
         reserve_account,
         stake_authority,
         mint_authority,
@@ -882,25 +880,29 @@ pub fn command_withdraw(
 pub struct DeactivateValidatorIfCommissionExceedsMaxOutput {
     // List of validators that exceeded max commission
     entries: Vec<ValidatorViolationInfo>,
-    max_validation_fee: u8,
+    max_commission_percentage: u8,
 }
 
 #[derive(Serialize)]
 struct ValidatorViolationInfo {
     #[serde(serialize_with = "serialize_b58")]
     pub validator_vote_account: Pubkey,
-    pub validation_fee: u8,
+    pub commission: u8,
 }
 
 impl fmt::Display for DeactivateValidatorIfCommissionExceedsMaxOutput {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        writeln!(f, "Maximum validation fee: {}", self.max_validation_fee)?;
+        writeln!(
+            f,
+            "Maximum validation commission: {}",
+            self.max_commission_percentage
+        )?;
 
         for entry in &self.entries {
             writeln!(
                 f,
-                "Validator vote account: {}, validation fee: {}",
-                entry.validator_vote_account, entry.validation_fee
+                "Validator vote account: {}, validation commission: {}",
+                entry.validator_vote_account, entry.commission
             )?;
         }
         Ok(())
@@ -922,8 +924,7 @@ pub fn command_deactivate_validator_if_commission_exceeds_max(
         let commission = get_vote_account_commission(&validator_account.data)
             .ok_or_else(|| CliError::new("Validator account data too small"))?;
 
-        // dbg!(pubkey_entry.pubkey, commission, validator.active);
-        if !validator.active || commission <= solido.max_validation_fee {
+        if !validator.active || commission <= solido.max_commission_percentage {
             continue;
         }
 
@@ -934,34 +935,35 @@ pub fn command_deactivate_validator_if_commission_exceeds_max(
                 validator_vote_account_to_deactivate: vote_pubkey,
             },
         );
-        config.sign_and_send_transaction(&[instruction], &[config.signer])?;
+        let signers: Vec<&dyn Signer> = vec![];
+        config.sign_and_send_transaction(&[instruction], &signers)?;
         violations.push(ValidatorViolationInfo {
             validator_vote_account: vote_pubkey,
-            validation_fee: commission,
+            commission,
         });
     }
 
     Ok(DeactivateValidatorIfCommissionExceedsMaxOutput {
         entries: violations,
-        max_validation_fee: solido.max_validation_fee,
+        max_commission_percentage: solido.max_commission_percentage,
     })
 }
 
-/// CLI entry point to set max validation fee
-pub fn command_set_max_validation_fee(
+/// CLI entry point to set max validation commission
+pub fn command_set_max_commission_percentage(
     config: &mut SnapshotConfig,
-    opts: &SetMaxValidationFeeOpts,
+    opts: &SetMaxValidationCommissionOpts,
 ) -> solido_cli_common::Result<ProposeInstructionOutput> {
     let (multisig_address, _) =
         get_multisig_program_address(opts.multisig_program_id(), opts.multisig_address());
 
-    let instruction = lido::instruction::set_max_validation_fee(
+    let instruction = lido::instruction::set_max_commission_percentage(
         opts.solido_program_id(),
-        &lido::instruction::SetMaxValidationFeeMeta {
+        &lido::instruction::SetMaxValidationCommissionMeta {
             lido: *opts.solido_address(),
             manager: multisig_address,
         },
-        *opts.max_validation_fee(),
+        *opts.max_commission_percentage(),
     );
     propose_instruction(
         config,
