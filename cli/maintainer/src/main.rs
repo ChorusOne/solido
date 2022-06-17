@@ -151,8 +151,9 @@ REWARDS
       A: stSOL value appreciation share
 
     For example, if the reward distribution is set to '5 : 3 : 92', then 92%
-    of the rewards go to stSOL value appreciation, and 8% go to fees. Of those
-    fees, 62.5% go to the treasury, and 37.5% goes to the developer.
+    of the rewards (after validators take their commission) go to stSOL value
+    appreciation, and 8% go to fees. Of those fees, 62.5% go to the treasury,
+    and 37.5% goes to the developer.
     ")]
     CreateSolido(CreateSolidoOpts),
 

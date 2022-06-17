@@ -44,7 +44,7 @@ struct MaintenanceMetrics {
     transactions_update_exchange_rate: u64,
 
     /// Number of times we performed `WithdrawInactiveStake`.
-    transactions_withdraw_inactive_stake: u64,
+    transactions_update_stake_account_balance: u64,
 
     /// Number of times we performed a `MergeStake`.
     transactions_merge_stake: u64,
@@ -104,7 +104,7 @@ impl MaintenanceMetrics {
                         .with_label("operation", "StakeDeposit".to_string()),
                     Metric::new(self.transactions_update_exchange_rate)
                         .with_label("operation", "UpdateExchangeRate".to_string()),
-                    Metric::new(self.transactions_withdraw_inactive_stake)
+                    Metric::new(self.transactions_update_stake_account_balance)
                         .with_label("operation", "WithdrawInactiveStake".to_string()),
                     Metric::new(self.transactions_merge_stake)
                         .with_label("operation", "MergeStake".to_string()),
@@ -141,7 +141,7 @@ impl MaintenanceMetrics {
                 self.transactions_update_exchange_rate += 1;
             }
             MaintenanceOutput::WithdrawInactiveStake { .. } => {
-                self.transactions_withdraw_inactive_stake += 1;
+                self.transactions_update_stake_account_balance += 1;
             }
             MaintenanceOutput::MergeStake { .. } => self.transactions_merge_stake += 1,
             MaintenanceOutput::UnstakeFromInactiveValidator { .. } => {
@@ -312,7 +312,7 @@ impl<'a, 'b> Daemon<'a, 'b> {
             errors: 0,
             transactions_stake_deposit: 0,
             transactions_update_exchange_rate: 0,
-            transactions_withdraw_inactive_stake: 0,
+            transactions_update_stake_account_balance: 0,
             transactions_merge_stake: 0,
             transactions_unstake_from_inactive_validator: 0,
             transactions_remove_validator: 0,

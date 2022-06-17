@@ -9,8 +9,8 @@ use crate::{
     error::LidoError,
     instruction::{
         DepositAccountsInfo, InitializeAccountsInfo, LidoInstruction, StakeDepositAccountsInfo,
-        UnstakeAccountsInfo, UpdateExchangeRateAccountsInfo, WithdrawAccountsInfo,
-        WithdrawInactiveStakeInfoV2,
+        UnstakeAccountsInfo, UpdateExchangeRateAccountsInfo, UpdateStakeAccountBalanceInfo,
+        WithdrawAccountsInfo,
     },
     logic::{
         burn_st_sol, check_mint, check_rent_exempt, check_unstake_accounts,
@@ -557,7 +557,7 @@ impl std::fmt::Display for StakeType {
 }
 
 pub struct WithdrawExcessOpts<'a, 'b> {
-    accounts: &'a WithdrawInactiveStakeInfoV2<'a, 'b>,
+    accounts: &'a UpdateStakeAccountBalanceInfo<'a, 'b>,
     clock: &'a Clock,
     stake_history: &'a StakeHistory,
     stake_account: &'a AccountInfo<'b>,
@@ -651,11 +651,11 @@ pub fn check_address_and_get_balance(
 /// the reserve account.
 /// Updates the validator's balance and distribute rewards.
 /// This function is permissionless and can be called by anyone.
-pub fn process_withdraw_inactive_stake(
+pub fn process_update_stake_account_balance(
     program_id: &Pubkey,
     raw_accounts: &[AccountInfo],
 ) -> ProgramResult {
-    let accounts = WithdrawInactiveStakeInfoV2::try_from_slice(raw_accounts)?;
+    let accounts = UpdateStakeAccountBalanceInfo::try_from_slice(raw_accounts)?;
     let mut lido = Lido::deserialize_lido(program_id, accounts.lido)?;
     let stake_history = StakeHistory::from_account_info(accounts.sysvar_stake_history)?;
     let clock = Clock::get()?;
@@ -733,7 +733,7 @@ pub fn process_withdraw_inactive_stake(
     )?;
 
     // We tracked in `stake_accounts_balance` what we put in there ourselves, so
-    // the excess is a donation by some joker.
+    // the excess is a sum of a donation by some joker and staking rewards.
     let donation = (stake_observed_total - validator.entry.effective_stake_balance())
         .expect("Does not underflow because observed_total >= stake_accounts_balance.");
     msg!("{} in donations observed.", donation);
@@ -986,11 +986,11 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
         | LidoInstruction::CollectValidatorFee
         | LidoInstruction::ClaimValidatorFee
         | LidoInstruction::AddValidator => {
-            msg!("Please use a new instruction {:?}", instruction);
+            msg!("{:?} is no longer supported since v2. Please check the changelog in the repository for update instructions.", instruction);
             Err(LidoError::InstructionIsDeprecated.into())
         }
-        LidoInstruction::WithdrawInactiveStakeV2 => {
-            process_withdraw_inactive_stake(program_id, accounts)
+        LidoInstruction::UpdateStakeAccountBalance => {
+            process_update_stake_account_balance(program_id, accounts)
         }
         LidoInstruction::Withdraw { amount } => process_withdraw(program_id, amount, accounts),
         LidoInstruction::ChangeRewardDistribution {

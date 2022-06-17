@@ -15,7 +15,7 @@ use crate::processor::StakeType;
 use crate::STAKE_AUTHORITY;
 use crate::{
     error::LidoError,
-    instruction::{UnstakeAccountsInfo, WithdrawAccountsInfo, WithdrawInactiveStakeInfoV2},
+    instruction::{UnstakeAccountsInfo, UpdateStakeAccountBalanceInfo, WithdrawAccountsInfo},
     state::Lido,
     token::{Lamports, StLamports},
     MINT_AUTHORITY, RESERVE_ACCOUNT,
@@ -321,7 +321,7 @@ pub fn transfer_stake_authority(
 /// `process_update_exchange_rate`.
 pub fn distribute_fees(
     lido: &mut Lido,
-    accounts: &WithdrawInactiveStakeInfoV2,
+    accounts: &UpdateStakeAccountBalanceInfo,
     clock: &Clock,
     rewards: Lamports,
 ) -> ProgramResult {

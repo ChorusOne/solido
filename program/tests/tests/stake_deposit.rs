@@ -180,7 +180,7 @@ async fn test_stake_deposit_succeeds_despite_donation() {
         TEST_STAKE_DEPOSIT_AMOUNT
     );
 
-    context.withdraw_inactive_stake(validator.pubkey).await;
+    context.update_stake_account_balance(validator.pubkey).await;
     let solido = context.get_solido().await;
     let validator_entry = &solido.validators.entries[0].entry;
     assert_eq!(

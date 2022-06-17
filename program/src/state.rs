@@ -1191,11 +1191,11 @@ mod test_lido {
         assert_eq!(
             // In this case the amount cannot be split exactly, all fees are
             // rounded down.
-            spec.split_reward(Lamports(1_000)).unwrap(),
+            spec.split_reward(Lamports(1_003)).unwrap(),
             Fees {
-                treasury_amount: Lamports(750),
+                treasury_amount: Lamports(752),
                 developer_amount: Lamports(250),
-                st_sol_appreciation_amount: Lamports(0),
+                st_sol_appreciation_amount: Lamports(1),
             },
         );
 

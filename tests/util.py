@@ -214,7 +214,7 @@ def create_vote_account(
     commission: int,
 ) -> Tuple[TestAccount, TestAccount]:
     """
-    Generate a vote account for the validatora and authorized withdrawer account
+    Generate a vote account for the validator and authorized withdrawer account
     """
     test_account = create_test_account(vote_key_fname, fund=False)
     withdrawer_account = create_test_account(authorized_withdrawer_key_fname, fund=True)

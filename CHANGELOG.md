@@ -1,5 +1,20 @@
 # Changelog
 
+## v2.0.0 (unreleased)
+
+New features:
+
+* Solido no longer requires that validators use a 100%-commission account of which Solido
+  is the withdraw authority. Any vote account can now be used, as long as its commission does
+  not exceed Solido’s configured maximum commission percentage.
+
+**Compatibility**
+
+* The `AddValidator` instruction is no longer supported and has been superseded by `AddValidatorV2`.
+* The `WithdrawInactiveStake` instruction is no longer supported and has been superseded by `UpdateStakeAccountBalance`.
+* The `CollectValidatorFee` instruction is no longer supported.
+* The `ClaimValidatorFee` instruction is no longer supported.
+
 ## v1.3.2
 
 Released 2022-05-04.

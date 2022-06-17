@@ -71,7 +71,7 @@ pub enum LidoInstruction {
     /// Observe any external changes in the balances of a validator's stake accounts.
     ///
     /// If there is inactive balance in stake accounts, withdraw this back to the reserve.
-    /// Deprecated in favour of WithdrawInactiveStakeV2
+    /// Deprecated in favour of UpdateStakeAccountBalance
     WithdrawInactiveStake,
 
     /// Claim rewards from the validator account and distribute rewards.
@@ -110,7 +110,7 @@ pub enum LidoInstruction {
     ///
     /// If there is inactive balance in stake accounts, withdraw this back to the reserve.
     /// Distribute fees.
-    WithdrawInactiveStakeV2,
+    UpdateStakeAccountBalance,
 
     /// Add a new validator to the validator set.
     ///
@@ -790,7 +790,7 @@ pub fn add_validator(program_id: &Pubkey, accounts: &AddValidatorMetaV2) -> Inst
 accounts_struct! {
     // Note: there are no signers among these accounts, updating validator
     // balance is permissionless, anybody can do it.
-    WithdrawInactiveStakeMetaV2, WithdrawInactiveStakeInfoV2 {
+    UpdateStakeAccountBalanceMeta, UpdateStakeAccountBalanceInfo {
         pub lido {
             is_signer: false,
             is_writable: true,
@@ -862,14 +862,14 @@ accounts_struct! {
     }
 }
 
-pub fn withdraw_inactive_stake(
+pub fn update_stake_account_balance(
     program_id: &Pubkey,
-    accounts: &WithdrawInactiveStakeMetaV2,
+    accounts: &UpdateStakeAccountBalanceMeta,
 ) -> Instruction {
     Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
-        data: LidoInstruction::WithdrawInactiveStakeV2.to_vec(),
+        data: LidoInstruction::UpdateStakeAccountBalance.to_vec(),
     }
 }
 

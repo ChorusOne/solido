@@ -110,8 +110,9 @@ async fn measure_staking_rewards(mode: StakeMode) -> Lamports {
     // Move ahead one epoch so the stake becomes active.
     context.advance_to_normal_epoch(1);
 
-    let mut balance_t0 = context.get_sol_balance(vote_account).await;
-    balance_t0 = (balance_t0 + context.get_sol_balance(stake_account).await).unwrap();
+    let balance_t0 = (context.get_sol_balance(vote_account).await
+        + context.get_sol_balance(stake_account).await)
+        .unwrap();
 
     // Deactivate the stake if needed.
     match mode {
@@ -129,8 +130,9 @@ async fn measure_staking_rewards(mode: StakeMode) -> Lamports {
         .increment_vote_account_credits(&vote_account, 1);
     context.advance_to_normal_epoch(2);
 
-    let mut balance_t1 = context.get_sol_balance(vote_account).await;
-    balance_t1 = (balance_t1 + context.get_sol_balance(stake_account).await).unwrap();
+    let balance_t1 = (context.get_sol_balance(vote_account).await
+        + context.get_sol_balance(stake_account).await)
+        .unwrap();
 
     (balance_t1 - balance_t0).unwrap()
 }

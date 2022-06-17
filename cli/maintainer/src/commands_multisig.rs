@@ -661,7 +661,7 @@ impl fmt::Display for ShowTransactionOutput {
                         max_commission_percentage,
                         manager,
                     } => {
-                        writeln!(f, "It sets the maximun validation commission")?;
+                        writeln!(f, "It sets the maximum validation commission")?;
                         writeln!(f, "    Solido instance:    {}", solido_instance)?;
                         writeln!(f, "    Manager:            {}", manager)?;
                         writeln!(

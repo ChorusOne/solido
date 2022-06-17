@@ -1013,7 +1013,7 @@ impl SolidoState {
     /// Merging stakes generates inactive stake that could be withdrawn with this transaction,
     /// or if some joker donates to one of the stake accounts we can use the same function
     /// to claim these rewards back to the reserve account so they can be re-staked.
-    pub fn try_withdraw_inactive_stake(&self) -> Option<MaintenanceInstruction> {
+    pub fn try_update_stake_account_balance(&self) -> Option<MaintenanceInstruction> {
         for (validator, stake_accounts, unstake_accounts) in izip!(
             self.solido.validators.entries.iter(),
             self.validator_stake_accounts.iter(),
@@ -1054,9 +1054,9 @@ impl SolidoState {
                 let mut stake_account_addrs = Vec::new();
                 stake_account_addrs.extend(stake_accounts.iter().map(|(addr, _)| *addr));
                 stake_account_addrs.extend(unstake_accounts.iter().map(|(addr, _)| *addr));
-                let instruction = lido::instruction::withdraw_inactive_stake(
+                let instruction = lido::instruction::update_stake_account_balance(
                     &self.solido_program_id,
-                    &lido::instruction::WithdrawInactiveStakeMetaV2 {
+                    &lido::instruction::UpdateStakeAccountBalanceMeta {
                         lido: self.solido_address,
                         validator_vote_account: validator.pubkey,
                         stake_accounts: stake_account_addrs,
@@ -1638,7 +1638,7 @@ pub fn try_perform_maintenance(
         // Collecting validator fees goes after updating the exchange rate,
         // because it may be rejected if the exchange rate is outdated.
         // Same for updating the validator balance.
-        .or_else(|| state.try_withdraw_inactive_stake())
+        .or_else(|| state.try_update_stake_account_balance())
         .or_else(|| state.try_deactivate_validator_if_commission_exceeds_max())
         .or_else(|| state.try_stake_deposit())
         .or_else(|| state.try_unstake_from_active_validators())

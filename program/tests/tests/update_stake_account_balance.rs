@@ -8,7 +8,7 @@ use testlib::assert_solido_error;
 use testlib::solido_context::{Context, StakeDeposit};
 
 #[tokio::test]
-async fn test_withdraw_inactive_stake() {
+async fn test_update_stake_account_balance() {
     let mut context = Context::new_with_maintainer().await;
     let validator = context.add_validator().await;
 
@@ -17,7 +17,7 @@ async fn test_withdraw_inactive_stake() {
     let solido_before = context.get_solido().await;
     for _ in 0..2 {
         context
-            .withdraw_inactive_stake(validator.vote_account)
+            .update_stake_account_balance(validator.vote_account)
             .await;
     }
     let solido_after = context.get_solido().await;
@@ -34,7 +34,7 @@ async fn test_withdraw_inactive_stake() {
     // because we already knew the current validator's balance.
     let solido_before = context.get_solido().await;
     context
-        .withdraw_inactive_stake(validator.vote_account)
+        .update_stake_account_balance(validator.vote_account)
         .await;
     let solido_after = context.get_solido().await;
     assert_eq!(solido_before, solido_after);
@@ -45,7 +45,7 @@ async fn test_withdraw_inactive_stake() {
     // So after we update the exchange rate, we should be allowed to withdraw the inactive stake.
     context.update_exchange_rate().await;
     context
-        .withdraw_inactive_stake(validator.vote_account)
+        .update_stake_account_balance(validator.vote_account)
         .await;
 
     // Create a second deposit and stake account, so we also test that
@@ -64,7 +64,7 @@ async fn test_withdraw_inactive_stake() {
 
     let reserve_before = context.get_sol_balance(context.reserve_address).await;
     context
-        .withdraw_inactive_stake(validator.vote_account)
+        .update_stake_account_balance(validator.vote_account)
         .await;
     let reserve_after = context.get_sol_balance(context.reserve_address).await;
 
@@ -107,7 +107,7 @@ async fn test_withdraw_inactive_stake() {
     // In this new epoch, we should not be allowed to distribute fees,
     // yet, because we haven’t updated the exchange rate yet.
     let result = context
-        .try_withdraw_inactive_stake(validator.vote_account)
+        .try_update_stake_account_balance(validator.vote_account)
         .await;
     assert_solido_error!(result, LidoError::ExchangeRateNotUpdatedInThisEpoch);
 
@@ -117,7 +117,7 @@ async fn test_withdraw_inactive_stake() {
     context.update_exchange_rate().await;
     let arbitrary_rewards: u64 = 18_976_413_379;
     context
-        .withdraw_inactive_stake(validator.vote_account)
+        .update_stake_account_balance(validator.vote_account)
         .await;
     let vote_account_after = context.get_sol_balance(validator.vote_account).await;
     let treasury_after = context
@@ -141,7 +141,7 @@ async fn test_withdraw_inactive_stake() {
     // validation commission is 5% of total rewards, solido_rewards is 95% of total rewards
     assert_eq!(
         validation_commission,
-        Lamports((5f64 * (rewards.0 as f64) / 95f64) as u64)
+        Lamports((5.0 * (rewards.0 as f64) / 95.0) as u64)
     );
 
     // The treasury balance increase, when converted back to SOL, should be equal
@@ -151,7 +151,7 @@ async fn test_withdraw_inactive_stake() {
         .exchange_rate
         .exchange_st_sol(treasury_fee)
         .unwrap();
-    assert_eq!(treasury_fee_sol, Lamports(rewards.0 / 100 * 3 + 1));
+    assert_eq!(treasury_fee_sol, Lamports(rewards.0 * 3 / 100 - 1));
 
     // The developer balance increase, when converted back to SOL, should be equal
     // to 2% of the rewards. Two lamport differ due to rounding errors.
@@ -160,5 +160,5 @@ async fn test_withdraw_inactive_stake() {
         .exchange_rate
         .exchange_st_sol(developer_fee)
         .unwrap();
-    assert_eq!(developer_fee_sol, Lamports(rewards.0 / 100 * 2));
+    assert_eq!(developer_fee_sol, Lamports(rewards.0 * 2 / 100 - 1));
 }

@@ -14,5 +14,5 @@ pub mod solana_assumptions;
 pub mod stake_deposit;
 pub mod unstake;
 pub mod update_exchange_rate;
-pub mod withdraw_inactive_stake;
+pub mod update_stake_account_balance;
 pub mod withdrawals;
