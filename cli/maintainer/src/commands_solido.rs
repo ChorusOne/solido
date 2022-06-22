@@ -946,7 +946,7 @@ pub fn command_deactivate_validator_if_commission_exceeds_max(
     let signers: Vec<&dyn Signer> = vec![];
     // Due to the fact that Solana has a limit on number of instructions in a transaction
     // this can fall if there would be alot of misbehaved validators each
-    // exceeding `max_commission_percentage`. But it is very improbable scenario.
+    // exceeding `max_commission_percentage`. But it is a very improbable scenario.
     config.sign_and_send_transaction(&instructions, &signers)?;
 
     Ok(DeactivateValidatorIfCommissionExceedsMaxOutput {
