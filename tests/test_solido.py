@@ -28,6 +28,7 @@ from util import (
     solana_program_deploy,
     solido,
     spl_token,
+    MAX_VALIDATION_COMMISSION_PERCENTAGE,
 )
 
 from typing import Any, Dict, NamedTuple, Tuple
@@ -135,14 +136,14 @@ result = solido(
     '9',
     '--max-maintainers',
     '1',
+    '--max-commission-percentage',
+    str(MAX_VALIDATION_COMMISSION_PERCENTAGE),
     '--treasury-fee-share',
     '5',
-    '--validation-fee-share',
-    '3',
     '--developer-fee-share',
     '2',
     '--st-sol-appreciation-share',
-    '90',
+    '93',
     '--treasury-account-owner',
     treasury_account_owner.pubkey,
     '--developer-account-owner',
@@ -169,14 +170,14 @@ result = solido(
     '9',
     '--max-maintainers',
     '1',
+    '--max-commission-percentage',
+    str(MAX_VALIDATION_COMMISSION_PERCENTAGE),
     '--treasury-fee-share',
     '5',
-    '--validation-fee-share',
-    '3',
     '--developer-fee-share',
     '2',
     '--st-sol-appreciation-share',
-    '90',
+    '93',
     '--treasury-account-owner',
     treasury_account_owner.pubkey,
     '--developer-account-owner',
@@ -208,28 +209,15 @@ assert solido_instance['solido']['exchange_rate'] == {
 }
 assert solido_instance['solido']['reward_distribution'] == {
     'treasury_fee': 5,
-    'validation_fee': 3,
     'developer_fee': 2,
-    'st_sol_appreciation': 90,
+    'st_sol_appreciation': 93,
 }
-
-validator_fee_account_owner = create_test_account(
-    'tests/.keys/validator-token-account-key.json'
-)
-
-print(f'> Validator token account owner: {validator_fee_account_owner}')
-
-# Create SPL token
-fee_account = create_spl_token_account(
-    f'tests/.keys/validator-token-account-key.json', st_sol_mint_account
-)
-print(f'> Validator stSol token account: {fee_account}')
 
 
 class Validator(NamedTuple):
     account: TestAccount
     vote_account: TestAccount
-    fee_account: str
+    withdrawer_account: TestAccount
 
 
 def add_validator(
@@ -237,18 +225,18 @@ def add_validator(
 ) -> Tuple[Validator, Dict[str, Any]]:
     print('\nAdding a validator ...')
     account = create_test_account(f'tests/.keys/{keypath_account}.json')
-    vote_account = create_vote_account(
+    vote_account, withdrawer_account = create_vote_account(
         f'tests/.keys/{keypath_vote}.json',
         account.keypair_path,
-        solido_instance['rewards_withdraw_authority'],
+        f'tests/.keys/{keypath_vote}_withdrawer.json',
+        MAX_VALIDATION_COMMISSION_PERCENTAGE,
     )
     print(f'> Creating validator vote account {vote_account}')
-    print(
-        f'> Creating validator token account with owner {validator_fee_account_owner}'
-    )
 
     validator = Validator(
-        account=account, vote_account=vote_account, fee_account=fee_account
+        account=account,
+        vote_account=vote_account,
+        withdrawer_account=withdrawer_account,
     )
 
     transaction_result = solido(
@@ -261,8 +249,6 @@ def add_validator(
         solido_address,
         '--validator-vote-account',
         vote_account.pubkey,
-        '--validator-fee-account',
-        fee_account,
         '--multisig-address',
         multisig_instance,
         keypair_path=test_addrs[1].keypair_path,
@@ -324,8 +310,6 @@ solido_instance = solido(
 assert solido_instance['solido']['validators']['entries'][0] == {
     'pubkey': validator.vote_account.pubkey,
     'entry': {
-        'fee_credit': 0,
-        'fee_address': validator.fee_account,
         'stake_seeds': {
             'begin': 0,
             'end': 0,
@@ -501,24 +485,32 @@ result = perform_maintenance()
 assert result is None, f'Huh, perform-maintenance performed {result}'
 print('> There was nothing to do, as expected.')
 
-# Adding another validator
-print('\nAdd another validator')
-(validator_1, transaction_result) = add_validator(
-    'validator-account-key-1',
-    'validator-vote-account-key-1',
-)
 
-transaction_address = transaction_result['transaction_address']
-transaction_status = multisig(
-    'show-transaction',
-    '--multisig-program-id',
-    multisig_program_id,
-    '--solido-program-id',
-    solido_program_id,
-    '--transaction-address',
-    transaction_address,
+def add_validator_and_approve(keypath_account: str, keypath_vote: str) -> Validator:
+    # Adding another validator
+    (validator, transaction_result) = add_validator(
+        'validator-account-key-1',
+        'validator-vote-account-key-1',
+    )
+
+    transaction_address = transaction_result['transaction_address']
+    approve_and_execute(transaction_address, test_addrs[0])
+    transaction_status = multisig(
+        'show-transaction',
+        '--multisig-program-id',
+        multisig_program_id,
+        '--solido-program-id',
+        solido_program_id,
+        '--transaction-address',
+        transaction_address,
+    )
+    assert transaction_status['did_execute'] == True
+    return validator
+
+
+validator_1 = add_validator_and_approve(
+    'validator-account-key-1', 'validator-vote-account-key-1'
 )
-approve_and_execute(transaction_address, test_addrs[0])
 
 # Should unstake 1/2 (1.5 - 0.0005/2 Sol) of the validator's balance.
 result = perform_maintenance()
@@ -706,3 +698,101 @@ number_validators = len(solido_instance['solido']['validators']['entries'])
 assert (
     number_validators == 1
 ), f'\nExpected no validators\nGot: {number_validators} validators'
+
+# change validator commission above limit
+solana(
+    "vote-update-commission",
+    validator_1.vote_account.pubkey,
+    str(MAX_VALIDATION_COMMISSION_PERCENTAGE + 1),  # exceed maximum allowed limit
+    validator_1.withdrawer_account.keypair_path,
+)
+
+print(
+    '\nRunning maintenance (should deactivate a validator that exceed max validation commission) ...'
+)
+result = perform_maintenance()
+# check validator_1 is deactivated
+expected_result = {
+    'DeactivateValidatorIfCommissionExceedsMax': {
+        'validator_vote_account': validator_1.vote_account.pubkey
+    }
+}
+assert result == expected_result, f'\nExpected: {expected_result}\nActual:   {result}'
+
+
+def consume_maintainence_instructions(verbose: bool = False) -> None:
+    """
+    Perform maintenance instructions till no more left
+    """
+    while True:
+        maintainance_result = perform_maintenance()
+        if maintainance_result is not None:
+            if verbose:
+                print(maintainance_result)
+        else:
+            break
+
+
+print('\nConsuming all maintainence instructions')
+consume_maintainence_instructions(False)
+
+# Adding another validator
+validator_2 = add_validator_and_approve(
+    'validator-account-key-2', 'validator-vote-account-key-2'
+)
+
+
+def set_max_validation_commission(fee: int) -> Any:
+    transaction_result = solido(
+        'set-max-validation-commission',
+        '--multisig-program-id',
+        multisig_program_id,
+        '--solido-program-id',
+        solido_program_id,
+        '--solido-address',
+        solido_address,
+        '--max-commission-percentage',
+        str(fee),
+        '--multisig-address',
+        multisig_instance,
+        keypair_path=test_addrs[1].keypair_path,
+    )
+    assert transaction_result['transaction_address'] != None
+
+    approve_and_execute(transaction_result['transaction_address'], test_addrs[0])
+    transaction_status = multisig(
+        'show-transaction',
+        '--multisig-program-id',
+        multisig_program_id,
+        '--solido-program-id',
+        solido_program_id,
+        '--transaction-address',
+        transaction_result['transaction_address'],
+    )
+    return transaction_status
+
+
+print(
+    '\nLowering max validation commission to %d%% ...'
+    % (MAX_VALIDATION_COMMISSION_PERCENTAGE - 1)
+)
+transaction_status = set_max_validation_commission(
+    MAX_VALIDATION_COMMISSION_PERCENTAGE - 1
+)
+assert transaction_status['did_execute'] == True
+
+
+print(
+    '\nRunning maintenance (should deactivate all validators, because they exceed max validation commission) ...'
+)
+
+maintainance_result = perform_maintenance()
+expected_result = {
+    'DeactivateValidatorIfCommissionExceedsMax': {
+        'validator_vote_account': validator_2.vote_account.pubkey
+    }
+}
+# check validator_2 is deactivated
+assert (
+    maintainance_result == expected_result
+), f'\nExpected: {expected_result}\nActual:   {maintainance_result}'

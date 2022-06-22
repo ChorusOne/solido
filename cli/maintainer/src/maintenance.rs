@@ -45,7 +45,7 @@ use lido::{
     token::Rational,
     token::StLamports,
     util::serialize_b58,
-    MINIMUM_STAKE_ACCOUNT_BALANCE, MINT_AUTHORITY, REWARDS_WITHDRAW_AUTHORITY, STAKE_AUTHORITY,
+    MINIMUM_STAKE_ACCOUNT_BALANCE, MINT_AUTHORITY, STAKE_AUTHORITY,
 };
 use spl_token_swap::curve::calculator::{CurveCalculator, TradeDirection};
 
@@ -86,20 +86,6 @@ pub enum MaintenanceOutput {
         unstake_withdrawn_to_reserve: Lamports,
     },
 
-    CollectValidatorFee {
-        #[serde(serialize_with = "serialize_b58")]
-        validator_vote_account: Pubkey,
-        #[serde(rename = "fee_rewards_lamports")]
-        fee_rewards: Lamports,
-    },
-
-    ClaimValidatorFee {
-        #[serde(serialize_with = "serialize_b58")]
-        validator_vote_account: Pubkey,
-        #[serde(rename = "fee_rewards_st_lamports")]
-        fee_rewards: StLamports,
-    },
-
     MergeStake {
         #[serde(serialize_with = "serialize_b58")]
         validator_vote_account: Pubkey,
@@ -113,6 +99,10 @@ pub enum MaintenanceOutput {
 
     UnstakeFromInactiveValidator(Unstake),
     RemoveValidator {
+        #[serde(serialize_with = "serialize_b58")]
+        validator_vote_account: Pubkey,
+    },
+    DeactivateValidatorIfCommissionExceedsMax {
         #[serde(serialize_with = "serialize_b58")]
         validator_vote_account: Pubkey,
     },
@@ -206,23 +196,6 @@ impl fmt::Display for MaintenanceOutput {
                     unstake_withdrawn_to_reserve
                 )?;
             }
-            MaintenanceOutput::CollectValidatorFee {
-                validator_vote_account,
-                fee_rewards,
-            } => {
-                writeln!(f, "Collected validator fees.")?;
-                writeln!(f, "  Validator vote account: {}", validator_vote_account)?;
-                writeln!(f, "  Collected fee rewards:  {}", fee_rewards)?;
-            }
-
-            MaintenanceOutput::ClaimValidatorFee {
-                validator_vote_account,
-                fee_rewards,
-            } => {
-                writeln!(f, "Claimed validator fees.")?;
-                writeln!(f, "  Validator vote account: {}", validator_vote_account)?;
-                writeln!(f, "  Claimed fee:            {}", fee_rewards)?;
-            }
             MaintenanceOutput::MergeStake {
                 validator_vote_account,
                 from_stake,
@@ -253,6 +226,16 @@ impl fmt::Display for MaintenanceOutput {
                 validator_vote_account,
             } => {
                 writeln!(f, "Remove validator")?;
+                writeln!(f, "  Validator vote account: {}", validator_vote_account)?;
+            }
+            MaintenanceOutput::DeactivateValidatorIfCommissionExceedsMax {
+                validator_vote_account,
+            } => {
+                writeln!(f, "Check max commission violation.")?;
+                writeln!(
+                    f,
+                    "Deactivate validator that charges more commission than we allow."
+                )?;
                 writeln!(f, "  Validator vote account: {}", validator_vote_account)?;
             }
             MaintenanceOutput::SellRewards { st_sol_amount } => {
@@ -740,6 +723,40 @@ impl SolidoState {
         None
     }
 
+    /// If there is a validator which exceeded commission limit, try to deactivate it.
+    pub fn try_deactivate_validator_if_commission_exceeds_max(
+        &self,
+    ) -> Option<MaintenanceInstruction> {
+        for (validator, vote_state) in self
+            .solido
+            .validators
+            .entries
+            .iter()
+            .zip(self.validator_vote_accounts.iter())
+        {
+            // We are only interested in validators that violate commission limit
+            if !validator.entry.active
+                || vote_state.commission <= self.solido.max_commission_percentage
+            {
+                continue;
+            }
+
+            let task = MaintenanceOutput::DeactivateValidatorIfCommissionExceedsMax {
+                validator_vote_account: validator.pubkey,
+            };
+
+            let instruction = lido::instruction::deactivate_validator_if_commission_exceeds_max(
+                &self.solido_program_id,
+                &lido::instruction::DeactivateValidatorIfCommissionExceedsMaxMeta {
+                    lido: self.solido_address,
+                    validator_vote_account_to_deactivate: validator.pubkey,
+                },
+            );
+            return Some(MaintenanceInstruction::new(instruction, task));
+        }
+        None
+    }
+
     /// If there is a validator ready for removal, try to remove it.
     pub fn try_remove_validator(&self) -> Option<MaintenanceInstruction> {
         for validator in &self.solido.validators.entries {
@@ -996,7 +1013,7 @@ impl SolidoState {
     /// Merging stakes generates inactive stake that could be withdrawn with this transaction,
     /// or if some joker donates to one of the stake accounts we can use the same function
     /// to claim these rewards back to the reserve account so they can be re-staked.
-    pub fn try_withdraw_inactive_stake(&self) -> Option<MaintenanceInstruction> {
+    pub fn try_update_stake_account_balance(&self) -> Option<MaintenanceInstruction> {
         for (validator, stake_accounts, unstake_accounts) in izip!(
             self.solido.validators.entries.iter(),
             self.validator_stake_accounts.iter(),
@@ -1037,14 +1054,18 @@ impl SolidoState {
                 let mut stake_account_addrs = Vec::new();
                 stake_account_addrs.extend(stake_accounts.iter().map(|(addr, _)| *addr));
                 stake_account_addrs.extend(unstake_accounts.iter().map(|(addr, _)| *addr));
-                let instruction = lido::instruction::withdraw_inactive_stake(
+                let instruction = lido::instruction::update_stake_account_balance(
                     &self.solido_program_id,
-                    &lido::instruction::WithdrawInactiveStakeMeta {
+                    &lido::instruction::UpdateStakeAccountBalanceMeta {
                         lido: self.solido_address,
                         validator_vote_account: validator.pubkey,
                         stake_accounts: stake_account_addrs,
                         reserve: self.reserve_address,
                         stake_authority: self.get_stake_authority(),
+                        mint_authority: self.get_mint_authority(),
+                        st_sol_mint: self.solido.st_sol_mint,
+                        treasury_st_sol_account: self.solido.fee_recipients.treasury_account,
+                        developer_st_sol_account: self.solido.fee_recipients.developer_account,
                     },
                 );
                 let task = MaintenanceOutput::WithdrawInactiveStake {
@@ -1054,75 +1075,6 @@ impl SolidoState {
                 };
                 return Some(MaintenanceInstruction::new(instruction, task));
             }
-        }
-
-        None
-    }
-
-    /// Check if any validator's vote account is eligible for fee collection, and if
-    /// so, collects it.
-    ///
-    /// As validator's vote accounts accumulate rewards, at the beginning of
-    /// every epoch, they should be collected and the fees they've generated
-    /// should be spread to the Solido participants.
-    pub fn try_collect_validator_fee(&self) -> Option<MaintenanceInstruction> {
-        for (validator, vote_account_balance) in self
-            .solido
-            .validators
-            .entries
-            .iter()
-            .zip(self.validator_vote_account_balances.iter())
-        {
-            // Need to collect some rewards if the balance is more than
-            // the minimum predefined amount.
-            if vote_account_balance > &SolidoState::MINIMUM_WITHDRAW_AMOUNT {
-                let instruction = lido::instruction::collect_validator_fee(
-                    &self.solido_program_id,
-                    &lido::instruction::CollectValidatorFeeMeta {
-                        lido: self.solido_address,
-                        validator_vote_account: validator.pubkey,
-                        mint_authority: self.get_mint_authority(),
-                        st_sol_mint: self.solido.st_sol_mint,
-                        treasury_st_sol_account: self.solido.fee_recipients.treasury_account,
-                        developer_st_sol_account: self.solido.fee_recipients.developer_account,
-                        reserve: self.reserve_address,
-                        rewards_withdraw_authority: self.get_rewards_withdraw_authority(),
-                    },
-                );
-                let task = MaintenanceOutput::CollectValidatorFee {
-                    validator_vote_account: validator.pubkey,
-                    fee_rewards: *vote_account_balance,
-                };
-                return Some(MaintenanceInstruction::new(instruction, task));
-            }
-        }
-
-        None
-    }
-
-    /// Checks if any of the validators has unclaimed fees in stSOL. If so,
-    /// claims it on behalf of the validator.
-    pub fn try_claim_validator_fee(&self) -> Option<MaintenanceInstruction> {
-        for validator in self.solido.validators.entries.iter() {
-            if validator.entry.fee_credit == StLamports(0) {
-                continue;
-            }
-
-            let instruction = lido::instruction::claim_validator_fee(
-                &self.solido_program_id,
-                &lido::instruction::ClaimValidatorFeeMeta {
-                    lido: self.solido_address,
-                    st_sol_mint: self.solido.st_sol_mint,
-                    mint_authority: self.get_mint_authority(),
-                    validator_fee_st_sol_account: validator.entry.fee_address,
-                },
-            );
-            let task = MaintenanceOutput::ClaimValidatorFee {
-                validator_vote_account: validator.pubkey,
-                fee_rewards: validator.entry.fee_credit,
-            };
-
-            return Some(MaintenanceInstruction::new(instruction, task));
         }
 
         None
@@ -1283,10 +1235,6 @@ impl SolidoState {
         let mut identity_account_balance_metrics = Vec::new();
         let mut vote_credits_metrics = Vec::new();
 
-        // Track if there are any unclaimed (and therefore unminted) validation
-        // fees.
-        let mut unclaimed_fees = StLamports(0);
-
         for ((((validator, stake_accounts), vote_account), identity_account_balance), info) in self
             .solido
             .validators
@@ -1343,9 +1291,6 @@ impl SolidoState {
             balance_sol_metrics.push(metric(stake_balance.activating, "activating"));
             balance_sol_metrics.push(metric(stake_balance.active, "active"));
             balance_sol_metrics.push(metric(stake_balance.deactivating, "deactivating"));
-
-            unclaimed_fees = (unclaimed_fees + validator.entry.fee_credit)
-                .expect("There shouldn't be so many fees to cause stSOL overflow.");
 
             last_voted_slot_metrics
                 .push(annotator.add_labels(Metric::new(vote_account.last_timestamp.slot)));
@@ -1419,14 +1364,9 @@ impl SolidoState {
                 name: "solido_token_supply_st_sol",
                 help: "Amount of stSOL that exists currently.",
                 type_: "gauge",
-                metrics: vec![
-                    Metric::new_st_sol(st_sol_supply)
-                        .at(self.produced_at)
-                        .with_label("status", "minted".to_string()),
-                    Metric::new_st_sol(unclaimed_fees)
-                        .at(self.produced_at)
-                        .with_label("status", "unclaimed_fee".to_string()),
-                ],
+                metrics: vec![Metric::new_st_sol(st_sol_supply)
+                    .at(self.produced_at)
+                    .with_label("status", "minted".to_string())],
             },
         )?;
 
@@ -1513,16 +1453,6 @@ impl SolidoState {
             STAKE_AUTHORITY,
         );
         stake_authority
-    }
-
-    fn get_rewards_withdraw_authority(&self) -> Pubkey {
-        let (rewards_withdraw_authority, _bump_seed_authority) =
-            lido::find_authority_program_address(
-                &self.solido_program_id,
-                &self.solido_address,
-                REWARDS_WITHDRAW_AUTHORITY,
-            );
-        rewards_withdraw_authority
     }
 
     fn get_mint_authority(&self) -> Pubkey {
@@ -1707,12 +1637,11 @@ pub fn try_perform_maintenance(
         .or_else(|| state.try_unstake_from_inactive_validator())
         // Collecting validator fees goes after updating the exchange rate,
         // because it may be rejected if the exchange rate is outdated.
-        .or_else(|| state.try_collect_validator_fee())
         // Same for updating the validator balance.
-        .or_else(|| state.try_withdraw_inactive_stake())
+        .or_else(|| state.try_update_stake_account_balance())
+        .or_else(|| state.try_deactivate_validator_if_commission_exceeds_max())
         .or_else(|| state.try_stake_deposit())
         .or_else(|| state.try_unstake_from_active_validators())
-        .or_else(|| state.try_claim_validator_fee())
         .or_else(|| state.try_remove_validator())
         .or_else(|| state.try_sell_anker_rewards())
         .or_else(|| state.try_send_anker_rewards());
@@ -1804,7 +1733,7 @@ mod test {
         state
             .solido
             .validators
-            .add(Pubkey::new_unique(), Validator::new(Pubkey::new_unique()))
+            .add(Pubkey::new_unique(), Validator::new())
             .unwrap();
         state.validator_stake_accounts.push(vec![]);
         // Put some SOL in the reserve, but not enough to stake.
@@ -1834,12 +1763,12 @@ mod test {
         state
             .solido
             .validators
-            .add(Pubkey::new_unique(), Validator::new(Pubkey::new_unique()))
+            .add(Pubkey::new_unique(), Validator::new())
             .unwrap();
         state
             .solido
             .validators
-            .add(Pubkey::new_unique(), Validator::new(Pubkey::new_unique()))
+            .add(Pubkey::new_unique(), Validator::new())
             .unwrap();
         state.validator_stake_accounts = vec![vec![], vec![]];
 

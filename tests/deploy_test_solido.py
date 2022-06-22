@@ -23,6 +23,7 @@ from util import (
     multisig,
     get_approve_and_execute,
     get_solido_program_path,
+    MAX_VALIDATION_COMMISSION_PERCENTAGE,
 )
 
 print('\nUploading Solido program ...')
@@ -64,14 +65,14 @@ result = solido(
     '9',
     '--max-maintainers',
     '3',
+    '--max-commission-percentage',
+    str(MAX_VALIDATION_COMMISSION_PERCENTAGE),
     '--treasury-fee-share',
     '5',
-    '--validation-fee-share',
-    '3',
     '--developer-fee-share',
     '2',
     '--st-sol-appreciation-share',
-    '90',
+    '93',
     '--treasury-account-owner',
     st_sol_accounts_owner.pubkey,
     '--developer-account-owner',
@@ -102,15 +103,6 @@ def add_validator(index: int, vote_account: Optional[str]) -> str:
     one. Returns the vote account address.
     """
     print(f'\nCreating validator {index} ...')
-    validator_fee_st_sol_account_owner = create_test_account(
-        f'tests/.keys/validator-{index}-fee-st-sol-account.json'
-    )
-    validator_fee_st_sol_account = create_spl_token_account(
-        validator_fee_st_sol_account_owner.keypair_path,
-        st_sol_mint_account,
-    )
-    print(f'> Validator token account owner: {validator_fee_st_sol_account_owner}')
-    print(f'> Validator stSOL token account: {validator_fee_st_sol_account}')
 
     if vote_account is None:
         solido_instance = solido(
@@ -121,10 +113,11 @@ def add_validator(index: int, vote_account: Optional[str]) -> str:
             solido_address,
         )
         validator = create_test_account(f'tests/.keys/validator-{index}-account.json')
-        validator_vote_account = create_vote_account(
+        validator_vote_account, _ = create_vote_account(
             f'tests/.keys/validator-{index}-vote-account.json',
             validator.keypair_path,
-            solido_instance['rewards_withdraw_authority'],
+            f'tests/.keys/validator-{index}-withdraw-account.json',
+            MAX_VALIDATION_COMMISSION_PERCENTAGE,
         )
         vote_account = validator_vote_account.pubkey
 
@@ -141,21 +134,12 @@ def add_validator(index: int, vote_account: Optional[str]) -> str:
         solido_address,
         '--validator-vote-account',
         vote_account,
-        '--validator-fee-account',
-        validator_fee_st_sol_account,
         '--multisig-address',
         multisig_instance,
         keypair_path=maintainer.keypair_path,
     )
     approve_and_execute(transaction_result['transaction_address'])
     return vote_account
-
-
-# Compares a validator structure
-def get_vote_account_withdrawer(vote_account: str) -> str:
-    result = solana('vote-account', vote_account, '--output', 'json')
-    authorized_withdrawer: str = json.loads(result)['authorizedWithdrawer']
-    return authorized_withdrawer
 
 
 # For the first validator, add the test validator itself, so we include a
@@ -172,21 +156,25 @@ if get_network() == 'http://127.0.0.1:8899':
         '--solido-address',
         solido_address,
     )
-    print(f'> Changing validator\'s comission to 100% ...')
+    print(
+        '> Changing validator\'s comission to {}% ...'.format(
+            MAX_VALIDATION_COMMISSION_PERCENTAGE
+        )
+    )
     validator = current_validators['validators'][0]
-    validator['commission'] = '100'
+    validator['commission'] = str(MAX_VALIDATION_COMMISSION_PERCENTAGE)
     solana(
         'vote-update-commission',
         validator['voteAccountPubkey'],
-        '100',
+        str(MAX_VALIDATION_COMMISSION_PERCENTAGE),
         './test-ledger/vote-account-keypair.json',
     )
-    print(f'> Changing validator\'s withdrawer to Solido\'s ...')
     solana(
-        'vote-authorize-withdrawer',
-        validator['voteAccountPubkey'],
-        './test-ledger/vote-account-keypair.json',
-        solido_instance['rewards_withdraw_authority'],
+        'validator-info',
+        'publish',
+        '--keypair',
+        './test-ledger/validator-keypair.json',
+        "solana-test-validator",
     )
 
 
@@ -198,9 +186,7 @@ active_validators = [
     v
     for v in current_validators['validators']
     if (not v['delinquent'])
-    and v['commission'] == '100'
-    and get_vote_account_withdrawer(v['voteAccountPubkey'])
-    == solido_instance['rewards_withdraw_authority']
+    and v['commission'] == str(MAX_VALIDATION_COMMISSION_PERCENTAGE)
 ]
 
 # Add up to 5 of the active validators. Locally there will only be one, but on

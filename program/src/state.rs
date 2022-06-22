@@ -26,15 +26,15 @@ use crate::{
     account_map::{AccountMap, AccountSet, EntryConstantSize, PubkeyAndEntry},
     MINIMUM_STAKE_ACCOUNT_BALANCE, MINT_AUTHORITY, RESERVE_ACCOUNT, STAKE_AUTHORITY,
 };
-use crate::{REWARDS_WITHDRAW_AUTHORITY, VALIDATOR_STAKE_ACCOUNT, VALIDATOR_UNSTAKE_ACCOUNT};
+use crate::{VALIDATOR_STAKE_ACCOUNT, VALIDATOR_UNSTAKE_ACCOUNT};
 
-pub const LIDO_VERSION: u8 = 0;
+pub const LIDO_VERSION: u8 = 1;
 
 /// Size of a serialized `Lido` struct excluding validators and maintainers.
 ///
 /// To update this, run the tests and replace the value here with the test output.
-pub const LIDO_CONSTANT_SIZE: usize = 357;
-pub const VALIDATOR_CONSTANT_SIZE: usize = 89;
+pub const LIDO_CONSTANT_SIZE: usize = 353;
+pub const VALIDATOR_CONSTANT_SIZE: usize = 49;
 
 pub type Validators = AccountMap<Validator>;
 
@@ -203,7 +203,6 @@ pub struct Lido {
     pub sol_reserve_account_bump_seed: u8,
     pub stake_authority_bump_seed: u8,
     pub mint_authority_bump_seed: u8,
-    pub rewards_withdraw_authority_bump_seed: u8,
 
     /// How rewards are distributed.
     pub reward_distribution: RewardDistribution,
@@ -220,6 +219,9 @@ pub struct Lido {
 
     /// Map of enrolled validators, maps their vote account to `Validator` details.
     pub validators: Validators,
+
+    /// Maximum validation commission percentage in [0, 100]
+    pub max_commission_percentage: u8,
 
     /// The set of maintainers.
     ///
@@ -315,10 +317,7 @@ impl Lido {
 
     /// Checks if the passed maintainer belong to the list of maintainers
     pub fn check_maintainer(&self, maintainer: &AccountInfo) -> ProgramResult {
-        if !&self.maintainers.entries.contains(&PubkeyAndEntry {
-            pubkey: *maintainer.key,
-            entry: (),
-        }) {
+        if self.maintainers.get(maintainer.key).is_err() {
             msg!(
                 "Invalid maintainer, account {} is not present in the maintainers list.",
                 maintainer.key
@@ -426,44 +425,6 @@ impl Lido {
         Ok(authority)
     }
 
-    /// Return the address of the rewards withdraw authority, the
-    /// program-derived address that can sign on behalf of vote accounts.
-    pub fn get_rewards_withdraw_authority(
-        &self,
-        program_id: &Pubkey,
-        solido_address: &Pubkey,
-    ) -> Result<Pubkey, ProgramError> {
-        Pubkey::create_program_address(
-            &[
-                &solido_address.to_bytes()[..],
-                REWARDS_WITHDRAW_AUTHORITY,
-                &[self.rewards_withdraw_authority_bump_seed],
-            ],
-            program_id,
-        )
-        .map_err(|_| ProgramError::InvalidSeeds)
-    }
-
-    /// Confirm that the rewards withdraw authority belongs to this Lido
-    /// instance, return the rewards authority address.
-    pub fn check_rewards_withdraw_authority(
-        &self,
-        program_id: &Pubkey,
-        solido_address: &Pubkey,
-        rewards_withdraw_authority_account_info: &AccountInfo,
-    ) -> Result<Pubkey, ProgramError> {
-        let authority = self.get_rewards_withdraw_authority(program_id, solido_address)?;
-        if &authority != rewards_withdraw_authority_account_info.key {
-            msg!(
-                "Invalid rewards withdraw authority, expected {} but got {}.",
-                authority,
-                rewards_withdraw_authority_account_info.key
-            );
-            return Err(LidoError::InvalidRewardsWithdrawAuthority.into());
-        }
-        Ok(authority)
-    }
-
     pub fn get_mint_authority(
         &self,
         program_id: &Pubkey,
@@ -485,7 +446,6 @@ impl Lido {
     pub fn check_can_stake_amount(
         &self,
         reserve: &AccountInfo,
-        sysvar_rent: &AccountInfo,
         amount: Lamports,
     ) -> Result<(), ProgramError> {
         if amount < MINIMUM_STAKE_ACCOUNT_BALANCE {
@@ -498,7 +458,7 @@ impl Lido {
             return Err(LidoError::InvalidAmount.into());
         }
 
-        let rent: Rent = Rent::from_account_info(sysvar_rent)?;
+        let rent: Rent = Rent::get()?;
 
         let available_reserve_amount = get_reserve_available_balance(&rent, reserve)?;
         if amount > available_reserve_amount {
@@ -588,20 +548,14 @@ impl Lido {
 
     /// Return the total amount of stSOL in existence.
     ///
-    /// The total is the amount minted so far, plus any unminted rewards that validators
-    /// are entitled to, but haven’t claimed yet.
+    /// The total is the amount minted so far
     pub fn get_st_sol_supply(&self, st_sol_mint: &AccountInfo) -> Result<StLamports, ProgramError> {
         self.check_mint_is_st_sol_mint(st_sol_mint)?;
 
         let st_sol_mint = Mint::unpack_from_slice(&st_sol_mint.data.borrow())?;
         let minted_supply = StLamports(st_sol_mint.supply);
 
-        let credit: token::Result<StLamports> =
-            self.validators.iter_entries().map(|v| v.fee_credit).sum();
-
-        let result = credit.and_then(|s| s + minted_supply)?;
-
-        Ok(result)
+        Ok(minted_supply)
     }
 
     pub fn check_exchange_rate_last_epoch(
@@ -626,13 +580,6 @@ impl Lido {
 #[repr(C)]
 #[derive(Clone, Debug, Eq, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema, Serialize)]
 pub struct Validator {
-    /// Fees in stSOL that the validator is entitled too, but hasn't claimed yet.
-    pub fee_credit: StLamports,
-
-    /// SPL token account denominated in stSOL to transfer fees to when claiming them.
-    #[serde(serialize_with = "serialize_b58")]
-    pub fee_address: Pubkey,
-
     /// Seeds for active stake accounts.
     pub stake_seeds: SeedRange,
     /// Seeds for inactive stake accounts.
@@ -694,9 +641,8 @@ impl IntoIterator for &SeedRange {
 }
 
 impl Validator {
-    pub fn new(fee_address: Pubkey) -> Validator {
+    pub fn new() -> Validator {
         Validator {
-            fee_address,
             ..Default::default()
         }
     }
@@ -706,13 +652,25 @@ impl Validator {
         (self.stake_accounts_balance - self.unstake_accounts_balance)
             .expect("Unstake balance cannot exceed the validator's total stake balance.")
     }
+
+    pub fn observe_balance(observed: Lamports, tracked: Lamports, info: &str) -> ProgramResult {
+        if observed < tracked {
+            msg!(
+                "{}: observed balance of {} is less than tracked balance of {}.",
+                info,
+                observed,
+                tracked
+            );
+            msg!("This should not happen, aborting ...");
+            return Err(LidoError::ValidatorBalanceDecreased.into());
+        }
+        Ok(())
+    }
 }
 
 impl Default for Validator {
     fn default() -> Self {
         Validator {
-            fee_address: Pubkey::default(),
-            fee_credit: StLamports(0),
             stake_seeds: SeedRange { begin: 0, end: 0 },
             unstake_seeds: SeedRange { begin: 0, end: 0 },
             stake_accounts_balance: Lamports(0),
@@ -733,9 +691,6 @@ impl Validator {
     pub fn check_can_be_removed(&self) -> Result<(), LidoError> {
         if self.active {
             return Err(LidoError::ValidatorIsStillActive);
-        }
-        if self.fee_credit != StLamports(0) {
-            return Err(LidoError::ValidatorHasUnclaimedCredit);
         }
         if self.has_stake_accounts() {
             return Err(LidoError::ValidatorShouldHaveNoStakeAccounts);
@@ -815,7 +770,6 @@ impl PubkeyAndEntry<Validator> {
 )]
 pub struct RewardDistribution {
     pub treasury_fee: u32,
-    pub validation_fee: u32,
     pub developer_fee: u32,
     pub st_sol_appreciation: u32,
 }
@@ -834,22 +788,12 @@ pub struct FeeRecipients {
 impl RewardDistribution {
     pub fn sum(&self) -> u64 {
         // These adds don't overflow because we widen from u32 to u64 first.
-        self.treasury_fee as u64
-            + self.validation_fee as u64
-            + self.developer_fee as u64
-            + self.st_sol_appreciation as u64
+        self.treasury_fee as u64 + self.developer_fee as u64 + self.st_sol_appreciation as u64
     }
 
     pub fn treasury_fraction(&self) -> Rational {
         Rational {
             numerator: self.treasury_fee as u64,
-            denominator: self.sum(),
-        }
-    }
-
-    pub fn validation_fraction(&self) -> Rational {
-        Rational {
-            numerator: self.validation_fee as u64,
             denominator: self.sum(),
         }
     }
@@ -873,31 +817,21 @@ impl RewardDistribution {
     /// deposited it. The remaining SOL, which is not taken as a fee, acts as a
     /// donation to the pool, and makes the SOL value of stSOL go up. It is not
     /// included in the output, as nothing needs to be done to handle it.
-    pub fn split_reward(&self, amount: Lamports, num_validators: u64) -> token::Result<Fees> {
+    pub fn split_reward(&self, amount: Lamports) -> token::Result<Fees> {
         use std::ops::Add;
 
         let treasury_amount = (amount * self.treasury_fraction())?;
         let developer_amount = (amount * self.developer_fraction())?;
 
-        // The actual amount that goes to validation can be a tiny bit lower
-        // than the target amount, when the number of validators does not divide
-        // the target amount. The loss is at most `num_validators` Lamports.
-        let validation_amount = (amount * self.validation_fraction())?;
-        let reward_per_validator = (validation_amount / num_validators)?;
-
         // Sanity check: We should not produce more fees than we had to split in
         // the first place.
-        let total_fees = Lamports(0)
-            .add(treasury_amount)?
-            .add(developer_amount)?
-            .add((reward_per_validator * num_validators)?)?;
+        let total_fees = Lamports(0).add(treasury_amount)?.add(developer_amount)?;
         assert!(total_fees <= amount);
 
         let st_sol_appreciation_amount = (amount - total_fees)?;
 
         let result = Fees {
             treasury_amount,
-            reward_per_validator,
             developer_amount,
             st_sol_appreciation_amount,
         };
@@ -913,7 +847,6 @@ impl RewardDistribution {
 #[derive(Debug, PartialEq, Eq)]
 pub struct Fees {
     pub treasury_amount: Lamports,
-    pub reward_per_validator: Lamports,
     pub developer_amount: Lamports,
 
     /// Remainder of the reward.
@@ -991,7 +924,7 @@ mod test_lido {
 
         let mut validators = Validators::new(10_000);
         validators
-            .add(Pubkey::new_unique(), Validator::new(Pubkey::new_unique()))
+            .add(Pubkey::new_unique(), Validator::new())
             .unwrap();
         let maintainers = Maintainers::new(1);
         let lido = Lido {
@@ -1006,10 +939,8 @@ mod test_lido {
             sol_reserve_account_bump_seed: 1,
             stake_authority_bump_seed: 2,
             mint_authority_bump_seed: 3,
-            rewards_withdraw_authority_bump_seed: 4,
             reward_distribution: RewardDistribution {
                 treasury_fee: 2,
-                validation_fee: 3,
                 developer_fee: 4,
                 st_sol_appreciation: 7,
             },
@@ -1020,6 +951,7 @@ mod test_lido {
             metrics: Metrics::new(),
             validators: validators,
             maintainers: maintainers,
+            max_commission_percentage: 5,
         };
         let mut data = Vec::new();
         BorshSerialize::serialize(&lido, &mut data).unwrap();
@@ -1163,7 +1095,7 @@ mod test_lido {
 
         lido.validators.maximum_entries = 1;
         lido.validators
-            .add(Pubkey::new_unique(), Validator::new(Pubkey::new_unique()))
+            .add(Pubkey::new_unique(), Validator::new())
             .unwrap();
         lido.validators.entries[0].entry.stake_accounts_balance = Lamports(37);
         assert_eq!(
@@ -1229,16 +1161,6 @@ mod test_lido {
             Ok(StLamports(200_000)),
         );
 
-        lido.validators.maximum_entries = 1;
-        lido.validators
-            .add(Pubkey::new_unique(), Validator::new(Pubkey::new_unique()))
-            .unwrap();
-        lido.validators.entries[0].entry.fee_credit = StLamports(37);
-        assert_eq!(
-            lido.get_st_sol_supply(&st_sol_mint),
-            Ok(StLamports(200_000 + 37))
-        );
-
         lido.st_sol_mint = Pubkey::new_unique();
 
         assert_eq!(
@@ -1251,7 +1173,6 @@ mod test_lido {
     fn test_split_reward() {
         let mut spec = RewardDistribution {
             treasury_fee: 3,
-            validation_fee: 2,
             developer_fee: 1,
             st_sol_appreciation: 0,
         };
@@ -1259,11 +1180,10 @@ mod test_lido {
         assert_eq!(
             // In this case the amount can be split exactly,
             // there is no remainder.
-            spec.split_reward(Lamports(600), 1).unwrap(),
+            spec.split_reward(Lamports(600)).unwrap(),
             Fees {
-                treasury_amount: Lamports(300),
-                reward_per_validator: Lamports(200),
-                developer_amount: Lamports(100),
+                treasury_amount: Lamports(450),
+                developer_amount: Lamports(150),
                 st_sol_appreciation_amount: Lamports(0),
             },
         );
@@ -1271,40 +1191,36 @@ mod test_lido {
         assert_eq!(
             // In this case the amount cannot be split exactly, all fees are
             // rounded down.
-            spec.split_reward(Lamports(1_000), 4).unwrap(),
+            spec.split_reward(Lamports(1_003)).unwrap(),
             Fees {
-                treasury_amount: Lamports(500),
-                reward_per_validator: Lamports(83),
-                developer_amount: Lamports(166),
-                st_sol_appreciation_amount: Lamports(2),
+                treasury_amount: Lamports(752),
+                developer_amount: Lamports(250),
+                st_sol_appreciation_amount: Lamports(1),
             },
         );
 
         // If we use 3%, 2%, 1% fee, and the remaining 94% go to stSOL appreciation,
         // we should see 3%, 2%, and 1% fee.
-        spec.st_sol_appreciation = 94;
+        spec.st_sol_appreciation = 96;
         assert_eq!(
-            spec.split_reward(Lamports(100), 1).unwrap(),
+            spec.split_reward(Lamports(100)).unwrap(),
             Fees {
                 treasury_amount: Lamports(3),
-                reward_per_validator: Lamports(2),
                 developer_amount: Lamports(1),
-                st_sol_appreciation_amount: Lamports(94),
+                st_sol_appreciation_amount: Lamports(96),
             },
         );
 
         let spec_coprime = RewardDistribution {
             treasury_fee: 17,
-            validation_fee: 23,
             developer_fee: 19,
             st_sol_appreciation: 0,
         };
         assert_eq!(
-            spec_coprime.split_reward(Lamports(1_000), 1).unwrap(),
+            spec_coprime.split_reward(Lamports(1_000)).unwrap(),
             Fees {
-                treasury_amount: Lamports(288),
-                reward_per_validator: Lamports(389),
-                developer_amount: Lamports(322),
+                treasury_amount: Lamports(472),
+                developer_amount: Lamports(527),
                 st_sol_appreciation_amount: Lamports(1),
             },
         );

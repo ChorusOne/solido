@@ -13,7 +13,9 @@ import sys
 from urllib import request
 from uuid import uuid4
 
-from typing import List, NamedTuple, Any, Optional, Callable, Dict
+from typing import List, NamedTuple, Any, Optional, Callable, Dict, Tuple
+
+MAX_VALIDATION_COMMISSION_PERCENTAGE = 5
 
 
 class TestAccount(NamedTuple):
@@ -206,19 +208,23 @@ def create_stake_account(keypair_fname: str) -> TestAccount:
 
 
 def create_vote_account(
-    vote_key_fname: str, validator_key_fname: str, authorized_withdrawer: str
-) -> TestAccount:
+    vote_key_fname: str,
+    validator_key_fname: str,
+    authorized_withdrawer_key_fname: str,
+    commission: int,
+) -> Tuple[TestAccount, TestAccount]:
     """
-    Generate a vote account for the validator
+    Generate a vote account for the validator and authorized withdrawer account
     """
     test_account = create_test_account(vote_key_fname, fund=False)
+    withdrawer_account = create_test_account(authorized_withdrawer_key_fname, fund=True)
     solana(
         'create-vote-account',
         vote_key_fname,
         validator_key_fname,
-        authorized_withdrawer,
+        authorized_withdrawer_key_fname,
         '--commission',
-        '100',
+        str(commission),
     )
     # Publish validator info for this new validator, because `show-solido`
     # requires validator info to be present.
@@ -230,7 +236,7 @@ def create_vote_account(
         validator_key_fname,
         name,
     )
-    return test_account
+    return test_account, withdrawer_account
 
 
 def create_spl_token_account(owner_keypair_fname: str, minter: str) -> str:

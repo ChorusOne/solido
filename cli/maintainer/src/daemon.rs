@@ -44,16 +44,11 @@ struct MaintenanceMetrics {
     transactions_update_exchange_rate: u64,
 
     /// Number of times we performed `WithdrawInactiveStake`.
-    transactions_withdraw_inactive_stake: u64,
-
-    /// Number of times we performed `CollectValidatorFee`
-    transactions_collect_validator_fee: u64,
+    transactions_update_stake_account_balance: u64,
 
     /// Number of times we performed a `MergeStake`.
     transactions_merge_stake: u64,
 
-    /// Number of times we performed `ClaimValidatorFee`.
-    transactions_claim_validator_fee: u64,
     // TODO(#96#issuecomment-859388866): Track how much the daemon spends on transaction fees,
     // so we know how much SOL it costs to operate.
     // spent_lamports_total: u64
@@ -62,6 +57,9 @@ struct MaintenanceMetrics {
 
     /// Number of times we performed `RemoveValidator`.
     transactions_remove_validator: u64,
+
+    /// Number of times we performed `DeactivateValidatorIfCommissionExceedsMax`.
+    transactions_deactivate_validator_if_commission_exceeds_max: u64,
 
     /// Number of times we performed `Unstake` on an active validator for balancing purposes.
     transactions_unstake_from_active_validator: u64,
@@ -106,14 +104,10 @@ impl MaintenanceMetrics {
                         .with_label("operation", "StakeDeposit".to_string()),
                     Metric::new(self.transactions_update_exchange_rate)
                         .with_label("operation", "UpdateExchangeRate".to_string()),
-                    Metric::new(self.transactions_withdraw_inactive_stake)
-                        .with_label("operation", "WithdrawInactiveStake".to_string()),
-                    Metric::new(self.transactions_collect_validator_fee)
-                        .with_label("operation", "CollectValidatorFee".to_string()),
+                    Metric::new(self.transactions_update_stake_account_balance)
+                        .with_label("operation", "UpdateStakeAccountBalance".to_string()),
                     Metric::new(self.transactions_merge_stake)
                         .with_label("operation", "MergeStake".to_string()),
-                    Metric::new(self.transactions_claim_validator_fee)
-                        .with_label("operation", "ClaimValidatorFee".to_string()),
                     Metric::new(self.transactions_unstake_from_inactive_validator)
                         .with_label("operation", "UnstakeFromInactiveValidator".to_string()),
                     Metric::new(self.transactions_remove_validator)
@@ -126,6 +120,11 @@ impl MaintenanceMetrics {
                         .with_label("operation", "SendRewards".to_string()),
                     Metric::new(self.transactions_fetch_pool_price)
                         .with_label("operation", "FetchPoolPrice".to_string()),
+                    Metric::new(self.transactions_deactivate_validator_if_commission_exceeds_max)
+                        .with_label(
+                            "operation",
+                            "DeactivateValidatorIfCommissionExceedsMax".to_string(),
+                        ),
                 ],
             },
         )?;
@@ -142,19 +141,16 @@ impl MaintenanceMetrics {
                 self.transactions_update_exchange_rate += 1;
             }
             MaintenanceOutput::WithdrawInactiveStake { .. } => {
-                self.transactions_withdraw_inactive_stake += 1;
-            }
-            MaintenanceOutput::CollectValidatorFee { .. } => {
-                self.transactions_collect_validator_fee += 1
+                self.transactions_update_stake_account_balance += 1;
             }
             MaintenanceOutput::MergeStake { .. } => self.transactions_merge_stake += 1,
-            MaintenanceOutput::ClaimValidatorFee { .. } => {
-                self.transactions_claim_validator_fee += 1
-            }
             MaintenanceOutput::UnstakeFromInactiveValidator { .. } => {
                 self.transactions_unstake_from_inactive_validator += 1
             }
             MaintenanceOutput::RemoveValidator { .. } => self.transactions_remove_validator += 1,
+            MaintenanceOutput::DeactivateValidatorIfCommissionExceedsMax { .. } => {
+                self.transactions_deactivate_validator_if_commission_exceeds_max += 1
+            }
             MaintenanceOutput::UnstakeFromActiveValidator { .. } => {
                 self.transactions_unstake_from_active_validator += 1
             }
@@ -316,12 +312,11 @@ impl<'a, 'b> Daemon<'a, 'b> {
             errors: 0,
             transactions_stake_deposit: 0,
             transactions_update_exchange_rate: 0,
-            transactions_withdraw_inactive_stake: 0,
-            transactions_collect_validator_fee: 0,
+            transactions_update_stake_account_balance: 0,
             transactions_merge_stake: 0,
-            transactions_claim_validator_fee: 0,
             transactions_unstake_from_inactive_validator: 0,
             transactions_remove_validator: 0,
+            transactions_deactivate_validator_if_commission_exceeds_max: 0,
             transactions_unstake_from_active_validator: 0,
             transactions_sell_rewards: 0,
             transactions_send_rewards: 0,

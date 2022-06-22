@@ -3218,6 +3218,7 @@ dependencies = [
  "solana-program",
  "solana-sdk",
  "solana-stake-program",
+ "solana-transaction-status",
  "solana-vote-program",
  "spl-token",
 ]

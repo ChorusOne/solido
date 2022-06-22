@@ -244,7 +244,7 @@ async fn test_unstake_allows_at_most_three_unstake_accounts() {
 
     // Withdraw the now-inactive stake accounts to the reserve to free up
     // unstake accounts again.
-    context.withdraw_inactive_stake(vote_account).await;
+    context.update_stake_account_balance(vote_account).await;
 
     let solido_after = context.get_solido().await;
     let validator_after = &solido_after.validators.entries[0].entry;

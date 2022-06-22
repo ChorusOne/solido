@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: 2021 Chorus One AG
 // SPDX-License-Identifier: GPL-3.0
 
-use solana_program::program::invoke_signed;
 use solana_program::rent::Rent;
 use solana_program::sysvar::Sysvar;
 use solana_program::{account_info::AccountInfo, entrypoint::ProgramResult, msg, pubkey::Pubkey};
+use solana_program::{program::invoke_signed, program_error::ProgramError};
 
 use crate::logic::check_rent_exempt;
 use crate::processor::StakeType;
@@ -13,12 +13,12 @@ use crate::vote_state::PartialVoteState;
 use crate::{
     error::LidoError,
     instruction::{
-        AddMaintainerInfo, AddValidatorInfo, ChangeRewardDistributionInfo, ClaimValidatorFeeInfo,
-        DeactivateValidatorInfo, MergeStakeInfo, RemoveMaintainerInfo, RemoveValidatorInfo,
+        AddMaintainerInfo, AddValidatorInfoV2, ChangeRewardDistributionInfo,
+        DeactivateValidatorIfCommissionExceedsMaxInfo, DeactivateValidatorInfo, MergeStakeInfo,
+        RemoveMaintainerInfo, RemoveValidatorInfo, SetMaxValidationCommissionInfo,
     },
-    logic::mint_st_sol_to,
     state::{RewardDistribution, Validator},
-    token::StLamports,
+    vote_state::get_vote_account_commission,
     STAKE_AUTHORITY,
 };
 
@@ -42,11 +42,10 @@ pub fn process_change_reward_distribution(
 }
 
 pub fn process_add_validator(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> ProgramResult {
-    let accounts = AddValidatorInfo::try_from_slice(accounts_raw)?;
+    let accounts = AddValidatorInfoV2::try_from_slice(accounts_raw)?;
     let mut lido = Lido::deserialize_lido(program_id, accounts.lido)?;
-    let rent = &Rent::from_account_info(accounts.sysvar_rent)?;
+    let rent = &Rent::get()?;
     lido.check_manager(accounts.manager)?;
-    lido.check_is_st_sol_account(accounts.validator_fee_st_sol_account)?;
 
     check_rent_exempt(
         rent,
@@ -55,18 +54,15 @@ pub fn process_add_validator(program_id: &Pubkey, accounts_raw: &[AccountInfo]) 
     )?;
     // Deserialize also checks if the vote account is a valid Solido vote
     // account: The vote account should be owned by the vote program, the
-    // withdraw authority should be set to the program_id, and it should have
-    // 100% commission.
+    // withdraw authority should be set to the program_id, and it should
+    // satisfy the commission limit.
     let _partial_vote_state = PartialVoteState::deserialize(
-        program_id,
-        accounts.lido.key,
         accounts.validator_vote_account,
+        lido.max_commission_percentage,
     )?;
 
-    lido.validators.add(
-        *accounts.validator_vote_account.key,
-        Validator::new(*accounts.validator_fee_st_sol_account.key),
-    )?;
+    lido.validators
+        .add(*accounts.validator_vote_account.key, Validator::new())?;
 
     lido.save(accounts.lido)
 }
@@ -98,8 +94,7 @@ pub fn process_remove_validator(
 /// Set the `active` flag to false for a given validator.
 ///
 /// This prevents new funds from being staked with this validator, and enables
-/// removing the validator once no stake is delegated to it any more, and once
-/// it has no unclaimed fee credit.
+/// removing the validator once no stake is delegated to it any more.
 pub fn process_deactivate_validator(
     program_id: &Pubkey,
     accounts_raw: &[AccountInfo],
@@ -118,32 +113,36 @@ pub fn process_deactivate_validator(
     lido.save(accounts.lido)
 }
 
-pub fn process_claim_validator_fee(
+/// Set the `active` flag to false for a given validator if it's commission is
+/// bigger then max allowed. It is permissionless.
+///
+/// This prevents new funds from being staked with this validator, and enables
+/// removing the validator once no stake is delegated to it any more.
+pub fn process_deactivate_validator_if_commission_exceeds_max(
     program_id: &Pubkey,
     accounts_raw: &[AccountInfo],
 ) -> ProgramResult {
-    let accounts = ClaimValidatorFeeInfo::try_from_slice(accounts_raw)?;
+    let accounts = DeactivateValidatorIfCommissionExceedsMaxInfo::try_from_slice(accounts_raw)?;
     let mut lido = Lido::deserialize_lido(program_id, accounts.lido)?;
 
-    let pubkey_entry = lido
+    let data = accounts.validator_vote_account_to_deactivate.data.borrow();
+    let commission = get_vote_account_commission(&data).ok_or(ProgramError::AccountDataTooSmall)?;
+
+    if commission <= lido.max_commission_percentage {
+        return Ok(());
+    }
+
+    let validator = lido
         .validators
-        .entries
-        .iter_mut()
-        .find(|pe| &pe.entry.fee_address == accounts.validator_fee_st_sol_account.key)
-        .ok_or(LidoError::InvalidValidatorCreditAccount)?;
+        .get_mut(accounts.validator_vote_account_to_deactivate.key)?;
 
-    let amount_claimed = pubkey_entry.entry.fee_credit;
-    pubkey_entry.entry.fee_credit = StLamports(0);
+    if !validator.entry.active {
+        return Ok(());
+    }
 
-    mint_st_sol_to(
-        &lido,
-        accounts.lido.key,
-        accounts.spl_token,
-        accounts.st_sol_mint,
-        accounts.mint_authority,
-        accounts.validator_fee_st_sol_account,
-        amount_claimed,
-    )?;
+    validator.entry.active = false;
+    msg!("Validator {} deactivated.", validator.pubkey);
+
     lido.save(accounts.lido)
 }
 
@@ -168,6 +167,27 @@ pub fn process_remove_maintainer(
     lido.check_manager(accounts.manager)?;
 
     lido.maintainers.remove(accounts.maintainer.key)?;
+
+    lido.save(accounts.lido)
+}
+
+/// Sets max validation commission for Lido. If validators exeed the threshold
+/// they will be deactivated by DeactivateValidatorIfCommissionExceedsMax
+pub fn process_set_max_commission_percentage(
+    program_id: &Pubkey,
+    max_commission_percentage: u8,
+    accounts_raw: &[AccountInfo],
+) -> ProgramResult {
+    if max_commission_percentage > 100 {
+        return Err(LidoError::ValidationCommissionOutOfBounds.into());
+    }
+
+    let accounts = SetMaxValidationCommissionInfo::try_from_slice(accounts_raw)?;
+    let mut lido = Lido::deserialize_lido(program_id, accounts.lido)?;
+
+    lido.check_manager(accounts.manager)?;
+
+    lido.max_commission_percentage = max_commission_percentage;
 
     lido.save(accounts.lido)
 }

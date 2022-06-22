@@ -165,6 +165,12 @@ pub enum LidoError {
 
     /// We expected the StSol account to be owned by the SPL token program.
     InvalidStSolAccountOwner = 46,
+
+    /// Tried to use a deprecated instruction
+    InstructionIsDeprecated = 47,
+
+    /// Validation commission is more than 100%
+    ValidationCommissionOutOfBounds = 48,
 }
 
 // Just reuse the generated Debug impl for Display. It shows the variant names.

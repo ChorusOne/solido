@@ -8,9 +8,9 @@ use std::ops::{Add, Sub};
 use crate::{
     error::LidoError,
     instruction::{
-        CollectValidatorFeeInfo, DepositAccountsInfo, InitializeAccountsInfo, LidoInstruction,
-        StakeDepositAccountsInfo, UnstakeAccountsInfo, UpdateExchangeRateAccountsInfo,
-        WithdrawAccountsInfo, WithdrawInactiveStakeInfo,
+        DepositAccountsInfo, InitializeAccountsInfo, LidoInstruction, StakeDepositAccountsInfo,
+        UnstakeAccountsInfo, UpdateExchangeRateAccountsInfo, UpdateStakeAccountBalanceInfo,
+        WithdrawAccountsInfo,
     },
     logic::{
         burn_st_sol, check_mint, check_rent_exempt, check_unstake_accounts,
@@ -21,18 +21,18 @@ use crate::{
     metrics::Metrics,
     process_management::{
         process_add_maintainer, process_add_validator, process_change_reward_distribution,
-        process_claim_validator_fee, process_deactivate_validator, process_merge_stake,
-        process_remove_maintainer, process_remove_validator,
+        process_deactivate_validator, process_deactivate_validator_if_commission_exceeds_max,
+        process_merge_stake, process_remove_maintainer, process_remove_validator,
+        process_set_max_commission_percentage,
     },
     stake_account::{deserialize_stake_account, StakeAccount},
     state::{
-        ExchangeRate, FeeRecipients, Lido, Maintainers, RewardDistribution, Validators,
+        ExchangeRate, FeeRecipients, Lido, Maintainers, RewardDistribution, Validator, Validators,
         LIDO_CONSTANT_SIZE, LIDO_VERSION,
     },
     token::{Lamports, Rational, StLamports},
-    vote_instruction, MAXIMUM_UNSTAKE_ACCOUNTS, MINIMUM_STAKE_ACCOUNT_BALANCE, MINT_AUTHORITY,
-    RESERVE_ACCOUNT, REWARDS_WITHDRAW_AUTHORITY, STAKE_AUTHORITY, VALIDATOR_STAKE_ACCOUNT,
-    VALIDATOR_UNSTAKE_ACCOUNT,
+    MAXIMUM_UNSTAKE_ACCOUNTS, MINIMUM_STAKE_ACCOUNT_BALANCE, MINT_AUTHORITY, RESERVE_ACCOUNT,
+    STAKE_AUTHORITY, VALIDATOR_STAKE_ACCOUNT, VALIDATOR_UNSTAKE_ACCOUNT,
 };
 
 use solana_program::stake::{self as stake_program};
@@ -61,10 +61,11 @@ pub fn process_initialize(
     reward_distribution: RewardDistribution,
     max_validators: u32,
     max_maintainers: u32,
+    max_commission_percentage: u8,
     accounts_raw: &[AccountInfo],
 ) -> ProgramResult {
     let accounts = InitializeAccountsInfo::try_from_slice(accounts_raw)?;
-    let rent = &Rent::from_account_info(accounts.sysvar_rent)?;
+    let rent = &Rent::get()?;
     check_rent_exempt(rent, accounts.lido, "Solido account")?;
     check_rent_exempt(rent, accounts.reserve_account, "Reserve account")?;
 
@@ -105,10 +106,9 @@ pub fn process_initialize(
     // Check if the token has no minted tokens and right mint authority.
     check_mint(rent, accounts.st_sol_mint, &mint_authority)?;
 
-    let (_, rewards_withdraw_authority_bump_seed) = Pubkey::find_program_address(
-        &[&accounts.lido.key.to_bytes(), REWARDS_WITHDRAW_AUTHORITY],
-        program_id,
-    );
+    if max_commission_percentage > 100 {
+        return Err(LidoError::ValidationCommissionOutOfBounds.into());
+    }
 
     // Initialize fee structure
     let lido = Lido {
@@ -119,7 +119,6 @@ pub fn process_initialize(
         sol_reserve_account_bump_seed: reserve_bump_seed,
         mint_authority_bump_seed: mint_bump_seed,
         stake_authority_bump_seed: deposit_bump_seed,
-        rewards_withdraw_authority_bump_seed,
         reward_distribution,
         fee_recipients: FeeRecipients {
             treasury_account: *accounts.treasury_account.key,
@@ -128,6 +127,7 @@ pub fn process_initialize(
         metrics: Metrics::new(),
         maintainers: Maintainers::new(max_maintainers),
         validators: Validators::new(max_validators),
+        max_commission_percentage,
     };
 
     // Confirm that the fee recipients are actually stSOL accounts.
@@ -198,7 +198,7 @@ pub fn process_stake_deposit(
     lido.check_maintainer(accounts.maintainer)?;
     lido.check_reserve_account(program_id, accounts.lido.key, accounts.reserve)?;
     lido.check_stake_authority(program_id, accounts.lido.key, accounts.stake_authority)?;
-    lido.check_can_stake_amount(accounts.reserve, accounts.sysvar_rent, amount)?;
+    lido.check_can_stake_amount(accounts.reserve, amount)?;
 
     let validator = lido.validators.get(accounts.validator_vote_account.key)?;
 
@@ -522,8 +522,8 @@ pub fn process_update_exchange_rate(
     let mut lido = Lido::deserialize_lido(program_id, accounts.lido)?;
     lido.check_reserve_account(program_id, accounts.lido.key, accounts.reserve)?;
 
-    let clock = Clock::from_account_info(accounts.sysvar_clock)?;
-    let rent = Rent::from_account_info(accounts.sysvar_rent)?;
+    let clock = Clock::get()?;
+    let rent = Rent::get()?;
 
     if lido.exchange_rate.computed_in_epoch >= clock.epoch {
         msg!(
@@ -557,7 +557,7 @@ impl std::fmt::Display for StakeType {
 }
 
 pub struct WithdrawExcessOpts<'a, 'b> {
-    accounts: &'a WithdrawInactiveStakeInfo<'a, 'b>,
+    accounts: &'a UpdateStakeAccountBalanceInfo<'a, 'b>,
     clock: &'a Clock,
     stake_history: &'a StakeHistory,
     stake_account: &'a AccountInfo<'b>,
@@ -649,17 +649,17 @@ pub fn check_address_and_get_balance(
 
 /// Recover any inactive balance from the validator's stake/unstake accounts to
 /// the reserve account.
-/// Updates the validator's balance.
+/// Updates the validator's balance and distribute rewards.
 /// This function is permissionless and can be called by anyone.
-pub fn process_withdraw_inactive_stake(
+pub fn process_update_stake_account_balance(
     program_id: &Pubkey,
     raw_accounts: &[AccountInfo],
 ) -> ProgramResult {
-    let accounts = WithdrawInactiveStakeInfo::try_from_slice(raw_accounts)?;
+    let accounts = UpdateStakeAccountBalanceInfo::try_from_slice(raw_accounts)?;
     let mut lido = Lido::deserialize_lido(program_id, accounts.lido)?;
     let stake_history = StakeHistory::from_account_info(accounts.sysvar_stake_history)?;
-    let clock = Clock::from_account_info(accounts.sysvar_clock)?;
-    let rent = Rent::from_account_info(accounts.sysvar_rent)?;
+    let clock = Clock::get()?;
+    let rent = Rent::get()?;
 
     // Confirm that the passed accounts are the ones configured in the state,
     // and confirm that they can receive stSOL.
@@ -723,21 +723,17 @@ pub fn process_withdraw_inactive_stake(
         stake_observed_total = (stake_observed_total + account_balance)?;
     }
 
-    if stake_observed_total < validator.entry.effective_stake_balance() {
-        // Solana has no slashing at the time of writing, and only Solido can
-        // withdraw from these accounts, so we should not observe a decrease in
-        // balance.
-        msg!(
-            "Observed balance of {} is less than tracked balance of {}.",
-            stake_observed_total,
-            validator.entry.effective_stake_balance()
-        );
-        msg!("This should not happen, aborting ...");
-        return Err(LidoError::ValidatorBalanceDecreased.into());
-    }
+    // Solana has no slashing at the time of writing, and only Solido can
+    // withdraw from these accounts, so we should not observe a decrease in
+    // balance.
+    Validator::observe_balance(
+        stake_observed_total,
+        validator.entry.effective_stake_balance(),
+        "Stake",
+    )?;
 
     // We tracked in `stake_accounts_balance` what we put in there ourselves, so
-    // the excess is a donation by some joker.
+    // the excess is a sum of a donation by some joker and staking rewards.
     let donation = (stake_observed_total - validator.entry.effective_stake_balance())
         .expect("Does not underflow because observed_total >= stake_accounts_balance.");
     msg!("{} in donations observed.", donation);
@@ -796,15 +792,17 @@ pub fn process_withdraw_inactive_stake(
         unstake_observed_total = (unstake_observed_total + account_balance)?;
     }
 
-    if unstake_observed_total < validator.entry.unstake_accounts_balance {
-        msg!(
-            "Observed balance of {} is less than tracked balance of {}.",
-            unstake_observed_total,
-            validator.entry.unstake_accounts_balance
-        );
-        msg!("This should not happen, aborting ...");
-        return Err(LidoError::ValidatorBalanceDecreased.into());
-    }
+    Validator::observe_balance(
+        unstake_observed_total,
+        validator.entry.unstake_accounts_balance,
+        "Unstake",
+    )?;
+
+    // we track stake_accounts_balance, so only rewards and
+    // donations (which we consider rewards) can make a difference
+    let stake_total_with_rewards = (stake_observed_total + unstake_observed_total)?;
+    let rewards = (stake_total_with_rewards - validator.entry.stake_accounts_balance)
+        .expect("Does not underflow, because tracked balance <= total.");
 
     // Store the new total. If we withdrew any inactive stake back to the
     // reserve, that is now no longer part of the stake accounts, so subtract
@@ -818,75 +816,8 @@ pub fn process_withdraw_inactive_stake(
         .add(validator.entry.unstake_accounts_balance)
         .expect("If Solido has enough SOL to make this overflow, something has gone very wrong.");
 
-    lido.save(accounts.lido)
-}
+    distribute_fees(&mut lido, &accounts, &clock, rewards)?;
 
-/// Collects the validator fee from the validator vote account and distributes
-/// this fee across the specified participants. It transfers the collected
-/// Lamports to the reserve account, where they can be re-staked.
-/// This function can only be called after the exchange rate is updated with
-/// `process_update_exchange_rate`.
-/// This function is permissionless and can be called by anyone.
-pub fn process_collect_validator_fee(
-    program_id: &Pubkey,
-    raw_accounts: &[AccountInfo],
-) -> ProgramResult {
-    let accounts = CollectValidatorFeeInfo::try_from_slice(raw_accounts)?;
-    let mut lido = Lido::deserialize_lido(program_id, accounts.lido)?;
-    let rent = Rent::from_account_info(accounts.sysvar_rent)?;
-
-    // Confirm that the passed accounts are the ones configured in the state,
-    // and confirm that they can receive stSOL.
-    lido.check_mint_is_st_sol_mint(accounts.st_sol_mint)?;
-    lido.check_treasury_fee_st_sol_account(accounts.treasury_st_sol_account)?;
-    lido.check_developer_fee_st_sol_account(accounts.developer_st_sol_account)?;
-    lido.check_reserve_account(program_id, accounts.lido.key, accounts.reserve)?;
-
-    let clock = Clock::from_account_info(accounts.sysvar_clock)?;
-    lido.check_exchange_rate_last_epoch(&clock, "CollectValidatorFee")?;
-
-    // Confirm that the vote account passed in is actually part of the validator set.
-    lido.validators.get(accounts.validator_vote_account.key)?;
-
-    let rewards_withdraw_authority = lido.check_rewards_withdraw_authority(
-        program_id,
-        accounts.lido.key,
-        accounts.rewards_withdraw_authority,
-    )?;
-
-    let vote_account_rent = rent.minimum_balance(accounts.validator_vote_account.data_len());
-    // Subtract the rent from the vote account, we should remove those only once
-    // validators are removed.
-    let rewards = accounts
-        .validator_vote_account
-        .lamports()
-        .checked_sub(vote_account_rent)
-        .expect("Vote account should be rent exempt");
-
-    let fees = lido
-        .reward_distribution
-        .split_reward(Lamports(rewards), lido.validators.len() as u64)?;
-    distribute_fees(&mut lido, &accounts, fees)?;
-
-    invoke_signed(
-        &vote_instruction::withdraw(
-            accounts.validator_vote_account.key,
-            &rewards_withdraw_authority,
-            rewards,
-            accounts.reserve.key, // checked if is right before.
-        ),
-        &[
-            accounts.validator_vote_account.clone(),
-            accounts.reserve.clone(),
-            accounts.rewards_withdraw_authority.clone(),
-            accounts.vote_program.clone(),
-        ],
-        &[&[
-            accounts.lido.key.as_ref(),
-            REWARDS_WITHDRAW_AUTHORITY,
-            &[lido.rewards_withdraw_authority_bump_seed],
-        ]],
-    )?;
     lido.save(accounts.lido)
 }
 
@@ -900,7 +831,7 @@ pub fn process_withdraw(
 ) -> ProgramResult {
     let accounts = WithdrawAccountsInfo::try_from_slice(raw_accounts)?;
     let mut lido = Lido::deserialize_lido(program_id, accounts.lido)?;
-    let clock = Clock::from_account_info(accounts.sysvar_clock)?;
+    let clock = Clock::get()?;
     lido.check_exchange_rate_last_epoch(&clock, "Withdraw")?;
 
     // We should withdraw from the validator that has the most effective stake.
@@ -1035,12 +966,14 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
             reward_distribution,
             max_validators,
             max_maintainers,
+            max_commission_percentage,
         } => process_initialize(
             LIDO_VERSION,
             program_id,
             reward_distribution,
             max_validators,
             max_maintainers,
+            max_commission_percentage,
             accounts,
         ),
         LidoInstruction::Deposit { amount } => process_deposit(program_id, amount, accounts),
@@ -1049,20 +982,31 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
         }
         LidoInstruction::Unstake { amount } => process_unstake(program_id, amount, accounts),
         LidoInstruction::UpdateExchangeRate => process_update_exchange_rate(program_id, accounts),
-        LidoInstruction::WithdrawInactiveStake => {
-            process_withdraw_inactive_stake(program_id, accounts)
+        LidoInstruction::WithdrawInactiveStake
+        | LidoInstruction::CollectValidatorFee
+        | LidoInstruction::ClaimValidatorFee
+        | LidoInstruction::AddValidator => {
+            msg!("{:?} is no longer supported since v2. Please check the changelog in the repository for update instructions.", instruction);
+            Err(LidoError::InstructionIsDeprecated.into())
         }
-        LidoInstruction::CollectValidatorFee => process_collect_validator_fee(program_id, accounts),
+        LidoInstruction::UpdateStakeAccountBalance => {
+            process_update_stake_account_balance(program_id, accounts)
+        }
         LidoInstruction::Withdraw { amount } => process_withdraw(program_id, amount, accounts),
-        LidoInstruction::ClaimValidatorFee => process_claim_validator_fee(program_id, accounts),
         LidoInstruction::ChangeRewardDistribution {
             new_reward_distribution,
         } => process_change_reward_distribution(program_id, new_reward_distribution, accounts),
-        LidoInstruction::AddValidator => process_add_validator(program_id, accounts),
+        LidoInstruction::AddValidatorV2 => process_add_validator(program_id, accounts),
         LidoInstruction::RemoveValidator => process_remove_validator(program_id, accounts),
         LidoInstruction::DeactivateValidator => process_deactivate_validator(program_id, accounts),
         LidoInstruction::AddMaintainer => process_add_maintainer(program_id, accounts),
         LidoInstruction::RemoveMaintainer => process_remove_maintainer(program_id, accounts),
         LidoInstruction::MergeStake => process_merge_stake(program_id, accounts),
+        LidoInstruction::DeactivateValidatorIfCommissionExceedsMax => {
+            process_deactivate_validator_if_commission_exceeds_max(program_id, accounts)
+        }
+        LidoInstruction::SetMaxValidationCommission {
+            max_commission_percentage,
+        } => process_set_max_commission_percentage(program_id, max_commission_percentage, accounts),
     }
 }

@@ -18,7 +18,8 @@ use lido::{
     state::{Lido, RewardDistribution},
     token::{Lamports, StLamports},
     util::serialize_b58,
-    MINT_AUTHORITY, RESERVE_ACCOUNT, REWARDS_WITHDRAW_AUTHORITY, STAKE_AUTHORITY,
+    vote_state::get_vote_account_commission,
+    MINT_AUTHORITY, RESERVE_ACCOUNT, STAKE_AUTHORITY,
 };
 use solido_cli_common::{
     error::{CliError, Error},
@@ -34,8 +35,9 @@ use crate::{
 };
 use crate::{
     config::{
-        AddRemoveMaintainerOpts, AddValidatorOpts, CreateSolidoOpts, DeactivateValidatorOpts,
-        DepositOpts, ShowSolidoAuthoritiesOpts, ShowSolidoOpts, WithdrawOpts,
+        AddRemoveMaintainerOpts, AddValidatorOpts, CreateSolidoOpts,
+        DeactivateValidatorIfCommissionExceedsMaxOpts, DeactivateValidatorOpts, DepositOpts,
+        SetMaxValidationCommissionOpts, ShowSolidoAuthoritiesOpts, ShowSolidoOpts, WithdrawOpts,
     },
     get_signer_from_path,
 };
@@ -202,12 +204,12 @@ pub fn command_create_solido(
         opts.solido_program_id(),
         RewardDistribution {
             treasury_fee: *opts.treasury_fee_share(),
-            validation_fee: *opts.validation_fee_share(),
             developer_fee: *opts.developer_fee_share(),
             st_sol_appreciation: *opts.st_sol_appreciation_share(),
         },
         *opts.max_validators(),
         *opts.max_maintainers(),
+        *opts.max_commission_percentage(),
         &lido::instruction::InitializeAccountsMeta {
             lido: lido_signer.pubkey(),
             st_sol_mint: st_sol_mint_pubkey,
@@ -242,11 +244,10 @@ pub fn command_add_validator(
 
     let instruction = lido::instruction::add_validator(
         opts.solido_program_id(),
-        &lido::instruction::AddValidatorMeta {
+        &lido::instruction::AddValidatorMetaV2 {
             lido: *opts.solido_address(),
             manager: multisig_address,
             validator_vote_account: *opts.validator_vote_account(),
-            validator_fee_st_sol_account: *opts.validator_fee_account(),
         },
     );
     propose_instruction(
@@ -346,14 +347,14 @@ pub struct ShowSolidoOutput {
     #[serde(serialize_with = "serialize_b58")]
     pub mint_authority: Pubkey,
 
-    #[serde(serialize_with = "serialize_b58")]
-    pub rewards_withdraw_authority: Pubkey,
-
     /// Identity account address for all validators in the same order as `solido.validators`.
     pub validator_identities: Vec<Pubkey>,
 
     /// Contains validator info in the same order as `solido.validators`.
     pub validator_infos: Vec<ValidatorInfo>,
+
+    /// Contains validator fees in the same order as `solido.validators`.
+    pub validator_commission_percentages: Vec<u8>,
 }
 
 impl fmt::Display for ShowSolidoOutput {
@@ -395,11 +396,6 @@ impl fmt::Display for ShowSolidoOutput {
         )?;
         writeln!(
             f,
-            "Rewards withdraw authority: {}, {}",
-            self.rewards_withdraw_authority, self.solido.rewards_withdraw_authority_bump_seed,
-        )?;
-        writeln!(
-            f,
             "Reserve:                    {}, {}",
             self.reserve_account, self.solido.sol_reserve_account_bump_seed
         )?;
@@ -415,7 +411,6 @@ impl fmt::Display for ShowSolidoOutput {
         };
         print_reward("stSOL appreciation", |d| d.st_sol_appreciation)?;
         print_reward("Treasury", |d| d.treasury_fee)?;
-        print_reward("Validation fee", |d| d.validation_fee)?;
         print_reward("Developer fee", |d| d.developer_fee)?;
 
         writeln!(f, "\nFee recipients:")?;
@@ -430,18 +425,18 @@ impl fmt::Display for ShowSolidoOutput {
             self.solido.fee_recipients.developer_account
         )?;
 
+        writeln!(
+            f,
+            "Max validation commission: {}%",
+            self.solido.max_commission_percentage
+        )?;
+
         writeln!(f, "\nMetrics:")?;
         writeln!(
             f,
             "  Total treasury fee:       {}, valued at {} when it was paid",
             self.solido.metrics.fee_treasury_st_sol_total,
             self.solido.metrics.fee_treasury_sol_total,
-        )?;
-        writeln!(
-            f,
-            "  Total validation fee:     {}, valued at {} when it was paid",
-            self.solido.metrics.fee_validation_st_sol_total,
-            self.solido.metrics.fee_validation_sol_total,
         )?;
         writeln!(
             f,
@@ -492,13 +487,14 @@ impl fmt::Display for ShowSolidoOutput {
             self.solido.validators.len(),
             self.solido.validators.maximum_entries
         )?;
-        for ((pe, identity), info) in self
+        for (((pe, identity), info), commission) in self
             .solido
             .validators
             .entries
             .iter()
             .zip(&self.validator_identities)
             .zip(&self.validator_infos)
+            .zip(&self.validator_commission_percentages)
         {
             writeln!(
                 f,
@@ -507,9 +503,8 @@ impl fmt::Display for ShowSolidoOutput {
                 Keybase username:          {}\n    \
                 Vote account:              {}\n    \
                 Identity account:          {}\n    \
-                Fee address:               {}\n    \
+                Commission:                {}%\n   \
                 Active:                    {}\n    \
-                Unclaimed fee:             {}\n    \
                 Stake in all accounts:     {}\n    \
                 Stake in stake accounts:   {}\n    \
                 Stake in unstake accounts: {}",
@@ -520,9 +515,8 @@ impl fmt::Display for ShowSolidoOutput {
                 },
                 pe.pubkey,
                 identity,
-                pe.entry.fee_address,
+                commission,
                 pe.entry.active,
-                pe.entry.fee_credit,
                 pe.entry.stake_accounts_balance,
                 pe.entry.effective_stake_balance(),
                 pe.entry.unstake_accounts_balance,
@@ -590,16 +584,19 @@ pub fn command_show_solido(
         lido.get_stake_authority(opts.solido_program_id(), opts.solido_address())?;
     let mint_authority =
         lido.get_mint_authority(opts.solido_program_id(), opts.solido_address())?;
-    let rewards_withdraw_authority =
-        lido.get_rewards_withdraw_authority(opts.solido_program_id(), opts.solido_address())?;
 
     let mut validator_identities = Vec::new();
     let mut validator_infos = Vec::new();
+    let mut validator_commission_percentages = Vec::new();
     for validator in lido.validators.entries.iter() {
         let vote_state = config.client.get_vote_account(&validator.pubkey)?;
         validator_identities.push(vote_state.node_pubkey);
         let info = config.client.get_validator_info(&vote_state.node_pubkey)?;
         validator_infos.push(info);
+        let vote_account = config.client.get_account(&validator.pubkey)?;
+        let commission = get_vote_account_commission(&vote_account.data)
+            .ok_or_else(|| CliError::new("Validator account data too small"))?;
+        validator_commission_percentages.push(commission);
     }
 
     Ok(ShowSolidoOutput {
@@ -608,10 +605,10 @@ pub fn command_show_solido(
         solido: lido,
         validator_identities,
         validator_infos,
+        validator_commission_percentages,
         reserve_account,
         stake_authority,
         mint_authority,
-        rewards_withdraw_authority,
     })
 }
 
@@ -631,20 +628,12 @@ pub struct ShowSolidoAuthoritiesOutput {
 
     #[serde(serialize_with = "serialize_b58")]
     pub mint_authority: Pubkey,
-
-    #[serde(serialize_with = "serialize_b58")]
-    pub rewards_withdraw_authority: Pubkey,
 }
 
 impl fmt::Display for ShowSolidoAuthoritiesOutput {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         writeln!(f, "Stake authority:            {}", self.stake_authority,)?;
         writeln!(f, "Mint authority:             {}", self.mint_authority)?;
-        writeln!(
-            f,
-            "Rewards withdraw authority: {}",
-            self.rewards_withdraw_authority,
-        )?;
         writeln!(f, "Reserve account:            {}", self.reserve_account)?;
         Ok(())
     }
@@ -668,18 +657,12 @@ pub fn command_show_solido_authorities(
         opts.solido_address(),
         STAKE_AUTHORITY,
     );
-    let (rewards_withdraw_authority, _) = find_authority_program_address(
-        opts.solido_program_id(),
-        opts.solido_address(),
-        REWARDS_WITHDRAW_AUTHORITY,
-    );
     Ok(ShowSolidoAuthoritiesOutput {
         solido_program_id: *opts.solido_program_id(),
         solido_address: *opts.solido_address(),
         reserve_account,
         stake_authority,
         mint_authority,
-        rewards_withdraw_authority,
     })
 }
 
@@ -891,4 +874,107 @@ pub fn command_withdraw(
         new_stake_account: new_stake_account.pubkey(),
     };
     Ok(result)
+}
+
+#[derive(Serialize)]
+pub struct DeactivateValidatorIfCommissionExceedsMaxOutput {
+    // List of validators that exceeded max commission
+    entries: Vec<ValidatorViolationInfo>,
+    max_commission_percentage: u8,
+}
+
+#[derive(Serialize)]
+struct ValidatorViolationInfo {
+    #[serde(serialize_with = "serialize_b58")]
+    pub validator_vote_account: Pubkey,
+    pub commission: u8,
+}
+
+impl fmt::Display for DeactivateValidatorIfCommissionExceedsMaxOutput {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        writeln!(
+            f,
+            "Maximum validation commission: {}",
+            self.max_commission_percentage
+        )?;
+
+        for entry in &self.entries {
+            writeln!(
+                f,
+                "Validator vote account: {}, validation commission: {}",
+                entry.validator_vote_account, entry.commission
+            )?;
+        }
+        Ok(())
+    }
+}
+
+/// CLI entry point to punish validator for commission violation.
+pub fn command_deactivate_validator_if_commission_exceeds_max(
+    config: &mut SnapshotConfig,
+    opts: &DeactivateValidatorIfCommissionExceedsMaxOpts,
+) -> solido_cli_common::Result<DeactivateValidatorIfCommissionExceedsMaxOutput> {
+    let solido = config.client.get_solido(opts.solido_address())?;
+
+    let mut violations = vec![];
+    let mut instructions = vec![];
+    for pubkey_entry in solido.validators.entries {
+        let validator = pubkey_entry.entry;
+        let vote_pubkey = pubkey_entry.pubkey;
+        let validator_account = config.client.get_account(&vote_pubkey)?;
+        let commission = get_vote_account_commission(&validator_account.data)
+            .ok_or_else(|| CliError::new("Validator account data too small"))?;
+
+        if !validator.active || commission <= solido.max_commission_percentage {
+            continue;
+        }
+
+        let instruction = lido::instruction::deactivate_validator_if_commission_exceeds_max(
+            opts.solido_program_id(),
+            &lido::instruction::DeactivateValidatorIfCommissionExceedsMaxMeta {
+                lido: *opts.solido_address(),
+                validator_vote_account_to_deactivate: vote_pubkey,
+            },
+        );
+        instructions.push(instruction);
+        violations.push(ValidatorViolationInfo {
+            validator_vote_account: vote_pubkey,
+            commission,
+        });
+    }
+
+    let signers: Vec<&dyn Signer> = vec![];
+    // Due to the fact that Solana has a limit on number of instructions in a transaction
+    // this can fall if there would be alot of misbehaved validators each
+    // exceeding `max_commission_percentage`. But it is a very improbable scenario.
+    config.sign_and_send_transaction(&instructions, &signers)?;
+
+    Ok(DeactivateValidatorIfCommissionExceedsMaxOutput {
+        entries: violations,
+        max_commission_percentage: solido.max_commission_percentage,
+    })
+}
+
+/// CLI entry point to set max validation commission
+pub fn command_set_max_commission_percentage(
+    config: &mut SnapshotConfig,
+    opts: &SetMaxValidationCommissionOpts,
+) -> solido_cli_common::Result<ProposeInstructionOutput> {
+    let (multisig_address, _) =
+        get_multisig_program_address(opts.multisig_program_id(), opts.multisig_address());
+
+    let instruction = lido::instruction::set_max_commission_percentage(
+        opts.solido_program_id(),
+        &lido::instruction::SetMaxValidationCommissionMeta {
+            lido: *opts.solido_address(),
+            manager: multisig_address,
+        },
+        *opts.max_commission_percentage(),
+    );
+    propose_instruction(
+        config,
+        opts.multisig_program_id(),
+        *opts.multisig_address(),
+        instruction,
+    )
 }

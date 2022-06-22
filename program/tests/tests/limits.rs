@@ -20,13 +20,13 @@ use solana_program_test::tokio;
 /// validator (one activating, one active but unmergeable due to a Solana bug,
 /// and one active and mergeable).
 #[tokio::test]
-async fn test_withdraw_inactive_stake_max_accounts() {
+async fn test_update_stake_account_balance_max_accounts() {
     let mut context = Context::new_with_maintainer().await;
     let validator = context.add_validator().await;
 
     // The maximum number of stake accounts per validator that we can support,
     // before WithdrawInactiveStake fails.
-    let max_accounts = 10;
+    let max_accounts = 9;
 
     for i in 0..=max_accounts {
         let amount = Lamports(2_000_000_000);
@@ -41,7 +41,7 @@ async fn test_withdraw_inactive_stake_max_accounts() {
         context.fund(stake_account, Lamports(100_000)).await;
 
         let result = context
-            .try_withdraw_inactive_stake(validator.vote_account)
+            .try_update_stake_account_balance(validator.vote_account)
             .await;
 
         if i < max_accounts {
@@ -65,7 +65,7 @@ async fn test_max_validators_maintainers() {
 
     // The maximum number of validators that we can support, before Deposit or
     // StakeDeposit fails.
-    let max_validators: u32 = 64;
+    let max_validators: u32 = 82;
 
     let mut validator: Option<ValidatorAccounts> = None;
     for i in 0..max_validators {

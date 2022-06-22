@@ -72,16 +72,6 @@ def main() -> None:
                 'Validator vote account in form response does not match instruction.'
             )
 
-        if (
-            form_response.st_sol_account_address
-            == instruction['validator_fee_st_sol_account']
-        ):
-            print_ok('Fee stSOL account in form response matches instruction.')
-        else:
-            print_error(
-                'Fee stSOL account in form response does not match instruction.'
-            )
-
         if instruction['solido_instance'] == SOLIDO_ADDRESS:
             print_ok('Solido instance is the mainnet instance.')
         else:

@@ -22,8 +22,6 @@ class ValidatorResponse(NamedTuple):
     withdraw_authority_check: Address
     commission_check: str
     will_vote_check: str
-    st_sol_account_address: Address
-    st_sol_mint_check: Address
     added_to_keybase_check: str
     identity_name: str
     unused: str = ''

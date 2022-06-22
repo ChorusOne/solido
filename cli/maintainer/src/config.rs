@@ -248,15 +248,15 @@ cli_opt_struct! {
         #[clap(long, value_name = "int")]
         max_maintainers: u32,
 
+        /// The maximum validator fee a validator can have to be accepted by protocol.
+        #[clap(long, value_name = "int")]
+        max_commission_percentage: u8,
+
         // See also the docs section of `create-solido` in main.rs for a description
         // of the fee shares.
         /// Treasury fee share of the rewards.
         #[clap(long, value_name = "int")]
         treasury_fee_share: u32,
-
-        /// Validation fee share of the rewards.
-        #[clap(long, value_name = "int")]
-        validation_fee_share: u32,
 
         /// Developer fee share of the rewards.
         #[clap(long, value_name = "int")]
@@ -338,10 +338,6 @@ cli_opt_struct! {
         /// Address of the validator vote account.
         #[clap(long, value_name = "address")]
         validator_vote_account: Pubkey,
-
-        /// Validator stSol token account.
-        #[clap(long, value_name = "address")]
-        validator_fee_account: Pubkey,
 
         /// Multisig instance.
         #[clap(long, value_name = "address")]
@@ -455,6 +451,42 @@ cli_opt_struct! {
         /// "anytime" option is only intended for testing purposes.
         #[clap(long, value_name = "anytime/only-near-epoch-end")]
         stake_time: StakeTime => StakeTime::OnlyNearEpochEnd,
+    }
+}
+
+cli_opt_struct! {
+    DeactivateValidatorIfCommissionExceedsMaxOpts {
+        /// Address of the Solido program.
+        #[clap(long, value_name = "address")]
+        solido_program_id: Pubkey,
+
+        /// Account that stores the data for this Solido instance.
+        #[clap(long, value_name = "address")]
+        solido_address: Pubkey,
+    }
+}
+
+cli_opt_struct! {
+    SetMaxValidationCommissionOpts {
+        /// Address of the Solido program.
+        #[clap(long, value_name = "address")]
+        solido_program_id: Pubkey,
+
+        /// Account that stores the data for this Solido instance.
+        #[clap(long, value_name = "address")]
+        solido_address: Pubkey,
+
+        /// Max percent of rewards a validator can recieve (validation commission), in range [0, 100]
+        #[clap(long, value_name = "fee")]
+        max_commission_percentage: u8,
+
+        /// Multisig instance.
+        #[clap(long, value_name = "address")]
+        multisig_address: Pubkey,
+
+        /// Address of the Multisig program.
+        #[clap(long, value_name = "address")]
+        multisig_program_id: Pubkey,
     }
 }
 

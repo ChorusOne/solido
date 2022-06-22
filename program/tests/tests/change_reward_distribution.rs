@@ -27,7 +27,6 @@ async fn test_successful_change_reward_distribution() {
 
     let new_fee = RewardDistribution {
         treasury_fee: 87,
-        validation_fee: 44,
         developer_fee: 54,
         st_sol_appreciation: 122,
     };
