@@ -44,33 +44,25 @@ pub enum LidoInstruction {
         amount: Lamports,
     },
 
-    /// Withdraw a given amount of stSOL.
-    ///
-    /// Caller provides some `amount` of StLamports that are to be burned in
-    /// order to withdraw SOL.
+    /// Deprecated in favour of WithdrawV2
     Withdraw {
         #[allow(dead_code)] // but it's not
         amount: StLamports,
     },
 
-    /// Move deposits from the reserve into a stake account and delegate it to a member validator.
+    /// Deprecated in favour of StakeDepositV2
     StakeDeposit {
         #[allow(dead_code)] // but it's not
         amount: Lamports,
     },
-    /// Unstake from a validator to a new stake account.
+    /// Deprecated in favour of UnstakeV2
     Unstake {
         #[allow(dead_code)] // but it's not
         amount: Lamports,
     },
-    /// Update the exchange rate, at the beginning of the epoch.
-    ///
-    /// This can be called by anybody.
+    /// Deprecated in favour of UpdateExchangeRateV2
     UpdateExchangeRate,
 
-    /// Observe any external changes in the balances of a validator's stake accounts.
-    ///
-    /// If there is inactive balance in stake accounts, withdraw this back to the reserve.
     /// Deprecated in favour of UpdateStakeAccountBalance
     WithdrawInactiveStake,
 
@@ -82,28 +74,19 @@ pub enum LidoInstruction {
         new_reward_distribution: RewardDistribution,
     },
 
-    /// Add a new validator to the validator set.
-    ///
-    /// Requires the manager to sign.
     /// Deprecated in favour of AddValidatorV2
     AddValidator,
 
-    /// Set the `active` flag to false for a given validator.
-    ///
-    /// Requires the manager to sign.
-    ///
-    /// Deactivation initiates the validator removal process:
-    ///
-    /// * It prevents new funds from being staked with the validator.
-    /// * It signals to the maintainer bot to start unstaking from this validator.
-    ///
-    /// Once there are no more delegations to this validator, and it has no
-    /// unclaimed fee credits, then the validator can be removed.
+    /// Deprecated in favour of DeactivateValidatorV2
     DeactivateValidator,
 
+    /// Deprecated in favour of RemoveValidatorV2
     RemoveValidator,
+    /// Deprecated in favour of AddMaintainerV2
     AddMaintainer,
+    /// Deprecated in favour of RemoveMaintainerV2
     RemoveMaintainer,
+    /// Deprecated in favour of MergeStakeV2
     MergeStake,
 
     /// Observe any external changes in the balances of a validator's stake accounts.
@@ -132,6 +115,51 @@ pub enum LidoInstruction {
         #[allow(dead_code)] // but it's not
         max_commission_percentage: u8, // percent in [0, 100]
     },
+
+    /// Move deposits from the reserve into a stake account and delegate it to a member validator.
+    StakeDepositV2 {
+        #[allow(dead_code)] // but it's not
+        amount: Lamports,
+    },
+
+    /// Unstake from a validator to a new stake account.
+    UnstakeV2 {
+        #[allow(dead_code)] // but it's not
+        amount: Lamports,
+    },
+
+    /// Update the exchange rate, at the beginning of the epoch.
+    ///
+    /// This can be called by anybody.
+    UpdateExchangeRateV2,
+
+    /// Withdraw a given amount of stSOL.
+    ///
+    /// Caller provides some `amount` of StLamports that are to be burned in
+    /// order to withdraw SOL.
+    WithdrawV2 {
+        #[allow(dead_code)] // but it's not
+        amount: StLamports,
+    },
+
+    RemoveValidatorV2,
+
+    /// Set the `active` flag to false for a given validator.
+    ///
+    /// Requires the manager to sign.
+    ///
+    /// Deactivation initiates the validator removal process:
+    ///
+    /// * It prevents new funds from being staked with the validator.
+    /// * It signals to the maintainer bot to start unstaking from this validator.
+    ///
+    /// Once there are no more delegations to this validator, and it has no
+    /// unclaimed fee credits, then the validator can be removed.
+    DeactivateValidatorV2,
+
+    AddMaintainerV2,
+    RemoveMaintainerV2,
+    MergeStakeV2,
 }
 
 impl LidoInstruction {
@@ -171,6 +199,15 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
+        pub validator_list {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub maintainer_list {
+            is_signer: false,
+            is_writable: true,
+        },
+
         const sysvar_rent = sysvar::rent::id(),
         const spl_token = spl_token::id(),
     }
@@ -251,7 +288,7 @@ pub fn deposit(
 }
 
 accounts_struct! {
-    WithdrawAccountsMeta, WithdrawAccountsInfo {
+    WithdrawAccountsMetaV2, WithdrawAccountsInfoV2 {
         pub lido {
             is_signer: false,
             // Needs to be writable for us to update the metrics.
@@ -294,6 +331,11 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
+        pub validator_list {
+            is_signer: false,
+            is_writable: true,
+        },
+
         const spl_token = spl_token::id(),
         const sysvar_clock = sysvar::clock::id(),
         const system_program = system_program::id(),
@@ -303,10 +345,10 @@ accounts_struct! {
 
 pub fn withdraw(
     program_id: &Pubkey,
-    accounts: &WithdrawAccountsMeta,
+    accounts: &WithdrawAccountsMetaV2,
     amount: StLamports,
 ) -> Instruction {
-    let data = LidoInstruction::Withdraw { amount };
+    let data = LidoInstruction::WithdrawV2 { amount };
     Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
@@ -315,10 +357,10 @@ pub fn withdraw(
 }
 
 accounts_struct! {
-    StakeDepositAccountsMeta, StakeDepositAccountsInfo {
+    StakeDepositAccountsMetaV2, StakeDepositAccountsInfoV2 {
         pub lido {
             is_signer: false,
-            is_writable: true,
+            is_writable: false,
         },
         pub maintainer {
             is_signer: true,
@@ -359,6 +401,15 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
+        pub validator_list {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub maintainer_list {
+            is_signer: false,
+            is_writable: false,
+        },
+
         const sysvar_clock = sysvar::clock::id(),
         const system_program = system_program::id(),
         const sysvar_rent = sysvar::rent::id(),
@@ -370,10 +421,10 @@ accounts_struct! {
 
 pub fn stake_deposit(
     program_id: &Pubkey,
-    accounts: &StakeDepositAccountsMeta,
+    accounts: &StakeDepositAccountsMetaV2,
     amount: Lamports,
 ) -> Instruction {
-    let data = LidoInstruction::StakeDeposit { amount };
+    let data = LidoInstruction::StakeDepositV2 { amount };
     Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
@@ -382,10 +433,10 @@ pub fn stake_deposit(
 }
 
 accounts_struct! {
-    UnstakeAccountsMeta, UnstakeAccountsInfo {
+    UnstakeAccountsMetaV2, UnstakeAccountsInfoV2 {
         pub lido {
             is_signer: false,
-            is_writable: true,
+            is_writable: false,
         },
         pub maintainer {
             is_signer: true,
@@ -416,6 +467,15 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
+        pub validator_list {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub maintainer_list {
+            is_signer: false,
+            is_writable: false,
+        },
+
         // Required to call `solana_program::stake::instruction::deactivate_stake`.
         const sysvar_clock = sysvar::clock::id(),
         // Required to call cross-program.
@@ -427,10 +487,10 @@ accounts_struct! {
 
 pub fn unstake(
     program_id: &Pubkey,
-    accounts: &UnstakeAccountsMeta,
+    accounts: &UnstakeAccountsMetaV2,
     amount: Lamports,
 ) -> Instruction {
-    let data = LidoInstruction::Unstake { amount };
+    let data = LidoInstruction::UnstakeV2 { amount };
     Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
@@ -439,7 +499,7 @@ pub fn unstake(
 }
 
 accounts_struct! {
-    UpdateExchangeRateAccountsMeta, UpdateExchangeRateAccountsInfo {
+    UpdateExchangeRateAccountsMetaV2, UpdateExchangeRateAccountsInfoV2 {
         pub lido {
             is_signer: false,
             is_writable: true,
@@ -452,6 +512,11 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
+        pub validator_list {
+            is_signer: false,
+            is_writable: false,
+        },
+
         const sysvar_clock = sysvar::clock::id(),
         const sysvar_rent = sysvar::rent::id(),
     }
@@ -459,12 +524,12 @@ accounts_struct! {
 
 pub fn update_exchange_rate(
     program_id: &Pubkey,
-    accounts: &UpdateExchangeRateAccountsMeta,
+    accounts: &UpdateExchangeRateAccountsMetaV2,
 ) -> Instruction {
     Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
-        data: LidoInstruction::UpdateExchangeRate.to_vec(),
+        data: LidoInstruction::UpdateExchangeRateV2.to_vec(),
     }
 }
 
@@ -588,31 +653,35 @@ pub fn change_reward_distribution(
 }
 
 accounts_struct! {
-    RemoveValidatorMeta, RemoveValidatorInfo {
+    RemoveValidatorMetaV2, RemoveValidatorInfoV2 {
         pub lido {
             is_signer: false,
-            is_writable: true,
+            is_writable: false,
         },
         pub validator_vote_account_to_remove {
             is_signer: false,
             is_writable: false,
         },
+        pub validator_list {
+            is_signer: false,
+            is_writable: true,
+        },
     }
 }
 
-pub fn remove_validator(program_id: &Pubkey, accounts: &RemoveValidatorMeta) -> Instruction {
+pub fn remove_validator(program_id: &Pubkey, accounts: &RemoveValidatorMetaV2) -> Instruction {
     Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
-        data: LidoInstruction::RemoveValidator.to_vec(),
+        data: LidoInstruction::RemoveValidatorV2.to_vec(),
     }
 }
 
 accounts_struct! {
-    DeactivateValidatorMeta, DeactivateValidatorInfo {
+    DeactivateValidatorMetaV2, DeactivateValidatorInfoV2 {
         pub lido {
             is_signer: false,
-            is_writable: true,
+            is_writable: false,
         },
         pub manager {
             is_signer: true,
@@ -622,17 +691,21 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
+        pub validator_list {
+            is_signer: false,
+            is_writable: true,
+        },
     }
 }
 
 pub fn deactivate_validator(
     program_id: &Pubkey,
-    accounts: &DeactivateValidatorMeta,
+    accounts: &DeactivateValidatorMetaV2,
 ) -> Instruction {
     Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
-        data: LidoInstruction::DeactivateValidator.to_vec(),
+        data: LidoInstruction::DeactivateValidatorV2.to_vec(),
     }
 }
 
@@ -671,10 +744,10 @@ pub fn claim_validator_fee(program_id: &Pubkey, accounts: &ClaimValidatorFeeMeta
 }
 
 accounts_struct! {
-    AddMaintainerMeta, AddMaintainerInfo {
+    AddMaintainerMetaV2, AddMaintainerInfoV2 {
         pub lido {
             is_signer: false,
-            is_writable: true,
+            is_writable: false,
         },
         pub manager {
             is_signer: true,
@@ -684,22 +757,27 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
+        pub maintainer_list {
+            is_signer: false,
+            is_writable: true,
+        },
+
     }
 }
 
-pub fn add_maintainer(program_id: &Pubkey, accounts: &AddMaintainerMeta) -> Instruction {
+pub fn add_maintainer(program_id: &Pubkey, accounts: &AddMaintainerMetaV2) -> Instruction {
     Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
-        data: LidoInstruction::AddMaintainer.to_vec(),
+        data: LidoInstruction::AddMaintainerV2.to_vec(),
     }
 }
 
 accounts_struct! {
-    RemoveMaintainerMeta, RemoveMaintainerInfo {
+    RemoveMaintainerMetaV2, RemoveMaintainerInfoV2 {
         pub lido {
             is_signer: false,
-            is_writable: true,
+            is_writable: false,
         },
         pub manager {
             is_signer: true,
@@ -709,22 +787,27 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
+        pub maintainer_list {
+            is_signer: false,
+            is_writable: true,
+        },
+
     }
 }
 
-pub fn remove_maintainer(program_id: &Pubkey, accounts: &RemoveMaintainerMeta) -> Instruction {
+pub fn remove_maintainer(program_id: &Pubkey, accounts: &RemoveMaintainerMetaV2) -> Instruction {
     Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
-        data: LidoInstruction::RemoveMaintainer.to_vec(),
+        data: LidoInstruction::RemoveMaintainerV2.to_vec(),
     }
 }
 
 accounts_struct! {
-    MergeStakeMeta, MergeStakeInfo {
+    MergeStakeMetaV2, MergeStakeInfoV2 {
         pub lido {
             is_signer: false,
-            is_writable: true,
+            is_writable: false,
         },
         pub validator_vote_account {
             is_signer: false,
@@ -747,18 +830,22 @@ accounts_struct! {
             is_signer: false,
             is_writable: false,
         },
+        pub validator_list {
+            is_signer: false,
+            is_writable: true,
+        },
         const sysvar_clock = sysvar::clock::id(),
         const stake_history = stake_history::id(),
         const stake_program = stake_program::program::id(),
     }
 }
 
-pub fn merge_stake(program_id: &Pubkey, accounts: &MergeStakeMeta) -> Instruction {
+pub fn merge_stake(program_id: &Pubkey, accounts: &MergeStakeMetaV2) -> Instruction {
     Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
         // this can fail on OutOfMemory
-        data: LidoInstruction::MergeStake.try_to_vec().unwrap(), // This should never fail.
+        data: LidoInstruction::MergeStakeV2.try_to_vec().unwrap(), // This should never fail.
     }
 }
 
@@ -766,7 +853,7 @@ accounts_struct! {
     AddValidatorMetaV2, AddValidatorInfoV2 {
         pub lido {
             is_signer: false,
-            is_writable: true,
+            is_writable: false,
         },
         pub manager {
             is_signer: true,
@@ -775,6 +862,10 @@ accounts_struct! {
         pub validator_vote_account {
             is_signer: false,
             is_writable: false,
+        },
+        pub validator_list {
+            is_signer: false,
+            is_writable: true,
         },
     }
 }
@@ -839,6 +930,10 @@ accounts_struct! {
             // Is writable due to fee mint (spl_token::instruction::mint_to) to developer
             is_writable: true,
         },
+        pub validator_list {
+            is_signer: false,
+            is_writable: true,
+        },
 
         // Needed for minting rewards.
         const spl_token_program = spl_token::id(),
@@ -878,11 +973,15 @@ accounts_struct! {
     DeactivateValidatorIfCommissionExceedsMaxInfo {
         pub lido {
             is_signer: false,
-            is_writable: true,
+            is_writable: false,
         },
         pub validator_vote_account_to_deactivate {
             is_signer: false,
             is_writable: false,
+        },
+        pub validator_list {
+            is_signer: false,
+            is_writable: true,
         },
     }
 }

@@ -3,6 +3,7 @@
 
 //! Holds a test context, which makes it easier to test with a Solido instance set up.
 
+use borsh::BorshSerialize;
 use num_traits::cast::FromPrimitive;
 use rand::prelude::StdRng;
 use rand::SeedableRng;
@@ -28,13 +29,14 @@ use solana_vote_program::vote_state::{VoteInit, VoteState};
 use std::sync::Once;
 
 use anker::error::AnkerError;
-use lido::account_map::PubkeyAndEntry;
 use lido::processor::StakeType;
 use lido::stake_account::StakeAccount;
 use lido::token::{Lamports, StLamports};
 use lido::{error::LidoError, instruction, RESERVE_ACCOUNT, STAKE_AUTHORITY};
 use lido::{
-    state::{FeeRecipients, Lido, RewardDistribution, Validator},
+    state::{
+        AccountList, FeeRecipients, Lido, ListEntry, Maintainer, RewardDistribution, Validator,
+    },
     MINT_AUTHORITY,
 };
 
@@ -85,6 +87,8 @@ pub struct Context {
     pub st_sol_mint: Pubkey,
     pub maintainer: Option<Keypair>,
     pub validator: Option<ValidatorAccounts>,
+    pub validator_list: Keypair,
+    pub maintainer_list: Keypair,
 
     pub treasury_st_sol_account: Pubkey,
     pub developer_st_sol_account: Pubkey,
@@ -199,6 +203,13 @@ pub enum StakeDeposit {
     Merge,
 }
 
+#[derive(PartialEq, Debug)]
+pub struct SolidoWithLists {
+    pub lido: Lido,
+    pub validators: AccountList<Validator>,
+    pub maintainers: AccountList<Maintainer>,
+}
+
 impl Context {
     /// Set up a new test context with an initialized Solido instance.
     ///
@@ -207,6 +218,8 @@ impl Context {
         let mut deterministic_keypair = DeterministicKeypairGen::new();
         let manager = deterministic_keypair.new_keypair();
         let solido = deterministic_keypair.new_keypair();
+        let validator_list = deterministic_keypair.new_keypair();
+        let maintainer_list = deterministic_keypair.new_keypair();
 
         let reward_distribution = RewardDistribution {
             treasury_fee: 3,
@@ -259,6 +272,8 @@ impl Context {
             nonce: 0,
             manager,
             solido,
+            validator_list,
+            maintainer_list,
             st_sol_mint: Pubkey::default(),
             maintainer: None,
             validator: None,
@@ -283,12 +298,18 @@ impl Context {
             result.create_st_sol_account(developer_owner.pubkey()).await;
 
         let max_validators = 10_000;
-        let max_maintainers = 1000;
-        let solido_size = Lido::calculate_size(max_validators, max_maintainers);
+        let max_maintainers = 10_000;
+        let solido_size = Lido::calculate_size();
         let rent = result.context.banks_client.get_rent().await.unwrap();
         let rent_solido = rent.minimum_balance(solido_size);
 
         let rent_reserve = rent.minimum_balance(0);
+        let validator_list_size = AccountList::<Validator>::required_bytes(max_validators);
+        let rent_validator_list = rent.minimum_balance(validator_list_size);
+
+        let maintainer_list_size = AccountList::<Maintainer>::required_bytes(max_maintainers);
+        let rent_maintainer_list = rent.minimum_balance(maintainer_list_size);
+
         result
             .fund(result.reserve_address, Lamports(rent_reserve))
             .await;
@@ -304,6 +325,20 @@ impl Context {
                     solido_size as u64,
                     &id(),
                 ),
+                system_instruction::create_account(
+                    &payer,
+                    &result.validator_list.pubkey(),
+                    rent_validator_list,
+                    validator_list_size as u64,
+                    &id(),
+                ),
+                system_instruction::create_account(
+                    &payer,
+                    &result.maintainer_list.pubkey(),
+                    rent_maintainer_list,
+                    maintainer_list_size as u64,
+                    &id(),
+                ),
                 instruction::initialize(
                     &id(),
                     result.reward_distribution.clone(),
@@ -317,10 +352,16 @@ impl Context {
                         treasury_account: result.treasury_st_sol_account,
                         developer_account: result.developer_st_sol_account,
                         reserve_account: result.reserve_address,
+                        validator_list: result.validator_list.pubkey(),
+                        maintainer_list: result.maintainer_list.pubkey(),
                     },
                 ),
             ],
-            vec![&result.solido],
+            vec![
+                &result.solido,
+                &result.validator_list,
+                &result.maintainer_list,
+            ],
         )
         .await
         .expect("Failed to initialize Solido instance.");
@@ -658,10 +699,11 @@ impl Context {
             &mut self.context,
             &[lido::instruction::add_maintainer(
                 &id(),
-                &lido::instruction::AddMaintainerMeta {
+                &lido::instruction::AddMaintainerMetaV2 {
                     lido: self.solido.pubkey(),
                     manager: self.manager.pubkey(),
                     maintainer,
+                    maintainer_list: self.maintainer_list.pubkey(),
                 },
             )],
             vec![&self.manager],
@@ -683,10 +725,11 @@ impl Context {
             &mut self.context,
             &[lido::instruction::remove_maintainer(
                 &id(),
-                &lido::instruction::RemoveMaintainerMeta {
+                &lido::instruction::RemoveMaintainerMetaV2 {
                     lido: self.solido.pubkey(),
                     manager: self.manager.pubkey(),
                     maintainer,
+                    maintainer_list: self.maintainer_list.pubkey(),
                 },
             )],
             vec![&self.manager],
@@ -706,6 +749,7 @@ impl Context {
                     lido: self.solido.pubkey(),
                     manager: self.manager.pubkey(),
                     validator_vote_account: accounts.vote_account,
+                    validator_list: self.validator_list.pubkey(),
                 },
             )],
             vec![&self.manager],
@@ -741,10 +785,11 @@ impl Context {
             &mut self.context,
             &[lido::instruction::deactivate_validator(
                 &id(),
-                &lido::instruction::DeactivateValidatorMeta {
+                &lido::instruction::DeactivateValidatorMetaV2 {
                     lido: self.solido.pubkey(),
                     manager: self.manager.pubkey(),
                     validator_vote_account_to_deactivate: vote_account,
+                    validator_list: self.validator_list.pubkey(),
                 },
             )],
             vec![&self.manager],
@@ -758,9 +803,10 @@ impl Context {
             &mut self.context,
             &[lido::instruction::remove_validator(
                 &id(),
-                &lido::instruction::RemoveValidatorMeta {
+                &lido::instruction::RemoveValidatorMetaV2 {
                     lido: self.solido.pubkey(),
                     validator_vote_account_to_remove: vote_account,
+                    validator_list: self.validator_list.pubkey(),
                 },
             )],
             vec![],
@@ -822,7 +868,7 @@ impl Context {
             &mut self.context,
             &[instruction::withdraw(
                 &id(),
-                &instruction::WithdrawAccountsMeta {
+                &instruction::WithdrawAccountsMetaV2 {
                     lido: self.solido.pubkey(),
                     st_sol_mint: self.st_sol_mint,
                     st_sol_account_owner: user.pubkey(),
@@ -831,6 +877,7 @@ impl Context {
                     source_stake_account,
                     destination_stake_account: new_stake.pubkey(),
                     stake_authority: self.stake_authority,
+                    validator_list: self.validator_list.pubkey(),
                 },
                 amount,
             )],
@@ -869,27 +916,27 @@ impl Context {
     ) -> transport::Result<Pubkey> {
         let solido = self.get_solido().await;
 
-        let validator_entry = solido
+        let validator = solido
             .validators
-            .get(&validator_vote_account)
+            .find(&validator_vote_account)
             .expect("Trying to stake with a non-member validator.");
 
-        let (stake_account_end, _) = validator_entry.find_stake_account_address(
+        let (stake_account_end, _) = validator.find_stake_account_address(
             &id(),
             &self.solido.pubkey(),
-            validator_entry.entry.stake_seeds.end,
+            validator.stake_seeds.end,
             StakeType::Stake,
         );
 
-        let (stake_account_merge_into, _) = validator_entry.find_stake_account_address(
+        let (stake_account_merge_into, _) = validator.find_stake_account_address(
             &id(),
             &self.solido.pubkey(),
             match approach {
-                StakeDeposit::Append => validator_entry.entry.stake_seeds.end,
+                StakeDeposit::Append => validator.stake_seeds.end,
                 // We do a wrapping sub here, so we can call stake-merge initially,
                 // when end is 0, such that the account to merge into is not the
                 // same as the end account.
-                StakeDeposit::Merge => validator_entry.entry.stake_seeds.end.wrapping_sub(1),
+                StakeDeposit::Merge => validator.stake_seeds.end.wrapping_sub(1),
             },
             StakeType::Stake,
         );
@@ -903,7 +950,7 @@ impl Context {
             &mut self.context,
             &[instruction::stake_deposit(
                 &id(),
-                &instruction::StakeDepositAccountsMeta {
+                &instruction::StakeDepositAccountsMetaV2 {
                     lido: self.solido.pubkey(),
                     maintainer: maintainer.pubkey(),
                     validator_vote_account,
@@ -911,6 +958,8 @@ impl Context {
                     stake_account_merge_into,
                     stake_account_end,
                     stake_authority: self.stake_authority,
+                    validator_list: self.validator_list.pubkey(),
+                    maintainer_list: self.maintainer_list.pubkey(),
                 },
                 amount,
             )],
@@ -941,18 +990,18 @@ impl Context {
     ) -> transport::Result<()> {
         // Where the new stake will live.
         let solido = self.get_solido().await;
-        let validator = solido.validators.get(&validator_vote_account).unwrap();
+        let validator = solido.validators.find(&validator_vote_account).unwrap();
 
         let (source_stake_account, _) = validator.find_stake_account_address(
             &id(),
             &self.solido.pubkey(),
-            validator.entry.stake_seeds.begin,
+            validator.stake_seeds.begin,
             StakeType::Stake,
         );
         let (destination_unstake_account, _) = validator.find_stake_account_address(
             &id(),
             &self.solido.pubkey(),
-            validator.entry.unstake_seeds.end,
+            validator.unstake_seeds.end,
             StakeType::Unstake,
         );
 
@@ -960,13 +1009,15 @@ impl Context {
             &mut self.context,
             &[instruction::unstake(
                 &id(),
-                &instruction::UnstakeAccountsMeta {
+                &instruction::UnstakeAccountsMetaV2 {
                     lido: self.solido.pubkey(),
                     validator_vote_account,
                     source_stake_account,
                     destination_unstake_account,
                     stake_authority: self.stake_authority,
                     maintainer: self.maintainer.as_ref().unwrap().pubkey(),
+                    validator_list: self.validator_list.pubkey(),
+                    maintainer_list: self.maintainer_list.pubkey(),
                 },
                 amount,
             )],
@@ -1011,10 +1062,11 @@ impl Context {
             &mut self.context,
             &[instruction::update_exchange_rate(
                 &id(),
-                &instruction::UpdateExchangeRateAccountsMeta {
+                &instruction::UpdateExchangeRateAccountsMetaV2 {
                     lido: self.solido.pubkey(),
                     reserve: self.reserve_address,
                     st_sol_mint: self.st_sol_mint,
+                    validator_list: self.validator_list.pubkey(),
                 },
             )],
             vec![],
@@ -1033,7 +1085,7 @@ impl Context {
     /// Returns the address that stake was merged into.
     pub async fn try_merge_stake(
         &mut self,
-        validator: &PubkeyAndEntry<Validator>,
+        validator: &Validator,
         from_seed: u64,
         to_seed: u64,
     ) -> transport::Result<Pubkey> {
@@ -1055,12 +1107,13 @@ impl Context {
             &mut self.context,
             &[instruction::merge_stake(
                 &id(),
-                &instruction::MergeStakeMeta {
+                &instruction::MergeStakeMetaV2 {
                     lido: self.solido.pubkey(),
-                    validator_vote_account: validator.pubkey,
+                    validator_vote_account: validator.pubkey(),
                     stake_authority: self.stake_authority,
                     from_stake: from_stake_account,
                     to_stake: to_stake_account,
+                    validator_list: self.validator_list.pubkey(),
                 },
             )],
             vec![],
@@ -1073,7 +1126,7 @@ impl Context {
     /// Merge two accounts of a given validator.
     pub async fn merge_stake(
         &mut self,
-        validator: &PubkeyAndEntry<Validator>,
+        validator: &Validator,
         from_seed: u64,
         to_seed: u64,
     ) -> Pubkey {
@@ -1089,16 +1142,16 @@ impl Context {
         validator_vote_account: Pubkey,
     ) -> transport::Result<()> {
         let solido = self.get_solido().await;
-        let validator = solido.validators.get(&validator_vote_account).unwrap();
+        let validator = solido.validators.find(&validator_vote_account).unwrap();
 
         let mut stake_account_addrs: Vec<Pubkey> = Vec::new();
 
-        stake_account_addrs.extend(validator.entry.stake_seeds.into_iter().map(|seed| {
+        stake_account_addrs.extend(validator.stake_seeds.into_iter().map(|seed| {
             validator
                 .find_stake_account_address(&id(), &self.solido.pubkey(), seed, StakeType::Stake)
                 .0
         }));
-        stake_account_addrs.extend(validator.entry.unstake_seeds.into_iter().map(|seed| {
+        stake_account_addrs.extend(validator.unstake_seeds.into_iter().map(|seed| {
             validator
                 .find_stake_account_address(&id(), &self.solido.pubkey(), seed, StakeType::Unstake)
                 .0
@@ -1118,6 +1171,7 @@ impl Context {
                     mint_authority: self.mint_authority,
                     treasury_st_sol_account: self.treasury_st_sol_account,
                     developer_st_sol_account: self.developer_st_sol_account,
+                    validator_list: self.validator_list.pubkey(),
                 },
             )],
             vec![],
@@ -1152,6 +1206,14 @@ impl Context {
         self.try_get_account(address)
             .await
             .unwrap_or_else(|| panic!("Account {} does not exist.", address))
+    }
+
+    pub async fn get_account_list<T>(&mut self, address: Pubkey) -> Option<AccountList<T>>
+    where
+        T: ListEntry + Clone + Default + BorshSerialize,
+    {
+        let mut list_account = self.get_account(address).await;
+        AccountList::<T>::from(&mut list_account.data).ok()
     }
 
     pub async fn get_sol_balance(&mut self, address: Pubkey) -> Lamports {
@@ -1194,12 +1256,26 @@ impl Context {
         .expect("Failed to transfer tokens.");
     }
 
-    pub async fn get_solido(&mut self) -> Lido {
+    pub async fn get_solido(&mut self) -> SolidoWithLists {
         let lido_account = self.get_account(self.solido.pubkey()).await;
         // This returns a Result because it can cause an IO error, but that should
         // not happen in the test environment. (And if it does, then the test just
         // fails.)
-        try_from_slice_unchecked::<Lido>(lido_account.data.as_slice()).unwrap()
+        let lido = try_from_slice_unchecked::<Lido>(lido_account.data.as_slice()).unwrap();
+        let validators = self
+            .get_account_list::<Validator>(lido.validator_list)
+            .await
+            .unwrap_or(AccountList::<Validator>::new_fill_default(0));
+        let maintainers = self
+            .get_account_list::<Maintainer>(lido.maintainer_list)
+            .await
+            .unwrap_or(AccountList::<Maintainer>::new_fill_default(0));
+
+        SolidoWithLists {
+            lido,
+            validators,
+            maintainers,
+        }
     }
 
     pub async fn get_rent(&mut self) -> Rent {
@@ -1242,7 +1318,7 @@ impl Context {
 
     pub async fn get_stake_account_from_seed(
         &mut self,
-        validator: &PubkeyAndEntry<Validator>,
+        validator: &Validator,
         seed: u64,
     ) -> StakeAccount {
         let (stake_address, _) = validator.find_stake_account_address(
@@ -1261,7 +1337,7 @@ impl Context {
 
     pub async fn get_unstake_account_from_seed(
         &mut self,
-        validator: &PubkeyAndEntry<Validator>,
+        validator: &Validator,
         seed: u64,
     ) -> StakeAccount {
         let (stake_address, _) = validator.find_stake_account_address(
@@ -1314,6 +1390,7 @@ impl Context {
                     &lido::instruction::DeactivateValidatorIfCommissionExceedsMaxMeta {
                         lido: self.solido.pubkey(),
                         validator_vote_account_to_deactivate: vote_account,
+                        validator_list: self.validator_list.pubkey(),
                     },
                 ),
             ],

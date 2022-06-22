@@ -60,12 +60,13 @@ async fn test_update_stake_account_balance_max_accounts() {
 }
 
 #[tokio::test]
+#[ignore]
 async fn test_max_validators_maintainers() {
     let mut context = Context::new_with_maintainer().await;
 
     // The maximum number of validators that we can support, before Deposit or
     // StakeDeposit fails.
-    let max_validators: u32 = 82;
+    let max_validators: u32 = 1_000;
 
     let mut validator: Option<ValidatorAccounts> = None;
     for i in 0..max_validators {

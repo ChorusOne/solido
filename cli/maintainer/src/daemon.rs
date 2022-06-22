@@ -105,7 +105,7 @@ impl MaintenanceMetrics {
                     Metric::new(self.transactions_update_exchange_rate)
                         .with_label("operation", "UpdateExchangeRate".to_string()),
                     Metric::new(self.transactions_update_stake_account_balance)
-                        .with_label("operation", "WithdrawInactiveStake".to_string()),
+                        .with_label("operation", "UpdateStakeAccountBalance".to_string()),
                     Metric::new(self.transactions_merge_stake)
                         .with_label("operation", "MergeStake".to_string()),
                     Metric::new(self.transactions_unstake_from_inactive_validator)

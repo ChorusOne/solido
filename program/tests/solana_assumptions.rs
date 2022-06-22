@@ -152,7 +152,7 @@ async fn test_deactivating_stake_earns_rewards() {
     // does not prevent rewards.
     assert_eq!(rewards_inactive, Lamports(0));
     assert_eq!(rewards_active, Lamports(19_974_887_558));
-    assert_eq!(rewards_deactivating, Lamports(19_974_887_558));
+    assert_eq!(rewards_deactivating, Lamports(19_974_887_557));
 }
 
 #[tokio::test]

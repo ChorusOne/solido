@@ -6,6 +6,7 @@ use testlib::{assert_error_code, assert_solido_error};
 
 use lido::error::LidoError;
 use lido::processor::StakeType;
+use lido::state::ListEntry;
 use lido::token::Lamports;
 use solana_program_test::tokio;
 use solana_sdk::signer::Signer;
@@ -20,7 +21,7 @@ async fn test_stake_deposit_append() {
 
     // Sanity check before we start: the validator should have zero balance in zero stake accounts.
     let solido_before = context.get_solido().await;
-    let validator_before = &solido_before.validators.entries[0].entry;
+    let validator_before = &solido_before.validators.entries[0];
     assert_eq!(validator_before.stake_accounts_balance, Lamports(0));
     assert_eq!(validator_before.stake_seeds.begin, 0);
     assert_eq!(validator_before.stake_seeds.end, 0);
@@ -46,7 +47,7 @@ async fn test_stake_deposit_append() {
     // has balance in a stake account.
     let solido_after = context.get_solido().await;
 
-    let validator_after = &solido_after.validators.entries[0].entry;
+    let validator_after = &solido_after.validators.entries[0];
     assert_eq!(
         validator_after.stake_accounts_balance,
         TEST_STAKE_DEPOSIT_AMOUNT
@@ -96,7 +97,7 @@ async fn test_stake_deposit_merge() {
     // We should also have recorded in the Solido state that this validator now
     // has balance in a stake account.
     let solido_after = context.get_solido().await;
-    let validator_after = &solido_after.validators.entries[0].entry;
+    let validator_after = &solido_after.validators.entries[0];
     assert_eq!(
         validator_after.stake_accounts_balance,
         (TEST_STAKE_DEPOSIT_AMOUNT * 2).unwrap(),
@@ -166,7 +167,7 @@ async fn test_stake_deposit_succeeds_despite_donation() {
     context.deposit(TEST_DEPOSIT_AMOUNT).await;
     context
         .stake_deposit(
-            validator.pubkey,
+            validator.pubkey(),
             StakeDeposit::Append,
             TEST_STAKE_DEPOSIT_AMOUNT,
         )
@@ -174,15 +175,17 @@ async fn test_stake_deposit_succeeds_despite_donation() {
 
     // The state does not record the additional balance yet though.
     let solido = context.get_solido().await;
-    let validator_entry = &solido.validators.entries[0].entry;
+    let validator_entry = &solido.validators.entries[0];
     assert_eq!(
         validator_entry.stake_accounts_balance,
         TEST_STAKE_DEPOSIT_AMOUNT
     );
 
-    context.update_stake_account_balance(validator.pubkey).await;
+    context
+        .update_stake_account_balance(validator.pubkey())
+        .await;
     let solido = context.get_solido().await;
-    let validator_entry = &solido.validators.entries[0].entry;
+    let validator_entry = &solido.validators.entries[0];
     assert_eq!(
         validator_entry.stake_accounts_balance,
         (TEST_STAKE_DEPOSIT_AMOUNT + Lamports(107_000_000)).unwrap()

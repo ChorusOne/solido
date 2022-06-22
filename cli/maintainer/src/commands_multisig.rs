@@ -28,8 +28,8 @@ use solana_sdk::sysvar;
 
 use lido::{
     instruction::{
-        AddMaintainerMeta, AddValidatorMetaV2, ChangeRewardDistributionMeta,
-        DeactivateValidatorMeta, LidoInstruction, RemoveMaintainerMeta,
+        AddMaintainerMetaV2, AddValidatorMetaV2, ChangeRewardDistributionMeta,
+        DeactivateValidatorMetaV2, LidoInstruction, RemoveMaintainerMetaV2,
         SetMaxValidationCommissionMeta,
     },
     state::{FeeRecipients, Lido, RewardDistribution},
@@ -1076,7 +1076,7 @@ fn try_parse_solido_instruction(
             })
         }
         LidoInstruction::DeactivateValidator => {
-            let accounts = DeactivateValidatorMeta::try_from_slice(&instr.accounts)?;
+            let accounts = DeactivateValidatorMetaV2::try_from_slice(&instr.accounts)?;
             ParsedInstruction::SolidoInstruction(SolidoInstruction::DeactivateValidator {
                 solido_instance: accounts.lido,
                 manager: accounts.manager,
@@ -1084,7 +1084,7 @@ fn try_parse_solido_instruction(
             })
         }
         LidoInstruction::AddMaintainer => {
-            let accounts = AddMaintainerMeta::try_from_slice(&instr.accounts)?;
+            let accounts = AddMaintainerMetaV2::try_from_slice(&instr.accounts)?;
             ParsedInstruction::SolidoInstruction(SolidoInstruction::AddMaintainer {
                 solido_instance: accounts.lido,
                 manager: accounts.manager,
@@ -1092,7 +1092,7 @@ fn try_parse_solido_instruction(
             })
         }
         LidoInstruction::RemoveMaintainer => {
-            let accounts = RemoveMaintainerMeta::try_from_slice(&instr.accounts)?;
+            let accounts = RemoveMaintainerMetaV2::try_from_slice(&instr.accounts)?;
             ParsedInstruction::SolidoInstruction(SolidoInstruction::RemoveMaintainer {
                 solido_instance: accounts.lido,
                 manager: accounts.manager,

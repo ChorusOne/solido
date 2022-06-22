@@ -1,4 +1,5 @@
 use lido::error::LidoError;
+use lido::state::ListEntry;
 
 use solana_program_test::tokio;
 
@@ -14,18 +15,18 @@ async fn test_set_max_commission_percentage() {
     let result = context.try_set_max_commission_percentage(context.max_commission_percentage + 1);
     assert_eq!(result.await.is_ok(), true);
 
-    let solido = context.get_solido().await;
+    let solido = context.get_solido().await.lido;
     assert_eq!(
         solido.max_commission_percentage,
         context.max_commission_percentage + 1
     );
 
-    let result = context.try_deactivate_validator_if_commission_exceeds_max(validator.pubkey);
+    let result = context.try_deactivate_validator_if_commission_exceeds_max(validator.pubkey());
     assert_eq!(result.await.is_ok(), true);
 
     // check validator is not deactivated
     let validator = &context.get_solido().await.validators.entries[0];
-    assert_eq!(validator.entry.active, true);
+    assert_eq!(validator.active, true);
 
     // Increase max_commission_percentage above 100%
     assert_solido_error!(
@@ -37,10 +38,10 @@ async fn test_set_max_commission_percentage() {
     let result = context.try_set_max_commission_percentage(context.max_commission_percentage - 1);
     assert_eq!(result.await.is_ok(), true);
 
-    let result = context.try_deactivate_validator_if_commission_exceeds_max(validator.pubkey);
+    let result = context.try_deactivate_validator_if_commission_exceeds_max(validator.pubkey());
     assert_eq!(result.await.is_ok(), true);
 
     // check validator is deactivated
     let validator = &context.get_solido().await.validators.entries[0];
-    assert_eq!(validator.entry.active, false);
+    assert_eq!(validator.active, false);
 }

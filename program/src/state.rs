@@ -3,58 +3,516 @@
 
 //! State transition types
 
+use std::fmt::Debug;
+use std::marker::PhantomData;
 use std::ops::Range;
 
 use serde::Serialize;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use solana_program::borsh::{get_instance_packed_len, try_from_slice_unchecked};
-use solana_program::clock::Clock;
 use solana_program::{
-    account_info::AccountInfo, clock::Epoch, entrypoint::ProgramResult, msg,
-    program_error::ProgramError, program_pack::Pack, pubkey::Pubkey, rent::Rent, sysvar::Sysvar,
+    account_info::AccountInfo,
+    borsh::{get_instance_packed_len, try_from_slice_unchecked},
+    clock::Clock,
+    clock::Epoch,
+    entrypoint::ProgramResult,
+    msg,
+    program_error::ProgramError,
+    program_memory::sol_memcmp,
+    program_pack::Pack,
+    program_pack::Sealed,
+    pubkey::{Pubkey, PUBKEY_BYTES},
+    rent::Rent,
+    sysvar::Sysvar,
 };
 use spl_token::state::Mint;
 
+use crate::big_vec::BigVec;
 use crate::error::LidoError;
-use crate::logic::get_reserve_available_balance;
+use crate::logic::{check_account_owner, get_reserve_available_balance};
 use crate::metrics::Metrics;
 use crate::processor::StakeType;
 use crate::token::{self, Lamports, Rational, StLamports};
 use crate::util::serialize_b58;
 use crate::{
-    account_map::{AccountMap, AccountSet, EntryConstantSize, PubkeyAndEntry},
     MINIMUM_STAKE_ACCOUNT_BALANCE, MINT_AUTHORITY, RESERVE_ACCOUNT, STAKE_AUTHORITY,
+    VALIDATOR_STAKE_ACCOUNT, VALIDATOR_UNSTAKE_ACCOUNT,
 };
-use crate::{VALIDATOR_STAKE_ACCOUNT, VALIDATOR_UNSTAKE_ACCOUNT};
 
 pub const LIDO_VERSION: u8 = 1;
 
 /// Size of a serialized `Lido` struct excluding validators and maintainers.
 ///
 /// To update this, run the tests and replace the value here with the test output.
-pub const LIDO_CONSTANT_SIZE: usize = 353;
-pub const VALIDATOR_CONSTANT_SIZE: usize = 49;
+pub const LIDO_CONSTANT_SIZE: usize = 418;
 
-pub type Validators = AccountMap<Validator>;
+/// Enum representing the account type managed by the program
+#[derive(Clone, Debug, PartialEq, Eq, BorshDeserialize, BorshSerialize, Serialize, BorshSchema)]
+pub enum AccountType {
+    /// If the account has not been initialized, the enum will be 0
+    Uninitialized,
+    Lido,
+    Validator,
+    Maintainer,
+}
 
-impl Validators {
+impl Default for AccountType {
+    fn default() -> Self {
+        AccountType::Uninitialized
+    }
+}
+
+/// Storage list for accounts in the pool.
+/// It is used to serialize account list on stake pool initialization
+#[repr(C)]
+#[derive(
+    Clone, Debug, Default, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema, Serialize,
+)]
+pub struct AccountList<T> {
+    /// Data outside of the list, separated out for cheaper deserializations
+    pub header: ListHeader<T>,
+
+    /// List of account in the pool
+    pub entries: Vec<T>,
+}
+
+pub type ValidatorList = AccountList<Validator>;
+pub type MaintainerList = AccountList<Maintainer>;
+
+/// Helper type to deserialize just the start of a ValidatorList
+#[repr(C)]
+#[derive(
+    Clone, Debug, Default, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema, Serialize,
+)]
+pub struct ListHeader<T> {
+    /// Maximum allowable number of elements
+    pub max_entries: u32,
+    /// Lido version
+    pub lido_version: u8,
+
+    pub account_type: AccountType,
+
+    phantom: PhantomData<T>,
+}
+
+/// Generic element of a list
+pub trait ListEntry: Pack + Default + Clone + BorshSerialize + PartialEq + Debug {
+    const TYPE: AccountType;
+
+    fn new(pubkey: Pubkey) -> Self;
+    fn pubkey(&self) -> Pubkey;
+
+    /// Performs a very cheap comparison, for checking if this  entry
+    /// info matches the account address.
+    /// First PUBKEY_BYTES of a ListEntry data should be the account address
+    fn memcmp_pubkey(data: &[u8], pubkey: &[u8]) -> bool {
+        sol_memcmp(&data[..PUBKEY_BYTES], pubkey, PUBKEY_BYTES) == 0
+    }
+}
+
+impl<T> AccountList<T>
+where
+    T: Default + Clone + ListEntry + BorshSerialize,
+{
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    /// Create an empty instance containing space for `max_entries` with default values
+    pub fn new_fill_default(max_entries: u32) -> Self {
+        Self {
+            header: ListHeader::<T> {
+                account_type: T::TYPE,
+                max_entries,
+                lido_version: LIDO_VERSION,
+                phantom: PhantomData,
+            },
+            entries: vec![T::default(); max_entries as usize],
+        }
+    }
+
+    /// Create a new list of accounts by coping from data. Do not use on-chain.
+    pub fn from(data: &mut [u8]) -> Result<Self, ProgramError> {
+        let (header, big_vec) = ListHeader::<T>::deserialize_vec(data)?;
+        let mut account_list = Self {
+            header,
+            entries: vec![],
+        };
+
+        for entry in big_vec.iter::<T>() {
+            account_list.entries.push(entry.clone());
+        }
+        Ok(account_list)
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &T> {
+        self.entries.iter()
+    }
+
+    fn header_size() -> usize {
+        // + 4 bytes for entries len
+        ListHeader::<T>::LEN + std::mem::size_of::<u32>()
+    }
+
+    /// Calculate the number of account entries that fit in the provided length
+    pub fn calculate_max_entries(buffer_length: usize) -> usize {
+        buffer_length.saturating_sub(Self::header_size()) / T::LEN
+    }
+
+    /// Calculate the number of bytes required for max_entries
+    pub fn required_bytes(max_entries: u32) -> usize {
+        Self::header_size() + T::LEN * max_entries as usize
+    }
+
+    /// Check if contains account with particular pubkey
+    pub fn contains(&self, pubkey: &Pubkey) -> bool {
+        self.entries.iter().any(|x| &x.pubkey() == pubkey)
+    }
+
+    /// Check if contains account with particular pubkey
+    pub fn find_mut(&mut self, pubkey: &Pubkey) -> Option<&mut T> {
+        self.entries.iter_mut().find(|x| &x.pubkey() == pubkey)
+    }
+
+    /// Check if contains account with particular pubkey
+    pub fn find(&self, pubkey: &Pubkey) -> Option<&T> {
+        self.entries.iter().find(|x| &x.pubkey() == pubkey)
+    }
+
+    /// Serialize to AccountInfo data
+    pub fn save(&self, account: &AccountInfo) -> ProgramResult {
+        BorshSerialize::serialize(self, &mut *account.data.borrow_mut())?;
+        Ok(())
+    }
+}
+
+/// Check Lido version
+pub fn check_lido_version(version: u8, account_type: AccountType) -> ProgramResult {
+    if version != LIDO_VERSION {
+        msg!(
+            "Lido version mismatch when deserializing {:?}. Current version {}, should be {}",
+            account_type,
+            version,
+            LIDO_VERSION
+        );
+        return Err(LidoError::LidoVersionMismatch.into());
+    }
+    Ok(())
+}
+
+/// Represents list of accounts.
+/// Main data structure to use on-chain for account lists
+pub struct BigVecWithHeader<'data, T> {
+    pub header: ListHeader<T>,
+    big_vec: BigVec<'data>,
+}
+
+impl<'data, T: ListEntry> BigVecWithHeader<'data, T> {
+    pub fn new(header: ListHeader<T>, big_vec: BigVec<'data>) -> Self {
+        Self { header, big_vec }
+    }
+
+    pub fn len(&self) -> u32 {
+        self.big_vec.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.big_vec.is_empty()
+    }
+
+    pub fn iter(&'data self) -> impl Iterator<Item = &'data T> {
+        self.big_vec.iter()
+    }
+
+    pub fn iter_mut(&'data mut self) -> impl Iterator<Item = &'data mut T> {
+        self.big_vec.iter_mut()
+    }
+
+    pub fn find(&'data self, pubkey: &Pubkey) -> Result<&'data T, LidoError> {
+        self.big_vec
+            .find::<T>(&pubkey.to_bytes(), T::memcmp_pubkey)
+            .ok_or(LidoError::InvalidAccountMember)
+    }
+
+    pub fn find_mut(&'data mut self, pubkey: &Pubkey) -> Result<&'data mut T, LidoError> {
+        self.big_vec
+            .find_mut::<T>(&pubkey.to_bytes(), T::memcmp_pubkey)
+            .ok_or(LidoError::InvalidAccountMember)
+    }
+
+    pub fn push(&mut self, value: T) -> ProgramResult {
+        if self.header.max_entries == self.len() {
+            return Err(LidoError::MaximumNumberOfAccountsExceeded.into());
+        }
+
+        if self.find(&value.pubkey()).is_ok() {
+            return Err(LidoError::DuplicatedEntry.into());
+        };
+        self.big_vec.push(value)
+    }
+
+    pub fn remove(&'data mut self, pubkey: &Pubkey) -> ProgramResult {
+        self.big_vec
+            .retain::<T, _>(|data| !T::memcmp_pubkey(data, &pubkey.to_bytes()))
+    }
+}
+
+impl<T: ListEntry> ListHeader<T> {
+    const LEN: usize =
+        std::mem::size_of::<u32>() + std::mem::size_of::<AccountType>() + std::mem::size_of::<u8>();
+
+    /// Extracts a slice of ListEntry types from the vec part of the AccountList
+    pub fn deserialize_mut_slice(
+        data: &mut [u8],
+        skip: usize,
+        len: usize,
+    ) -> Result<(Self, Vec<&mut T>), ProgramError> {
+        let (header, mut big_vec) = Self::deserialize_vec(data)?;
+        let account_slice = big_vec.deserialize_mut_slice::<T>(skip, len)?;
+        Ok((header, account_slice))
+    }
+
+    /// Extracts the account list into its header and internal BigVec
+    pub fn deserialize_vec(data: &mut [u8]) -> Result<(Self, BigVec), ProgramError> {
+        let mut data_mut = &data[..];
+        let header = Self::deserialize(&mut data_mut)?;
+        check_lido_version(header.lido_version, T::TYPE)?;
+
+        // check AccountType
+        if header.account_type != T::TYPE {
+            return Err(LidoError::InvalidAccountType.into());
+        }
+
+        let length = get_instance_packed_len(&header)?;
+
+        let big_vec = BigVec {
+            data: &mut data[length..],
+        };
+        Ok((header, big_vec))
+    }
+}
+
+impl ValidatorList {
     pub fn iter_active(&self) -> impl Iterator<Item = &Validator> {
-        self.iter_entries().filter(|&v| v.active)
-    }
-
-    pub fn iter_active_entries(&self) -> impl Iterator<Item = &PubkeyAndEntry<Validator>> {
-        self.entries.iter().filter(|&v| v.entry.active)
+        self.entries.iter().filter(|&v| v.active)
     }
 }
-pub type Maintainers = AccountSet;
 
-impl EntryConstantSize for Validator {
-    const SIZE: usize = VALIDATOR_CONSTANT_SIZE;
+/// NOTE: ORDER IS VERY IMPORTANT HERE, PLEASE DO NOT RE-ORDER THE FIELDS UNLESS
+/// THERE'S AN EXTREMELY GOOD REASON.
+///
+/// To save on BPF instructions, the serialized bytes are reinterpreted with an
+/// unsafe pointer cast, which means that this structure cannot have any
+/// undeclared alignment-padding in its representation.
+#[repr(C)]
+#[derive(Clone, Debug, Eq, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema, Serialize)]
+pub struct Validator {
+    /// Validator vote account address.
+    /// Do not reorder this field, it should be first in the struct
+    pub vote_account_address: Pubkey,
+
+    /// Seeds for active stake accounts.
+    pub stake_seeds: SeedRange,
+    /// Seeds for inactive stake accounts.
+    pub unstake_seeds: SeedRange,
+
+    /// Sum of the balances of the stake accounts and unstake accounts.
+    pub stake_accounts_balance: Lamports,
+
+    /// Sum of the balances of the unstake accounts.
+    pub unstake_accounts_balance: Lamports,
+
+    /// Controls if a validator is allowed to have new stake deposits.
+    /// When removing a validator, this flag should be set to `false`.
+    pub active: bool,
 }
 
-impl EntryConstantSize for () {
-    const SIZE: usize = 0;
+/// NOTE: ORDER IS VERY IMPORTANT HERE, PLEASE DO NOT RE-ORDER THE FIELDS UNLESS
+/// THERE'S AN EXTREMELY GOOD REASON.
+///
+/// To save on BPF instructions, the serialized bytes are reinterpreted with an
+/// unsafe pointer cast, which means that this structure cannot have any
+/// undeclared alignment-padding in its representation.
+#[repr(C)]
+#[derive(
+    Clone, Default, Debug, Eq, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema, Serialize,
+)]
+pub struct Maintainer {
+    /// Address of maintainer account.
+    /// Do not reorder this field, it should be first in the struct
+    pub pubkey: Pubkey,
+}
+
+impl Validator {
+    /// Return the balance in only the stake accounts, excluding the unstake accounts.
+    pub fn effective_stake_balance(&self) -> Lamports {
+        (self.stake_accounts_balance - self.unstake_accounts_balance)
+            .expect("Unstake balance cannot exceed the validator's total stake balance.")
+    }
+
+    pub fn observe_balance(observed: Lamports, tracked: Lamports, info: &str) -> ProgramResult {
+        if observed < tracked {
+            msg!(
+                "{}: observed balance of {} is less than tracked balance of {}.",
+                info,
+                observed,
+                tracked
+            );
+            msg!("This should not happen, aborting ...");
+            return Err(LidoError::ValidatorBalanceDecreased.into());
+        }
+        Ok(())
+    }
+
+    pub fn has_stake_accounts(&self) -> bool {
+        self.stake_seeds.begin != self.stake_seeds.end
+    }
+    pub fn has_unstake_accounts(&self) -> bool {
+        self.unstake_seeds.begin != self.unstake_seeds.end
+    }
+
+    pub fn check_can_be_removed(&self) -> Result<(), LidoError> {
+        if self.active {
+            return Err(LidoError::ValidatorIsStillActive);
+        }
+        if self.has_stake_accounts() {
+            return Err(LidoError::ValidatorShouldHaveNoStakeAccounts);
+        }
+        if self.has_unstake_accounts() {
+            return Err(LidoError::ValidatorShouldHaveNoUnstakeAccounts);
+        }
+        // If not, this is a bug.
+        assert_eq!(self.stake_accounts_balance, Lamports(0));
+        Ok(())
+    }
+
+    pub fn show_removed_error_msg(error: &Result<(), LidoError>) {
+        if let Err(err) = error {
+            match err {
+                LidoError::ValidatorIsStillActive => {
+                    msg!(
+                                "Refusing to remove validator because it is still active, deactivate it first."
+                            );
+                }
+                LidoError::ValidatorHasUnclaimedCredit => {
+                    msg!(
+                        "Validator still has tokens to claim. Reclaim tokens before removing the validator"
+                    );
+                }
+                LidoError::ValidatorShouldHaveNoStakeAccounts => {
+                    msg!("Refusing to remove validator because it still has stake accounts, unstake them first.");
+                }
+                LidoError::ValidatorShouldHaveNoUnstakeAccounts => {
+                    msg!("Refusing to remove validator because it still has unstake accounts, withdraw them first.");
+                }
+                _ => {
+                    msg!("Invalid error when removing a validator: shouldn't happen.");
+                }
+            }
+        }
+    }
+
+    pub fn find_stake_account_address_with_authority(
+        &self,
+        program_id: &Pubkey,
+        solido_account: &Pubkey,
+        authority: &[u8],
+        seed: u64,
+    ) -> (Pubkey, u8) {
+        let seeds = [
+            &solido_account.to_bytes(),
+            &self.vote_account_address.to_bytes(),
+            authority,
+            &seed.to_le_bytes()[..],
+        ];
+        Pubkey::find_program_address(&seeds, program_id)
+    }
+
+    pub fn find_stake_account_address(
+        &self,
+        program_id: &Pubkey,
+        solido_account: &Pubkey,
+        seed: u64,
+        stake_type: StakeType,
+    ) -> (Pubkey, u8) {
+        let authority = match stake_type {
+            StakeType::Stake => VALIDATOR_STAKE_ACCOUNT,
+            StakeType::Unstake => VALIDATOR_UNSTAKE_ACCOUNT,
+        };
+        self.find_stake_account_address_with_authority(program_id, solido_account, authority, seed)
+    }
+}
+
+impl Sealed for Validator {}
+
+impl Pack for Validator {
+    const LEN: usize = 81;
+    fn pack_into_slice(&self, data: &mut [u8]) {
+        let mut data = data;
+        BorshSerialize::serialize(&self, &mut data).unwrap();
+    }
+    fn unpack_from_slice(src: &[u8]) -> Result<Self, ProgramError> {
+        let unpacked = Self::try_from_slice(src)?;
+        Ok(unpacked)
+    }
+}
+
+impl Default for Validator {
+    fn default() -> Self {
+        Validator {
+            stake_seeds: SeedRange { begin: 0, end: 0 },
+            unstake_seeds: SeedRange { begin: 0, end: 0 },
+            stake_accounts_balance: Lamports(0),
+            unstake_accounts_balance: Lamports(0),
+            active: true,
+            vote_account_address: Pubkey::default(),
+        }
+    }
+}
+
+impl ListEntry for Validator {
+    const TYPE: AccountType = AccountType::Validator;
+
+    fn new(vote_account_address: Pubkey) -> Self {
+        Self {
+            vote_account_address,
+            ..Default::default()
+        }
+    }
+
+    fn pubkey(&self) -> Pubkey {
+        self.vote_account_address
+    }
+}
+
+impl Sealed for Maintainer {}
+
+impl Pack for Maintainer {
+    const LEN: usize = PUBKEY_BYTES;
+    fn pack_into_slice(&self, data: &mut [u8]) {
+        let mut data = data;
+        BorshSerialize::serialize(&self, &mut data).unwrap();
+    }
+    fn unpack_from_slice(src: &[u8]) -> Result<Self, ProgramError> {
+        let unpacked = Self::try_from_slice(src)?;
+        Ok(unpacked)
+    }
+}
+
+impl ListEntry for Maintainer {
+    const TYPE: AccountType = AccountType::Maintainer;
+
+    fn new(pubkey: Pubkey) -> Self {
+        Self { pubkey }
+    }
+
+    fn pubkey(&self) -> Pubkey {
+        self.pubkey
+    }
 }
 
 /// The exchange rate used for deposits and rewards distribution.
@@ -188,6 +646,9 @@ pub struct Lido {
     /// Version number for the Lido
     pub lido_version: u8,
 
+    /// Account type, must be Lido
+    pub account_type: AccountType,
+
     /// Manager of the Lido program, able to execute administrative functions
     #[serde(serialize_with = "serialize_b58")]
     pub manager: Pubkey,
@@ -217,19 +678,21 @@ pub struct Lido {
     /// these metrics.
     pub metrics: Metrics,
 
-    /// Map of enrolled validators, maps their vote account to `Validator` details.
-    pub validators: Validators,
+    /// Validator list account
+    #[serde(serialize_with = "serialize_b58")]
+    pub validator_list: Pubkey,
 
-    /// Maximum validation commission percentage in [0, 100]
-    pub max_commission_percentage: u8,
-
-    /// The set of maintainers.
+    /// Maintainer list account
     ///
     /// Maintainers are granted low security risk privileges. Maintainers are
     /// expected to run the maintenance daemon, that invokes the maintenance
     /// operations. These are gated on the signer being present in this set.
     /// In the future we plan to make maintenance operations callable by anybody.
-    pub maintainers: Maintainers,
+    #[serde(serialize_with = "serialize_b58")]
+    pub maintainer_list: Pubkey,
+
+    /// Maximum validation commission percentage in [0, 100]
+    pub max_commission_percentage: u8,
 }
 
 impl Lido {
@@ -243,17 +706,23 @@ impl Lido {
             return Err(LidoError::InvalidOwner.into());
         }
         let lido = try_from_slice_unchecked::<Lido>(&lido.data.borrow())?;
+        if lido.account_type != AccountType::Lido {
+            msg!(
+                "Lido account type should be {:?}, but is {:?}",
+                AccountType::Lido,
+                lido.account_type
+            );
+            return Err(LidoError::InvalidAccountType.into());
+        }
+
+        check_lido_version(lido.lido_version, AccountType::Lido)?;
+
         Ok(lido)
     }
 
-    /// Calculates the total size of Lido given two variables: `max_validators`
-    /// and `max_maintainers`, the maximum number of maintainers and validators,
-    /// respectively. It creates default structures for both and sum its sizes
-    /// with Lido's constant size.
-    pub fn calculate_size(max_validators: u32, max_maintainers: u32) -> usize {
+    /// Calculates the total size of Lido
+    pub fn calculate_size() -> usize {
         let lido_instance = Lido {
-            validators: Validators::new_fill_default(max_validators),
-            maintainers: Maintainers::new_fill_default(max_maintainers),
             ..Default::default()
         };
         get_instance_packed_len(&lido_instance).unwrap()
@@ -311,19 +780,6 @@ impl Lido {
         if &self.manager != manager.key {
             msg!("Invalid manager, not the same as the one stored in state");
             return Err(LidoError::InvalidManager.into());
-        }
-        Ok(())
-    }
-
-    /// Checks if the passed maintainer belong to the list of maintainers
-    pub fn check_maintainer(&self, maintainer: &AccountInfo) -> ProgramResult {
-        if self.maintainers.get(maintainer.key).is_err() {
-            msg!(
-                "Invalid maintainer, account {} is not present in the maintainers list.",
-                maintainer.key
-            );
-
-            return Err(LidoError::InvalidMaintainer.into());
         }
         Ok(())
     }
@@ -480,7 +936,7 @@ impl Lido {
     pub fn check_stake_account(
         program_id: &Pubkey,
         solido_address: &Pubkey,
-        validator: &PubkeyAndEntry<Validator>,
+        validator: &Validator,
         stake_account_seed: u64,
         stake_account: &AccountInfo,
         authority: &[u8],
@@ -527,19 +983,19 @@ impl Lido {
     /// The computation is based on the amount of SOL per validator that we track
     /// ourselves, so if there are any unobserved rewards in the stake accounts,
     /// these will not be included.
-    pub fn get_sol_balance(
-        &self,
+    pub fn get_sol_balance<'data, I>(
+        validators: I,
         rent: &Rent,
         reserve: &AccountInfo,
-    ) -> Result<Lamports, LidoError> {
+    ) -> Result<Lamports, LidoError>
+    where
+        I: Iterator<Item = &'data Validator>,
+    {
         let effective_reserve_balance = get_reserve_available_balance(rent, reserve)?;
 
         // The remaining SOL managed is all in stake accounts.
-        let validator_balance: token::Result<Lamports> = self
-            .validators
-            .iter_entries()
-            .map(|v| v.stake_accounts_balance)
-            .sum();
+        let validator_balance: token::Result<Lamports> =
+            validators.map(|v| v.stake_accounts_balance).sum();
 
         let result = validator_balance.and_then(|s| s + effective_reserve_balance)?;
 
@@ -575,25 +1031,70 @@ impl Lido {
         }
         Ok(())
     }
-}
 
-#[repr(C)]
-#[derive(Clone, Debug, Eq, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema, Serialize)]
-pub struct Validator {
-    /// Seeds for active stake accounts.
-    pub stake_seeds: SeedRange,
-    /// Seeds for inactive stake accounts.
-    pub unstake_seeds: SeedRange,
+    /// Checks if the passed maintainer belong to the list of maintainers
+    pub fn check_maintainer(
+        &self,
+        program_id: &Pubkey,
+        solido_maintainer_list: &Pubkey,
+        maintainer_list: &AccountInfo,
+        maintainer: &AccountInfo,
+    ) -> ProgramResult {
+        let data = &mut *maintainer_list.data.borrow_mut();
+        let maintainer_list = self.deserialize_account_list_info::<Maintainer>(
+            program_id,
+            solido_maintainer_list,
+            maintainer_list,
+            data,
+        )?;
 
-    /// Sum of the balances of the stake accounts and unstake accounts.
-    pub stake_accounts_balance: Lamports,
+        if maintainer_list.find(maintainer.key).is_err() {
+            msg!(
+                "Invalid maintainer, account {} is not present in the maintainers list.",
+                maintainer.key
+            );
 
-    /// Sum of the balances of the unstake accounts.
-    pub unstake_accounts_balance: Lamports,
+            return Err(LidoError::InvalidMaintainer.into());
+        }
 
-    /// Controls if a validator is allowed to have new stake deposits.
-    /// When removing a validator, this flag should be set to `false`.
-    pub active: bool,
+        Ok(())
+    }
+
+    /// Checks if account list belongs to Lido
+    pub fn check_account_list_info<T: ListEntry>(
+        &self,
+        program_id: &Pubkey,
+        solido_list_address: &Pubkey,
+        account_list_info: &AccountInfo,
+    ) -> ProgramResult {
+        check_account_owner(account_list_info, program_id)?;
+
+        // check account_list belongs to Lido
+        if solido_list_address != account_list_info.key {
+            msg!(
+                "{:?} list address {} is different from Lido's {}",
+                T::TYPE,
+                account_list_info.key,
+                solido_list_address
+            );
+            return Err(LidoError::InvalidListAccount.into());
+        }
+
+        Ok(())
+    }
+
+    /// Check account list info and deserialize the account data
+    pub fn deserialize_account_list_info<'data, T: ListEntry>(
+        &self,
+        program_id: &Pubkey,
+        solido_list_address: &Pubkey,
+        account_list_info: &AccountInfo,
+        account_list_data: &'data mut [u8],
+    ) -> Result<BigVecWithHeader<'data, T>, ProgramError> {
+        self.check_account_list_info::<T>(program_id, solido_list_address, account_list_info)?;
+        let (header, big_vec) = ListHeader::<T>::deserialize_vec(account_list_data)?;
+        Ok(BigVecWithHeader::new(header, big_vec))
+    }
 }
 
 #[repr(C)]
@@ -637,128 +1138,6 @@ impl IntoIterator for &SeedRange {
             start: self.begin,
             end: self.end,
         }
-    }
-}
-
-impl Validator {
-    pub fn new() -> Validator {
-        Validator {
-            ..Default::default()
-        }
-    }
-
-    /// Return the balance in only the stake accounts, excluding the unstake accounts.
-    pub fn effective_stake_balance(&self) -> Lamports {
-        (self.stake_accounts_balance - self.unstake_accounts_balance)
-            .expect("Unstake balance cannot exceed the validator's total stake balance.")
-    }
-
-    pub fn observe_balance(observed: Lamports, tracked: Lamports, info: &str) -> ProgramResult {
-        if observed < tracked {
-            msg!(
-                "{}: observed balance of {} is less than tracked balance of {}.",
-                info,
-                observed,
-                tracked
-            );
-            msg!("This should not happen, aborting ...");
-            return Err(LidoError::ValidatorBalanceDecreased.into());
-        }
-        Ok(())
-    }
-}
-
-impl Default for Validator {
-    fn default() -> Self {
-        Validator {
-            stake_seeds: SeedRange { begin: 0, end: 0 },
-            unstake_seeds: SeedRange { begin: 0, end: 0 },
-            stake_accounts_balance: Lamports(0),
-            unstake_accounts_balance: Lamports(0),
-            active: true,
-        }
-    }
-}
-
-impl Validator {
-    pub fn has_stake_accounts(&self) -> bool {
-        self.stake_seeds.begin != self.stake_seeds.end
-    }
-    pub fn has_unstake_accounts(&self) -> bool {
-        self.unstake_seeds.begin != self.unstake_seeds.end
-    }
-
-    pub fn check_can_be_removed(&self) -> Result<(), LidoError> {
-        if self.active {
-            return Err(LidoError::ValidatorIsStillActive);
-        }
-        if self.has_stake_accounts() {
-            return Err(LidoError::ValidatorShouldHaveNoStakeAccounts);
-        }
-        if self.has_unstake_accounts() {
-            return Err(LidoError::ValidatorShouldHaveNoUnstakeAccounts);
-        }
-        // If not, this is a bug.
-        assert_eq!(self.stake_accounts_balance, Lamports(0));
-        Ok(())
-    }
-
-    pub fn show_removed_error_msg(error: &Result<(), LidoError>) {
-        if let Err(err) = error {
-            match err {
-                LidoError::ValidatorIsStillActive => {
-                    msg!(
-                                "Refusing to remove validator because it is still active, deactivate it first."
-                            );
-                }
-                LidoError::ValidatorHasUnclaimedCredit => {
-                    msg!(
-                        "Validator still has tokens to claim. Reclaim tokens before removing the validator"
-                    );
-                }
-                LidoError::ValidatorShouldHaveNoStakeAccounts => {
-                    msg!("Refusing to remove validator because it still has stake accounts, unstake them first.");
-                }
-                LidoError::ValidatorShouldHaveNoUnstakeAccounts => {
-                    msg!("Refusing to remove validator because it still has unstake accounts, withdraw them first.");
-                }
-                _ => {
-                    msg!("Invalid error when removing a validator: shouldn't happen.");
-                }
-            }
-        }
-    }
-}
-
-impl PubkeyAndEntry<Validator> {
-    pub fn find_stake_account_address_with_authority(
-        &self,
-        program_id: &Pubkey,
-        solido_account: &Pubkey,
-        authority: &[u8],
-        seed: u64,
-    ) -> (Pubkey, u8) {
-        let seeds = [
-            &solido_account.to_bytes(),
-            &self.pubkey.to_bytes(),
-            authority,
-            &seed.to_le_bytes()[..],
-        ];
-        Pubkey::find_program_address(&seeds, program_id)
-    }
-
-    pub fn find_stake_account_address(
-        &self,
-        program_id: &Pubkey,
-        solido_account: &Pubkey,
-        seed: u64,
-        stake_type: StakeType,
-    ) -> (Pubkey, u8) {
-        let authority = match stake_type {
-            StakeType::Stake => VALIDATOR_STAKE_ACCOUNT,
-            StakeType::Unstake => VALIDATOR_UNSTAKE_ACCOUNT,
-        };
-        self.find_stake_account_address_with_authority(program_id, solido_account, authority, seed)
     }
 }
 
@@ -864,21 +1243,11 @@ mod test_lido {
     #[test]
     fn test_account_map_required_bytes_relates_to_maximum_entries() {
         for buffer_size in 0..8_000 {
-            let max_entries = Validators::maximum_entries(buffer_size);
-            let needed_size = Validators::required_bytes(max_entries);
+            let max_entries = ValidatorList::calculate_max_entries(buffer_size);
+            let needed_size = ValidatorList::required_bytes(max_entries as u32);
             assert!(
                 needed_size <= buffer_size || max_entries == 0,
                 "Buffer of len {} can fit {} validators which need {} bytes.",
-                buffer_size,
-                max_entries,
-                needed_size,
-            );
-
-            let max_entries = Maintainers::maximum_entries(buffer_size);
-            let needed_size = Maintainers::required_bytes(max_entries);
-            assert!(
-                needed_size <= buffer_size || max_entries == 0,
-                "Buffer of len {} can fit {} maintainers which need {} bytes.",
                 buffer_size,
                 max_entries,
                 needed_size,
@@ -889,15 +1258,12 @@ mod test_lido {
     #[test]
     fn test_validators_size() {
         let validator = get_instance_packed_len(&Validator::default()).unwrap();
-        assert_eq!(validator, Validator::SIZE);
-        let one_len = get_instance_packed_len(&Validators::new_fill_default(1)).unwrap();
-        let two_len = get_instance_packed_len(&Validators::new_fill_default(2)).unwrap();
-        assert_eq!(one_len, Validators::required_bytes(1));
-        assert_eq!(two_len, Validators::required_bytes(2));
-        assert_eq!(
-            two_len - one_len,
-            std::mem::size_of::<Pubkey>() + Validator::SIZE
-        );
+        assert_eq!(validator, Validator::LEN);
+        let one_len = get_instance_packed_len(&ValidatorList::new_fill_default(1)).unwrap();
+        let two_len = get_instance_packed_len(&ValidatorList::new_fill_default(2)).unwrap();
+        assert_eq!(one_len, ValidatorList::required_bytes(1));
+        assert_eq!(two_len, ValidatorList::required_bytes(2));
+        assert_eq!(two_len - one_len, Validator::LEN);
     }
 
     #[test]
@@ -907,28 +1273,49 @@ mod test_lido {
         let minimal = Lido::default();
         let mut data = Vec::new();
         BorshSerialize::serialize(&minimal, &mut data).unwrap();
-
-        let num_entries = 0;
-        let size_validators = Validators::required_bytes(num_entries);
-        let size_maintainers = Maintainers::required_bytes(num_entries);
-
-        assert_eq!(
-            data.len() - size_validators - size_maintainers,
-            LIDO_CONSTANT_SIZE
-        );
+        assert_eq!(data.len(), LIDO_CONSTANT_SIZE);
     }
 
     #[test]
     fn test_lido_serialization_roundtrips() {
         use solana_sdk::borsh::try_from_slice_unchecked;
 
-        let mut validators = Validators::new(10_000);
-        validators
-            .add(Pubkey::new_unique(), Validator::new())
-            .unwrap();
-        let maintainers = Maintainers::new(1);
+        fn test_list<T: ListEntry>() {
+            // create empty account list with Vec
+            let mut accounts = AccountList::<T>::new_fill_default(0);
+            accounts.header.max_entries = 100;
+
+            // allocate space for future elements
+            let mut buffer: Vec<u8> =
+                vec![0; AccountList::<T>::required_bytes(accounts.header.max_entries)];
+            let mut slice = &mut buffer[..];
+            // seriaslize empty list to buffer, which serializes a header and lenght
+            BorshSerialize::serialize(&accounts, &mut slice).unwrap();
+
+            // deserialize to BigVec
+            let slice = &mut buffer[..];
+            let (header, big_vec) = ListHeader::<T>::deserialize_vec(slice).unwrap();
+            let mut account_list = BigVecWithHeader::new(header, big_vec);
+
+            for _ in 0..accounts.header.max_entries {
+                // add same account to both Vec and BigVec
+                let new_account = T::new(Pubkey::new_unique());
+                account_list.push(new_account.clone()).unwrap();
+                accounts.entries.push(new_account);
+            }
+
+            // restore from BigVec to Vec and compare
+            let slice = &mut buffer[..];
+            let accounts_restored = AccountList::<T>::from(slice).unwrap();
+            assert_eq!(accounts_restored, accounts);
+        }
+
+        test_list::<Validator>();
+        test_list::<Maintainer>();
+
         let lido = Lido {
             lido_version: 0,
+            account_type: AccountType::Lido,
             manager: Pubkey::new_unique(),
             st_sol_mint: Pubkey::new_unique(),
             exchange_rate: ExchangeRate {
@@ -949,15 +1336,15 @@ mod test_lido {
                 developer_account: Pubkey::new_unique(),
             },
             metrics: Metrics::new(),
-            validators: validators,
-            maintainers: maintainers,
+            validator_list: Pubkey::new_unique(),
+            maintainer_list: Pubkey::new_unique(),
             max_commission_percentage: 5,
         };
         let mut data = Vec::new();
         BorshSerialize::serialize(&lido, &mut data).unwrap();
 
-        let lido_restored = try_from_slice_unchecked(&data[..]).unwrap();
-        assert_eq!(lido, lido_restored);
+        let restored = try_from_slice_unchecked(&data[..]).unwrap();
+        assert_eq!(lido, restored);
     }
 
     #[test]
@@ -1074,14 +1461,14 @@ mod test_lido {
         use std::rc::Rc;
 
         let rent = &Rent::default();
-        let mut lido = Lido::default();
+        let mut validators = ValidatorList::new_fill_default(0);
         let key = Pubkey::default();
         let mut amount = rent.minimum_balance(0);
         let mut reserve_account =
             AccountInfo::new(&key, true, true, &mut amount, &mut [], &key, false, 0);
 
         assert_eq!(
-            lido.get_sol_balance(&rent, &reserve_account),
+            Lido::get_sol_balance(validators.iter(), &rent, &reserve_account),
             Ok(Lamports(0))
         );
 
@@ -1089,24 +1476,24 @@ mod test_lido {
         reserve_account.lamports = Rc::new(RefCell::new(&mut new_amount));
 
         assert_eq!(
-            lido.get_sol_balance(&rent, &reserve_account),
+            Lido::get_sol_balance(validators.iter(), &rent, &reserve_account),
             Ok(Lamports(10))
         );
 
-        lido.validators.maximum_entries = 1;
-        lido.validators
-            .add(Pubkey::new_unique(), Validator::new())
-            .unwrap();
-        lido.validators.entries[0].entry.stake_accounts_balance = Lamports(37);
+        validators.header.max_entries = 1;
+        validators
+            .entries
+            .push(Validator::new(Pubkey::new_unique()));
+        validators.entries[0].stake_accounts_balance = Lamports(37);
         assert_eq!(
-            lido.get_sol_balance(&rent, &reserve_account),
+            Lido::get_sol_balance(validators.iter(), &rent, &reserve_account),
             Ok(Lamports(10 + 37))
         );
 
-        lido.validators.entries[0].entry.stake_accounts_balance = Lamports(u64::MAX);
+        validators.entries[0].stake_accounts_balance = Lamports(u64::MAX);
 
         assert_eq!(
-            lido.get_sol_balance(&rent, &reserve_account),
+            Lido::get_sol_balance(validators.iter(), &rent, &reserve_account),
             Err(LidoError::CalculationFailure)
         );
 
@@ -1114,10 +1501,10 @@ mod test_lido {
         reserve_account.lamports = Rc::new(RefCell::new(&mut new_amount));
         // The amount here is more than the rent exemption that gets discounted
         // from the reserve, causing an overflow.
-        lido.validators.entries[0].entry.stake_accounts_balance = Lamports(5_000_000);
+        validators.entries[0].stake_accounts_balance = Lamports(5_000_000);
 
         assert_eq!(
-            lido.get_sol_balance(&rent, &reserve_account),
+            Lido::get_sol_balance(validators.iter(), &rent, &reserve_account),
             Err(LidoError::CalculationFailure)
         );
     }
@@ -1229,9 +1616,12 @@ mod test_lido {
     fn test_n_val() {
         let n_validators: u64 = 10_000;
         let size =
-            get_instance_packed_len(&Validators::new_fill_default(n_validators as u32)).unwrap();
+            get_instance_packed_len(&ValidatorList::new_fill_default(n_validators as u32)).unwrap();
 
-        assert_eq!(Validators::maximum_entries(size) as u64, n_validators);
+        assert_eq!(
+            ValidatorList::calculate_max_entries(size) as u64,
+            n_validators
+        );
     }
 
     #[test]

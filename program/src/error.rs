@@ -94,9 +94,8 @@ pub enum LidoError {
     /// in the structure
     InvalidAccountMember = 25,
 
-    /// Lido has an invalid size, calculated with the Lido's constant size plus
-    /// required to hold variable structures
-    InvalidLidoSize = 26,
+    /// Account has an invalid size, calculated with the constant size
+    InvalidAccountSize = 26,
 
     /// The instance has no validators.
     NoActiveValidators = 27,
@@ -171,6 +170,18 @@ pub enum LidoError {
 
     /// Validation commission is more than 100%
     ValidationCommissionOutOfBounds = 48,
+
+    /// The size of the given validator or maintainer stake list doesn't match the expected amount
+    UnexpectedListAccountSize = 49,
+
+    /// Account has incorrect account type
+    InvalidAccountType = 50,
+
+    /// Account list address does not belong to Lido
+    InvalidListAccount = 51,
+
+    /// Lido version mismatch when deserializing
+    LidoVersionMismatch = 52,
 }
 
 // Just reuse the generated Debug impl for Display. It shows the variant names.

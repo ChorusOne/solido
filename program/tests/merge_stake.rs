@@ -5,6 +5,7 @@ use testlib::assert_solido_error;
 use testlib::solido_context::{self, get_account_info, Context, StakeDeposit};
 
 use lido::processor::StakeType;
+use lido::state::{Lido, ListEntry};
 use lido::{error::LidoError, token::Lamports};
 use solana_program_test::tokio;
 use solana_sdk::signer::Signer;
@@ -33,24 +34,24 @@ async fn test_successful_merge_activating_stake() {
     let solido_after = context.get_solido().await;
     let mut reserve_after = context.get_account(context.reserve_address).await;
     assert_eq!(
-        solido_after.validators.entries[0]
-            .entry
-            .stake_accounts_balance,
+        solido_after.validators.entries[0].stake_accounts_balance,
         Lamports(20_000_000_000)
     );
 
-    let validator_before = &solido_before.validators.entries[0].entry;
-    let validator_after = &solido_after.validators.entries[0].entry;
+    let validator_before = &solido_before.validators.entries[0];
+    let validator_after = &solido_after.validators.entries[0];
     assert_eq!(
         validator_after.stake_seeds.begin,
         validator_before.stake_seeds.begin + 1,
     );
 
-    let sol_before = solido_before.get_sol_balance(
+    let sol_before = Lido::get_sol_balance(
+        solido_before.validators.entries.iter(),
         &rent,
         &get_account_info(&context.reserve_address, &mut reserve_before),
     );
-    let sol_after = solido_after.get_sol_balance(
+    let sol_after = Lido::get_sol_balance(
+        solido_after.validators.entries.iter(),
         &rent,
         &get_account_info(&context.reserve_address, &mut reserve_after),
     );
@@ -72,14 +73,22 @@ async fn test_merge_stake_combinations() {
     let validator = &context.get_solido().await.validators.entries[0];
     context.deposit(Lamports(100_000_000_000)).await;
     context
-        .stake_deposit(validator.pubkey, StakeDeposit::Append, stake_deposit_amount)
+        .stake_deposit(
+            validator.pubkey(),
+            StakeDeposit::Append,
+            stake_deposit_amount,
+        )
         .await;
 
     context.advance_to_normal_epoch(1);
 
     // Create an activating stake account.
     context
-        .stake_deposit(validator.pubkey, StakeDeposit::Append, stake_deposit_amount)
+        .stake_deposit(
+            validator.pubkey(),
+            StakeDeposit::Append,
+            stake_deposit_amount,
+        )
         .await;
 
     let active_stake_account = context.get_stake_account_from_seed(&validator, 0).await;
@@ -108,11 +117,13 @@ async fn test_merge_stake_combinations() {
     let solido_after = context.get_solido().await;
     let mut reserve_after = context.get_account(context.reserve_address).await;
 
-    let sol_before = solido_before.get_sol_balance(
+    let sol_before = Lido::get_sol_balance(
+        solido_before.validators.entries.iter(),
         &rent,
         &get_account_info(&context.reserve_address, &mut reserve_before),
     );
-    let sol_after = solido_after.get_sol_balance(
+    let sol_after = Lido::get_sol_balance(
+        solido_after.validators.entries.iter(),
         &rent,
         &get_account_info(&context.reserve_address, &mut reserve_after),
     );
@@ -135,7 +146,7 @@ async fn test_merge_validator_with_zero_and_one_stake_account() {
 
     context
         .stake_deposit(
-            validator.pubkey,
+            validator.pubkey(),
             StakeDeposit::Append,
             Lamports(10_000_000_000),
         )

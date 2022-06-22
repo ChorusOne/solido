@@ -6,7 +6,6 @@ use solana_program::pubkey::Pubkey;
 #[cfg(not(feature = "no-entrypoint"))]
 pub mod entrypoint;
 
-pub mod account_map;
 pub mod accounts;
 pub mod balance;
 pub mod error;
@@ -20,6 +19,7 @@ pub mod state;
 pub mod token;
 pub mod util;
 
+pub mod big_vec;
 pub mod vote_state;
 
 /// Seed for reserve account that holds SOL.

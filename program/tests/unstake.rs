@@ -1,12 +1,11 @@
 // SPDX-FileCopyrightText: 2021 Chorus One AG
 // SPDX-License-Identifier: GPL-3.0
 
-#![cfg(feature = "test-bpf")]
-
 use testlib::assert_solido_error;
 use testlib::solido_context::{self, Context, StakeDeposit};
 
 use lido::processor::StakeType;
+use lido::state::ListEntry;
 use lido::MINIMUM_STAKE_ACCOUNT_BALANCE;
 use lido::{error::LidoError, token::Lamports};
 use solana_program::stake::state::StakeState;
@@ -60,7 +59,7 @@ async fn test_successful_unstake() {
     let validator = &solido.validators.entries[0];
 
     let stake_account_before = context.get_stake_account_from_seed(&validator, 0).await;
-    context.unstake(validator.pubkey, unstake_lamports).await;
+    context.unstake(validator.pubkey(), unstake_lamports).await;
     let stake_account_after = context.get_stake_account_from_seed(&validator, 0).await;
     assert_eq!(
         (stake_account_before.balance.total() - stake_account_after.balance.total()).unwrap(),
@@ -169,8 +168,8 @@ async fn test_unstake_from_inactive_validator() {
     let solido_after = context.get_solido().await;
 
     assert_eq!(
-        solido_before.validators.entries[0].entry.stake_seeds.begin + 1,
-        solido_after.validators.entries[0].entry.stake_seeds.begin,
+        solido_before.validators.entries[0].stake_seeds.begin + 1,
+        solido_after.validators.entries[0].stake_seeds.begin,
         "Unstaking the full stake account amount should have bumped the steed.",
     );
 
@@ -179,17 +178,17 @@ async fn test_unstake_from_inactive_validator() {
 
     let validator = &context.get_solido().await.validators.entries[0];
     assert_eq!(
-        validator.entry.stake_seeds.begin, validator.entry.stake_seeds.end,
+        validator.stake_seeds.begin, validator.stake_seeds.end,
         "No stake accounts should be left after unstaking both."
     );
     assert_eq!(
-        validator.entry.stake_accounts_balance, validator.entry.unstake_accounts_balance,
+        validator.stake_accounts_balance, validator.unstake_accounts_balance,
         "The full balance should be in unstake accounts after unstaking both."
     );
     let (stake_account, _) = validator.find_stake_account_address(
         &solido_context::id(),
         &context.solido.pubkey(),
-        validator.entry.stake_seeds.begin,
+        validator.stake_seeds.begin,
         StakeType::Stake,
     );
     let account = context.try_get_account(stake_account).await;
@@ -212,7 +211,7 @@ async fn test_unstake_with_funded_destination_stake() {
     context.fund(unstake_address, Lamports(500_000_000)).await;
     let unstake_lamports = Lamports(1_000_000_000);
 
-    context.unstake(validator.pubkey, unstake_lamports).await;
+    context.unstake(validator.pubkey(), unstake_lamports).await;
     let unstake_account = context.get_unstake_account_from_seed(&validator, 0).await;
     // Since we already had something in the account that paid for the rent, we
     // can unstake all the requested amount.
@@ -238,7 +237,7 @@ async fn test_unstake_allows_at_most_three_unstake_accounts() {
     context.advance_to_normal_epoch(1);
 
     let solido_before = context.get_solido().await;
-    let validator_before = &solido_before.validators.entries[0].entry;
+    let validator_before = &solido_before.validators.entries[0];
     assert_eq!(validator_before.unstake_seeds.begin, 0);
     assert_eq!(validator_before.unstake_seeds.end, 3);
 
@@ -247,7 +246,7 @@ async fn test_unstake_allows_at_most_three_unstake_accounts() {
     context.update_stake_account_balance(vote_account).await;
 
     let solido_after = context.get_solido().await;
-    let validator_after = &solido_after.validators.entries[0].entry;
+    let validator_after = &solido_after.validators.entries[0];
     assert_eq!(validator_after.unstake_seeds.begin, 3);
     assert_eq!(validator_after.unstake_seeds.end, 3);
 
@@ -266,7 +265,7 @@ async fn test_unstake_activating() {
     context.deposit(Lamports(10_000_000_000)).await;
     context
         .stake_deposit(
-            validator.pubkey,
+            validator.pubkey(),
             StakeDeposit::Append,
             Lamports(10_000_000_000),
         )
@@ -282,7 +281,7 @@ async fn test_unstake_activating() {
         (Lamports(10_000_000_000) - Lamports(stake_rent)).unwrap()
     );
 
-    context.unstake(validator.pubkey, unstake_lamports).await;
+    context.unstake(validator.pubkey(), unstake_lamports).await;
     let stake_account_after = context.get_stake_account_from_seed(&validator, 0).await;
     assert_eq!(
         (stake_account_before.balance.total() - stake_account_after.balance.total()).unwrap(),

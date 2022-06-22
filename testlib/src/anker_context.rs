@@ -105,6 +105,7 @@ impl TokenPoolContext {
 
         let solido = solido_context.get_solido().await;
         let sol_amount = solido
+            .lido
             .exchange_rate
             .exchange_st_sol(st_sol_amount)
             .expect("Some StSol should have been minted at this point.");
@@ -571,7 +572,7 @@ impl Context {
     /// Return the value of the given amount of stSOL in SOL.
     pub async fn exchange_st_sol(&mut self, amount: StLamports) -> Lamports {
         let solido = self.solido_context.get_solido().await;
-        solido.exchange_rate.exchange_st_sol(amount).unwrap()
+        solido.lido.exchange_rate.exchange_st_sol(amount).unwrap()
     }
 
     /// Return the current amount of bSOL in existence.
