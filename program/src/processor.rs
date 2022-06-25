@@ -227,16 +227,6 @@ pub fn process_stake_deposit(
         validator_list_data,
     )?;
 
-    let validator = validators.find(accounts.validator_vote_account.key)?;
-
-    if !validator.active {
-        msg!(
-            "Validator {} is inactive, new deposits are not allowed",
-            validator.pubkey()
-        );
-        return Err(LidoError::StakeToInactiveValidator.into());
-    }
-
     // Confirm that there is no other active validator with a lower balance that
     // we could stake to. This alone is not sufficient to guarantee a uniform
     // stake balance, but it limits the power that maintainers have to disturb
@@ -247,24 +237,31 @@ pub fn process_stake_deposit(
         .filter(|&v| v.active)
         .min_by_key(|v| v.effective_stake_balance())
         .ok_or(LidoError::NoActiveValidators)?;
+    let minimum_stake_pubkey = minimum_stake_validator.pubkey();
+    let minimum_stake_balance = minimum_stake_validator.effective_stake_balance();
+
+    let validator = validators.find_mut(accounts.validator_vote_account.key)?;
+
+    if !validator.active {
+        msg!(
+            "Validator {} is inactive, new deposits are not allowed",
+            validator.pubkey()
+        );
+        return Err(LidoError::StakeToInactiveValidator.into());
+    }
 
     // Note that we compare balances, not keys, because the minimum might not be unique.
-    if validator.effective_stake_balance() > minimum_stake_validator.effective_stake_balance() {
+    if validator.effective_stake_balance() > minimum_stake_balance {
         msg!(
             "Refusing to stake with {}, who has {} stake, \
             because {} has less stake: {}. Stake there instead.",
             validator.pubkey(),
             validator.effective_stake_balance(),
-            minimum_stake_validator.pubkey(),
-            minimum_stake_validator.effective_stake_balance(),
+            minimum_stake_pubkey,
+            minimum_stake_balance,
         );
         return Err(LidoError::ValidatorWithLessStakeExists.into());
     }
-
-    // From now on we will not reference other Lido fields, so we can get the
-    // validator as mutable. This is a bit wasteful, but we can optimize when we
-    // need dozens of validators, for now we are under the compute limit.
-    let validator = validators.find_mut(accounts.validator_vote_account.key)?;
 
     let stake_account_bump_seed = Lido::check_stake_account(
         program_id,
@@ -448,7 +445,7 @@ pub fn process_unstake(
         validator_list_data,
     )?;
 
-    let validator = validators.find(accounts.validator_vote_account.key)?;
+    let validator = validators.find_mut(accounts.validator_vote_account.key)?;
     let destination_bump_seed = check_unstake_accounts(program_id, validator, &accounts)?;
 
     // Because `WithdrawInactiveStake` needs to reference all stake and unstake
@@ -508,8 +505,6 @@ pub fn process_unstake(
             &[lido.stake_authority_bump_seed],
         ]],
     )?;
-
-    let validator = validators.find_mut(accounts.validator_vote_account.key)?;
 
     if validator.active {
         // For active validators, we don't allow their stake accounts to contain
@@ -881,11 +876,6 @@ pub fn process_withdraw(
         validator_list_data,
     )?;
 
-    // We should withdraw from the validator that has the most effective stake.
-    // With effective here we mean "total in stake accounts" - "total in unstake
-    // accounts", regardless of whether the stake in those accounts is active or not.
-    let validator = validators.find(accounts.validator_vote_account.key)?;
-
     // Confirm that there is no other validator with a higher balance that
     // we could withdraw from. This alone is not sufficient to guarantee a uniform
     // stake balance, but prevents things from becoming more unbalanced than
@@ -894,16 +884,23 @@ pub fn process_withdraw(
         .iter()
         .max_by_key(|pair| pair.effective_stake_balance())
         .ok_or(LidoError::NoActiveValidators)?;
+    let maximum_stake_pubkey = maximum_stake_validator.pubkey();
+    let maximum_stake_balance = maximum_stake_validator.effective_stake_balance();
+
+    // We should withdraw from the validator that has the most effective stake.
+    // With effective here we mean "total in stake accounts" - "total in unstake
+    // accounts", regardless of whether the stake in those accounts is active or not.
+    let validator = validators.find_mut(accounts.validator_vote_account.key)?;
 
     // Note that we compare balances, not keys, because the maximum might not be unique.
-    if validator.effective_stake_balance() < maximum_stake_validator.effective_stake_balance() {
+    if validator.effective_stake_balance() < maximum_stake_balance {
         msg!(
             "Refusing to withdraw from {}, who has {} stake, \
             because {} has more stake: {}. Withdraw from there instead.",
             validator.pubkey(),
             validator.effective_stake_balance(),
-            maximum_stake_validator.pubkey(),
-            maximum_stake_validator.effective_stake_balance(),
+            maximum_stake_pubkey,
+            maximum_stake_balance,
         );
         return Err(LidoError::ValidatorWithMoreStakeExists.into());
     }
@@ -928,8 +925,6 @@ pub fn process_withdraw(
             return Err(err.into());
         }
     };
-
-    let provided_validator = validators.find_mut(accounts.validator_vote_account.key)?;
 
     let source_balance = Lamports(accounts.source_stake_account.lamports());
 
@@ -966,8 +961,7 @@ pub fn process_withdraw(
         return Err(LidoError::InvalidAmount.into());
     }
 
-    provided_validator.stake_accounts_balance =
-        (provided_validator.stake_accounts_balance - sol_to_withdraw)?;
+    validator.stake_accounts_balance = (validator.stake_accounts_balance - sol_to_withdraw)?;
 
     // Burn stSol tokens
     burn_st_sol(&lido, &accounts, amount)?;

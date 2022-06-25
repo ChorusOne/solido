@@ -196,6 +196,8 @@ async fn test_stake_deposit_succeeds_despite_donation() {
 async fn test_stake_deposit_fails_for_inactive_validator() {
     let mut context = Context::new_with_maintainer().await;
     let validator = context.add_validator().await;
+    // let one validator be active
+    context.add_validator().await;
 
     context.deactivate_validator(validator.vote_account).await;
 
