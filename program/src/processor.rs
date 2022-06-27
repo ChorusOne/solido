@@ -203,6 +203,8 @@ pub fn process_deposit(
 pub fn process_stake_deposit(
     program_id: &Pubkey,
     amount: Lamports,
+    validator_index: u32,
+    maintainer_index: u32,
     raw_accounts: &[AccountInfo],
 ) -> ProgramResult {
     let accounts = StakeDepositAccountsInfoV2::try_from_slice(raw_accounts)?;
@@ -213,6 +215,7 @@ pub fn process_stake_deposit(
         program_id,
         &lido.maintainer_list,
         accounts.maintainer_list,
+        maintainer_index,
         accounts.maintainer,
     )?;
     lido.check_reserve_account(program_id, accounts.lido.key, accounts.reserve)?;
@@ -240,7 +243,7 @@ pub fn process_stake_deposit(
     let minimum_stake_pubkey = minimum_stake_validator.pubkey();
     let minimum_stake_balance = minimum_stake_validator.effective_stake_balance();
 
-    let validator = validators.find_mut(accounts.validator_vote_account.key)?;
+    let validator = validators.get_mut(validator_index, accounts.validator_vote_account.key)?;
 
     if !validator.active {
         msg!(
@@ -424,6 +427,8 @@ pub fn process_stake_deposit(
 pub fn process_unstake(
     program_id: &Pubkey,
     amount: Lamports,
+    validator_index: u32,
+    maintainer_index: u32,
     raw_accounts: &[AccountInfo],
 ) -> ProgramResult {
     let accounts = UnstakeAccountsInfoV2::try_from_slice(raw_accounts)?;
@@ -432,6 +437,7 @@ pub fn process_unstake(
         program_id,
         &lido.maintainer_list,
         accounts.maintainer_list,
+        maintainer_index,
         accounts.maintainer,
     )?;
 
@@ -445,7 +451,7 @@ pub fn process_unstake(
         validator_list_data,
     )?;
 
-    let validator = validators.find_mut(accounts.validator_vote_account.key)?;
+    let validator = validators.get_mut(validator_index, accounts.validator_vote_account.key)?;
     let destination_bump_seed = check_unstake_accounts(program_id, validator, &accounts)?;
 
     // Because `WithdrawInactiveStake` needs to reference all stake and unstake
@@ -690,6 +696,7 @@ pub fn check_address_and_get_balance(
 /// This function is permissionless and can be called by anyone.
 pub fn process_update_stake_account_balance(
     program_id: &Pubkey,
+    validator_index: u32,
     raw_accounts: &[AccountInfo],
 ) -> ProgramResult {
     let accounts = UpdateStakeAccountBalanceInfo::try_from_slice(raw_accounts)?;
@@ -710,7 +717,7 @@ pub fn process_update_stake_account_balance(
         validator_list_data,
     )?;
 
-    let validator = validators.find_mut(accounts.validator_vote_account.key)?;
+    let validator = validators.get_mut(validator_index, accounts.validator_vote_account.key)?;
 
     let mut stake_observed_total = Lamports(0);
     let mut excess_removed = Lamports(0);
@@ -861,6 +868,7 @@ pub fn process_update_stake_account_balance(
 pub fn process_withdraw(
     program_id: &Pubkey,
     amount: StLamports,
+    validator_index: u32,
     raw_accounts: &[AccountInfo],
 ) -> ProgramResult {
     let accounts = WithdrawAccountsInfoV2::try_from_slice(raw_accounts)?;
@@ -890,7 +898,7 @@ pub fn process_withdraw(
     // We should withdraw from the validator that has the most effective stake.
     // With effective here we mean "total in stake accounts" - "total in unstake
     // accounts", regardless of whether the stake in those accounts is active or not.
-    let validator = validators.find_mut(accounts.validator_vote_account.key)?;
+    let validator = validators.get_mut(validator_index, accounts.validator_vote_account.key)?;
 
     // Note that we compare balances, not keys, because the maximum might not be unique.
     if validator.effective_stake_balance() < maximum_stake_balance {
@@ -1013,28 +1021,59 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
             accounts,
         ),
         LidoInstruction::Deposit { amount } => process_deposit(program_id, amount, accounts),
-        LidoInstruction::StakeDepositV2 { amount } => {
-            process_stake_deposit(program_id, amount, accounts)
-        }
-        LidoInstruction::UnstakeV2 { amount } => process_unstake(program_id, amount, accounts),
+        LidoInstruction::StakeDepositV2 {
+            amount,
+            validator_index,
+            maintainer_index,
+        } => process_stake_deposit(
+            program_id,
+            amount,
+            validator_index,
+            maintainer_index,
+            accounts,
+        ),
+        LidoInstruction::UnstakeV2 {
+            amount,
+            validator_index,
+            maintainer_index,
+        } => process_unstake(
+            program_id,
+            amount,
+            validator_index,
+            maintainer_index,
+            accounts,
+        ),
         LidoInstruction::UpdateExchangeRateV2 => process_update_exchange_rate(program_id, accounts),
-        LidoInstruction::UpdateStakeAccountBalance => {
-            process_update_stake_account_balance(program_id, accounts)
+        LidoInstruction::UpdateStakeAccountBalance { validator_index } => {
+            process_update_stake_account_balance(program_id, validator_index, accounts)
         }
-        LidoInstruction::WithdrawV2 { amount } => process_withdraw(program_id, amount, accounts),
+        LidoInstruction::WithdrawV2 {
+            amount,
+            validator_index,
+        } => process_withdraw(program_id, amount, validator_index, accounts),
         LidoInstruction::ChangeRewardDistribution {
             new_reward_distribution,
         } => process_change_reward_distribution(program_id, new_reward_distribution, accounts),
         LidoInstruction::AddValidatorV2 => process_add_validator(program_id, accounts),
-        LidoInstruction::RemoveValidatorV2 => process_remove_validator(program_id, accounts),
-        LidoInstruction::DeactivateValidatorV2 => {
-            process_deactivate_validator(program_id, accounts)
+        LidoInstruction::RemoveValidatorV2 { validator_index } => {
+            process_remove_validator(program_id, validator_index, accounts)
+        }
+        LidoInstruction::DeactivateValidatorV2 { validator_index } => {
+            process_deactivate_validator(program_id, validator_index, accounts)
         }
         LidoInstruction::AddMaintainerV2 => process_add_maintainer(program_id, accounts),
-        LidoInstruction::RemoveMaintainerV2 => process_remove_maintainer(program_id, accounts),
-        LidoInstruction::MergeStakeV2 => process_merge_stake(program_id, accounts),
-        LidoInstruction::DeactivateValidatorIfCommissionExceedsMax => {
-            process_deactivate_validator_if_commission_exceeds_max(program_id, accounts)
+        LidoInstruction::RemoveMaintainerV2 { maintainer_index } => {
+            process_remove_maintainer(program_id, maintainer_index, accounts)
+        }
+        LidoInstruction::MergeStakeV2 { validator_index } => {
+            process_merge_stake(program_id, validator_index, accounts)
+        }
+        LidoInstruction::DeactivateValidatorIfCommissionExceedsMax { validator_index } => {
+            process_deactivate_validator_if_commission_exceeds_max(
+                program_id,
+                validator_index,
+                accounts,
+            )
         }
         LidoInstruction::SetMaxValidationCommission {
             max_commission_percentage,

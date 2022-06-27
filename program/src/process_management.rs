@@ -80,6 +80,7 @@ pub fn process_add_validator(program_id: &Pubkey, accounts_raw: &[AccountInfo]) 
 /// no more stake delegated to it, removing it from the list can be done by anybody.
 pub fn process_remove_validator(
     program_id: &Pubkey,
+    validator_index: u32,
     accounts_raw: &[AccountInfo],
 ) -> ProgramResult {
     let accounts = RemoveValidatorInfoV2::try_from_slice(accounts_raw)?;
@@ -93,7 +94,10 @@ pub fn process_remove_validator(
         validator_list_data,
     )?;
 
-    let removed_validator = validators.remove(accounts.validator_vote_account_to_remove.key)?;
+    let removed_validator = validators.remove(
+        validator_index,
+        accounts.validator_vote_account_to_remove.key,
+    )?;
 
     let result = removed_validator.check_can_be_removed();
     Validator::show_removed_error_msg(&result);
@@ -107,6 +111,7 @@ pub fn process_remove_validator(
 /// removing the validator once no stake is delegated to it any more.
 pub fn process_deactivate_validator(
     program_id: &Pubkey,
+    validator_index: u32,
     accounts_raw: &[AccountInfo],
 ) -> ProgramResult {
     let accounts = DeactivateValidatorInfoV2::try_from_slice(accounts_raw)?;
@@ -121,7 +126,10 @@ pub fn process_deactivate_validator(
         validator_list_data,
     )?;
 
-    let validator = validators.find_mut(accounts.validator_vote_account_to_deactivate.key)?;
+    let validator = validators.get_mut(
+        validator_index,
+        accounts.validator_vote_account_to_deactivate.key,
+    )?;
 
     validator.active = false;
     msg!("Validator {} deactivated.", validator.pubkey());
@@ -135,6 +143,7 @@ pub fn process_deactivate_validator(
 /// removing the validator once no stake is delegated to it any more.
 pub fn process_deactivate_validator_if_commission_exceeds_max(
     program_id: &Pubkey,
+    validator_index: u32,
     accounts_raw: &[AccountInfo],
 ) -> ProgramResult {
     let accounts = DeactivateValidatorIfCommissionExceedsMaxInfo::try_from_slice(accounts_raw)?;
@@ -155,7 +164,10 @@ pub fn process_deactivate_validator_if_commission_exceeds_max(
         validator_list_data,
     )?;
 
-    let validator = validators.find_mut(accounts.validator_vote_account_to_deactivate.key)?;
+    let validator = validators.get_mut(
+        validator_index,
+        accounts.validator_vote_account_to_deactivate.key,
+    )?;
 
     if !validator.active {
         return Ok(());
@@ -187,6 +199,7 @@ pub fn process_add_maintainer(program_id: &Pubkey, accounts_raw: &[AccountInfo])
 /// Removes a maintainer from the list of maintainers
 pub fn process_remove_maintainer(
     program_id: &Pubkey,
+    maintainer_index: u32,
     accounts_raw: &[AccountInfo],
 ) -> ProgramResult {
     let accounts = RemoveMaintainerInfoV2::try_from_slice(accounts_raw)?;
@@ -201,7 +214,7 @@ pub fn process_remove_maintainer(
         maintainer_list_data,
     )?;
 
-    maintainers.remove(accounts.maintainer.key)?;
+    maintainers.remove(maintainer_index, accounts.maintainer.key)?;
     Ok(())
 }
 
@@ -243,7 +256,11 @@ pub fn _process_change_validator_fee_account(
 /// exist and is merged with the stake defined by `stake_accounts_seed_begin +
 /// 1`, and `stake_accounts_seed_begin` is incremented by one.
 /// All fully active stake accounts precede the activating stake accounts.
-pub fn process_merge_stake(program_id: &Pubkey, accounts_raw: &[AccountInfo]) -> ProgramResult {
+pub fn process_merge_stake(
+    program_id: &Pubkey,
+    validator_index: u32,
+    accounts_raw: &[AccountInfo],
+) -> ProgramResult {
     let accounts = MergeStakeInfoV2::try_from_slice(accounts_raw)?;
     let lido = Lido::deserialize_lido(program_id, accounts.lido)?;
 
@@ -255,7 +272,7 @@ pub fn process_merge_stake(program_id: &Pubkey, accounts_raw: &[AccountInfo]) ->
         validator_list_data,
     )?;
 
-    let validator = validator.find_mut(accounts.validator_vote_account.key)?;
+    let validator = validator.get_mut(validator_index, accounts.validator_vote_account.key)?;
 
     let from_seed = validator.stake_seeds.begin;
     let to_seed = validator.stake_seeds.begin + 1;

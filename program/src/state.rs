@@ -256,10 +256,29 @@ impl<'data, T: ListEntry> BigVecWithHeader<'data, T> {
         self.big_vec.push(value)
     }
 
+    pub fn get_mut(
+        &'data mut self,
+        index: u32,
+        pubkey: &Pubkey,
+    ) -> Result<&'data mut T, LidoError> {
+        let element = self
+            .big_vec
+            .get_mut::<T>(index)
+            .ok_or(LidoError::InvalidAccountMember)?;
+
+        if &element.pubkey() != pubkey {
+            return Err(LidoError::PubkeyIndexMismatch.into());
+        }
+        Ok(element)
+    }
+
     // Removes first element with pubkey
-    pub fn remove(&'data mut self, pubkey: &Pubkey) -> Result<T, ProgramError> {
-        self.big_vec
-            .remove::<T, _>(|data| T::memcmp_pubkey(data, &pubkey.to_bytes()), true)
+    pub fn remove(&'data mut self, index: u32, pubkey: &Pubkey) -> Result<T, ProgramError> {
+        let element = self.big_vec.remove_at::<T>(index)?;
+        if &element.pubkey() != pubkey {
+            return Err(LidoError::PubkeyIndexMismatch.into());
+        }
+        Ok(element)
     }
 }
 
@@ -1040,17 +1059,21 @@ impl Lido {
         program_id: &Pubkey,
         solido_maintainer_list: &Pubkey,
         maintainer_list: &AccountInfo,
+        maintainer_index: u32,
         maintainer: &AccountInfo,
     ) -> ProgramResult {
         let data = &mut *maintainer_list.data.borrow_mut();
-        let maintainer_list = self.deserialize_account_list_info::<Maintainer>(
+        let mut maintainer_list = self.deserialize_account_list_info::<Maintainer>(
             program_id,
             solido_maintainer_list,
             maintainer_list,
             data,
         )?;
 
-        if maintainer_list.find(maintainer.key).is_err() {
+        if maintainer_list
+            .get_mut(maintainer_index, maintainer.key)
+            .is_err()
+        {
             msg!(
                 "Invalid maintainer, account {} is not present in the maintainers list.",
                 maintainer.key

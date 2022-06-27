@@ -26,6 +26,7 @@ use solana_sdk::transport;
 use solana_sdk::transport::TransportError;
 use solana_vote_program::vote_instruction;
 use solana_vote_program::vote_state::{VoteInit, VoteState};
+use std::convert::TryFrom;
 use std::sync::Once;
 
 use anker::error::AnkerError;
@@ -721,6 +722,8 @@ impl Context {
     }
 
     pub async fn try_remove_maintainer(&mut self, maintainer: Pubkey) -> transport::Result<()> {
+        let solido = self.get_solido().await;
+        let maintainer_index = get_account_index::<Maintainer>(&solido.maintainers, &maintainer);
         send_transaction(
             &mut self.context,
             &[lido::instruction::remove_maintainer(
@@ -731,6 +734,7 @@ impl Context {
                     maintainer,
                     maintainer_list: self.maintainer_list.pubkey(),
                 },
+                maintainer_index,
             )],
             vec![&self.manager],
         )
@@ -781,6 +785,8 @@ impl Context {
     }
 
     pub async fn deactivate_validator(&mut self, vote_account: Pubkey) {
+        let solido = self.get_solido().await;
+        let validator_index = get_account_index::<Validator>(&solido.validators, &vote_account);
         send_transaction(
             &mut self.context,
             &[lido::instruction::deactivate_validator(
@@ -791,6 +797,7 @@ impl Context {
                     validator_vote_account_to_deactivate: vote_account,
                     validator_list: self.validator_list.pubkey(),
                 },
+                validator_index,
             )],
             vec![&self.manager],
         )
@@ -799,6 +806,8 @@ impl Context {
     }
 
     pub async fn try_remove_validator(&mut self, vote_account: Pubkey) -> transport::Result<()> {
+        let solido = self.get_solido().await;
+        let validator_index = get_account_index::<Validator>(&solido.validators, &vote_account);
         send_transaction(
             &mut self.context,
             &[lido::instruction::remove_validator(
@@ -808,6 +817,7 @@ impl Context {
                     validator_vote_account_to_remove: vote_account,
                     validator_list: self.validator_list.pubkey(),
                 },
+                validator_index,
             )],
             vec![],
         )
@@ -864,6 +874,9 @@ impl Context {
         // Where the new stake will live.
         let new_stake = self.deterministic_keypair.new_keypair();
 
+        let solido = self.get_solido().await;
+        let validator_index =
+            get_account_index::<Validator>(&solido.validators, &validator_vote_account);
         send_transaction(
             &mut self.context,
             &[instruction::withdraw(
@@ -880,6 +893,7 @@ impl Context {
                     validator_list: self.validator_list.pubkey(),
                 },
                 amount,
+                validator_index,
             )],
             vec![user, &new_stake],
         )
@@ -921,6 +935,8 @@ impl Context {
             .find(&validator_vote_account)
             .expect("Trying to stake with a non-member validator.");
 
+        let validator_index =
+            get_account_index::<Validator>(&solido.validators, &validator_vote_account);
         let (stake_account_end, _) = validator.find_stake_account_address(
             &id(),
             &self.solido.pubkey(),
@@ -946,6 +962,8 @@ impl Context {
             .as_ref()
             .expect("Must have maintainer to call StakeDeposit.");
 
+        let maintainer_index =
+            get_account_index::<Maintainer>(&solido.maintainers, &maintainer.pubkey());
         send_transaction(
             &mut self.context,
             &[instruction::stake_deposit(
@@ -962,6 +980,8 @@ impl Context {
                     maintainer_list: self.maintainer_list.pubkey(),
                 },
                 amount,
+                validator_index,
+                maintainer_index,
             )],
             vec![maintainer],
         )
@@ -1005,6 +1025,11 @@ impl Context {
             StakeType::Unstake,
         );
 
+        let validator_index =
+            get_account_index::<Validator>(&solido.validators, &validator_vote_account);
+        let maintainer = self.maintainer.as_ref().unwrap();
+        let maintainer_index =
+            get_account_index::<Maintainer>(&solido.maintainers, &maintainer.pubkey());
         send_transaction(
             &mut self.context,
             &[instruction::unstake(
@@ -1015,11 +1040,13 @@ impl Context {
                     source_stake_account,
                     destination_unstake_account,
                     stake_authority: self.stake_authority,
-                    maintainer: self.maintainer.as_ref().unwrap().pubkey(),
+                    maintainer: maintainer.pubkey(),
                     validator_list: self.validator_list.pubkey(),
                     maintainer_list: self.maintainer_list.pubkey(),
                 },
                 amount,
+                validator_index,
+                maintainer_index,
             )],
             vec![self.maintainer.as_ref().unwrap()],
         )
@@ -1103,6 +1130,9 @@ impl Context {
             StakeType::Stake,
         );
 
+        let solido = self.get_solido().await;
+        let validator_index =
+            get_account_index::<Validator>(&solido.validators, &validator.pubkey());
         send_transaction(
             &mut self.context,
             &[instruction::merge_stake(
@@ -1115,6 +1145,7 @@ impl Context {
                     to_stake: to_stake_account,
                     validator_list: self.validator_list.pubkey(),
                 },
+                validator_index,
             )],
             vec![],
         )
@@ -1157,6 +1188,9 @@ impl Context {
                 .0
         }));
 
+        let validator_index =
+            get_account_index::<Validator>(&solido.validators, &validator_vote_account);
+
         send_transaction(
             &mut self.context,
             &[instruction::update_stake_account_balance(
@@ -1173,6 +1207,7 @@ impl Context {
                     developer_st_sol_account: self.developer_st_sol_account,
                     validator_list: self.validator_list.pubkey(),
                 },
+                validator_index,
             )],
             vec![],
         )
@@ -1382,6 +1417,8 @@ impl Context {
         &mut self,
         vote_account: Pubkey,
     ) -> transport::Result<()> {
+        let solido = self.get_solido().await;
+        let validator_index = get_account_index::<Validator>(&solido.validators, &vote_account);
         send_transaction(
             &mut self.context,
             &[
@@ -1392,12 +1429,22 @@ impl Context {
                         validator_vote_account_to_deactivate: vote_account,
                         validator_list: self.validator_list.pubkey(),
                     },
+                    validator_index,
                 ),
             ],
             vec![],
         )
         .await
     }
+}
+
+pub fn get_account_index<T: ListEntry>(list: &AccountList<T>, pubkey: &Pubkey) -> u32 {
+    list.entries
+        .iter()
+        .position(|v| &v.pubkey() == pubkey)
+        .map(u32::try_from)
+        .expect("Account not found in a list")
+        .unwrap()
 }
 
 /// Return an `AccountInfo` for the given account, with `is_signer` and `is_writable` set to false.

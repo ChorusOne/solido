@@ -23,6 +23,7 @@
 //! rare, and when they do happen, they shouldn’t happen repeatedly.
 
 use std::collections::{HashMap, HashSet};
+use std::convert::TryFrom;
 use std::str::FromStr;
 use std::time::Duration;
 
@@ -475,6 +476,15 @@ impl<'a> Snapshot<'a> {
         )?;
         Ok(signature)
     }
+}
+
+pub fn get_account_index<T: ListEntry>(list: &AccountList<T>, pubkey: &Pubkey) -> u32 {
+    list.entries
+        .iter()
+        .position(|v| &v.pubkey() == pubkey)
+        .map(u32::try_from)
+        .expect("Account not found in a list")
+        .expect("List is too big")
 }
 
 /// A wrapper around [`RpcClient`] that enables reading consistent snapshots of multiple accounts.

@@ -67,8 +67,8 @@ async fn test_max_validators_maintainers() {
 
     // The maximum number of validators that we can support, before Deposit or
     // StakeDeposit fails.
-    let max_validators: u32 = 2_900;
-    let max_maintainers: u32 = 100;
+    let max_validators: u32 = 5_700;
+    let max_maintainers: u32 = 1_000;
 
     let mut first_validator_vote_account = Pubkey::default();
     for i in 0..max_validators {

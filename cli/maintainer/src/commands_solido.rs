@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2021 Chorus One AG
 // SPDX-License-Identifier: GPL-3.0
 
+use std::convert::TryFrom;
 use std::{fmt, path::PathBuf};
 
 use serde::Serialize;
@@ -23,7 +24,7 @@ use lido::{
 };
 use solido_cli_common::{
     error::{CliError, Error},
-    snapshot::{SnapshotClientConfig, SnapshotConfig},
+    snapshot::{get_account_index, SnapshotClientConfig, SnapshotConfig},
     validator_info_utils::ValidatorInfo,
 };
 
@@ -315,6 +316,13 @@ pub fn command_deactivate_validator(
     let (multisig_address, _) =
         get_multisig_program_address(opts.multisig_program_id(), opts.multisig_address());
 
+    let validators = config
+        .client
+        .get_account_list::<Validator>(opts.validator_list_address())?;
+
+    let validator_index =
+        get_account_index::<Validator>(&validators, opts.validator_vote_account());
+
     let instruction = lido::instruction::deactivate_validator(
         opts.solido_program_id(),
         &lido::instruction::DeactivateValidatorMetaV2 {
@@ -323,6 +331,7 @@ pub fn command_deactivate_validator(
             validator_vote_account_to_deactivate: *opts.validator_vote_account(),
             validator_list: *opts.validator_list_address(),
         },
+        validator_index,
     );
     propose_instruction(
         config,
@@ -365,6 +374,12 @@ pub fn command_remove_maintainer(
     let (multisig_address, _) =
         get_multisig_program_address(opts.multisig_program_id(), opts.multisig_address());
 
+    let maintainers = config
+        .client
+        .get_account_list::<Validator>(opts.maintainer_list_address())?;
+
+    let maintainer_index = get_account_index::<Validator>(&maintainers, opts.maintainer_address());
+
     let instruction = lido::instruction::remove_maintainer(
         opts.solido_program_id(),
         &lido::instruction::RemoveMaintainerMetaV2 {
@@ -373,6 +388,7 @@ pub fn command_remove_maintainer(
             maintainer: *opts.maintainer_address(),
             maintainer_list: *opts.maintainer_list_address(),
         },
+        maintainer_index,
     );
     propose_instruction(
         config,
@@ -916,6 +932,8 @@ pub fn command_withdraw(
         );
 
         let destination_stake_account = Keypair::new();
+        let validator_index =
+            get_account_index::<Validator>(&validators, &heaviest_validator.pubkey());
 
         let instr = lido::instruction::withdraw(
             opts.solido_program_id(),
@@ -931,6 +949,7 @@ pub fn command_withdraw(
                 validator_list: *opts.validator_list_address(),
             },
             *opts.amount_st_sol(),
+            validator_index,
         );
         config.sign_and_send_transaction(&[instr], &[config.signer, &destination_stake_account])?;
 
@@ -995,7 +1014,7 @@ pub fn command_deactivate_validator_if_commission_exceeds_max(
 
     let mut violations = vec![];
     let mut instructions = vec![];
-    for validator in validators.entries {
+    for (validator_index, validator) in validators.entries.iter().enumerate() {
         let vote_pubkey = validator.pubkey();
         let validator_account = config.client.get_account(&vote_pubkey)?;
         let commission = get_vote_account_commission(&validator_account.data)
@@ -1012,6 +1031,7 @@ pub fn command_deactivate_validator_if_commission_exceeds_max(
                 validator_vote_account_to_deactivate: validator.pubkey(),
                 validator_list: *opts.validator_list_address(),
             },
+            u32::try_from(validator_index).expect("Too many validators"),
         );
         instructions.push(instruction);
         violations.push(ValidatorViolationInfo {

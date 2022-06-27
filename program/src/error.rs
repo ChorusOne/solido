@@ -182,6 +182,12 @@ pub enum LidoError {
 
     /// Lido version mismatch when deserializing
     LidoVersionMismatch = 52,
+
+    /// Index out of bounds
+    IndexOutOfBounds = 53,
+
+    /// Pubkey at index does not match while indexing in account list
+    PubkeyIndexMismatch = 54,
 }
 
 // Just reuse the generated Debug impl for Display. It shows the variant names.

@@ -3,6 +3,7 @@
 
 //! Entry point for maintenance operations, such as updating the pool balance.
 
+use std::convert::TryFrom;
 use std::fmt;
 use std::io;
 use std::time::SystemTime;
@@ -31,7 +32,10 @@ use solana_sdk::{
 };
 use solana_vote_program::vote_state::VoteState;
 use solido_cli_common::{
-    error::MaintenanceError, snapshot::SnapshotConfig, validator_info_utils::ValidatorInfo, Result,
+    error::MaintenanceError,
+    snapshot::{get_account_index, SnapshotConfig},
+    validator_info_utils::ValidatorInfo,
+    Result,
 };
 use spl_token::state::Mint;
 
@@ -635,6 +639,8 @@ impl SolidoState {
             _ => stake_account_end,
         };
 
+        let maintainer_index = get_account_index(&self.maintainers, &self.maintainer_address);
+
         let instruction = lido::instruction::stake_deposit(
             &self.solido_program_id,
             &lido::instruction::StakeDepositAccountsMetaV2 {
@@ -649,6 +655,8 @@ impl SolidoState {
                 maintainer_list: self.solido.maintainer_list,
             },
             amount_to_deposit,
+            u32::try_from(validator_index).expect("Too many validators"),
+            maintainer_index,
         );
         let task = MaintenanceOutput::StakeDeposit {
             validator_vote_account: validator.pubkey(),
@@ -672,6 +680,11 @@ impl SolidoState {
             validator.unstake_seeds.end,
             StakeType::Unstake,
         );
+
+        let validator_index = get_account_index::<Validator>(&self.validators, &validator.pubkey());
+        let maintainer_index =
+            get_account_index::<Maintainer>(&self.maintainers, &self.maintainer_address);
+
         let (stake_account_address, _) = stake_account;
         (
             validator_unstake_account,
@@ -688,6 +701,8 @@ impl SolidoState {
                     maintainer_list: self.solido.maintainer_list,
                 },
                 amount,
+                validator_index,
+                maintainer_index,
             ),
         )
     }
@@ -739,11 +754,12 @@ impl SolidoState {
     pub fn try_deactivate_validator_if_commission_exceeds_max(
         &self,
     ) -> Option<MaintenanceInstruction> {
-        for (validator, vote_state) in self
+        for (validator_index, (validator, vote_state)) in self
             .validators
             .entries
             .iter()
             .zip(self.validator_vote_accounts.iter())
+            .enumerate()
         {
             // We are only interested in validators that violate commission limit
             if !validator.active || vote_state.commission <= self.solido.max_commission_percentage {
@@ -761,6 +777,7 @@ impl SolidoState {
                     validator_vote_account_to_deactivate: validator.pubkey(),
                     validator_list: self.solido.validator_list,
                 },
+                u32::try_from(validator_index).expect("Too many validators"),
             );
             return Some(MaintenanceInstruction::new(instruction, task));
         }
@@ -769,7 +786,7 @@ impl SolidoState {
 
     /// If there is a validator ready for removal, try to remove it.
     pub fn try_remove_validator(&self) -> Option<MaintenanceInstruction> {
-        for validator in &self.validators.entries {
+        for (validator_index, validator) in self.validators.entries.iter().enumerate() {
             // We are only interested in validators that can be removed.
             if validator.check_can_be_removed().is_err() {
                 continue;
@@ -785,6 +802,7 @@ impl SolidoState {
                     validator_vote_account_to_remove: validator.pubkey(),
                     validator_list: self.solido.validator_list,
                 },
+                u32::try_from(validator_index).expect("Too many validators"),
             );
             return Some(MaintenanceInstruction::new(instruction, task));
         }
@@ -956,6 +974,9 @@ impl SolidoState {
             to_seed,
             StakeType::Stake,
         );
+
+        let validator_index = get_account_index::<Validator>(&self.validators, &validator.pubkey());
+
         lido::instruction::merge_stake(
             &self.solido_program_id,
             &lido::instruction::MergeStakeMetaV2 {
@@ -966,6 +987,7 @@ impl SolidoState {
                 stake_authority: self.get_stake_authority(),
                 validator_list: self.solido.validator_list,
             },
+            validator_index,
         )
     }
 
@@ -1026,7 +1048,8 @@ impl SolidoState {
     /// or if some joker donates to one of the stake accounts we can use the same function
     /// to claim these rewards back to the reserve account so they can be re-staked.
     pub fn try_update_stake_account_balance(&self) -> Option<MaintenanceInstruction> {
-        for (validator, stake_accounts, unstake_accounts) in izip!(
+        for (validator_index, validator, stake_accounts, unstake_accounts) in izip!(
+            0..self.validators.len(),
             self.validators.entries.iter(),
             self.validator_stake_accounts.iter(),
             self.validator_unstake_accounts.iter()
@@ -1080,6 +1103,7 @@ impl SolidoState {
                         developer_st_sol_account: self.solido.fee_recipients.developer_account,
                         validator_list: self.solido.validator_list,
                     },
+                    u32::try_from(validator_index).expect("Too many validators"),
                 );
                 let task = MaintenanceOutput::WithdrawInactiveStake {
                     validator_vote_account: validator.pubkey(),

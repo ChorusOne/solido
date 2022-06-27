@@ -93,7 +93,11 @@ pub enum LidoInstruction {
     ///
     /// If there is inactive balance in stake accounts, withdraw this back to the reserve.
     /// Distribute fees.
-    UpdateStakeAccountBalance,
+    UpdateStakeAccountBalance {
+        // Index of a validator in validator list
+        #[allow(dead_code)] // but it's not
+        validator_index: u32,
+    },
 
     /// Add a new validator to the validator set.
     ///
@@ -104,7 +108,11 @@ pub enum LidoInstruction {
     /// and deactivate him if he did
     ///
     /// Requires no permission
-    DeactivateValidatorIfCommissionExceedsMax,
+    DeactivateValidatorIfCommissionExceedsMax {
+        // Index of a validator in validator list
+        #[allow(dead_code)] // but it's not
+        validator_index: u32,
+    },
 
     /// Set max_commission_percentage to control validator's fees.
     /// If validators exeed the threshold they will be deactivated by
@@ -120,12 +128,24 @@ pub enum LidoInstruction {
     StakeDepositV2 {
         #[allow(dead_code)] // but it's not
         amount: Lamports,
+        // Index of a validator in validator list
+        #[allow(dead_code)] // but it's not
+        validator_index: u32,
+        // Index of a maintainer in maintainer list
+        #[allow(dead_code)] // but it's not
+        maintainer_index: u32,
     },
 
     /// Unstake from a validator to a new stake account.
     UnstakeV2 {
         #[allow(dead_code)] // but it's not
         amount: Lamports,
+        // Index of a validator in validator list
+        #[allow(dead_code)] // but it's not
+        validator_index: u32,
+        // Index of a maintainer in maintainer list
+        #[allow(dead_code)] // but it's not
+        maintainer_index: u32,
     },
 
     /// Update the exchange rate, at the beginning of the epoch.
@@ -140,9 +160,16 @@ pub enum LidoInstruction {
     WithdrawV2 {
         #[allow(dead_code)] // but it's not
         amount: StLamports,
+        // Index of a validator in validator list
+        #[allow(dead_code)] // but it's not
+        validator_index: u32,
     },
 
-    RemoveValidatorV2,
+    RemoveValidatorV2 {
+        // Index of a validator in validator list
+        #[allow(dead_code)] // but it's not
+        validator_index: u32,
+    },
 
     /// Set the `active` flag to false for a given validator.
     ///
@@ -155,11 +182,23 @@ pub enum LidoInstruction {
     ///
     /// Once there are no more delegations to this validator, and it has no
     /// unclaimed fee credits, then the validator can be removed.
-    DeactivateValidatorV2,
+    DeactivateValidatorV2 {
+        // Index of a validator in validator list
+        #[allow(dead_code)] // but it's not
+        validator_index: u32,
+    },
 
     AddMaintainerV2,
-    RemoveMaintainerV2,
-    MergeStakeV2,
+    RemoveMaintainerV2 {
+        // Index of a maintainer in maintainer list
+        #[allow(dead_code)] // but it's not
+        maintainer_index: u32,
+    },
+    MergeStakeV2 {
+        // Index of a validator in validator list
+        #[allow(dead_code)] // but it's not
+        validator_index: u32,
+    },
 }
 
 impl LidoInstruction {
@@ -347,8 +386,12 @@ pub fn withdraw(
     program_id: &Pubkey,
     accounts: &WithdrawAccountsMetaV2,
     amount: StLamports,
+    validator_index: u32,
 ) -> Instruction {
-    let data = LidoInstruction::WithdrawV2 { amount };
+    let data = LidoInstruction::WithdrawV2 {
+        amount,
+        validator_index,
+    };
     Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
@@ -423,8 +466,14 @@ pub fn stake_deposit(
     program_id: &Pubkey,
     accounts: &StakeDepositAccountsMetaV2,
     amount: Lamports,
+    validator_index: u32,
+    maintainer_index: u32,
 ) -> Instruction {
-    let data = LidoInstruction::StakeDepositV2 { amount };
+    let data = LidoInstruction::StakeDepositV2 {
+        amount,
+        validator_index,
+        maintainer_index,
+    };
     Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
@@ -489,8 +538,14 @@ pub fn unstake(
     program_id: &Pubkey,
     accounts: &UnstakeAccountsMetaV2,
     amount: Lamports,
+    validator_index: u32,
+    maintainer_index: u32,
 ) -> Instruction {
-    let data = LidoInstruction::UnstakeV2 { amount };
+    let data = LidoInstruction::UnstakeV2 {
+        amount,
+        validator_index,
+        maintainer_index,
+    };
     Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
@@ -669,11 +724,15 @@ accounts_struct! {
     }
 }
 
-pub fn remove_validator(program_id: &Pubkey, accounts: &RemoveValidatorMetaV2) -> Instruction {
+pub fn remove_validator(
+    program_id: &Pubkey,
+    accounts: &RemoveValidatorMetaV2,
+    validator_index: u32,
+) -> Instruction {
     Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
-        data: LidoInstruction::RemoveValidatorV2.to_vec(),
+        data: LidoInstruction::RemoveValidatorV2 { validator_index }.to_vec(),
     }
 }
 
@@ -701,11 +760,12 @@ accounts_struct! {
 pub fn deactivate_validator(
     program_id: &Pubkey,
     accounts: &DeactivateValidatorMetaV2,
+    validator_index: u32,
 ) -> Instruction {
     Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
-        data: LidoInstruction::DeactivateValidatorV2.to_vec(),
+        data: LidoInstruction::DeactivateValidatorV2 { validator_index }.to_vec(),
     }
 }
 
@@ -795,11 +855,15 @@ accounts_struct! {
     }
 }
 
-pub fn remove_maintainer(program_id: &Pubkey, accounts: &RemoveMaintainerMetaV2) -> Instruction {
+pub fn remove_maintainer(
+    program_id: &Pubkey,
+    accounts: &RemoveMaintainerMetaV2,
+    maintainer_index: u32,
+) -> Instruction {
     Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
-        data: LidoInstruction::RemoveMaintainerV2.to_vec(),
+        data: LidoInstruction::RemoveMaintainerV2 { maintainer_index }.to_vec(),
     }
 }
 
@@ -840,12 +904,18 @@ accounts_struct! {
     }
 }
 
-pub fn merge_stake(program_id: &Pubkey, accounts: &MergeStakeMetaV2) -> Instruction {
+pub fn merge_stake(
+    program_id: &Pubkey,
+    accounts: &MergeStakeMetaV2,
+    validator_index: u32,
+) -> Instruction {
     Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
         // this can fail on OutOfMemory
-        data: LidoInstruction::MergeStakeV2.try_to_vec().unwrap(), // This should never fail.
+        data: LidoInstruction::MergeStakeV2 { validator_index }
+            .try_to_vec()
+            .unwrap(), // This should never fail.
     }
 }
 
@@ -960,11 +1030,12 @@ accounts_struct! {
 pub fn update_stake_account_balance(
     program_id: &Pubkey,
     accounts: &UpdateStakeAccountBalanceMeta,
+    validator_index: u32,
 ) -> Instruction {
     Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
-        data: LidoInstruction::UpdateStakeAccountBalance.to_vec(),
+        data: LidoInstruction::UpdateStakeAccountBalance { validator_index }.to_vec(),
     }
 }
 
@@ -989,11 +1060,13 @@ accounts_struct! {
 pub fn deactivate_validator_if_commission_exceeds_max(
     program_id: &Pubkey,
     accounts: &DeactivateValidatorIfCommissionExceedsMaxMeta,
+    validator_index: u32,
 ) -> Instruction {
     Instruction {
         program_id: *program_id,
         accounts: accounts.to_vec(),
-        data: LidoInstruction::DeactivateValidatorIfCommissionExceedsMax.to_vec(),
+        data: LidoInstruction::DeactivateValidatorIfCommissionExceedsMax { validator_index }
+            .to_vec(),
     }
 }
 

@@ -1,4 +1,4 @@
-// Copied from spl-stake-pool library and modified
+// Copied from SPL stake-pool library at 1a0155e34bf96489db2cd498be79ca417c87c09f and modified
 
 //! Big vector type, used with vectors that can't be serde'd
 
@@ -34,72 +34,41 @@ impl<'data> BigVec<'data> {
         self.len() == 0
     }
 
-    /// Removes elements that match the provided function.
-    /// If `only_first` is `true` removes only first matched element.
-    /// Returns a first removed element or error if not found.
-    pub fn remove<T: Pack + Clone, F: Fn(&[u8]) -> bool>(
-        &mut self,
-        predicate: F,
-        only_first: bool,
-    ) -> Result<T, ProgramError> {
-        let mut vec_len = self.len();
-        let mut removals_found = 0;
-        let mut dst_start_index = 0;
-        let mut first = None;
+    /// Remove element at position
+    pub fn remove_at<T: Pack + Clone>(&mut self, position: u32) -> Result<T, ProgramError> {
+        if position >= self.len() {
+            return Err(LidoError::IndexOutOfBounds.into());
+        }
+        let position = position as usize;
+        let start_index = VEC_SIZE_BYTES.saturating_add(position.saturating_mul(T::LEN));
+        let end_index = start_index.saturating_add(T::LEN);
+
+        if end_index - start_index != T::LEN {
+            // This only happends if start_index is very close to usize::MAX,
+            // which means that T::LEN should be huge. Solana does not allow such values on-chain
+            return Err(LidoError::IndexOutOfBounds.into());
+        }
+
+        let slice = self.data[start_index..end_index].as_ptr();
+        let value = unsafe { (*(slice as *const T)).clone() };
 
         let data_start_index = VEC_SIZE_BYTES;
         let data_end_index =
-            data_start_index.saturating_add((vec_len as usize).saturating_mul(T::LEN));
-        for start_index in (data_start_index..data_end_index).step_by(T::LEN) {
-            let end_index = start_index + T::LEN;
-            let slice = &self.data[start_index..end_index];
-            if predicate(slice) {
-                if first.is_none() {
-                    first = Some(unsafe { (*(slice.as_ptr() as *const T)).clone() });
-                }
+            data_start_index.saturating_add((self.len() as usize).saturating_mul(T::LEN));
 
-                let gap = removals_found * T::LEN;
-                if removals_found > 0 {
-                    // In case the compute budget is ever bumped up, allowing us
-                    // to use this safe code instead:
-                    // self.data.copy_within(dst_start_index + gap..start_index, dst_start_index);
-                    unsafe {
-                        sol_memmove(
-                            self.data[dst_start_index..start_index - gap].as_mut_ptr(),
-                            self.data[dst_start_index + gap..start_index].as_mut_ptr(),
-                            start_index - gap - dst_start_index,
-                        );
-                    }
-                }
-                dst_start_index = start_index - gap;
-                removals_found += 1;
-                vec_len -= 1;
-
-                if only_first {
-                    break;
-                }
-            }
+        unsafe {
+            sol_memmove(
+                self.data[start_index..data_end_index - T::LEN].as_mut_ptr(),
+                self.data[end_index..data_end_index].as_mut_ptr(),
+                data_end_index - end_index,
+            );
         }
 
-        // final memmove
-        if removals_found > 0 {
-            let gap = removals_found * T::LEN;
-            // In case the compute budget is ever bumped up, allowing us
-            // to use this safe code instead:
-            //self.data.copy_within(dst_start_index + gap..data_end_index, dst_start_index);
-            unsafe {
-                sol_memmove(
-                    self.data[dst_start_index..data_end_index - gap].as_mut_ptr(),
-                    self.data[dst_start_index + gap..data_end_index].as_mut_ptr(),
-                    data_end_index - gap - dst_start_index,
-                );
-            }
-        }
-
+        let new_len = self.len() - 1;
         let mut vec_len_ref = &mut self.data[0..VEC_SIZE_BYTES];
-        vec_len.serialize(&mut vec_len_ref)?;
+        new_len.serialize(&mut vec_len_ref)?;
 
-        return first.ok_or(LidoError::InvalidAccountMember.into());
+        Ok(value)
     }
 
     /// Extracts a slice of the data types
@@ -142,6 +111,22 @@ impl<'data> BigVec<'data> {
         let element_ref = &mut self.data[start_index..start_index + T::LEN];
         element.pack_into_slice(element_ref);
         Ok(())
+    }
+
+    /// Get element at position
+    pub fn get_mut<T: Pack>(&mut self, position: u32) -> Option<&mut T> {
+        if position >= self.len() {
+            return None;
+        }
+        let position = position as usize;
+        let start_index = VEC_SIZE_BYTES.saturating_add(position.saturating_mul(T::LEN));
+        let end_index = start_index.saturating_add(T::LEN);
+
+        if end_index - start_index != T::LEN {
+            return None;
+        }
+
+        Some(unsafe { &mut *(self.data[start_index..end_index].as_ptr() as *mut T) })
     }
 
     /// Get an iterator for the type provided
@@ -325,30 +310,61 @@ mod tests {
     }
 
     #[test]
-    fn retain() {
-        fn is_odd(data: &[u8]) -> bool {
-            u64::try_from_slice(data).unwrap() % 2 == 1
-        }
+    fn at_position() {
+        let mut data = [0u8; 4 + 8 * 3];
+        let mut v = from_slice(&mut data, &[1, 2, 3]);
 
-        let mut data = [0u8; 4 + 8 * 7];
-        let mut v = from_slice(&mut data, &[1, 2, 3, 4, 8, 4, 10]);
-        v.remove::<TestStruct, _>(is_odd, false).unwrap();
-        check_big_vec_eq(&v, &[2, 4, 8, 4, 10]);
+        let elem = v.get_mut::<TestStruct>(0);
+        assert_eq!(elem.unwrap().value, 1);
 
-        v.remove::<TestStruct, _>(|x| u64::try_from_slice(x).unwrap() == 4, true)
-            .unwrap();
-        check_big_vec_eq(&v, &[2, 8, 4, 10]);
+        let elem = v.get_mut::<TestStruct>(1).unwrap();
+        assert_eq!(elem.value, 2);
 
-        v.remove::<TestStruct, _>(|x| u64::try_from_slice(x).unwrap() == 4, true)
-            .unwrap();
-        check_big_vec_eq(&v, &[2, 8, 10]);
+        elem.value = 22;
+        let elem = v.get_mut::<TestStruct>(1);
+        assert_eq!(elem.unwrap().value, 22);
 
-        v.remove::<TestStruct, _>(|x| u64::try_from_slice(x).unwrap() == 10, true)
-            .unwrap();
-        check_big_vec_eq(&v, &[2, 8]);
+        let elem = v.get_mut::<TestStruct>(2);
+        assert_eq!(elem.unwrap().value, 3);
 
-        v.remove::<TestStruct, _>(|x| !is_odd(x), false).unwrap();
+        let elem = v.get_mut::<TestStruct>(3);
+        assert_eq!(elem, None);
+
+        let mut data = [0u8; 4 + 0];
+        let mut v = from_slice(&mut data, &[]);
+
+        let elem = v.get_mut::<TestStruct>(0);
+        assert_eq!(elem, None);
+    }
+
+    #[test]
+    fn remove_at() {
+        let mut data = [0u8; 4 + 8 * 4];
+        let mut v = from_slice(&mut data, &[1, 2, 3, 4]);
+
+        let elem = v.remove_at::<TestStruct>(1);
+        check_big_vec_eq(&v, &[1, 3, 4]);
+        assert_eq!(elem.unwrap().value, 2);
+
+        let elem = v.remove_at::<TestStruct>(0);
+        check_big_vec_eq(&v, &[3, 4]);
+        assert_eq!(elem.unwrap().value, 1);
+
+        let elem = v.remove_at::<TestStruct>(2).unwrap_err();
+        check_big_vec_eq(&v, &[3, 4]);
+        assert_eq!(elem, LidoError::IndexOutOfBounds.into());
+
+        let elem = v.remove_at::<TestStruct>(1);
+        check_big_vec_eq(&v, &[3]);
+        assert_eq!(elem.unwrap().value, 4);
+
+        let elem = v.remove_at::<TestStruct>(0);
         check_big_vec_eq(&v, &[]);
+        assert_eq!(elem.unwrap().value, 3);
+
+        let elem = v.remove_at::<TestStruct>(0).unwrap_err();
+        check_big_vec_eq(&v, &[]);
+        assert_eq!(elem, LidoError::IndexOutOfBounds.into());
     }
 
     fn find_predicate(a: &[u8], b: &[u8]) -> bool {
