@@ -69,9 +69,6 @@ struct MaintenanceMetrics {
     /// Number of times we performed `SellRewards` on the Anker instance.
     transactions_sell_rewards: u64,
 
-    /// Number of times we performed `SendRewards` on the Anker instance.
-    transactions_send_rewards: u64,
-
     /// Number of times we performed `FetchPoolPrice` on the Anker instance.
     transactions_fetch_pool_price: u64,
 }
@@ -122,8 +119,6 @@ impl MaintenanceMetrics {
                         .with_label("operation", "UnstakeFromActiveValidator".to_string()),
                     Metric::new(self.transactions_sell_rewards)
                         .with_label("operation", "SellRewards".to_string()),
-                    Metric::new(self.transactions_send_rewards)
-                        .with_label("operation", "SendRewards".to_string()),
                     Metric::new(self.transactions_fetch_pool_price)
                         .with_label("operation", "FetchPoolPrice".to_string()),
                 ],
@@ -159,7 +154,6 @@ impl MaintenanceMetrics {
                 self.transactions_unstake_from_active_validator += 1
             }
             MaintenanceOutput::SellRewards { .. } => self.transactions_sell_rewards += 1,
-            MaintenanceOutput::SendRewards { .. } => self.transactions_send_rewards += 1,
             MaintenanceOutput::FetchPoolPrice { .. } => self.transactions_fetch_pool_price += 1,
         }
     }
@@ -324,7 +318,6 @@ impl<'a, 'b> Daemon<'a, 'b> {
             transactions_remove_validator: 0,
             transactions_unstake_from_active_validator: 0,
             transactions_sell_rewards: 0,
-            transactions_send_rewards: 0,
             transactions_fetch_pool_price: 0,
         };
         Daemon {
