@@ -27,7 +27,6 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use anchor_lang::AccountDeserialize;
-use borsh::BorshSerialize;
 use solana_client::client_error::{ClientError, ClientErrorKind};
 use solana_client::rpc_client::RpcClient;
 use solana_client::rpc_config::{RpcBlockConfig, RpcSendTransactionConfig};
@@ -221,7 +220,7 @@ impl<'a> Snapshot<'a> {
     /// Get list of accounts of type T from Solido
     pub fn get_account_list<T>(&mut self, address: &Pubkey) -> crate::Result<AccountList<T>>
     where
-        T: ListEntry + Clone + Default + BorshSerialize,
+        T: ListEntry,
     {
         let list_account = self.get_account(address)?;
         let mut data = list_account.data.to_vec();
