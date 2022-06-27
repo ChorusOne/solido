@@ -1,8 +1,9 @@
-// Copied from spl-stake-pool library
+// Copied from spl-stake-pool library and modified
 
 //! Big vector type, used with vectors that can't be serde'd
 
 use {
+    crate::error::LidoError,
     arrayref::array_ref,
     borsh::{BorshDeserialize, BorshSerialize},
     solana_program::{
@@ -33,14 +34,18 @@ impl<'data> BigVec<'data> {
         self.len() == 0
     }
 
-    /// Retain all elements that match the provided function, discard all others
-    pub fn retain<T: Pack, F: Fn(&[u8]) -> bool>(
+    /// Removes elements that match the provided function.
+    /// If `only_first` is `true` removes only first matched element.
+    /// Returns a first removed element or error if not found.
+    pub fn remove<T: Pack + Clone, F: Fn(&[u8]) -> bool>(
         &mut self,
         predicate: F,
-    ) -> Result<(), ProgramError> {
+        only_first: bool,
+    ) -> Result<T, ProgramError> {
         let mut vec_len = self.len();
         let mut removals_found = 0;
         let mut dst_start_index = 0;
+        let mut first = None;
 
         let data_start_index = VEC_SIZE_BYTES;
         let data_end_index =
@@ -48,7 +53,11 @@ impl<'data> BigVec<'data> {
         for start_index in (data_start_index..data_end_index).step_by(T::LEN) {
             let end_index = start_index + T::LEN;
             let slice = &self.data[start_index..end_index];
-            if !predicate(slice) {
+            if predicate(slice) {
+                if first.is_none() {
+                    first = Some(unsafe { (*(slice.as_ptr() as *const T)).clone() });
+                }
+
                 let gap = removals_found * T::LEN;
                 if removals_found > 0 {
                     // In case the compute budget is ever bumped up, allowing us
@@ -65,6 +74,10 @@ impl<'data> BigVec<'data> {
                 dst_start_index = start_index - gap;
                 removals_found += 1;
                 vec_len -= 1;
+
+                if only_first {
+                    break;
+                }
             }
         }
 
@@ -86,7 +99,7 @@ impl<'data> BigVec<'data> {
         let mut vec_len_ref = &mut self.data[0..VEC_SIZE_BYTES];
         vec_len.serialize(&mut vec_len_ref)?;
 
-        Ok(())
+        return first.ok_or(LidoError::InvalidAccountMember.into());
     }
 
     /// Extracts a slice of the data types
@@ -253,7 +266,7 @@ mod tests {
         solana_program::{program_memory::sol_memcmp, program_pack::Sealed},
     };
 
-    #[derive(Debug, PartialEq)]
+    #[derive(Debug, PartialEq, Clone)]
     struct TestStruct {
         value: u64,
     }
@@ -313,14 +326,29 @@ mod tests {
 
     #[test]
     fn retain() {
-        fn mod_2_predicate(data: &[u8]) -> bool {
-            u64::try_from_slice(data).unwrap() % 2 == 0
+        fn is_odd(data: &[u8]) -> bool {
+            u64::try_from_slice(data).unwrap() % 2 == 1
         }
 
-        let mut data = [0u8; 4 + 8 * 4];
-        let mut v = from_slice(&mut data, &[1, 2, 3, 4]);
-        v.retain::<TestStruct, _>(mod_2_predicate).unwrap();
-        check_big_vec_eq(&v, &[2, 4]);
+        let mut data = [0u8; 4 + 8 * 7];
+        let mut v = from_slice(&mut data, &[1, 2, 3, 4, 8, 4, 10]);
+        v.remove::<TestStruct, _>(is_odd, false).unwrap();
+        check_big_vec_eq(&v, &[2, 4, 8, 4, 10]);
+
+        v.remove::<TestStruct, _>(|x| u64::try_from_slice(x).unwrap() == 4, true)
+            .unwrap();
+        check_big_vec_eq(&v, &[2, 8, 4, 10]);
+
+        v.remove::<TestStruct, _>(|x| u64::try_from_slice(x).unwrap() == 4, true)
+            .unwrap();
+        check_big_vec_eq(&v, &[2, 8, 10]);
+
+        v.remove::<TestStruct, _>(|x| u64::try_from_slice(x).unwrap() == 10, true)
+            .unwrap();
+        check_big_vec_eq(&v, &[2, 8]);
+
+        v.remove::<TestStruct, _>(|x| !is_odd(x), false).unwrap();
+        check_big_vec_eq(&v, &[]);
     }
 
     fn find_predicate(a: &[u8], b: &[u8]) -> bool {

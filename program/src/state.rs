@@ -244,6 +244,7 @@ impl<'data, T: ListEntry> BigVecWithHeader<'data, T> {
             .ok_or(LidoError::InvalidAccountMember)
     }
 
+    // Appends to the list only if unique
     pub fn push(&mut self, value: T) -> ProgramResult {
         if self.header.max_entries == self.len() {
             return Err(LidoError::MaximumNumberOfAccountsExceeded.into());
@@ -255,9 +256,10 @@ impl<'data, T: ListEntry> BigVecWithHeader<'data, T> {
         self.big_vec.push(value)
     }
 
-    pub fn remove(&'data mut self, pubkey: &Pubkey) -> ProgramResult {
+    // Removes first element with pubkey
+    pub fn remove(&'data mut self, pubkey: &Pubkey) -> Result<T, ProgramError> {
         self.big_vec
-            .retain::<T, _>(|data| !T::memcmp_pubkey(data, &pubkey.to_bytes()))
+            .remove::<T, _>(|data| T::memcmp_pubkey(data, &pubkey.to_bytes()), true)
     }
 }
 

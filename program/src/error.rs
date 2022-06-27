@@ -171,7 +171,7 @@ pub enum LidoError {
     /// Validation commission is more than 100%
     ValidationCommissionOutOfBounds = 48,
 
-    /// The size of the given validator or maintainer stake list doesn't match the expected amount
+    /// The size of the given validator or maintainer list doesn't match the expected amount
     UnexpectedListAccountSize = 49,
 
     /// Account has incorrect account type

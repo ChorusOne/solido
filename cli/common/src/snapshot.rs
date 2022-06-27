@@ -218,10 +218,10 @@ impl<'a> Snapshot<'a> {
     }
 
     /// Get list of accounts of type T from Solido
-    pub fn get_account_list<T>(&mut self, address: &Pubkey) -> crate::Result<AccountList<T>>
-    where
-        T: ListEntry,
-    {
+    pub fn get_account_list<T: ListEntry>(
+        &mut self,
+        address: &Pubkey,
+    ) -> crate::Result<AccountList<T>> {
         let list_account = self.get_account(address)?;
         let mut data = list_account.data.to_vec();
         AccountList::<T>::from(&mut data).map_err(|e| e.into())

@@ -93,13 +93,12 @@ pub fn process_remove_validator(
         validator_list_data,
     )?;
 
-    let removed_validator = validators.find(accounts.validator_vote_account_to_remove.key)?;
+    let removed_validator = validators.remove(accounts.validator_vote_account_to_remove.key)?;
 
     let result = removed_validator.check_can_be_removed();
     Validator::show_removed_error_msg(&result);
     result?;
-
-    validators.remove(accounts.validator_vote_account_to_remove.key)
+    Ok(())
 }
 
 /// Set the `active` flag to false for a given validator.
@@ -202,7 +201,8 @@ pub fn process_remove_maintainer(
         maintainer_list_data,
     )?;
 
-    maintainers.remove(accounts.maintainer.key)
+    maintainers.remove(accounts.maintainer.key)?;
+    Ok(())
 }
 
 /// Sets max validation commission for Lido. If validators exeed the threshold

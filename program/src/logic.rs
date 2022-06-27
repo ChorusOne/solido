@@ -504,8 +504,8 @@ pub fn split_stake_account(
     Ok(())
 }
 
-/// Efficiantly check all elements are zero
-fn is_zero(buf: &[u8]) -> bool {
+/// Efficiantly check all bytes are zero
+fn all_bytes_zero(buf: &[u8]) -> bool {
     let (prefix, aligned, suffix) = unsafe { buf.align_to::<u128>() };
 
     prefix.iter().all(|&x| x == 0)
@@ -519,7 +519,7 @@ pub fn check_account_uninitialized(
     expected_size: usize,
     account_type: AccountType,
 ) -> ProgramResult {
-    if !is_zero(&account.data.borrow()[..expected_size]) {
+    if !all_bytes_zero(&account.data.borrow()[..expected_size]) {
         msg!(
             "Account {} appears to be in use already, refusing to overwrite.",
             account.key

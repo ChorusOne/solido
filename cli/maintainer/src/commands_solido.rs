@@ -114,7 +114,7 @@ impl fmt::Display for CreateSolidoOutput {
     }
 }
 
-/// Get keypair from key path of random if not set
+/// Get keypair from key path or random if not set
 fn from_key_path_or_random(key_path: &PathBuf) -> solido_cli_common::Result<Box<dyn Signer>> {
     let lido_signer = {
         if key_path != &PathBuf::default() {
@@ -168,7 +168,7 @@ pub fn command_create_solido(
 
     let mut instructions = Vec::new();
 
-    // We need to fund Lido's PDA accounts so they are rent-exempt, otherwise they
+    // We need to fund Lido's reserve account so it is rent-exempt, otherwise it
     // might disappear.
     let min_balance_empty_data_account = config.client.get_minimum_balance_for_rent_exemption(0)?;
     instructions.push(system_instruction::transfer(
@@ -890,7 +890,7 @@ pub fn command_withdraw(
 
         let validators = config
             .client
-            .get_account_list::<Validator>(&opts.validator_list_address())?;
+            .get_account_list::<Validator>(opts.validator_list_address())?;
 
         let st_sol_address = spl_associated_token_account::get_associated_token_address(
             &config.signer.pubkey(),
@@ -991,7 +991,7 @@ pub fn command_deactivate_validator_if_commission_exceeds_max(
 
     let validators = config
         .client
-        .get_account_list::<Validator>(&opts.validator_list_address())?;
+        .get_account_list::<Validator>(opts.validator_list_address())?;
 
     let mut violations = vec![];
     let mut instructions = vec![];
