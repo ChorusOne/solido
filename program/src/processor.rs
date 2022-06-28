@@ -238,10 +238,10 @@ pub fn process_stake_deposit(
     let minimum_stake_validator = validators
         .iter()
         .filter(|&v| v.active)
-        .min_by_key(|v| v.effective_stake_balance())
+        .min_by_key(|v| v.effective_stake_balance)
         .ok_or(LidoError::NoActiveValidators)?;
     let minimum_stake_pubkey = minimum_stake_validator.pubkey();
-    let minimum_stake_balance = minimum_stake_validator.effective_stake_balance();
+    let minimum_stake_balance = minimum_stake_validator.effective_stake_balance;
 
     let validator = validators.get_mut(validator_index, accounts.validator_vote_account.key)?;
 
@@ -254,12 +254,12 @@ pub fn process_stake_deposit(
     }
 
     // Note that we compare balances, not keys, because the minimum might not be unique.
-    if validator.effective_stake_balance() > minimum_stake_balance {
+    if validator.effective_stake_balance > minimum_stake_balance {
         msg!(
             "Refusing to stake with {}, who has {} stake, \
             because {} has less stake: {}. Stake there instead.",
             validator.pubkey(),
-            validator.effective_stake_balance(),
+            validator.effective_stake_balance,
             minimum_stake_pubkey,
             minimum_stake_balance,
         );
@@ -324,6 +324,7 @@ pub fn process_stake_deposit(
     // and then it will be treated as a donation.
     msg!("Staked {} out of the reserve.", amount);
     validator.stake_accounts_balance = (validator.stake_accounts_balance + amount)?;
+    validator.effective_stake_balance = validator.get_effective_stake_balance();
 
     // Now we have two options:
     //
@@ -543,6 +544,7 @@ pub fn process_unstake(
     }
 
     validator.unstake_accounts_balance = (validator.unstake_accounts_balance + amount)?;
+    validator.effective_stake_balance = validator.get_effective_stake_balance();
     validator.unstake_seeds.end += 1;
 
     Ok(())
@@ -774,13 +776,13 @@ pub fn process_update_stake_account_balance(
     // balance.
     Validator::observe_balance(
         stake_observed_total,
-        validator.effective_stake_balance(),
+        validator.effective_stake_balance,
         "Stake",
     )?;
 
     // We tracked in `stake_accounts_balance` what we put in there ourselves, so
     // the excess is a sum of a donation by some joker and staking rewards.
-    let donation = (stake_observed_total - validator.effective_stake_balance())
+    let donation = (stake_observed_total - validator.effective_stake_balance)
         .expect("Does not underflow because observed_total >= stake_accounts_balance.");
     msg!("{} in donations observed.", donation);
 
@@ -857,6 +859,8 @@ pub fn process_update_stake_account_balance(
         .add(validator.unstake_accounts_balance)
         .expect("If Solido has enough SOL to make this overflow, something has gone very wrong.");
 
+    validator.effective_stake_balance = validator.get_effective_stake_balance();
+
     distribute_fees(&mut lido, &accounts, &clock, rewards)?;
 
     lido.save(accounts.lido)
@@ -890,10 +894,10 @@ pub fn process_withdraw(
     // necessary.
     let maximum_stake_validator = validators
         .iter()
-        .max_by_key(|pair| pair.effective_stake_balance())
+        .max_by_key(|pair| pair.effective_stake_balance)
         .ok_or(LidoError::NoActiveValidators)?;
     let maximum_stake_pubkey = maximum_stake_validator.pubkey();
-    let maximum_stake_balance = maximum_stake_validator.effective_stake_balance();
+    let maximum_stake_balance = maximum_stake_validator.effective_stake_balance;
 
     // We should withdraw from the validator that has the most effective stake.
     // With effective here we mean "total in stake accounts" - "total in unstake
@@ -901,12 +905,12 @@ pub fn process_withdraw(
     let validator = validators.get_mut(validator_index, accounts.validator_vote_account.key)?;
 
     // Note that we compare balances, not keys, because the maximum might not be unique.
-    if validator.effective_stake_balance() < maximum_stake_balance {
+    if validator.effective_stake_balance < maximum_stake_balance {
         msg!(
             "Refusing to withdraw from {}, who has {} stake, \
             because {} has more stake: {}. Withdraw from there instead.",
             validator.pubkey(),
-            validator.effective_stake_balance(),
+            validator.effective_stake_balance,
             maximum_stake_pubkey,
             maximum_stake_balance,
         );
@@ -970,6 +974,7 @@ pub fn process_withdraw(
     }
 
     validator.stake_accounts_balance = (validator.stake_accounts_balance - sol_to_withdraw)?;
+    validator.effective_stake_balance = validator.get_effective_stake_balance();
 
     // Burn stSol tokens
     burn_st_sol(&lido, &accounts, amount)?;

@@ -592,7 +592,7 @@ impl fmt::Display for ShowSolidoOutput {
                 commission,
                 pe.active,
                 pe.stake_accounts_balance,
-                pe.effective_stake_balance(),
+                pe.effective_stake_balance,
                 pe.unstake_accounts_balance,
             )?;
 

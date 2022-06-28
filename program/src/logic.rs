@@ -504,7 +504,7 @@ pub fn split_stake_account(
     Ok(())
 }
 
-/// Efficiantly check all bytes are zero
+/// Efficiently check all bytes are zero
 fn all_bytes_zero(buf: &[u8]) -> bool {
     let (prefix, aligned, suffix) = unsafe { buf.align_to::<u128>() };
 
@@ -513,7 +513,7 @@ fn all_bytes_zero(buf: &[u8]) -> bool {
         && aligned.iter().all(|&x| x == 0)
 }
 
-/// Check that account data is uninitialized and allocated size is correct.
+/// Check account data is uninitialized and allocated size is correct.
 pub fn check_account_uninitialized(
     account: &AccountInfo,
     expected_size: usize,

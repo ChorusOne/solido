@@ -67,19 +67,15 @@ async fn test_max_validators_maintainers() {
 
     // The maximum number of validators that we can support, before Deposit or
     // StakeDeposit fails.
-    let max_validators: u32 = 5_700;
-    let max_maintainers: u32 = 1_000;
+    let max_validators: u32 = 6_700;
 
     let mut first_validator_vote_account = Pubkey::default();
     for i in 0..max_validators {
-        // It is over kill to add a maintainer for each validator, so we limit
-        // the number. We set this to be the context's maintainer that is
-        // used to sign `stake_deposit`. We use a linear search, so the later
-        // maintainers are slightly more expensive to check.
-        if i < max_maintainers {
-            let maintainer = context.add_maintainer().await;
-            context.maintainer = Some(maintainer);
-        }
+        // Initially expect every validator to be a maintainer as well, so let's
+        // add a maintainer for every validator. We set this to be the context's
+        // maintainer that is used to sign `stake_deposit`.
+        let maintainer = context.add_maintainer().await;
+        context.maintainer = Some(maintainer);
 
         let validator = context.add_validator().await;
         if i == 0 {

@@ -244,7 +244,7 @@ impl<'data, T: ListEntry> BigVecWithHeader<'data, T> {
             .ok_or(LidoError::InvalidAccountMember)
     }
 
-    // Appends to the list only if unique
+    /// Appends to the list only if unique
     pub fn push(&mut self, value: T) -> ProgramResult {
         if self.header.max_entries == self.len() {
             return Err(LidoError::MaximumNumberOfAccountsExceeded.into());
@@ -256,6 +256,7 @@ impl<'data, T: ListEntry> BigVecWithHeader<'data, T> {
         self.big_vec.push(value)
     }
 
+    /// Get element with pubkey at index
     pub fn get_mut(
         &'data mut self,
         index: u32,
@@ -267,14 +268,14 @@ impl<'data, T: ListEntry> BigVecWithHeader<'data, T> {
             .ok_or(LidoError::InvalidAccountMember)?;
 
         if &element.pubkey() != pubkey {
-            return Err(LidoError::PubkeyIndexMismatch.into());
+            return Err(LidoError::PubkeyIndexMismatch);
         }
         Ok(element)
     }
 
-    // Removes first element with pubkey
+    /// Removes first element with pubkey at index
     pub fn remove(&'data mut self, index: u32, pubkey: &Pubkey) -> Result<T, ProgramError> {
-        let element = self.big_vec.remove_at::<T>(index)?;
+        let element = self.big_vec.remove::<T>(index)?;
         if &element.pubkey() != pubkey {
             return Err(LidoError::PubkeyIndexMismatch.into());
         }
@@ -347,6 +348,10 @@ pub struct Validator {
     /// Sum of the balances of the unstake accounts.
     pub unstake_accounts_balance: Lamports,
 
+    /// Effective stake balance is stake_accounts_balance - unstake_accounts_balance.
+    /// The result is stored on-chain to optimize compute budget
+    pub effective_stake_balance: Lamports,
+
     /// Controls if a validator is allowed to have new stake deposits.
     /// When removing a validator, this flag should be set to `false`.
     pub active: bool,
@@ -370,7 +375,7 @@ pub struct Maintainer {
 
 impl Validator {
     /// Return the balance in only the stake accounts, excluding the unstake accounts.
-    pub fn effective_stake_balance(&self) -> Lamports {
+    pub fn get_effective_stake_balance(&self) -> Lamports {
         (self.stake_accounts_balance - self.unstake_accounts_balance)
             .expect("Unstake balance cannot exceed the validator's total stake balance.")
     }
@@ -471,7 +476,7 @@ impl Validator {
 impl Sealed for Validator {}
 
 impl Pack for Validator {
-    const LEN: usize = 81;
+    const LEN: usize = 89;
     fn pack_into_slice(&self, data: &mut [u8]) {
         let mut data = data;
         BorshSerialize::serialize(&self, &mut data).unwrap();
@@ -489,6 +494,7 @@ impl Default for Validator {
             unstake_seeds: SeedRange { begin: 0, end: 0 },
             stake_accounts_balance: Lamports(0),
             unstake_accounts_balance: Lamports(0),
+            effective_stake_balance: Lamports(0),
             active: true,
             vote_account_address: Pubkey::default(),
         }

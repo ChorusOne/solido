@@ -1061,8 +1061,8 @@ impl SolidoState {
                 .expect("If this overflows, there would be more than u64::MAX staked.");
 
             let expected_difference_stake =
-                if current_stake_balance > validator.effective_stake_balance() {
-                    (current_stake_balance - validator.effective_stake_balance())
+                if current_stake_balance > validator.get_effective_stake_balance() {
+                    (current_stake_balance - validator.get_effective_stake_balance())
                         .expect("Does not overflow because current > entry.balance.")
                 } else {
                     Lamports(0)

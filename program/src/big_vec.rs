@@ -34,13 +34,13 @@ impl<'data> BigVec<'data> {
         self.len() == 0
     }
 
-    /// Remove element at position
-    pub fn remove_at<T: Pack + Clone>(&mut self, position: u32) -> Result<T, ProgramError> {
-        if position >= self.len() {
+    /// Remove element at index
+    pub fn remove<T: Pack + Clone>(&mut self, index: u32) -> Result<T, ProgramError> {
+        if index >= self.len() {
             return Err(LidoError::IndexOutOfBounds.into());
         }
-        let position = position as usize;
-        let start_index = VEC_SIZE_BYTES.saturating_add(position.saturating_mul(T::LEN));
+        let index = index as usize;
+        let start_index = VEC_SIZE_BYTES.saturating_add(index.saturating_mul(T::LEN));
         let end_index = start_index.saturating_add(T::LEN);
 
         if end_index - start_index != T::LEN {
@@ -56,6 +56,7 @@ impl<'data> BigVec<'data> {
         let data_end_index =
             data_start_index.saturating_add((self.len() as usize).saturating_mul(T::LEN));
 
+        // shift block of memory [end_index..data_end_index] to the left by T::LEN bytes
         unsafe {
             sol_memmove(
                 self.data[start_index..data_end_index - T::LEN].as_mut_ptr(),
@@ -342,27 +343,27 @@ mod tests {
         let mut data = [0u8; 4 + 8 * 4];
         let mut v = from_slice(&mut data, &[1, 2, 3, 4]);
 
-        let elem = v.remove_at::<TestStruct>(1);
+        let elem = v.remove::<TestStruct>(1);
         check_big_vec_eq(&v, &[1, 3, 4]);
         assert_eq!(elem.unwrap().value, 2);
 
-        let elem = v.remove_at::<TestStruct>(0);
+        let elem = v.remove::<TestStruct>(0);
         check_big_vec_eq(&v, &[3, 4]);
         assert_eq!(elem.unwrap().value, 1);
 
-        let elem = v.remove_at::<TestStruct>(2).unwrap_err();
+        let elem = v.remove::<TestStruct>(2).unwrap_err();
         check_big_vec_eq(&v, &[3, 4]);
         assert_eq!(elem, LidoError::IndexOutOfBounds.into());
 
-        let elem = v.remove_at::<TestStruct>(1);
+        let elem = v.remove::<TestStruct>(1);
         check_big_vec_eq(&v, &[3]);
         assert_eq!(elem.unwrap().value, 4);
 
-        let elem = v.remove_at::<TestStruct>(0);
+        let elem = v.remove::<TestStruct>(0);
         check_big_vec_eq(&v, &[]);
         assert_eq!(elem.unwrap().value, 3);
 
-        let elem = v.remove_at::<TestStruct>(0).unwrap_err();
+        let elem = v.remove::<TestStruct>(0).unwrap_err();
         check_big_vec_eq(&v, &[]);
         assert_eq!(elem, LidoError::IndexOutOfBounds.into());
     }
