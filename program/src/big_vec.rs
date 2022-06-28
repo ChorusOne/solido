@@ -34,8 +34,8 @@ impl<'data> BigVec<'data> {
         self.len() == 0
     }
 
-    /// Remove element at index
-    pub fn remove<T: Pack + Clone>(&mut self, index: u32) -> Result<T, ProgramError> {
+    // Get start and end positions of slice at index
+    fn get_slice_bounds<T: Pack>(&mut self, index: u32) -> Result<(usize, usize), ProgramError> {
         if index >= self.len() {
             return Err(LidoError::IndexOutOfBounds.into());
         }
@@ -49,8 +49,21 @@ impl<'data> BigVec<'data> {
             return Err(LidoError::IndexOutOfBounds.into());
         }
 
-        let slice = self.data[start_index..end_index].as_ptr();
-        let value = unsafe { (*(slice as *const T)).clone() };
+        Ok((start_index, end_index))
+    }
+
+    /// Get element at position
+    pub fn get_mut<T: Pack>(&mut self, index: u32) -> Result<&mut T, ProgramError> {
+        let (start_index, end_index) = self.get_slice_bounds::<T>(index)?;
+        let ptr = self.data[start_index..end_index].as_ptr();
+        Ok(unsafe { &mut *(ptr as *mut T) })
+    }
+
+    /// Removes and returns the element at position index within the vector, shifting all elements after it to the left.
+    pub fn remove<T: Pack + Clone>(&mut self, index: u32) -> Result<T, ProgramError> {
+        let (start_index, end_index) = self.get_slice_bounds::<T>(index)?;
+        let ptr = self.data[start_index..end_index].as_ptr();
+        let value = unsafe { (*(ptr as *const T)).clone() };
 
         let data_start_index = VEC_SIZE_BYTES;
         let data_end_index =
@@ -63,6 +76,36 @@ impl<'data> BigVec<'data> {
                 self.data[end_index..data_end_index].as_mut_ptr(),
                 data_end_index - end_index,
             );
+        }
+
+        let new_len = self.len() - 1;
+        let mut vec_len_ref = &mut self.data[0..VEC_SIZE_BYTES];
+        new_len.serialize(&mut vec_len_ref)?;
+
+        Ok(value)
+    }
+
+    /// Removes an element from the vector and returns it.
+    /// The removed element is replaced by the last element of the vector.
+    /// This does not preserve ordering, but is O(1). If you need to preserve the element order, use remove instead
+    pub fn swap_remove<T: Pack + Clone>(&mut self, index: u32) -> Result<T, ProgramError> {
+        let (start_index, end_index) = self.get_slice_bounds::<T>(index)?;
+        let ptr = self.data[start_index..end_index].as_ptr();
+        let value = unsafe { (*(ptr as *const T)).clone() };
+
+        let data_start_index = VEC_SIZE_BYTES;
+        let data_end_index =
+            data_start_index.saturating_add((self.len() as usize).saturating_mul(T::LEN));
+
+        // if not last element replace it with last
+        if index != self.len() - 1 {
+            unsafe {
+                sol_memmove(
+                    self.data[start_index..end_index].as_mut_ptr(),
+                    self.data[data_end_index - T::LEN..data_end_index].as_mut_ptr(),
+                    T::LEN,
+                );
+            }
         }
 
         let new_len = self.len() - 1;
@@ -112,22 +155,6 @@ impl<'data> BigVec<'data> {
         let element_ref = &mut self.data[start_index..start_index + T::LEN];
         element.pack_into_slice(element_ref);
         Ok(())
-    }
-
-    /// Get element at position
-    pub fn get_mut<T: Pack>(&mut self, position: u32) -> Option<&mut T> {
-        if position >= self.len() {
-            return None;
-        }
-        let position = position as usize;
-        let start_index = VEC_SIZE_BYTES.saturating_add(position.saturating_mul(T::LEN));
-        let end_index = start_index.saturating_add(T::LEN);
-
-        if end_index - start_index != T::LEN {
-            return None;
-        }
-
-        Some(unsafe { &mut *(self.data[start_index..end_index].as_ptr() as *mut T) })
     }
 
     /// Get an iterator for the type provided
@@ -328,14 +355,14 @@ mod tests {
         let elem = v.get_mut::<TestStruct>(2);
         assert_eq!(elem.unwrap().value, 3);
 
-        let elem = v.get_mut::<TestStruct>(3);
-        assert_eq!(elem, None);
+        let elem = v.get_mut::<TestStruct>(3).unwrap_err();
+        assert_eq!(elem, LidoError::IndexOutOfBounds.into());
 
         let mut data = [0u8; 4 + 0];
         let mut v = from_slice(&mut data, &[]);
 
-        let elem = v.get_mut::<TestStruct>(0);
-        assert_eq!(elem, None);
+        let elem = v.get_mut::<TestStruct>(0).unwrap_err();
+        assert_eq!(elem, LidoError::IndexOutOfBounds.into());
     }
 
     #[test]
@@ -364,6 +391,36 @@ mod tests {
         assert_eq!(elem.unwrap().value, 3);
 
         let elem = v.remove::<TestStruct>(0).unwrap_err();
+        check_big_vec_eq(&v, &[]);
+        assert_eq!(elem, LidoError::IndexOutOfBounds.into());
+    }
+
+    #[test]
+    fn swap_remove() {
+        let mut data = [0u8; 4 + 8 * 4];
+        let mut v = from_slice(&mut data, &[1, 2, 3, 4]);
+
+        let elem = v.swap_remove::<TestStruct>(1);
+        check_big_vec_eq(&v, &[1, 4, 3]);
+        assert_eq!(elem.unwrap().value, 2);
+
+        let elem = v.swap_remove::<TestStruct>(0);
+        check_big_vec_eq(&v, &[3, 4]);
+        assert_eq!(elem.unwrap().value, 1);
+
+        let elem = v.swap_remove::<TestStruct>(2).unwrap_err();
+        check_big_vec_eq(&v, &[3, 4]);
+        assert_eq!(elem, LidoError::IndexOutOfBounds.into());
+
+        let elem = v.swap_remove::<TestStruct>(1);
+        check_big_vec_eq(&v, &[3]);
+        assert_eq!(elem.unwrap().value, 4);
+
+        let elem = v.swap_remove::<TestStruct>(0);
+        check_big_vec_eq(&v, &[]);
+        assert_eq!(elem.unwrap().value, 3);
+
+        let elem = v.swap_remove::<TestStruct>(0).unwrap_err();
         check_big_vec_eq(&v, &[]);
         assert_eq!(elem, LidoError::IndexOutOfBounds.into());
     }

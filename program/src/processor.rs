@@ -13,8 +13,8 @@ use crate::{
         WithdrawAccountsInfoV2,
     },
     logic::{
-        burn_st_sol, check_account_uninitialized, check_mint, check_rent_exempt,
-        check_unstake_accounts, create_account_even_if_funded, distribute_fees,
+        burn_st_sol, check_account_owner, check_account_uninitialized, check_mint,
+        check_rent_exempt, check_unstake_accounts, create_account_even_if_funded, distribute_fees,
         initialize_stake_account_undelegated, mint_st_sol_to, split_stake_account,
         transfer_stake_authority, CreateAccountOptions, SplitStakeAccounts,
     },
@@ -70,6 +70,10 @@ pub fn process_initialize(
     check_rent_exempt(rent, accounts.reserve_account, "Reserve account")?;
     check_rent_exempt(rent, accounts.validator_list, "Validator list account")?;
     check_rent_exempt(rent, accounts.maintainer_list, "Maintainer list account")?;
+
+    check_account_owner(&accounts.lido, program_id)?;
+    check_account_owner(&accounts.validator_list, program_id)?;
+    check_account_owner(&accounts.maintainer_list, program_id)?;
 
     check_account_uninitialized(accounts.lido, LIDO_CONSTANT_SIZE, AccountType::Lido)?;
     check_account_uninitialized(

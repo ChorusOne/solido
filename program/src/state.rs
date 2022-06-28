@@ -261,21 +261,18 @@ impl<'data, T: ListEntry> BigVecWithHeader<'data, T> {
         &'data mut self,
         index: u32,
         pubkey: &Pubkey,
-    ) -> Result<&'data mut T, LidoError> {
-        let element = self
-            .big_vec
-            .get_mut::<T>(index)
-            .ok_or(LidoError::InvalidAccountMember)?;
+    ) -> Result<&'data mut T, ProgramError> {
+        let element = self.big_vec.get_mut::<T>(index)?;
 
         if &element.pubkey() != pubkey {
-            return Err(LidoError::PubkeyIndexMismatch);
+            return Err(LidoError::PubkeyIndexMismatch.into());
         }
         Ok(element)
     }
 
     /// Removes first element with pubkey at index
     pub fn remove(&'data mut self, index: u32, pubkey: &Pubkey) -> Result<T, ProgramError> {
-        let element = self.big_vec.remove::<T>(index)?;
+        let element = self.big_vec.swap_remove::<T>(index)?;
         if &element.pubkey() != pubkey {
             return Err(LidoError::PubkeyIndexMismatch.into());
         }
