@@ -1703,4 +1703,23 @@ mod test_lido {
         }
         assert!(result.is_err());
     }
+
+    #[test]
+    fn check_lido_version() {
+        // create empty account list with Vec
+        let mut accounts = ValidatorList::new_default(1);
+        accounts.header.lido_version = 0;
+
+        // allocate space for future elements
+        let mut buffer: Vec<u8> =
+            vec![0; ValidatorList::required_bytes(accounts.header.max_entries)];
+        let mut slice = &mut buffer[..];
+        // seriaslize empty list to buffer, which serializes a header and lenght
+        BorshSerialize::serialize(&accounts, &mut slice).unwrap();
+
+        // deserialize to BigVec
+        let slice = &mut buffer[..];
+        let err = ListHeader::<Validator>::deserialize_vec(slice).unwrap_err();
+        assert_eq!(err, LidoError::LidoVersionMismatch.into());
+    }
 }
