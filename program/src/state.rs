@@ -76,6 +76,7 @@ impl Default for AccountType {
 )]
 pub struct AccountList<T> {
     /// Data outside of the list, separated out for cheaper deserializations
+    #[serde(skip_serializing)]
     pub header: ListHeader<T>,
 
     /// List of account in the pool
@@ -303,8 +304,7 @@ impl<T: ListEntry> ListHeader<T> {
 
     /// Extracts the account list into its header and internal BigVec
     pub fn deserialize_vec(data: &mut [u8]) -> Result<(Self, BigVec), ProgramError> {
-        let mut data_mut = &data[..];
-        let header = Self::deserialize(&mut data_mut)?;
+        let header = Self::deserialize(&mut &data[..])?;
         check_lido_version(header.lido_version, T::TYPE)?;
 
         // check AccountType
@@ -338,6 +338,8 @@ impl ValidatorList {
 pub struct Validator {
     /// Validator vote account address.
     /// Do not reorder this field, it should be first in the struct
+    #[serde(serialize_with = "serialize_b58")]
+    #[serde(rename = "pubkey")]
     pub vote_account_address: Pubkey,
 
     /// Seeds for active stake accounts.
@@ -373,6 +375,7 @@ pub struct Validator {
 pub struct Maintainer {
     /// Address of maintainer account.
     /// Do not reorder this field, it should be first in the struct
+    #[serde(serialize_with = "serialize_b58")]
     pub pubkey: Pubkey,
 }
 

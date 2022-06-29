@@ -57,6 +57,16 @@ print(f'> Treasury account owner:      {treasury_account_owner}')
 developer_account_owner = create_test_account('tests/.keys/developer-fee-key.json')
 print(f'> Developer fee account owner: {developer_account_owner}')
 
+validator_list_account_owner = create_test_account(
+    'tests/.keys/validator-list-key.json', fund=False
+)
+print(f'> Validator list account owner: {validator_list_account_owner}')
+
+maintainer_list_account_owner = create_test_account(
+    'tests/.keys/maintainer-list-key.json', fund=False
+)
+print(f'> Maintainer list account owner: {maintainer_list_account_owner}')
+
 print('\nUploading Solido program ...')
 solido_program_id = solana_program_deploy(get_solido_program_path() + '/lido.so')
 print(f'> Solido program id is {solido_program_id}.')
@@ -182,6 +192,10 @@ result = solido(
     treasury_account_owner.pubkey,
     '--developer-account-owner',
     developer_account_owner.pubkey,
+    '--validator-list-key-path',
+    validator_list_account_owner.keypair_path,
+    '--maintainer-list-key-path',
+    maintainer_list_account_owner.keypair_path,
     '--multisig-address',
     multisig_instance,
     keypair_path=test_addrs[0].keypair_path,
@@ -191,6 +205,8 @@ solido_address = result['solido_address']
 treasury_account = result['treasury_account']
 developer_account = result['developer_account']
 st_sol_mint_account = result['st_sol_mint_address']
+validator_list_address = result['validator_list_address']
+maintainer_list_address = result['maintainer_list_address']
 
 print(f'> Created instance at {solido_address}.')
 
@@ -251,6 +267,10 @@ def add_validator(
         vote_account.pubkey,
         '--multisig-address',
         multisig_instance,
+        '--validator-list-address',
+        validator_list_address,
+        '--maintainer-list-address',
+        maintainer_list_address,
         keypair_path=test_addrs[1].keypair_path,
     )
     return (validator, transaction_result)
@@ -307,21 +327,20 @@ solido_instance = solido(
     solido_address,
 )
 
-assert solido_instance['solido']['validators']['entries'][0] == {
+assert solido_instance['validators']['entries'][0] == {
     'pubkey': validator.vote_account.pubkey,
-    'entry': {
-        'stake_seeds': {
-            'begin': 0,
-            'end': 0,
-        },
-        'unstake_seeds': {
-            'begin': 0,
-            'end': 0,
-        },
-        'stake_accounts_balance': 0,
-        'unstake_accounts_balance': 0,
-        'active': True,
+    'stake_seeds': {
+        'begin': 0,
+        'end': 0,
     },
+    'unstake_seeds': {
+        'begin': 0,
+        'end': 0,
+    },
+    'stake_accounts_balance': 0,
+    'unstake_accounts_balance': 0,
+    'effective_stake_balance': 0,
+    'active': True,
 }, f'Unexpected validator entry, in {json.dumps(solido_instance, indent=True)}'
 
 maintainer = create_test_account('tests/.keys/maintainer-account-key.json')
@@ -337,6 +356,8 @@ transaction_result = solido(
     solido_program_id,
     '--solido-address',
     solido_address,
+    '--maintainer-list-address',
+    maintainer_list_address,
     '--maintainer-address',
     maintainer.pubkey,
     '--multisig-address',
@@ -353,9 +374,9 @@ solido_instance = solido(
     '--solido-address',
     solido_address,
 )
-assert solido_instance['solido']['maintainers']['entries'][0] == {
+
+assert solido_instance['maintainers']['entries'][0] == {
     'pubkey': maintainer.pubkey,
-    'entry': None,
 }
 
 print(f'> Removing maintainer {maintainer}')
@@ -367,6 +388,8 @@ transaction_result = solido(
     solido_program_id,
     '--solido-address',
     solido_address,
+    '--maintainer-list-address',
+    maintainer_list_address,
     '--maintainer-address',
     maintainer.pubkey,
     '--multisig-address',
@@ -383,7 +406,7 @@ solido_instance = solido(
     solido_address,
 )
 
-assert len(solido_instance['solido']['maintainers']['entries']) == 0
+assert len(solido_instance['maintainers']['entries']) == 0
 
 print(f'> Adding maintainer {maintainer} again')
 transaction_result = solido(
@@ -394,6 +417,8 @@ transaction_result = solido(
     solido_program_id,
     '--solido-address',
     solido_address,
+    '--maintainer-list-address',
+    maintainer_list_address,
     '--maintainer-address',
     maintainer.pubkey,
     '--multisig-address',
@@ -598,6 +623,8 @@ transaction_result = solido(
     solido_address,
     '--validator-vote-account',
     validator.vote_account.pubkey,
+    '--validator-list-address',
+    validator_list_address,
     keypair_path=test_addrs[0].keypair_path,
 )
 transaction_address = transaction_result['transaction_address']
@@ -624,7 +651,7 @@ solido_instance = solido(
     '--solido-address',
     solido_address,
 )
-assert not solido_instance['solido']['validators']['entries'][0]['entry'][
+assert not solido_instance['validators']['entries'][0][
     'active'
 ], 'Validator should be inactive after deactivation.'
 print('> Validator is inactive as expected.')
@@ -652,7 +679,7 @@ solido_instance = solido(
     solido_address,
 )
 # Should have bumped the validator's `stake_seeds` and `unstake_seeds`.
-val = solido_instance['solido']['validators']['entries'][0]['entry']
+val = solido_instance['validators']['entries'][0]
 assert val['stake_seeds'] == {'begin': 1, 'end': 1}
 assert val['unstake_seeds'] == {'begin': 1, 'end': 2}
 
@@ -694,7 +721,7 @@ solido_instance = solido(
     '--solido-address',
     solido_address,
 )
-number_validators = len(solido_instance['solido']['validators']['entries'])
+number_validators = len(solido_instance['validators']['entries'])
 assert (
     number_validators == 1
 ), f'\nExpected no validators\nGot: {number_validators} validators'

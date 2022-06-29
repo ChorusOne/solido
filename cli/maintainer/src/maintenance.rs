@@ -1746,6 +1746,10 @@ mod test {
 
         // The reserve should be rent-exempt.
         state.reserve_account.lamports = state.rent.minimum_balance(0);
+        state
+            .maintainers
+            .entries
+            .push(Maintainer::new(state.maintainer_address));
 
         state
     }

@@ -71,9 +71,9 @@ pub fn process_initialize(
     check_rent_exempt(rent, accounts.validator_list, "Validator list account")?;
     check_rent_exempt(rent, accounts.maintainer_list, "Maintainer list account")?;
 
-    check_account_owner(&accounts.lido, program_id)?;
-    check_account_owner(&accounts.validator_list, program_id)?;
-    check_account_owner(&accounts.maintainer_list, program_id)?;
+    check_account_owner(accounts.lido, program_id)?;
+    check_account_owner(accounts.validator_list, program_id)?;
+    check_account_owner(accounts.maintainer_list, program_id)?;
 
     check_account_uninitialized(accounts.lido, LIDO_CONSTANT_SIZE, AccountType::Lido)?;
     check_account_uninitialized(

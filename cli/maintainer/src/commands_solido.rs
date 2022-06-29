@@ -267,7 +267,15 @@ pub fn command_create_solido(
         },
     ));
 
-    config.sign_and_send_transaction(&instructions[..], &[config.signer, &*lido_signer])?;
+    config.sign_and_send_transaction(
+        &instructions[..],
+        &[
+            config.signer,
+            &*lido_signer,
+            &*validator_list_signer,
+            &*maintainer_list_signer,
+        ],
+    )?;
     eprintln!("Did send Lido init.");
 
     let result = CreateSolidoOutput {
@@ -320,8 +328,7 @@ pub fn command_deactivate_validator(
         .client
         .get_account_list::<Validator>(opts.validator_list_address())?;
 
-    let validator_index =
-        get_account_index::<Validator>(&validators, opts.validator_vote_account());
+    let validator_index = get_account_index(&validators, opts.validator_vote_account());
 
     let instruction = lido::instruction::deactivate_validator(
         opts.solido_program_id(),
@@ -376,9 +383,9 @@ pub fn command_remove_maintainer(
 
     let maintainers = config
         .client
-        .get_account_list::<Validator>(opts.maintainer_list_address())?;
+        .get_account_list::<Maintainer>(opts.maintainer_list_address())?;
 
-    let maintainer_index = get_account_index::<Validator>(&maintainers, opts.maintainer_address());
+    let maintainer_index = get_account_index(&maintainers, opts.maintainer_address());
 
     let instruction = lido::instruction::remove_maintainer(
         opts.solido_program_id(),
@@ -932,8 +939,7 @@ pub fn command_withdraw(
         );
 
         let destination_stake_account = Keypair::new();
-        let validator_index =
-            get_account_index::<Validator>(&validators, &heaviest_validator.pubkey());
+        let validator_index = get_account_index(&validators, &heaviest_validator.pubkey());
 
         let instr = lido::instruction::withdraw(
             opts.solido_program_id(),

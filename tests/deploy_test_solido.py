@@ -86,6 +86,8 @@ solido_address = result['solido_address']
 treasury_account = result['treasury_account']
 developer_account = result['developer_account']
 st_sol_mint_account = result['st_sol_mint_address']
+validator_list_address = result['validator_list_address']
+maintainer_list_address = result['maintainer_list_address']
 
 print(f'> Created instance at {solido_address}')
 
@@ -134,6 +136,10 @@ def add_validator(index: int, vote_account: Optional[str]) -> str:
         solido_address,
         '--validator-vote-account',
         vote_account,
+        '--validator-list-address',
+        validator_list_address,
+        '--maintainer-list-address',
+        maintainer_list_address,
         '--multisig-address',
         multisig_instance,
         keypair_path=maintainer.keypair_path,
@@ -216,6 +222,8 @@ transaction_result = solido(
     solido_address,
     '--maintainer-address',
     maintainer.pubkey,
+    '--maintainer-list-address',
+    maintainer_list_address,
     '--multisig-address',
     multisig_instance,
     keypair_path=maintainer.keypair_path,

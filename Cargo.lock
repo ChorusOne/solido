@@ -3902,7 +3902,7 @@ dependencies = [
 [[package]]
 name = "tiny_http"
 version = "0.11.0"
-source = "git+https://github.com/ruuda/tiny-http?rev=3568e8880f995dd0348feff9e29645fce995b534#3568e8880f995dd0348feff9e29645fce995b534"
+source = "git+https://github.com/tiny-http/tiny-http?rev=f0fce7ed0bdf7439b5bd0b2d15fa82944aac30f6#f0fce7ed0bdf7439b5bd0b2d15fa82944aac30f6"
 dependencies = [
  "ascii 1.0.0",
  "chunked_transfer",
