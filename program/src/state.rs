@@ -47,6 +47,12 @@ pub const LIDO_VERSION: u8 = 1;
 pub const LIDO_CONSTANT_SIZE: usize = 418;
 
 /// Enum representing the account type managed by the program
+/// NOTE: ORDER IS VERY IMPORTANT HERE, PLEASE DO NOT RE-ORDER THE FIELDS UNLESS
+/// THERE'S AN EXTREMELY GOOD REASON.
+///
+/// To save on BPF instructions, the serialized bytes are reinterpreted with an
+/// unsafe pointer cast, which means that this structure cannot have any
+/// undeclared alignment-padding in its representation.
 #[derive(Clone, Debug, PartialEq, Eq, BorshDeserialize, BorshSerialize, Serialize, BorshSchema)]
 pub enum AccountType {
     /// If the account has not been initialized, the enum will be 0
@@ -79,7 +85,7 @@ pub struct AccountList<T> {
 pub type ValidatorList = AccountList<Validator>;
 pub type MaintainerList = AccountList<Maintainer>;
 
-/// Helper type to deserialize just the start of a ValidatorList
+/// Helper type to deserialize just the start of AccountList
 #[repr(C)]
 #[derive(
     Clone, Debug, Default, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema, Serialize,
@@ -87,7 +93,7 @@ pub type MaintainerList = AccountList<Maintainer>;
 pub struct ListHeader<T> {
     /// Maximum allowable number of elements
     pub max_entries: u32,
-    /// Lido version
+
     pub lido_version: u8,
 
     pub account_type: AccountType,
@@ -102,7 +108,7 @@ pub trait ListEntry: Pack + Default + Clone + BorshSerialize + PartialEq + Debug
     fn new(pubkey: Pubkey) -> Self;
     fn pubkey(&self) -> Pubkey;
 
-    /// Performs a very cheap comparison, for checking if this  entry
+    /// Performs a very cheap comparison, for checking if entry
     /// info matches the account address.
     /// First PUBKEY_BYTES of a ListEntry data should be the account address
     fn memcmp_pubkey(data: &[u8], pubkey: &[u8]) -> bool {
@@ -123,7 +129,7 @@ where
     }
 
     /// Create an empty instance containing space for `max_entries` with default values
-    pub fn new_fill_default(max_entries: u32) -> Self {
+    pub fn new_default(max_entries: u32) -> Self {
         Self {
             header: ListHeader::<T> {
                 account_type: T::TYPE,
@@ -135,7 +141,7 @@ where
         }
     }
 
-    /// Create a new list of accounts by coping from data. Do not use on-chain.
+    /// Create a new list of accounts by copying from `data`. Do not use on-chain.
     pub fn from(data: &mut [u8]) -> Result<Self, ProgramError> {
         let (header, big_vec) = ListHeader::<T>::deserialize_vec(data)?;
         let mut account_list = Self {
@@ -168,17 +174,17 @@ where
         Self::header_size() + T::LEN * max_entries as usize
     }
 
-    /// Check if contains account with particular pubkey
+    /// Check if contains an account with particular pubkey
     pub fn contains(&self, pubkey: &Pubkey) -> bool {
         self.entries.iter().any(|x| &x.pubkey() == pubkey)
     }
 
-    /// Check if contains account with particular pubkey
+    /// Check if contains an  account with particular pubkey
     pub fn find_mut(&mut self, pubkey: &Pubkey) -> Option<&mut T> {
         self.entries.iter_mut().find(|x| &x.pubkey() == pubkey)
     }
 
-    /// Check if contains account with particular pubkey
+    /// Check if contains an account with particular pubkey
     pub fn find(&self, pubkey: &Pubkey) -> Option<&T> {
         self.entries.iter().find(|x| &x.pubkey() == pubkey)
     }
@@ -194,7 +200,7 @@ where
 pub fn check_lido_version(version: u8, account_type: AccountType) -> ProgramResult {
     if version != LIDO_VERSION {
         msg!(
-            "Lido version mismatch when deserializing {:?}. Current version {}, should be {}",
+            "Lido version mismatch for {:?}. Current version {}, should be {}",
             account_type,
             version,
             LIDO_VERSION
@@ -204,7 +210,7 @@ pub fn check_lido_version(version: u8, account_type: AccountType) -> ProgramResu
     Ok(())
 }
 
-/// Represents list of accounts.
+/// Represents list of accounts as a view of raw bytes.
 /// Main data structure to use on-chain for account lists
 pub struct BigVecWithHeader<'data, T> {
     pub header: ListHeader<T>,
@@ -270,7 +276,7 @@ impl<'data, T: ListEntry> BigVecWithHeader<'data, T> {
         Ok(element)
     }
 
-    /// Removes first element with pubkey at index
+    /// Removes element with pubkey at index
     pub fn remove(&'data mut self, index: u32, pubkey: &Pubkey) -> Result<T, ProgramError> {
         let element = self.big_vec.swap_remove::<T>(index)?;
         if &element.pubkey() != pubkey {
@@ -1287,8 +1293,8 @@ mod test_lido {
     fn test_validators_size() {
         let validator = get_instance_packed_len(&Validator::default()).unwrap();
         assert_eq!(validator, Validator::LEN);
-        let one_len = get_instance_packed_len(&ValidatorList::new_fill_default(1)).unwrap();
-        let two_len = get_instance_packed_len(&ValidatorList::new_fill_default(2)).unwrap();
+        let one_len = get_instance_packed_len(&ValidatorList::new_default(1)).unwrap();
+        let two_len = get_instance_packed_len(&ValidatorList::new_default(2)).unwrap();
         assert_eq!(one_len, ValidatorList::required_bytes(1));
         assert_eq!(two_len, ValidatorList::required_bytes(2));
         assert_eq!(two_len - one_len, Validator::LEN);
@@ -1310,7 +1316,7 @@ mod test_lido {
 
         fn test_list<T: ListEntry>() {
             // create empty account list with Vec
-            let mut accounts = AccountList::<T>::new_fill_default(0);
+            let mut accounts = AccountList::<T>::new_default(0);
             accounts.header.max_entries = 100;
 
             // allocate space for future elements
@@ -1489,7 +1495,7 @@ mod test_lido {
         use std::rc::Rc;
 
         let rent = &Rent::default();
-        let mut validators = ValidatorList::new_fill_default(0);
+        let mut validators = ValidatorList::new_default(0);
         let key = Pubkey::default();
         let mut amount = rent.minimum_balance(0);
         let mut reserve_account =
@@ -1644,7 +1650,7 @@ mod test_lido {
     fn test_n_val() {
         let n_validators: u64 = 10_000;
         let size =
-            get_instance_packed_len(&ValidatorList::new_fill_default(n_validators as u32)).unwrap();
+            get_instance_packed_len(&ValidatorList::new_default(n_validators as u32)).unwrap();
 
         assert_eq!(
             ValidatorList::calculate_max_entries(size) as u64,

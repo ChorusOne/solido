@@ -1740,8 +1740,8 @@ mod test {
             stake_history: StakeHistory::default(),
             maintainer_address: Pubkey::new_unique(),
             stake_time: StakeTime::Anytime,
-            validators: AccountList::<Validator>::new_fill_default(0),
-            maintainers: AccountList::<Maintainer>::new_fill_default(0),
+            validators: AccountList::<Validator>::new_default(0),
+            maintainers: AccountList::<Maintainer>::new_default(0),
         };
 
         // The reserve should be rent-exempt.

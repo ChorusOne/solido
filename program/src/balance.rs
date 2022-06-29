@@ -221,7 +221,7 @@ mod test {
     #[test]
     fn get_target_balance_works_for_single_validator() {
         // 100 Lamports delegated + 50 undelegated => 150 per validator target.
-        let mut validators = ValidatorList::new_fill_default(1);
+        let mut validators = ValidatorList::new_default(1);
         validators.entries[0].stake_accounts_balance = Lamports(100);
         let undelegated_stake = Lamports(50);
         let targets = get_target_balance(undelegated_stake, &validators).unwrap();
@@ -238,7 +238,7 @@ mod test {
     #[test]
     fn get_target_balance_works_for_integer_multiple() {
         // 200 Lamports delegated + 50 undelegated => 125 per validator target.
-        let mut validators = ValidatorList::new_fill_default(2);
+        let mut validators = ValidatorList::new_default(2);
         validators.entries[0].stake_accounts_balance = Lamports(101);
         validators.entries[1].stake_accounts_balance = Lamports(99);
 
@@ -257,7 +257,7 @@ mod test {
     fn get_target_balance_works_for_non_integer_multiple() {
         // 200 Lamports delegated + 51 undelegated => 125 per validator target,
         // and one validator gets 1 more.
-        let mut validators = ValidatorList::new_fill_default(2);
+        let mut validators = ValidatorList::new_default(2);
         validators.entries[0].stake_accounts_balance = Lamports(101);
         validators.entries[1].stake_accounts_balance = Lamports(99);
 
@@ -274,7 +274,7 @@ mod test {
 
     #[test]
     fn get_target_balance_already_balanced() {
-        let mut validators = ValidatorList::new_fill_default(2);
+        let mut validators = ValidatorList::new_default(2);
         validators.entries[0].stake_accounts_balance = Lamports(50);
         validators.entries[1].stake_accounts_balance = Lamports(50);
 
@@ -289,7 +289,7 @@ mod test {
     }
     #[test]
     fn get_target_balance_works_with_inactive_for_non_integer_multiple() {
-        let mut validators = ValidatorList::new_fill_default(3);
+        let mut validators = ValidatorList::new_default(3);
         validators.entries[0].stake_accounts_balance = Lamports(101);
         validators.entries[1].stake_accounts_balance = Lamports(0);
         validators.entries[1].active = false;
@@ -309,7 +309,7 @@ mod test {
     fn get_target_balance_works_with_inactive_for_integer_multiple() {
         // 500 Lamports delegated, but only two active validators out of three.
         // All target should be divided equally within the active validators.
-        let mut validators = ValidatorList::new_fill_default(3);
+        let mut validators = ValidatorList::new_default(3);
         validators.entries[0].stake_accounts_balance = Lamports(100);
         validators.entries[1].stake_accounts_balance = Lamports(100);
         validators.entries[1].active = false;
@@ -328,7 +328,7 @@ mod test {
     #[test]
     fn get_target_balance_all_inactive() {
         // No active validators exist.
-        let mut validators = ValidatorList::new_fill_default(3);
+        let mut validators = ValidatorList::new_default(3);
         validators.entries[0].stake_accounts_balance = Lamports(1);
         validators.entries[1].stake_accounts_balance = Lamports(2);
         validators.entries[2].stake_accounts_balance = Lamports(3);
@@ -346,7 +346,7 @@ mod test {
         // Every validator is exactly at its target, no validator is below.
         // But the validator furthest below target should still be an active one,
         // not the inactive one.
-        let mut validators = ValidatorList::new_fill_default(2);
+        let mut validators = ValidatorList::new_default(2);
         validators.entries[0].stake_accounts_balance = Lamports(0);
         validators.entries[1].stake_accounts_balance = Lamports(10);
         validators.entries[0].active = false;
@@ -361,7 +361,7 @@ mod test {
 
     #[test]
     fn get_target_balance_works_for_minimum_staked_validator() {
-        let mut validators = ValidatorList::new_fill_default(3);
+        let mut validators = ValidatorList::new_default(3);
         validators.entries[0].stake_accounts_balance = Lamports(101);
         validators.entries[1].stake_accounts_balance = Lamports(101);
         validators.entries[2].stake_accounts_balance = Lamports(100);
@@ -378,7 +378,7 @@ mod test {
 
     #[test]
     fn get_unstake_from_active_validator_above_or_equal_threshold() {
-        let mut validators = ValidatorList::new_fill_default(3);
+        let mut validators = ValidatorList::new_default(3);
         validators.entries[0].stake_accounts_balance = Lamports(10);
         validators.entries[1].stake_accounts_balance = Lamports(16);
         validators.entries[2].stake_accounts_balance = Lamports(10);
@@ -407,7 +407,7 @@ mod test {
 
     #[test]
     fn get_unstake_from_active_validator_below_threshold() {
-        let mut validators = ValidatorList::new_fill_default(3);
+        let mut validators = ValidatorList::new_default(3);
         validators.entries[0].stake_accounts_balance = Lamports(10);
         validators.entries[1].stake_accounts_balance = Lamports(16);
         validators.entries[2].stake_accounts_balance = Lamports(10);
@@ -428,7 +428,7 @@ mod test {
 
     #[test]
     fn get_unstake_from_active_validator_because_another_needs_stake() {
-        let mut validators = ValidatorList::new_fill_default(3);
+        let mut validators = ValidatorList::new_default(3);
         validators.entries[0].stake_accounts_balance = Lamports(17);
         validators.entries[1].stake_accounts_balance = Lamports(15);
         validators.entries[2].stake_accounts_balance = Lamports(0);

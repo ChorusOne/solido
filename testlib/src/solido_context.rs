@@ -1300,11 +1300,11 @@ impl Context {
         let validators = self
             .get_account_list::<Validator>(lido.validator_list)
             .await
-            .unwrap_or_else(|| AccountList::<Validator>::new_fill_default(0));
+            .unwrap_or_else(|| AccountList::<Validator>::new_default(0));
         let maintainers = self
             .get_account_list::<Maintainer>(lido.maintainer_list)
             .await
-            .unwrap_or_else(|| AccountList::<Maintainer>::new_fill_default(0));
+            .unwrap_or_else(|| AccountList::<Maintainer>::new_default(0));
 
         SolidoWithLists {
             lido,

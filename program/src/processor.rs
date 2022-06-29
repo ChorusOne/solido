@@ -100,10 +100,10 @@ pub fn process_initialize(
         return Err(LidoError::AlreadyInUse.into());
     }
 
-    let mut validators = ValidatorList::new_fill_default(0);
+    let mut validators = ValidatorList::new_default(0);
     validators.header.max_entries = max_validators;
 
-    let mut maintainers = MaintainerList::new_fill_default(0);
+    let mut maintainers = MaintainerList::new_default(0);
     maintainers.header.max_entries = max_maintainers;
 
     let (_, reserve_bump_seed) = Pubkey::find_program_address(
