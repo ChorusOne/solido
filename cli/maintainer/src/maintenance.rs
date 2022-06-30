@@ -32,10 +32,7 @@ use solana_sdk::{
 };
 use solana_vote_program::vote_state::VoteState;
 use solido_cli_common::{
-    error::MaintenanceError,
-    snapshot::{get_account_index, SnapshotConfig},
-    validator_info_utils::ValidatorInfo,
-    Result,
+    error::MaintenanceError, snapshot::SnapshotConfig, validator_info_utils::ValidatorInfo, Result,
 };
 use spl_token::state::Mint;
 
@@ -639,7 +636,7 @@ impl SolidoState {
             _ => stake_account_end,
         };
 
-        let maintainer_index = get_account_index(&self.maintainers, &self.maintainer_address);
+        let maintainer_index = self.maintainers.position(&self.maintainer_address);
 
         let instruction = lido::instruction::stake_deposit(
             &self.solido_program_id,
@@ -681,9 +678,8 @@ impl SolidoState {
             StakeType::Unstake,
         );
 
-        let validator_index = get_account_index::<Validator>(&self.validators, &validator.pubkey());
-        let maintainer_index =
-            get_account_index::<Maintainer>(&self.maintainers, &self.maintainer_address);
+        let validator_index = self.validators.position(&validator.pubkey());
+        let maintainer_index = self.maintainers.position(&self.maintainer_address);
 
         let (stake_account_address, _) = stake_account;
         (
@@ -975,7 +971,7 @@ impl SolidoState {
             StakeType::Stake,
         );
 
-        let validator_index = get_account_index::<Validator>(&self.validators, &validator.pubkey());
+        let validator_index = self.validators.position(&validator.pubkey());
 
         lido::instruction::merge_stake(
             &self.solido_program_id,

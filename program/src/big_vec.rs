@@ -43,6 +43,10 @@ impl<'data> BigVec<'data> {
         let start_index = VEC_SIZE_BYTES.saturating_add(index.saturating_mul(T::LEN));
         let end_index = start_index.saturating_add(T::LEN);
 
+        if self.data.len() < end_index {
+            return Err(ProgramError::AccountDataTooSmall);
+        }
+
         if end_index - start_index != T::LEN {
             // This only happends if start_index is very close to usize::MAX,
             // which means that T::LEN should be huge. Solana does not allow such values on-chain
@@ -152,7 +156,7 @@ impl<'data> BigVec<'data> {
         if self.data.len() < end_index {
             return Err(ProgramError::AccountDataTooSmall);
         }
-        let element_ref = &mut self.data[start_index..start_index + T::LEN];
+        let element_ref = &mut self.data[start_index..end_index];
         element.pack_into_slice(element_ref);
         Ok(())
     }

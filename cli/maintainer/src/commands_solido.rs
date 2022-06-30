@@ -24,7 +24,7 @@ use lido::{
 };
 use solido_cli_common::{
     error::{CliError, Error},
-    snapshot::{get_account_index, SnapshotClientConfig, SnapshotConfig},
+    snapshot::{SnapshotClientConfig, SnapshotConfig},
     validator_info_utils::ValidatorInfo,
 };
 
@@ -328,7 +328,7 @@ pub fn command_deactivate_validator(
         .client
         .get_account_list::<Validator>(opts.validator_list_address())?;
 
-    let validator_index = get_account_index(&validators, opts.validator_vote_account());
+    let validator_index = validators.position(opts.validator_vote_account());
 
     let instruction = lido::instruction::deactivate_validator(
         opts.solido_program_id(),
@@ -385,7 +385,7 @@ pub fn command_remove_maintainer(
         .client
         .get_account_list::<Maintainer>(opts.maintainer_list_address())?;
 
-    let maintainer_index = get_account_index(&maintainers, opts.maintainer_address());
+    let maintainer_index = maintainers.position(opts.maintainer_address());
 
     let instruction = lido::instruction::remove_maintainer(
         opts.solido_program_id(),
@@ -939,7 +939,7 @@ pub fn command_withdraw(
         );
 
         let destination_stake_account = Keypair::new();
-        let validator_index = get_account_index(&validators, &heaviest_validator.pubkey());
+        let validator_index = validators.position(&heaviest_validator.pubkey());
 
         let instr = lido::instruction::withdraw(
             opts.solido_program_id(),

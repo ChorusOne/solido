@@ -3,6 +3,7 @@
 
 //! State transition types
 
+use std::convert::TryFrom;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::ops::Range;
@@ -190,6 +191,17 @@ where
         self.entries.iter().find(|x| &x.pubkey() == pubkey)
     }
 
+    /// Get index of entry with pubkey.
+    /// Panics if not found, not used on-chain
+    pub fn position(&self, pubkey: &Pubkey) -> u32 {
+        self.entries
+            .iter()
+            .position(|v| &v.pubkey() == pubkey)
+            .map(u32::try_from)
+            .unwrap_or_else(|| panic!("Pubkey {pubkey} not found in {:?} account list", T::TYPE))
+            .unwrap_or_else(|_| panic!("{:?} account list is too big", T::TYPE))
+    }
+
     /// Serialize to AccountInfo data
     pub fn save(&self, account: &AccountInfo) -> ProgramResult {
         BorshSerialize::serialize(self, &mut *account.data.borrow_mut())?;
@@ -258,9 +270,22 @@ impl<'data, T: ListEntry> BigVecWithHeader<'data, T> {
         }
 
         if self.find(&value.pubkey()).is_ok() {
+            msg!("Pubkey {} is duplicated in a {:?} list, pubkey, T::TYPE");
             return Err(LidoError::DuplicatedEntry.into());
         };
         self.big_vec.push(value)
+    }
+
+    /// Check if list element pubkey matches requested pubkey
+    fn check_pubkey(element: &T, pubkey: &Pubkey) -> ProgramResult {
+        if &element.pubkey() != pubkey {
+            msg!(
+                "{:?} list index does not match pubkey. Please supply a valid index or try again.",
+                T::TYPE
+            );
+            return Err(LidoError::PubkeyIndexMismatch.into());
+        }
+        Ok(())
     }
 
     /// Get element with pubkey at index
@@ -270,19 +295,14 @@ impl<'data, T: ListEntry> BigVecWithHeader<'data, T> {
         pubkey: &Pubkey,
     ) -> Result<&'data mut T, ProgramError> {
         let element = self.big_vec.get_mut::<T>(index)?;
-
-        if &element.pubkey() != pubkey {
-            return Err(LidoError::PubkeyIndexMismatch.into());
-        }
+        Self::check_pubkey(element, pubkey)?;
         Ok(element)
     }
 
     /// Removes element with pubkey at index
     pub fn remove(&'data mut self, index: u32, pubkey: &Pubkey) -> Result<T, ProgramError> {
         let element = self.big_vec.swap_remove::<T>(index)?;
-        if &element.pubkey() != pubkey {
-            return Err(LidoError::PubkeyIndexMismatch.into());
-        }
+        Self::check_pubkey(&element, pubkey)?;
         Ok(element)
     }
 }
@@ -1724,5 +1744,23 @@ mod test_lido {
         let slice = &mut buffer[..];
         let err = ListHeader::<Validator>::deserialize_vec(slice).unwrap_err();
         assert_eq!(err, LidoError::LidoVersionMismatch.into());
+    }
+
+    #[test]
+    fn check_account_type() {
+        // create empty validator list with Vec
+        let accounts = ValidatorList::new_default(1);
+
+        // allocate space for future elements
+        let mut buffer: Vec<u8> =
+            vec![0; ValidatorList::required_bytes(accounts.header.max_entries)];
+        let mut slice = &mut buffer[..];
+        // seriaslize empty list to buffer, which serializes a header and lenght
+        BorshSerialize::serialize(&accounts, &mut slice).unwrap();
+
+        // deserialize to BigVec but with a different account type
+        let slice = &mut buffer[..];
+        let err = ListHeader::<Maintainer>::deserialize_vec(slice).unwrap_err();
+        assert_eq!(err, LidoError::InvalidAccountType.into());
     }
 }

@@ -183,7 +183,7 @@ pub enum LidoError {
     /// Lido version mismatch when deserializing
     LidoVersionMismatch = 52,
 
-    /// Index out of bounds
+    /// Index out of bounds when indexing into an account list
     IndexOutOfBounds = 53,
 
     /// Pubkey at index does not match while indexing in account list
