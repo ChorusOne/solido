@@ -117,10 +117,6 @@ pub enum MaintenanceOutput {
         #[serde(rename = "st_sol_amount_st_lamports")]
         st_sol_amount: StLamports,
     },
-    SendRewards {
-        #[serde(rename = "ust_amount_micro_ust")]
-        ust_amount: MicroUst,
-    },
 }
 
 #[derive(Debug, Eq, PartialEq, Serialize)]
@@ -241,10 +237,6 @@ impl fmt::Display for MaintenanceOutput {
             MaintenanceOutput::SellRewards { st_sol_amount } => {
                 writeln!(f, "Sell stSOL rewards")?;
                 writeln!(f, "  Amount:               {}", st_sol_amount)?;
-            }
-            MaintenanceOutput::SendRewards { ust_amount } => {
-                writeln!(f, "Sent Anker UST rewards through Wormhole.")?;
-                writeln!(f, "  Amount: {}", ust_amount)?;
             }
             MaintenanceOutput::FetchPoolPrice {
                 expected_st_sol_price_in_ust,
@@ -887,41 +879,6 @@ impl SolidoState {
                 },
             ))
         }
-    }
-
-    pub fn try_send_anker_rewards(&self) -> Option<MaintenanceInstruction> {
-        let anker_state = self.anker_state.as_ref()?;
-
-        // If there are no rewards to send, or if there are some, but it's less
-        // than 10 cent, then don't send the rewards, because the transaction
-        // cost would be significant with respect to the amount we send.
-        if anker_state.ust_reserve_balance < MicroUst(100_000) {
-            return None;
-        }
-
-        // Use the low 32 bits of the current slot as the nonce. This ensures
-        // that we don't repeat the nonce for at least 2^32 slots, which is 327
-        // years even if the block times were 100ms, but in practice block times
-        // are 600-700ms, so it’s even longer. Do we never send multiple
-        // transactions based on the same slot though? If we do, then the state
-        // we observe should also be identical, and only one of the transactions
-        // should succeed.
-        let wormhole_nonce = (self.clock.slot & 0xffff_ffff) as u32;
-
-        let (instruction, additional_signer) = anker_state.get_send_rewards_instruction(
-            self.solido_address,
-            self.maintainer_address,
-            wormhole_nonce,
-        );
-
-        let ust_amount = anker_state.ust_reserve_balance;
-        let output = MaintenanceOutput::SendRewards { ust_amount };
-        let mut maintenance_instruction = MaintenanceInstruction::new(instruction, output);
-        maintenance_instruction
-            .additional_signers
-            .push(additional_signer);
-
-        Some(maintenance_instruction)
     }
 
     /// Get an instruction to merge accounts.
@@ -1643,8 +1600,7 @@ pub fn try_perform_maintenance(
         .or_else(|| state.try_stake_deposit())
         .or_else(|| state.try_unstake_from_active_validators())
         .or_else(|| state.try_remove_validator())
-        .or_else(|| state.try_sell_anker_rewards())
-        .or_else(|| state.try_send_anker_rewards());
+        .or_else(|| state.try_sell_anker_rewards());
 
     match instruction_output {
         Some(maintenance_instruction) => {
