@@ -485,8 +485,8 @@ impl SolidoState {
         let mut validator_vote_accounts = Vec::new();
         let mut validator_infos = Vec::new();
         for validator in validators.entries.iter() {
-            let vote_account = config.client.get_account(&validator.pubkey())?;
-            let vote_state = config.client.get_vote_account(&validator.pubkey())?;
+            let vote_account = config.client.get_account(validator.pubkey())?;
+            let vote_state = config.client.get_vote_account(validator.pubkey())?;
             let validator_info = config.client.get_validator_info(&vote_state.node_pubkey)?;
             let identity_account = config.client.get_account(&vote_state.node_pubkey)?;
             validator_vote_accounts.push(vote_state);
@@ -519,7 +519,7 @@ impl SolidoState {
         let mut maintainer_balances = Vec::new();
         for maintainer in maintainers.entries.iter() {
             maintainer_balances.push(Lamports(
-                config.client.get_account(&maintainer.pubkey())?.lamports,
+                config.client.get_account(maintainer.pubkey())?.lamports,
             ));
         }
 
@@ -678,7 +678,7 @@ impl SolidoState {
             StakeType::Unstake,
         );
 
-        let validator_index = self.validators.position(&validator.pubkey())?;
+        let validator_index = self.validators.position(validator.pubkey())?;
         let maintainer_index = self.maintainers.position(&self.maintainer_address)?;
 
         let (stake_account_address, _) = stake_account;
@@ -971,7 +971,7 @@ impl SolidoState {
             StakeType::Stake,
         );
 
-        let validator_index = self.validators.position(&validator.pubkey())?;
+        let validator_index = self.validators.position(validator.pubkey())?;
 
         Some(lido::instruction::merge_stake(
             &self.solido_program_id,

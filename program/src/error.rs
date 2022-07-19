@@ -191,6 +191,9 @@ pub enum LidoError {
 
     /// Index out of bounds when indexing into an account list
     AccountListIndexOutOfBounds = 55,
+
+    /// Validator list should be empty prior to state update
+    ValidatorListNotEmpty = 56,
 }
 
 // Just reuse the generated Debug impl for Display. It shows the variant names.

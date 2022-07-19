@@ -1,4 +1,4 @@
-// Copied from SPL stake-pool library at 1a0155e34bf96489db2cd498be79ca417c87c09f and modified
+// Copied from https://github.com/solana-labs/solana-program-library/blob/1a0155e34bf96489db2cd498be79ca417c87c09f/stake-pool/program/src/big_vec.rs and modified
 
 //! Big vector type, used with vectors that can't be serde'd
 

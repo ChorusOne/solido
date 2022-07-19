@@ -8,9 +8,9 @@ use std::ops::{Add, Sub};
 use crate::{
     error::LidoError,
     instruction::{
-        DepositAccountsInfo, InitializeAccountsInfo, LidoInstruction, StakeDepositAccountsInfoV2,
-        UnstakeAccountsInfoV2, UpdateExchangeRateAccountsInfoV2, UpdateStakeAccountBalanceInfo,
-        WithdrawAccountsInfoV2,
+        DepositAccountsInfo, InitializeAccountsInfo, LidoInstruction, MigrateStateToV2Info,
+        StakeDepositAccountsInfoV2, UnstakeAccountsInfoV2, UpdateExchangeRateAccountsInfoV2,
+        UpdateStakeAccountBalanceInfo, WithdrawAccountsInfoV2,
     },
     logic::{
         burn_st_sol, check_account_owner, check_account_uninitialized, check_mint,
@@ -27,8 +27,8 @@ use crate::{
     },
     stake_account::{deserialize_stake_account, StakeAccount},
     state::{
-        AccountType, ExchangeRate, FeeRecipients, Lido, ListEntry, MaintainerList,
-        RewardDistribution, Validator, ValidatorList,
+        AccountType, ExchangeRate, FeeRecipients, Lido, LidoV1, ListEntry, Maintainer,
+        MaintainerList, RewardDistribution, Validator, ValidatorList,
     },
     token::{Lamports, Rational, StLamports},
     MAXIMUM_UNSTAKE_ACCOUNTS, MINIMUM_STAKE_ACCOUNT_BALANCE, MINT_AUTHORITY, RESERVE_ACCOUNT,
@@ -75,14 +75,17 @@ pub fn process_initialize(
     check_account_owner(accounts.validator_list, program_id)?;
     check_account_owner(accounts.maintainer_list, program_id)?;
 
-    check_account_uninitialized(accounts.lido, Lido::LEN, AccountType::Lido)?;
+    check_account_uninitialized(accounts.lido, Lido::LEN, Lido::LEN, AccountType::Lido)?;
+    // it's enough to ckeck that first bytes needed for one list entry are zero
     check_account_uninitialized(
         accounts.validator_list,
+        ValidatorList::required_bytes(1),
         ValidatorList::required_bytes(max_validators),
         AccountType::Validator,
     )?;
     check_account_uninitialized(
         accounts.maintainer_list,
+        MaintainerList::required_bytes(1),
         MaintainerList::required_bytes(max_maintainers),
         AccountType::Maintainer,
     )?;
@@ -1011,6 +1014,107 @@ pub fn process_withdraw(
     lido.save(accounts.lido)
 }
 
+/// Migrate Solido state to version 2
+pub fn processor_migrate_to_v2(
+    program_id: &Pubkey,
+    reward_distribution: RewardDistribution,
+    max_validators: u32,
+    max_maintainers: u32,
+    max_commission_percentage: u8,
+    accounts_raw: &[AccountInfo],
+) -> ProgramResult {
+    let accounts = MigrateStateToV2Info::try_from_slice(accounts_raw)?;
+    let lido_v1 = LidoV1::deserialize_lido(program_id, accounts.lido)?;
+
+    if !(lido_v1.lido_version == 0 && Lido::VERSION == 1) {
+        return Err(LidoError::LidoVersionMismatch.into());
+    }
+
+    let rent = &Rent::get()?;
+    check_rent_exempt(rent, accounts.validator_list, "Validator list account")?;
+    check_rent_exempt(rent, accounts.maintainer_list, "Maintainer list account")?;
+
+    check_account_owner(accounts.validator_list, program_id)?;
+    check_account_owner(accounts.maintainer_list, program_id)?;
+
+    // it's enough to ckeck that first bytes needed for one list entry are zero
+    check_account_uninitialized(
+        accounts.validator_list,
+        ValidatorList::required_bytes(1),
+        ValidatorList::required_bytes(max_validators),
+        AccountType::Validator,
+    )?;
+    check_account_uninitialized(
+        accounts.maintainer_list,
+        MaintainerList::required_bytes(1),
+        MaintainerList::required_bytes(max_maintainers),
+        AccountType::Maintainer,
+    )?;
+
+    if accounts.validator_list.key == accounts.maintainer_list.key {
+        msg!("Cannot use same account for validator list and maintainer list");
+        return Err(LidoError::AlreadyInUse.into());
+    }
+
+    if lido_v1.maintainers.entries.len() > max_maintainers as usize {
+        msg!("max_maintainers is too small");
+        return Err(LidoError::MaximumNumberOfAccountsExceeded.into());
+    }
+    let mut maintainers = MaintainerList::new_default(0);
+    maintainers.header.max_entries = max_maintainers;
+
+    for pe in lido_v1.maintainers.entries {
+        maintainers.entries.push(Maintainer::new(pe.pubkey));
+    }
+
+    if lido_v1.validators.entries.len() > max_validators as usize {
+        msg!("max_validators is too small");
+        return Err(LidoError::MaximumNumberOfAccountsExceeded.into());
+    }
+    let mut validators = ValidatorList::new_default(0);
+    validators.header.max_entries = max_validators;
+
+    if !lido_v1.validators.entries.is_empty() {
+        msg!("There should be no validators in Solido state prior to update.");
+        msg!("You should first deactivate all validators and wait for epoch boundary.");
+        msg!("Then maintainers will withdraw inactive stake to reserve and remove validators.");
+        return Err(LidoError::ValidatorListNotEmpty.into());
+    }
+
+    if max_commission_percentage > 100 {
+        return Err(LidoError::ValidationCommissionOutOfBounds.into());
+    }
+
+    // Initialize Lido structure
+    let lido = Lido {
+        lido_version: Lido::VERSION,
+        account_type: AccountType::Lido,
+        validator_list: *accounts.validator_list.key,
+        maintainer_list: *accounts.maintainer_list.key,
+        max_commission_percentage,
+        fee_recipients: FeeRecipients {
+            treasury_account: lido_v1.fee_recipients.treasury_account,
+            developer_account: *accounts.developer_account.key,
+        },
+        reward_distribution,
+
+        manager: lido_v1.manager,
+        st_sol_mint: lido_v1.st_sol_mint,
+        exchange_rate: lido_v1.exchange_rate,
+        sol_reserve_account_bump_seed: lido_v1.sol_reserve_account_bump_seed,
+        mint_authority_bump_seed: lido_v1.mint_authority_bump_seed,
+        stake_authority_bump_seed: lido_v1.stake_authority_bump_seed,
+        metrics: lido_v1.metrics,
+    };
+
+    // Confirm that the fee recipients are actually stSOL accounts.
+    lido.check_is_st_sol_account(accounts.developer_account)?;
+
+    validators.save(accounts.validator_list)?;
+    maintainers.save(accounts.maintainer_list)?;
+    lido.save(accounts.lido)
+}
+
 /// Processes [Instruction](enum.Instruction.html).
 pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> ProgramResult {
     let instruction = LidoInstruction::try_from_slice(input)?;
@@ -1087,6 +1191,19 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
         LidoInstruction::SetMaxValidationCommission {
             max_commission_percentage,
         } => process_set_max_commission_percentage(program_id, max_commission_percentage, accounts),
+        LidoInstruction::MigrateStateToV2 {
+            reward_distribution,
+            max_validators,
+            max_maintainers,
+            max_commission_percentage,
+        } => processor_migrate_to_v2(
+            program_id,
+            reward_distribution,
+            max_validators,
+            max_maintainers,
+            max_commission_percentage,
+            accounts,
+        ),
         LidoInstruction::WithdrawInactiveStake
         | LidoInstruction::CollectValidatorFee
         | LidoInstruction::ClaimValidatorFee

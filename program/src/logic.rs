@@ -504,22 +504,17 @@ pub fn split_stake_account(
     Ok(())
 }
 
-/// Efficiently check all bytes are zero
-fn all_bytes_zero(buf: &[u8]) -> bool {
-    let (prefix, aligned, suffix) = unsafe { buf.align_to::<u128>() };
-
-    prefix.iter().all(|&x| x == 0)
-        && suffix.iter().all(|&x| x == 0)
-        && aligned.iter().all(|&x| x == 0)
-}
-
 /// Check account data is uninitialized and allocated size is correct.
 pub fn check_account_uninitialized(
     account: &AccountInfo,
+    bytes_to_check: usize,
     expected_size: usize,
     account_type: AccountType,
 ) -> ProgramResult {
-    if !all_bytes_zero(&account.data.borrow()[..expected_size]) {
+    if !&account.data.borrow()[..bytes_to_check]
+        .iter()
+        .all(|byte| *byte == 0)
+    {
         msg!(
             "Account {} appears to be in use already, refusing to overwrite.",
             account.key
@@ -527,9 +522,9 @@ pub fn check_account_uninitialized(
         return Err(LidoError::AlreadyInUse.into());
     }
 
-    if expected_size != account.data_len() {
+    if account.data_len() < expected_size {
         msg!(
-            "Incorrect allocated bytes for {:?} account bytes: {}, should be {}",
+            "Incorrect allocated bytes for {:?} account: {}, should be at least {}",
             account_type,
             account.data_len(),
             expected_size
@@ -547,11 +542,12 @@ pub fn check_account_owner(
 ) -> Result<(), ProgramError> {
     if *program_id != *account_info.owner {
         msg!(
-            "Expected account to be owned by program {}, received {}",
+            "Expected account {} to be owned by program {}, received {}",
+            account_info.key,
             program_id,
             account_info.owner
         );
-        Err(ProgramError::IncorrectProgramId)
+        Err(LidoError::InvalidOwner.into())
     } else {
         Ok(())
     }

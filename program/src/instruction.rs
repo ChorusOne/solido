@@ -12,7 +12,6 @@ use solana_program::{
     pubkey::Pubkey,
     stake as stake_program, system_program,
     sysvar::{self, stake_history},
-    vote,
 };
 
 use crate::{
@@ -198,6 +197,18 @@ pub enum LidoInstruction {
         // Index of a validator in validator list
         #[allow(dead_code)] // but it's not
         validator_index: u32,
+    },
+
+    /// Update Solido state to V2
+    MigrateStateToV2 {
+        #[allow(dead_code)] // but it's not
+        reward_distribution: RewardDistribution,
+        #[allow(dead_code)] // but it's not
+        max_validators: u32,
+        #[allow(dead_code)] // but it's not
+        max_maintainers: u32,
+        #[allow(dead_code)] // but it's not
+        max_commission_percentage: u8,
     },
 }
 
@@ -588,85 +599,6 @@ pub fn update_exchange_rate(
     }
 }
 
-accounts_struct! {
-    // Note: there are no signers among these accounts, updating a validator
-    // account is permissionless, anybody can do it.
-    CollectValidatorFeeMeta, CollectValidatorFeeInfo {
-        pub lido {
-            is_signer: false,
-            is_writable: true,
-        },
-        // The validator to update the balance for.
-        // Needs to be writable so we withdraw from it.
-        pub validator_vote_account {
-            is_signer: false,
-            // Is writable due to withdraw to reserve (vote_instruction::withdraw)
-            is_writable: true,
-        },
-
-        // Updating balances also immediately mints rewards, so we need the stSOL
-        // mint, and the fee accounts to deposit the stSOL into.
-        pub st_sol_mint {
-            is_signer: false,
-            // Is writable due to fee mint (spl_token::instruction::mint_to)
-            is_writable: true,
-        },
-
-        // Mint authority is required to mint tokens.
-        pub mint_authority {
-            is_signer: false,
-            is_writable: false,
-        },
-
-        pub treasury_st_sol_account {
-            is_signer: false,
-            // Is writable due to fee mint (spl_token::instruction::mint_to) to treasury
-            is_writable: true,
-        },
-        pub developer_st_sol_account {
-            is_signer: false,
-            // Is writable due to fee mint (spl_token::instruction::mint_to) to developer
-            is_writable: true,
-        },
-
-        pub reserve {
-            is_signer: false,
-            // Is writable due to withdraw to reserve (vote_instruction::withdraw)
-            is_writable: true,
-        },
-        // Used to get the rewards out of the validator vote account.
-        pub rewards_withdraw_authority {
-            is_signer: false,
-            is_writable: false,
-        },
-
-        // We only allow updating balances if the exchange rate is up to date,
-        // so we need to know the current epoch.
-        const sysvar_clock = sysvar::clock::id(),
-
-        // Needed for minting rewards.
-        const spl_token_program = spl_token::id(),
-
-        // Needed to calculate the validator's vote account rent exempt, so it
-        // can subtracted from the rewards.
-        const sysvar_rent = sysvar::rent::id(),
-
-        // Needed to withdraw from the vote account.
-        const vote_program = vote::program::id(),
-    }
-}
-
-pub fn collect_validator_fee(
-    program_id: &Pubkey,
-    accounts: &CollectValidatorFeeMeta,
-) -> Instruction {
-    Instruction {
-        program_id: *program_id,
-        accounts: accounts.to_vec(),
-        data: LidoInstruction::CollectValidatorFee.to_vec(),
-    }
-}
-
 // Changes the Fee spec
 // The new Fee structure is passed by argument and the recipients are passed here
 accounts_struct! {
@@ -766,40 +698,6 @@ pub fn deactivate_validator(
         program_id: *program_id,
         accounts: accounts.to_vec(),
         data: LidoInstruction::DeactivateValidatorV2 { validator_index }.to_vec(),
-    }
-}
-
-accounts_struct! {
-    ClaimValidatorFeeMeta, ClaimValidatorFeeInfo {
-        pub lido {
-            is_signer: false,
-            is_writable: true,
-        },
-        pub st_sol_mint {
-            is_signer: false,
-            // Is writable due to fee mint (spl_token::instruction::mint_to) to validator fee
-            // st_sol account
-            is_writable: true,
-        },
-        pub mint_authority {
-            is_signer: false,
-            is_writable: false,
-        },
-        pub validator_fee_st_sol_account {
-            is_signer: false,
-            // Is writable due to fee mint (spl_token::instruction::mint_to) to validator fee
-            // st_sol account
-            is_writable: true,
-        },
-        const spl_token = spl_token::id(),
-    }
-}
-
-pub fn claim_validator_fee(program_id: &Pubkey, accounts: &ClaimValidatorFeeMeta) -> Instruction {
-    Instruction {
-        program_id: *program_id,
-        accounts: accounts.to_vec(),
-        data: LidoInstruction::ClaimValidatorFee.to_vec(),
     }
 }
 
@@ -1089,6 +987,49 @@ pub fn set_max_commission_percentage(
     max_commission_percentage: u8,
 ) -> Instruction {
     let data = LidoInstruction::SetMaxValidationCommission {
+        max_commission_percentage,
+    };
+    Instruction {
+        program_id: *program_id,
+        accounts: accounts.to_vec(),
+        data: data.to_vec(),
+    }
+}
+
+accounts_struct! {
+    MigrateStateToV2Meta, MigrateStateToV2Info {
+        pub lido {
+            is_signer: false,
+            // Needs to be writable for us to update the metrics.
+            is_writable: true,
+        },
+        pub validator_list {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub maintainer_list {
+            is_signer: false,
+            is_writable: true,
+        },
+        pub developer_account {
+            is_signer: false,
+            is_writable: false,
+        },
+    }
+}
+
+pub fn migrate_state_to_v2(
+    program_id: &Pubkey,
+    reward_distribution: RewardDistribution,
+    max_validators: u32,
+    max_maintainers: u32,
+    max_commission_percentage: u8,
+    accounts: &MigrateStateToV2Meta,
+) -> Instruction {
+    let data = LidoInstruction::MigrateStateToV2 {
+        reward_distribution,
+        max_validators,
+        max_maintainers,
         max_commission_percentage,
     };
     Instruction {

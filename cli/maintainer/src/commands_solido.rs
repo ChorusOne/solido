@@ -38,7 +38,8 @@ use crate::{
     config::{
         AddRemoveMaintainerOpts, AddValidatorOpts, CreateSolidoOpts,
         DeactivateValidatorIfCommissionExceedsMaxOpts, DeactivateValidatorOpts, DepositOpts,
-        SetMaxValidationCommissionOpts, ShowSolidoAuthoritiesOpts, ShowSolidoOpts, WithdrawOpts,
+        MigrateStateToV2Opts, SetMaxValidationCommissionOpts, ShowSolidoAuthoritiesOpts,
+        ShowSolidoOpts, WithdrawOpts,
     },
     get_signer_from_path,
 };
@@ -682,12 +683,13 @@ pub fn command_show_solido(
     let mut validator_infos = Vec::new();
     let mut validator_commission_percentages = Vec::new();
     for validator in validators.entries.iter() {
-        let vote_state = config.client.get_vote_account(&validator.pubkey())?;
+        let vote_state = config.client.get_vote_account(validator.pubkey())?;
         validator_identities.push(vote_state.node_pubkey);
         let info = config.client.get_validator_info(&vote_state.node_pubkey)?;
         validator_infos.push(info);
-        let vote_account = config.client.get_account(&validator.pubkey())?;
+        let vote_account = config.client.get_account(validator.pubkey())?;
         let commission = get_vote_account_commission(&vote_account.data)
+            .ok()
             .ok_or_else(|| CliError::new("Validator account data too small"))?;
         validator_commission_percentages.push(commission);
     }
@@ -1028,8 +1030,9 @@ pub fn command_deactivate_validator_if_commission_exceeds_max(
     let mut instructions = vec![];
     for (validator_index, validator) in validators.entries.iter().enumerate() {
         let vote_pubkey = validator.pubkey();
-        let validator_account = config.client.get_account(&vote_pubkey)?;
+        let validator_account = config.client.get_account(vote_pubkey)?;
         let commission = get_vote_account_commission(&validator_account.data)
+            .ok()
             .ok_or_else(|| CliError::new("Validator account data too small"))?;
 
         if !validator.active || commission <= solido.max_commission_percentage {
@@ -1086,4 +1089,137 @@ pub fn command_set_max_commission_percentage(
         *opts.multisig_address(),
         instruction,
     )
+}
+
+#[derive(Serialize)]
+pub struct MigrateStateToV2Output {
+    /// Account that stores the data for this Solido instance.
+    #[serde(serialize_with = "serialize_b58")]
+    pub solido_address: Pubkey,
+
+    /// Data account that holds list of validators
+    #[serde(serialize_with = "serialize_b58")]
+    pub validator_list_address: Pubkey,
+
+    /// Data account that holds list of maintainers
+    #[serde(serialize_with = "serialize_b58")]
+    pub maintainer_list_address: Pubkey,
+
+    /// stSOL SPL token account that receives the developer fees.
+    #[serde(serialize_with = "serialize_b58")]
+    pub developer_account: Pubkey,
+}
+
+impl fmt::Display for MigrateStateToV2Output {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        writeln!(f, "Solido details:")?;
+        writeln!(
+            //
+            f,
+            "  Solido address:          {}",
+            self.solido_address
+        )?;
+        writeln!(
+            f,
+            "  Validator list account:  {}",
+            self.validator_list_address
+        )?;
+        writeln!(
+            f,
+            "  Maintainer list account: {}",
+            self.maintainer_list_address
+        )?;
+        writeln!(
+            f,
+            "  Developer fee SPL token account: {}",
+            self.developer_account
+        )?;
+        Ok(())
+    }
+}
+
+/// CLI entry point to update Solido state to V2
+pub fn command_migrate_to_v2(
+    config: &mut SnapshotConfig,
+    opts: &MigrateStateToV2Opts,
+) -> solido_cli_common::Result<MigrateStateToV2Output> {
+    let validator_list_signer = from_key_path_or_random(opts.validator_list_key_path())?;
+    let maintainer_list_signer = from_key_path_or_random(opts.maintainer_list_key_path())?;
+
+    let validator_list_size = AccountList::<Validator>::required_bytes(50_000);
+    let validator_list_account_balance = config
+        .client
+        .get_minimum_balance_for_rent_exemption(validator_list_size)?;
+
+    let maintainer_list_size = AccountList::<Maintainer>::required_bytes(1_000);
+    let maintainer_list_account_balance = config
+        .client
+        .get_minimum_balance_for_rent_exemption(maintainer_list_size)?;
+
+    let mut instructions = Vec::new();
+
+    let developer_keypair = push_create_spl_token_account(
+        config,
+        &mut instructions,
+        opts.st_sol_mint(),
+        opts.developer_account_owner(),
+    )?;
+    config
+        .sign_and_send_transaction(&instructions[..], &vec![config.signer, &developer_keypair])?;
+    instructions.clear();
+    eprintln!("Did send SPL account inits.");
+
+    // Create the account that holds the validator list itself.
+    instructions.push(system_instruction::create_account(
+        &config.signer.pubkey(),
+        &validator_list_signer.pubkey(),
+        validator_list_account_balance.0,
+        validator_list_size as u64,
+        opts.solido_program_id(),
+    ));
+
+    // Create the account that holds the maintainer list itself.
+    instructions.push(system_instruction::create_account(
+        &config.signer.pubkey(),
+        &maintainer_list_signer.pubkey(),
+        maintainer_list_account_balance.0,
+        maintainer_list_size as u64,
+        opts.solido_program_id(),
+    ));
+
+    instructions.push(lido::instruction::migrate_state_to_v2(
+        opts.solido_program_id(),
+        RewardDistribution {
+            treasury_fee: *opts.treasury_fee_share(),
+            developer_fee: *opts.developer_fee_share(),
+            st_sol_appreciation: *opts.st_sol_appreciation_share(),
+        },
+        6_700,
+        1_000,
+        *opts.max_commission_percentage(),
+        &lido::instruction::MigrateStateToV2Meta {
+            lido: *opts.solido_address(),
+            validator_list: validator_list_signer.pubkey(),
+            maintainer_list: maintainer_list_signer.pubkey(),
+            developer_account: developer_keypair.pubkey(),
+        },
+    ));
+
+    config.sign_and_send_transaction(
+        &instructions[..],
+        &[
+            config.signer,
+            &*validator_list_signer,
+            &*maintainer_list_signer,
+        ],
+    )?;
+    eprintln!("Did send Lido update to V2.");
+
+    let result = MigrateStateToV2Output {
+        solido_address: *opts.solido_address(),
+        validator_list_address: validator_list_signer.pubkey(),
+        maintainer_list_address: maintainer_list_signer.pubkey(),
+        developer_account: developer_keypair.pubkey(),
+    };
+    Ok(result)
 }

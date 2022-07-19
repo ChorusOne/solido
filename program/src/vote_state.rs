@@ -61,7 +61,7 @@ impl PartialVoteState {
         pubkey_buf.copy_from_slice(&data[4..][..32]);
         let node_pubkey = Pubkey::new_from_array(pubkey_buf);
 
-        let commission = get_vote_account_commission(&data).ok_or(LidoError::InvalidVoteAccount)?;
+        let commission = get_vote_account_commission(&data)?;
         if commission > max_commission_percentage {
             msg!(
                 "Vote Account's commission should be <= {}, is {} instead",
@@ -78,8 +78,11 @@ impl PartialVoteState {
     }
 }
 
-pub fn get_vote_account_commission(vote_account_data: &[u8]) -> Option<u8> {
-    vote_account_data.get(68).copied() // Read 1 byte for u8.
+pub fn get_vote_account_commission(vote_account_data: &[u8]) -> Result<u8, LidoError> {
+    vote_account_data
+        .get(68)
+        .copied()
+        .ok_or(LidoError::InvalidVoteAccount) // Read 1 byte for u8.
 }
 
 #[cfg(test)]

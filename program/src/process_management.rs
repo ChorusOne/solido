@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: 2021 Chorus One AG
 // SPDX-License-Identifier: GPL-3.0
 
+use solana_program::program::invoke_signed;
 use solana_program::rent::Rent;
 use solana_program::sysvar::Sysvar;
 use solana_program::{account_info::AccountInfo, entrypoint::ProgramResult, msg, pubkey::Pubkey};
-use solana_program::{program::invoke_signed, program_error::ProgramError};
 
 use crate::logic::check_rent_exempt;
 use crate::processor::StakeType;
@@ -150,7 +150,7 @@ pub fn process_deactivate_validator_if_commission_exceeds_max(
     let lido = Lido::deserialize_lido(program_id, accounts.lido)?;
 
     let data = accounts.validator_vote_account_to_deactivate.data.borrow();
-    let commission = get_vote_account_commission(&data).ok_or(ProgramError::AccountDataTooSmall)?;
+    let commission = get_vote_account_commission(&data)?;
 
     if commission <= lido.max_commission_percentage {
         return Ok(());
@@ -237,16 +237,6 @@ pub fn process_set_max_commission_percentage(
     lido.max_commission_percentage = max_commission_percentage;
 
     lido.save(accounts.lido)
-}
-
-/// TODO(#186) Allow validator to change fee account
-/// Called by the validator, changes the fee account which the validator
-/// receives tokens
-pub fn _process_change_validator_fee_account(
-    _program_id: &Pubkey,
-    _accounts: &[AccountInfo],
-) -> ProgramResult {
-    unimplemented!()
 }
 
 /// Merge two stake accounts from the beginning of the validator's stake

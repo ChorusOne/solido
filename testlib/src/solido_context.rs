@@ -1125,7 +1125,7 @@ impl Context {
         );
 
         let solido = self.get_solido().await;
-        let validator_index = solido.validators.position(&validator.pubkey()).unwrap();
+        let validator_index = solido.validators.position(validator.pubkey()).unwrap();
         send_transaction(
             &mut self.context,
             &[instruction::merge_stake(

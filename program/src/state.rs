@@ -40,13 +40,8 @@ use crate::{
     VALIDATOR_STAKE_ACCOUNT, VALIDATOR_UNSTAKE_ACCOUNT,
 };
 
-/// Enum representing the account type managed by the program
-/// NOTE: ORDER IS VERY IMPORTANT HERE, PLEASE DO NOT RE-ORDER THE FIELDS UNLESS
-/// THERE'S AN EXTREMELY GOOD REASON.
-///
-/// To save on BPF instructions, the serialized bytes are reinterpreted with an
-/// unsafe pointer cast, which means that this structure cannot have any
-/// undeclared alignment-padding in its representation.
+/// Types of list entries
+/// Uninitialized should always be a first enum field as it catches empty list data errors
 #[derive(Clone, Debug, PartialEq, Eq, BorshDeserialize, BorshSerialize, Serialize, BorshSchema)]
 pub enum AccountType {
     /// If the account has not been initialized, the enum will be 0
@@ -139,15 +134,10 @@ where
     /// Create a new list of accounts by copying from `data`. Do not use on-chain.
     pub fn from(data: &mut [u8]) -> Result<Self, ProgramError> {
         let (header, big_vec) = ListHeader::<T>::deserialize_vec(data)?;
-        let mut account_list = Self {
+        Ok(Self {
             header,
-            entries: vec![],
-        };
-
-        for entry in big_vec.iter() {
-            account_list.entries.push(entry.clone());
-        }
-        Ok(account_list)
+            entries: big_vec.iter().cloned().collect(),
+        })
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &T> {
@@ -731,14 +721,8 @@ impl Lido {
     pub const LEN: usize = 418;
 
     pub fn deserialize_lido(program_id: &Pubkey, lido: &AccountInfo) -> Result<Lido, ProgramError> {
-        if lido.owner != program_id {
-            msg!(
-                "Lido state is owned by {}, but should be owned by the Lido program ({}).",
-                lido.owner,
-                program_id
-            );
-            return Err(LidoError::InvalidOwner.into());
-        }
+        check_account_owner(lido, program_id)?;
+
         let lido = try_from_slice_unchecked::<Lido>(&lido.data.borrow())?;
         if lido.account_type != AccountType::Lido {
             msg!(
@@ -1066,7 +1050,7 @@ impl Lido {
         Ok(())
     }
 
-    /// Checks if the passed maintainer belong to the list of maintainers
+    /// Checks if the maintainer belongs to the list of maintainers
     pub fn check_maintainer(
         &self,
         program_id: &Pubkey,
@@ -1102,18 +1086,18 @@ impl Lido {
     pub fn check_account_list_info<T: ListEntry>(
         &self,
         program_id: &Pubkey,
-        solido_list_address: &Pubkey,
+        list_address: &Pubkey,
         account_list_info: &AccountInfo,
     ) -> ProgramResult {
         check_account_owner(account_list_info, program_id)?;
 
         // check account_list belongs to Lido
-        if solido_list_address != account_list_info.key {
+        if list_address != account_list_info.key {
             msg!(
                 "{:?} list address {} is different from Lido's {}",
                 T::TYPE,
                 account_list_info.key,
-                solido_list_address
+                list_address
             );
             return Err(LidoError::InvalidListAccount.into());
         }
@@ -1272,6 +1256,73 @@ pub struct Fees {
     /// with the other fields in this struct, that totals the input amount.
     pub st_sol_appreciation_amount: Lamports,
 }
+
+/////////////////////////////////////////////////// OLD STATE ///////////////////////////////////////////////////
+
+/// An entry in `AccountMap`.
+#[derive(Clone, Debug, BorshDeserialize, BorshSchema)]
+pub struct PubkeyAndEntry<T> {
+    pub pubkey: Pubkey,
+    pub entry: T,
+}
+
+/// A map from public key to `T`, implemented as a vector of key-value pairs.
+#[derive(Clone, Debug, BorshDeserialize, BorshSchema)]
+pub struct AccountMap<T> {
+    pub entries: Vec<PubkeyAndEntry<T>>,
+    pub maximum_entries: u32,
+}
+
+#[repr(C)]
+#[derive(Clone, Debug, BorshDeserialize, BorshSchema)]
+pub struct ValidatorV1 {
+    pub fee_credit: StLamports,
+    pub fee_address: Pubkey,
+    pub stake_seeds: SeedRange,
+    pub unstake_seeds: SeedRange,
+    pub stake_accounts_balance: Lamports,
+    pub unstake_accounts_balance: Lamports,
+    pub active: bool,
+}
+
+#[derive(Clone, Debug, BorshDeserialize, BorshSchema)]
+pub struct RewardDistributionV1 {
+    pub treasury_fee: u32,
+    pub validation_fee: u32,
+    pub developer_fee: u32,
+    pub st_sol_appreciation: u32,
+}
+
+#[repr(C)]
+#[derive(Clone, Debug, BorshDeserialize, BorshSchema)]
+pub struct LidoV1 {
+    pub lido_version: u8,
+    pub manager: Pubkey,
+    pub st_sol_mint: Pubkey,
+    pub exchange_rate: ExchangeRate,
+    pub sol_reserve_account_bump_seed: u8,
+    pub stake_authority_bump_seed: u8,
+    pub mint_authority_bump_seed: u8,
+    pub rewards_withdraw_authority_bump_seed: u8,
+    pub reward_distribution: RewardDistributionV1,
+    pub fee_recipients: FeeRecipients,
+    pub metrics: Metrics,
+    pub validators: AccountMap<ValidatorV1>,
+    pub maintainers: AccountMap<()>,
+}
+
+impl LidoV1 {
+    pub fn deserialize_lido(
+        program_id: &Pubkey,
+        lido: &AccountInfo,
+    ) -> Result<LidoV1, ProgramError> {
+        check_account_owner(lido, program_id)?;
+        let lido = try_from_slice_unchecked::<LidoV1>(&lido.data.borrow())?;
+        Ok(lido)
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #[cfg(test)]
 mod test_lido {
@@ -1743,5 +1794,54 @@ mod test_lido {
         let slice = &mut buffer[..];
         let err = ListHeader::<Maintainer>::deserialize_vec(slice).unwrap_err();
         assert_eq!(err, LidoError::InvalidAccountType.into());
+    }
+
+    #[test]
+    fn check_deserialize_with_borsh() {
+        // create empty validator list with Vec
+        let mut accounts = ValidatorList::new_default(1);
+        accounts.header.max_entries = 2;
+
+        let mut elem = &mut accounts.entries[0];
+        elem.vote_account_address = Pubkey::new_unique();
+        elem.effective_stake_balance = Lamports(34453);
+        elem.stake_accounts_balance = Lamports(234525);
+        elem.active = true;
+
+        // allocate space for future elements
+        let mut buffer: Vec<u8> =
+            vec![0; ValidatorList::required_bytes(accounts.header.max_entries)];
+        let mut slice = &mut buffer[..];
+        BorshSerialize::serialize(&accounts, &mut slice).unwrap();
+
+        let slice = &mut buffer[..];
+        let (big_vec, header) = ListHeader::<Validator>::deserialize_vec(slice).unwrap();
+        let mut bigvec = BigVecWithHeader::new(big_vec, header);
+
+        let elem = Validator {
+            vote_account_address: Pubkey::new_unique(),
+            stake_seeds: SeedRange {
+                begin: 123,
+                end: 5455,
+            },
+            unstake_seeds: SeedRange {
+                begin: 555,
+                end: 9886,
+            },
+            stake_accounts_balance: Lamports(1111),
+            unstake_accounts_balance: Lamports(3333),
+            effective_stake_balance: Lamports(3465468),
+            active: false,
+        };
+
+        accounts.entries.push(elem.clone());
+
+        bigvec.push(elem).unwrap();
+
+        let mut slice = &buffer[..];
+        let accounts2 = BorshDeserialize::deserialize(&mut slice).unwrap();
+
+        // test that BigVec does not break borsh deserialization
+        assert_eq!(accounts, accounts2);
     }
 }
