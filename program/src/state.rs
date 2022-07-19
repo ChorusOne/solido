@@ -40,13 +40,6 @@ use crate::{
     VALIDATOR_STAKE_ACCOUNT, VALIDATOR_UNSTAKE_ACCOUNT,
 };
 
-pub const LIDO_VERSION: u8 = 1;
-
-/// Size of a serialized `Lido` struct excluding validators and maintainers.
-///
-/// To update this, run the tests and replace the value here with the test output.
-pub const LIDO_CONSTANT_SIZE: usize = 418;
-
 /// Enum representing the account type managed by the program
 /// NOTE: ORDER IS VERY IMPORTANT HERE, PLEASE DO NOT RE-ORDER THE FIELDS UNLESS
 /// THERE'S AN EXTREMELY GOOD REASON.
@@ -108,7 +101,7 @@ pub trait ListEntry: Pack + Default + Clone + BorshSerialize + PartialEq + Debug
     const TYPE: AccountType;
 
     fn new(pubkey: Pubkey) -> Self;
-    fn pubkey(&self) -> Pubkey;
+    fn pubkey(&self) -> &Pubkey;
 
     /// Performs a very cheap comparison, for checking if entry
     /// info matches the account address.
@@ -136,7 +129,7 @@ where
             header: ListHeader::<T> {
                 account_type: T::TYPE,
                 max_entries,
-                lido_version: LIDO_VERSION,
+                lido_version: Lido::VERSION,
                 phantom: PhantomData,
             },
             entries: vec![T::default(); max_entries as usize],
@@ -151,7 +144,7 @@ where
             entries: vec![],
         };
 
-        for entry in big_vec.iter::<T>() {
+        for entry in big_vec.iter() {
             account_list.entries.push(entry.clone());
         }
         Ok(account_list)
@@ -177,29 +170,18 @@ where
     }
 
     /// Check if contains an account with particular pubkey
-    pub fn contains(&self, pubkey: &Pubkey) -> bool {
-        self.entries.iter().any(|x| &x.pubkey() == pubkey)
-    }
-
-    /// Check if contains an  account with particular pubkey
-    pub fn find_mut(&mut self, pubkey: &Pubkey) -> Option<&mut T> {
-        self.entries.iter_mut().find(|x| &x.pubkey() == pubkey)
-    }
-
-    /// Check if contains an account with particular pubkey
     pub fn find(&self, pubkey: &Pubkey) -> Option<&T> {
-        self.entries.iter().find(|x| &x.pubkey() == pubkey)
+        self.entries.iter().find(|x| x.pubkey() == pubkey)
     }
 
-    /// Get index of entry with pubkey.
-    /// Panics if not found, not used on-chain
-    pub fn position(&self, pubkey: &Pubkey) -> u32 {
+    /// Get index of list entry with pubkey.
+    /// Panics if list is too big, not used on-chain
+    pub fn position(&self, pubkey: &Pubkey) -> Option<u32> {
         self.entries
             .iter()
-            .position(|v| &v.pubkey() == pubkey)
+            .position(|v| v.pubkey() == pubkey)
             .map(u32::try_from)
-            .unwrap_or_else(|| panic!("Pubkey {pubkey} not found in {:?} account list", T::TYPE))
-            .unwrap_or_else(|_| panic!("{:?} account list is too big", T::TYPE))
+            .map(Result::unwrap)
     }
 
     /// Serialize to AccountInfo data
@@ -211,12 +193,12 @@ where
 
 /// Check Lido version
 pub fn check_lido_version(version: u8, account_type: AccountType) -> ProgramResult {
-    if version != LIDO_VERSION {
+    if version != Lido::VERSION {
         msg!(
             "Lido version mismatch for {:?}. Current version {}, should be {}",
             account_type,
             version,
-            LIDO_VERSION
+            Lido::VERSION
         );
         return Err(LidoError::LidoVersionMismatch.into());
     }
@@ -227,11 +209,11 @@ pub fn check_lido_version(version: u8, account_type: AccountType) -> ProgramResu
 /// Main data structure to use on-chain for account lists
 pub struct BigVecWithHeader<'data, T> {
     pub header: ListHeader<T>,
-    big_vec: BigVec<'data>,
+    big_vec: BigVec<'data, T>,
 }
 
 impl<'data, T: ListEntry> BigVecWithHeader<'data, T> {
-    pub fn new(header: ListHeader<T>, big_vec: BigVec<'data>) -> Self {
+    pub fn new(header: ListHeader<T>, big_vec: BigVec<'data, T>) -> Self {
         Self { header, big_vec }
     }
 
@@ -247,30 +229,25 @@ impl<'data, T: ListEntry> BigVecWithHeader<'data, T> {
         self.big_vec.iter()
     }
 
-    pub fn iter_mut(&'data mut self) -> impl Iterator<Item = &'data mut T> {
-        self.big_vec.iter_mut()
-    }
-
     pub fn find(&'data self, pubkey: &Pubkey) -> Result<&'data T, LidoError> {
         self.big_vec
-            .find::<T>(&pubkey.to_bytes(), T::memcmp_pubkey)
-            .ok_or(LidoError::InvalidAccountMember)
-    }
-
-    pub fn find_mut(&'data mut self, pubkey: &Pubkey) -> Result<&'data mut T, LidoError> {
-        self.big_vec
-            .find_mut::<T>(&pubkey.to_bytes(), T::memcmp_pubkey)
+            .find(&pubkey.to_bytes(), T::memcmp_pubkey)
             .ok_or(LidoError::InvalidAccountMember)
     }
 
     /// Appends to the list only if unique
     pub fn push(&mut self, value: T) -> ProgramResult {
         if self.header.max_entries == self.len() {
+            msg!("Can't append to {:?} list as it has no free space", T::TYPE);
             return Err(LidoError::MaximumNumberOfAccountsExceeded.into());
         }
 
-        if self.find(&value.pubkey()).is_ok() {
-            msg!("Pubkey {} is duplicated in a {:?} list, pubkey, T::TYPE");
+        if self.find(value.pubkey()).is_ok() {
+            msg!(
+                "Pubkey {} is duplicated in a {:?} list",
+                value.pubkey(),
+                T::TYPE
+            );
             return Err(LidoError::DuplicatedEntry.into());
         };
         self.big_vec.push(value)
@@ -278,7 +255,7 @@ impl<'data, T: ListEntry> BigVecWithHeader<'data, T> {
 
     /// Check if list element pubkey matches requested pubkey
     fn check_pubkey(element: &T, pubkey: &Pubkey) -> ProgramResult {
-        if &element.pubkey() != pubkey {
+        if element.pubkey() != pubkey {
             msg!(
                 "{:?} list index does not match pubkey. Please supply a valid index or try again.",
                 T::TYPE
@@ -294,16 +271,16 @@ impl<'data, T: ListEntry> BigVecWithHeader<'data, T> {
         index: u32,
         pubkey: &Pubkey,
     ) -> Result<&'data mut T, ProgramError> {
-        let element = self.big_vec.get_mut::<T>(index)?;
+        let element = self.big_vec.get_mut(index)?;
         Self::check_pubkey(element, pubkey)?;
         Ok(element)
     }
 
     /// Removes element with pubkey at index
     pub fn remove(&'data mut self, index: u32, pubkey: &Pubkey) -> Result<T, ProgramError> {
-        let element = self.big_vec.swap_remove::<T>(index)?;
-        Self::check_pubkey(&element, pubkey)?;
-        Ok(element)
+        let element = self.big_vec.get_mut(index)?;
+        Self::check_pubkey(element, pubkey)?;
+        self.big_vec.swap_remove(index)
     }
 }
 
@@ -311,32 +288,29 @@ impl<T: ListEntry> ListHeader<T> {
     const LEN: usize =
         std::mem::size_of::<u32>() + std::mem::size_of::<AccountType>() + std::mem::size_of::<u8>();
 
-    /// Extracts a slice of ListEntry types from the vec part of the AccountList
-    pub fn deserialize_mut_slice(
-        data: &mut [u8],
-        skip: usize,
-        len: usize,
-    ) -> Result<(Self, Vec<&mut T>), ProgramError> {
-        let (header, mut big_vec) = Self::deserialize_vec(data)?;
-        let account_slice = big_vec.deserialize_mut_slice::<T>(skip, len)?;
-        Ok((header, account_slice))
+    pub fn deserialize_checked(data: &[u8]) -> Result<Self, ProgramError> {
+        let mut data = data;
+        let header = Self::deserialize(&mut data)?;
+
+        check_lido_version(header.lido_version, T::TYPE)?;
+
+        // check ListEntryType
+        if header.account_type != T::TYPE {
+            msg!(
+                "Invalid account type when deserializing list header, found {:?}, should be {:?}",
+                header.account_type,
+                T::TYPE
+            );
+            return Err(LidoError::InvalidAccountType.into());
+        }
+        Ok(header)
     }
 
     /// Extracts the account list into its header and internal BigVec
-    pub fn deserialize_vec(data: &mut [u8]) -> Result<(Self, BigVec), ProgramError> {
-        let header = Self::deserialize(&mut &data[..])?;
-        check_lido_version(header.lido_version, T::TYPE)?;
-
-        // check AccountType
-        if header.account_type != T::TYPE {
-            return Err(LidoError::InvalidAccountType.into());
-        }
-
-        let length = get_instance_packed_len(&header)?;
-
-        let big_vec = BigVec {
-            data: &mut data[length..],
-        };
+    pub fn deserialize_vec(data: &mut [u8]) -> Result<(Self, BigVec<T>), ProgramError> {
+        let header = Self::deserialize_checked(data)?;
+        let big_vec: BigVec<T> =
+            BigVec::new(&mut data[Self::LEN..AccountList::<T>::required_bytes(header.max_entries)]);
         Ok((header, big_vec))
     }
 }
@@ -401,7 +375,7 @@ pub struct Maintainer {
 
 impl Validator {
     /// Return the balance in only the stake accounts, excluding the unstake accounts.
-    pub fn get_effective_stake_balance(&self) -> Lamports {
+    pub fn compute_effective_stake_balance(&self) -> Lamports {
         (self.stake_accounts_balance - self.unstake_accounts_balance)
             .expect("Unstake balance cannot exceed the validator's total stake balance.")
     }
@@ -537,8 +511,8 @@ impl ListEntry for Validator {
         }
     }
 
-    fn pubkey(&self) -> Pubkey {
-        self.vote_account_address
+    fn pubkey(&self) -> &Pubkey {
+        &self.vote_account_address
     }
 }
 
@@ -563,8 +537,8 @@ impl ListEntry for Maintainer {
         Self { pubkey }
     }
 
-    fn pubkey(&self) -> Pubkey {
-        self.pubkey
+    fn pubkey(&self) -> &Pubkey {
+        &self.pubkey
     }
 }
 
@@ -749,6 +723,13 @@ pub struct Lido {
 }
 
 impl Lido {
+    pub const VERSION: u8 = 1;
+
+    /// Size of a serialized `Lido` struct excluding validators and maintainers.
+    ///
+    /// To update this, run the tests and replace the value here with the test output.
+    pub const LEN: usize = 418;
+
     pub fn deserialize_lido(program_id: &Pubkey, lido: &AccountInfo) -> Result<Lido, ProgramError> {
         if lido.owner != program_id {
             msg!(
@@ -1330,7 +1311,7 @@ mod test_lido {
         let minimal = Lido::default();
         let mut data = Vec::new();
         BorshSerialize::serialize(&minimal, &mut data).unwrap();
-        assert_eq!(data.len(), LIDO_CONSTANT_SIZE);
+        assert_eq!(data.len(), Lido::LEN);
     }
 
     #[test]

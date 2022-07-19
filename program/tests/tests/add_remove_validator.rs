@@ -28,7 +28,7 @@ async fn test_successful_add_validator() {
     assert_eq!(solido.validators.len(), 1);
     assert_eq!(
         solido.validators.entries[0].pubkey(),
-        validator.vote_account
+        &validator.vote_account
     );
 
     // Adding the validator a second time should fail.
@@ -68,9 +68,9 @@ async fn test_add_validator_with_invalid_owner() {
 async fn test_successful_remove_validator() {
     let mut context = Context::new_with_maintainer_and_validator().await;
     let validator = &context.get_solido().await.validators.entries[0];
-    context.deactivate_validator(validator.pubkey()).await;
+    context.deactivate_validator(*validator.pubkey()).await;
     context
-        .try_remove_validator(validator.pubkey())
+        .try_remove_validator(*validator.pubkey())
         .await
         .unwrap();
 
@@ -82,7 +82,7 @@ async fn test_successful_remove_validator() {
 async fn test_removing_validator_with_stake_accounts_should_fail() {
     let (mut context, _) = Context::new_with_two_stake_accounts().await;
     let validator = &context.get_solido().await.validators.entries[0];
-    let result = context.try_remove_validator(validator.pubkey()).await;
+    let result = context.try_remove_validator(*validator.pubkey()).await;
 
     // The validator should not be able to be removed if it is still active
     //  (i.e. the active flag is set toe true OR it has stake accounts)

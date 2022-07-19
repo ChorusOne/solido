@@ -328,7 +328,9 @@ pub fn command_deactivate_validator(
         .client
         .get_account_list::<Validator>(opts.validator_list_address())?;
 
-    let validator_index = validators.position(opts.validator_vote_account());
+    let validator_index = validators
+        .position(opts.validator_vote_account())
+        .ok_or_else(|| CliError::new("Pubkey not found in validator list"))?;
 
     let instruction = lido::instruction::deactivate_validator(
         opts.solido_program_id(),
@@ -385,7 +387,9 @@ pub fn command_remove_maintainer(
         .client
         .get_account_list::<Maintainer>(opts.maintainer_list_address())?;
 
-    let maintainer_index = maintainers.position(opts.maintainer_address());
+    let maintainer_index = maintainers
+        .position(opts.maintainer_address())
+        .ok_or_else(|| CliError::new("Pubkey not found in maintainer list"))?;
 
     let instruction = lido::instruction::remove_maintainer(
         opts.solido_program_id(),
@@ -939,7 +943,9 @@ pub fn command_withdraw(
         );
 
         let destination_stake_account = Keypair::new();
-        let validator_index = validators.position(&heaviest_validator.pubkey());
+        let validator_index = validators
+            .position(heaviest_validator.pubkey())
+            .ok_or_else(|| CliError::new("Pubkey not found in validator list"))?;
 
         let instr = lido::instruction::withdraw(
             opts.solido_program_id(),
@@ -948,7 +954,7 @@ pub fn command_withdraw(
                 st_sol_mint: solido.st_sol_mint,
                 st_sol_account_owner: config.signer.pubkey(),
                 st_sol_account: st_sol_address,
-                validator_vote_account: heaviest_validator.pubkey(),
+                validator_vote_account: *heaviest_validator.pubkey(),
                 source_stake_account: stake_address,
                 destination_stake_account: destination_stake_account.pubkey(),
                 stake_authority,
@@ -1034,14 +1040,14 @@ pub fn command_deactivate_validator_if_commission_exceeds_max(
             opts.solido_program_id(),
             &lido::instruction::DeactivateValidatorIfCommissionExceedsMaxMeta {
                 lido: *opts.solido_address(),
-                validator_vote_account_to_deactivate: validator.pubkey(),
+                validator_vote_account_to_deactivate: *validator.pubkey(),
                 validator_list: *opts.validator_list_address(),
             },
             u32::try_from(validator_index).expect("Too many validators"),
         );
         instructions.push(instruction);
         violations.push(ValidatorViolationInfo {
-            validator_vote_account: validator.pubkey(),
+            validator_vote_account: *validator.pubkey(),
             commission,
         });
     }

@@ -386,7 +386,7 @@ fn get_validator_stake_accounts(
             .expect("Derived stake account contains invalid data.");
 
         assert_eq!(
-            stake.delegation.voter_pubkey,
+            &stake.delegation.voter_pubkey,
             validator.pubkey(),
             "Expected the stake account for validator to delegate to that validator."
         );
@@ -636,7 +636,7 @@ impl SolidoState {
             _ => stake_account_end,
         };
 
-        let maintainer_index = self.maintainers.position(&self.maintainer_address);
+        let maintainer_index = self.maintainers.position(&self.maintainer_address)?;
 
         let instruction = lido::instruction::stake_deposit(
             &self.solido_program_id,
@@ -644,7 +644,7 @@ impl SolidoState {
                 lido: self.solido_address,
                 maintainer: self.maintainer_address,
                 reserve: self.reserve_address,
-                validator_vote_account: validator.pubkey(),
+                validator_vote_account: *validator.pubkey(),
                 stake_account_merge_into: account_merge_into,
                 stake_account_end,
                 stake_authority: self.get_stake_authority(),
@@ -656,7 +656,7 @@ impl SolidoState {
             maintainer_index,
         );
         let task = MaintenanceOutput::StakeDeposit {
-            validator_vote_account: validator.pubkey(),
+            validator_vote_account: *validator.pubkey(),
             amount: amount_to_deposit,
             stake_account: stake_account_end,
         };
@@ -670,7 +670,7 @@ impl SolidoState {
         validator: &Validator,
         stake_account: &(Pubkey, StakeAccount),
         amount: Lamports,
-    ) -> (Pubkey, Instruction) {
+    ) -> Option<(Pubkey, Instruction)> {
         let (validator_unstake_account, _) = validator.find_stake_account_address(
             &self.solido_program_id,
             &self.solido_address,
@@ -678,18 +678,18 @@ impl SolidoState {
             StakeType::Unstake,
         );
 
-        let validator_index = self.validators.position(&validator.pubkey());
-        let maintainer_index = self.maintainers.position(&self.maintainer_address);
+        let validator_index = self.validators.position(&validator.pubkey())?;
+        let maintainer_index = self.maintainers.position(&self.maintainer_address)?;
 
         let (stake_account_address, _) = stake_account;
-        (
+        Some((
             validator_unstake_account,
             lido::instruction::unstake(
                 &self.solido_program_id,
                 &lido::instruction::UnstakeAccountsMetaV2 {
                     lido: self.solido_address,
                     maintainer: self.maintainer_address,
-                    validator_vote_account: validator.pubkey(),
+                    validator_vote_account: *validator.pubkey(),
                     source_stake_account: *stake_account_address,
                     destination_unstake_account: validator_unstake_account,
                     stake_authority: self.get_stake_authority(),
@@ -700,7 +700,7 @@ impl SolidoState {
                 validator_index,
                 maintainer_index,
             ),
-        )
+        ))
     }
 
     /// If there is a validator being deactivated, try to unstake its funds.
@@ -731,9 +731,9 @@ impl SolidoState {
                 validator,
                 &stake_accounts[0],
                 stake_account_balance.balance.total(),
-            );
+            )?;
             let task = MaintenanceOutput::UnstakeFromInactiveValidator(Unstake {
-                validator_vote_account: validator.pubkey(),
+                validator_vote_account: *validator.pubkey(),
                 from_stake_account: stake_account_address,
                 to_unstake_account: unstake_account,
                 from_stake_seed: validator.stake_seeds.begin,
@@ -763,14 +763,14 @@ impl SolidoState {
             }
 
             let task = MaintenanceOutput::DeactivateValidatorIfCommissionExceedsMax {
-                validator_vote_account: validator.pubkey(),
+                validator_vote_account: *validator.pubkey(),
             };
 
             let instruction = lido::instruction::deactivate_validator_if_commission_exceeds_max(
                 &self.solido_program_id,
                 &lido::instruction::DeactivateValidatorIfCommissionExceedsMaxMeta {
                     lido: self.solido_address,
-                    validator_vote_account_to_deactivate: validator.pubkey(),
+                    validator_vote_account_to_deactivate: *validator.pubkey(),
                     validator_list: self.solido.validator_list,
                 },
                 u32::try_from(validator_index).expect("Too many validators"),
@@ -788,14 +788,14 @@ impl SolidoState {
                 continue;
             }
             let task = MaintenanceOutput::RemoveValidator {
-                validator_vote_account: validator.pubkey(),
+                validator_vote_account: *validator.pubkey(),
             };
 
             let instruction = lido::instruction::remove_validator(
                 &self.solido_program_id,
                 &lido::instruction::RemoveValidatorMetaV2 {
                     lido: self.solido_address,
-                    validator_vote_account_to_remove: validator.pubkey(),
+                    validator_vote_account_to_remove: *validator.pubkey(),
                     validator_list: self.solido.validator_list,
                 },
                 u32::try_from(validator_index).expect("Too many validators"),
@@ -955,7 +955,7 @@ impl SolidoState {
         validator: &Validator,
         from_seed: u64,
         to_seed: u64,
-    ) -> Instruction {
+    ) -> Option<Instruction> {
         // Stake Account created by this transaction.
         let (from_stake, _bump_seed_end) = validator.find_stake_account_address(
             &self.solido_program_id,
@@ -971,20 +971,20 @@ impl SolidoState {
             StakeType::Stake,
         );
 
-        let validator_index = self.validators.position(&validator.pubkey());
+        let validator_index = self.validators.position(&validator.pubkey())?;
 
-        lido::instruction::merge_stake(
+        Some(lido::instruction::merge_stake(
             &self.solido_program_id,
             &lido::instruction::MergeStakeMetaV2 {
                 lido: self.solido_address,
-                validator_vote_account: validator.pubkey(),
+                validator_vote_account: *validator.pubkey(),
                 from_stake,
                 to_stake,
                 stake_authority: self.get_stake_authority(),
                 validator_list: self.solido.validator_list,
             },
             validator_index,
-        )
+        ))
     }
 
     // Tries to merge accounts from the beginning of the validator's
@@ -1002,9 +1002,9 @@ impl SolidoState {
                 let to_stake = stake_accounts[1];
                 if to_stake.1.can_merge(&from_stake.1) {
                     let instruction =
-                        self.get_merge_instruction(validator, from_stake.1.seed, to_stake.1.seed);
+                        self.get_merge_instruction(validator, from_stake.1.seed, to_stake.1.seed)?;
                     let task = MaintenanceOutput::MergeStake {
-                        validator_vote_account: validator.pubkey(),
+                        validator_vote_account: *validator.pubkey(),
                         from_stake: from_stake.0,
                         to_stake: to_stake.0,
                         from_stake_seed: from_stake.1.seed,
@@ -1057,8 +1057,8 @@ impl SolidoState {
                 .expect("If this overflows, there would be more than u64::MAX staked.");
 
             let expected_difference_stake =
-                if current_stake_balance > validator.get_effective_stake_balance() {
-                    (current_stake_balance - validator.get_effective_stake_balance())
+                if current_stake_balance > validator.compute_effective_stake_balance() {
+                    (current_stake_balance - validator.compute_effective_stake_balance())
                         .expect("Does not overflow because current > entry.balance.")
                 } else {
                     Lamports(0)
@@ -1089,7 +1089,7 @@ impl SolidoState {
                     &self.solido_program_id,
                     &lido::instruction::UpdateStakeAccountBalanceMeta {
                         lido: self.solido_address,
-                        validator_vote_account: validator.pubkey(),
+                        validator_vote_account: *validator.pubkey(),
                         stake_accounts: stake_account_addrs,
                         reserve: self.reserve_address,
                         stake_authority: self.get_stake_authority(),
@@ -1102,7 +1102,7 @@ impl SolidoState {
                     u32::try_from(validator_index).expect("Too many validators"),
                 );
                 let task = MaintenanceOutput::WithdrawInactiveStake {
-                    validator_vote_account: validator.pubkey(),
+                    validator_vote_account: *validator.pubkey(),
                     expected_difference_stake,
                     unstake_withdrawn_to_reserve: removed_unstake,
                 };
@@ -1147,9 +1147,9 @@ impl SolidoState {
         }
 
         let (unstake_account, instruction) =
-            self.get_unstake_instruction(validator, stake_account, amount);
+            self.get_unstake_instruction(validator, stake_account, amount)?;
         let task = MaintenanceOutput::UnstakeFromActiveValidator(Unstake {
-            validator_vote_account: validator.pubkey(),
+            validator_vote_account: *validator.pubkey(),
             from_stake_account: stake_account.0,
             to_unstake_account: unstake_account,
             from_stake_seed: validator.stake_seeds.begin,
@@ -1818,7 +1818,7 @@ mod test {
         assert_eq!(
             state.try_stake_deposit().unwrap().output,
             MaintenanceOutput::StakeDeposit {
-                validator_vote_account: state.validators.entries[0].pubkey(),
+                validator_vote_account: *state.validators.entries[0].pubkey(),
                 amount: (MINIMUM_STAKE_ACCOUNT_BALANCE * 2).unwrap(),
                 stake_account: stake_account_0.0,
             }
@@ -1844,7 +1844,7 @@ mod test {
         assert_eq!(
             state.try_stake_deposit().unwrap().output,
             MaintenanceOutput::StakeDeposit {
-                validator_vote_account: state.validators.entries[1].pubkey(),
+                validator_vote_account: *state.validators.entries[1].pubkey(),
                 amount: (MINIMUM_STAKE_ACCOUNT_BALANCE * 2).unwrap(),
                 stake_account: stake_account_1.0,
             }
@@ -1868,6 +1868,7 @@ mod test {
                 .entries
                 .iter()
                 .map(|p| p.pubkey())
+                .cloned()
                 .collect();
 
             // Check the next slot in forward order but also reverse order. With

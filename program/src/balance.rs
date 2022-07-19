@@ -123,7 +123,7 @@ pub fn get_unstake_validator_index(
             .any(|(validator, target)| {
                 let target_difference = target
                     .0
-                    .saturating_sub(validator.get_effective_stake_balance().0);
+                    .saturating_sub(validator.compute_effective_stake_balance().0);
                 if target == &Lamports(0) {
                     return false;
                 }
@@ -140,13 +140,13 @@ pub fn get_unstake_validator_index(
         .zip(target_balance)
         .max_by_key(|((_idx, validator), target)| {
             validator
-                .get_effective_stake_balance()
+                .compute_effective_stake_balance()
                 .0
                 .saturating_sub(target.0)
         })?;
 
     let amount = validator
-        .get_effective_stake_balance()
+        .compute_effective_stake_balance()
         .0
         .saturating_sub(target.0);
     let ratio = Rational {
@@ -180,22 +180,24 @@ pub fn get_minimum_stake_validator_index_amount(
         validators.entries.iter().position(|v| v.active).expect(
             "get_minimum_stake_validator_index_amount requires at least one active validator.",
         );
-    let mut lowest_balance = validators.entries[index].get_effective_stake_balance();
+    let mut lowest_balance = validators.entries[index].compute_effective_stake_balance();
     let mut amount = Lamports(
-        target_balance[index]
-            .0
-            .saturating_sub(validators.entries[index].get_effective_stake_balance().0),
+        target_balance[index].0.saturating_sub(
+            validators.entries[index]
+                .compute_effective_stake_balance()
+                .0,
+        ),
     );
 
     for (i, (validator, target)) in validators.entries.iter().zip(target_balance).enumerate() {
-        if validator.active && validator.get_effective_stake_balance() < lowest_balance {
+        if validator.active && validator.compute_effective_stake_balance() < lowest_balance {
             index = i;
             amount = Lamports(
                 target
                     .0
-                    .saturating_sub(validator.get_effective_stake_balance().0),
+                    .saturating_sub(validator.compute_effective_stake_balance().0),
             );
-            lowest_balance = validator.get_effective_stake_balance();
+            lowest_balance = validator.compute_effective_stake_balance();
         }
     }
 
@@ -208,7 +210,7 @@ pub fn get_validator_to_withdraw(
     validators
         .entries
         .iter()
-        .max_by_key(|v| v.get_effective_stake_balance())
+        .max_by_key(|v| v.compute_effective_stake_balance())
         .ok_or(LidoError::NoActiveValidators)
 }
 

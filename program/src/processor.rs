@@ -28,14 +28,14 @@ use crate::{
     stake_account::{deserialize_stake_account, StakeAccount},
     state::{
         AccountType, ExchangeRate, FeeRecipients, Lido, ListEntry, MaintainerList,
-        RewardDistribution, Validator, ValidatorList, LIDO_CONSTANT_SIZE, LIDO_VERSION,
+        RewardDistribution, Validator, ValidatorList,
     },
     token::{Lamports, Rational, StLamports},
     MAXIMUM_UNSTAKE_ACCOUNTS, MINIMUM_STAKE_ACCOUNT_BALANCE, MINT_AUTHORITY, RESERVE_ACCOUNT,
     STAKE_AUTHORITY, VALIDATOR_STAKE_ACCOUNT, VALIDATOR_UNSTAKE_ACCOUNT,
 };
 
-use solana_program::stake::{self as stake_program};
+use solana_program::stake as stake_program;
 use solana_program::stake_history::StakeHistory;
 use {
     borsh::BorshDeserialize,
@@ -75,7 +75,7 @@ pub fn process_initialize(
     check_account_owner(accounts.validator_list, program_id)?;
     check_account_owner(accounts.maintainer_list, program_id)?;
 
-    check_account_uninitialized(accounts.lido, LIDO_CONSTANT_SIZE, AccountType::Lido)?;
+    check_account_uninitialized(accounts.lido, Lido::LEN, AccountType::Lido)?;
     check_account_uninitialized(
         accounts.validator_list,
         ValidatorList::required_bytes(max_validators),
@@ -244,7 +244,7 @@ pub fn process_stake_deposit(
         .filter(|&v| v.active)
         .min_by_key(|v| v.effective_stake_balance)
         .ok_or(LidoError::NoActiveValidators)?;
-    let minimum_stake_pubkey = minimum_stake_validator.pubkey();
+    let minimum_stake_pubkey = *minimum_stake_validator.pubkey();
     let minimum_stake_balance = minimum_stake_validator.effective_stake_balance;
 
     let validator = validators.get_mut(validator_index, accounts.validator_vote_account.key)?;
@@ -328,7 +328,7 @@ pub fn process_stake_deposit(
     // and then it will be treated as a donation.
     msg!("Staked {} out of the reserve.", amount);
     validator.stake_accounts_balance = (validator.stake_accounts_balance + amount)?;
-    validator.effective_stake_balance = validator.get_effective_stake_balance();
+    validator.effective_stake_balance = validator.compute_effective_stake_balance();
 
     // Now we have two options:
     //
@@ -548,7 +548,7 @@ pub fn process_unstake(
     }
 
     validator.unstake_accounts_balance = (validator.unstake_accounts_balance + amount)?;
-    validator.effective_stake_balance = validator.get_effective_stake_balance();
+    validator.effective_stake_balance = validator.compute_effective_stake_balance();
     validator.unstake_seeds.end += 1;
 
     Ok(())
@@ -863,7 +863,7 @@ pub fn process_update_stake_account_balance(
         .add(validator.unstake_accounts_balance)
         .expect("If Solido has enough SOL to make this overflow, something has gone very wrong.");
 
-    validator.effective_stake_balance = validator.get_effective_stake_balance();
+    validator.effective_stake_balance = validator.compute_effective_stake_balance();
 
     distribute_fees(&mut lido, &accounts, &clock, rewards)?;
 
@@ -900,7 +900,7 @@ pub fn process_withdraw(
         .iter()
         .max_by_key(|pair| pair.effective_stake_balance)
         .ok_or(LidoError::NoActiveValidators)?;
-    let maximum_stake_pubkey = maximum_stake_validator.pubkey();
+    let maximum_stake_pubkey = *maximum_stake_validator.pubkey();
     let maximum_stake_balance = maximum_stake_validator.effective_stake_balance;
 
     // We should withdraw from the validator that has the most effective stake.
@@ -978,7 +978,7 @@ pub fn process_withdraw(
     }
 
     validator.stake_accounts_balance = (validator.stake_accounts_balance - sol_to_withdraw)?;
-    validator.effective_stake_balance = validator.get_effective_stake_balance();
+    validator.effective_stake_balance = validator.compute_effective_stake_balance();
 
     // Burn stSol tokens
     burn_st_sol(&lido, &accounts, amount)?;
@@ -1021,7 +1021,7 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
             max_maintainers,
             max_commission_percentage,
         } => process_initialize(
-            LIDO_VERSION,
+            Lido::VERSION,
             program_id,
             reward_distribution,
             max_validators,

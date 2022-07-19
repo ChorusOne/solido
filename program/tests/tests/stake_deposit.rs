@@ -167,7 +167,7 @@ async fn test_stake_deposit_succeeds_despite_donation() {
     context.deposit(TEST_DEPOSIT_AMOUNT).await;
     context
         .stake_deposit(
-            validator.pubkey(),
+            *validator.pubkey(),
             StakeDeposit::Append,
             TEST_STAKE_DEPOSIT_AMOUNT,
         )
@@ -182,7 +182,7 @@ async fn test_stake_deposit_succeeds_despite_donation() {
     );
 
     context
-        .update_stake_account_balance(validator.pubkey())
+        .update_stake_account_balance(*validator.pubkey())
         .await;
     let solido = context.get_solido().await;
     let validator_entry = &solido.validators.entries[0];

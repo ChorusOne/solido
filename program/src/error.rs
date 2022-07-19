@@ -188,6 +188,9 @@ pub enum LidoError {
 
     /// Pubkey at index does not match while indexing in account list
     PubkeyIndexMismatch = 54,
+
+    /// Index out of bounds when indexing into an account list
+    AccountListIndexOutOfBounds = 55,
 }
 
 // Just reuse the generated Debug impl for Display. It shows the variant names.

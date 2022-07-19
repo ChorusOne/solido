@@ -59,7 +59,7 @@ async fn test_successful_unstake() {
     let validator = &solido.validators.entries[0];
 
     let stake_account_before = context.get_stake_account_from_seed(&validator, 0).await;
-    context.unstake(validator.pubkey(), unstake_lamports).await;
+    context.unstake(*validator.pubkey(), unstake_lamports).await;
     let stake_account_after = context.get_stake_account_from_seed(&validator, 0).await;
     assert_eq!(
         (stake_account_before.balance.total() - stake_account_after.balance.total()).unwrap(),
@@ -211,7 +211,7 @@ async fn test_unstake_with_funded_destination_stake() {
     context.fund(unstake_address, Lamports(500_000_000)).await;
     let unstake_lamports = Lamports(1_000_000_000);
 
-    context.unstake(validator.pubkey(), unstake_lamports).await;
+    context.unstake(*validator.pubkey(), unstake_lamports).await;
     let unstake_account = context.get_unstake_account_from_seed(&validator, 0).await;
     // Since we already had something in the account that paid for the rent, we
     // can unstake all the requested amount.
@@ -265,7 +265,7 @@ async fn test_unstake_activating() {
     context.deposit(Lamports(10_000_000_000)).await;
     context
         .stake_deposit(
-            validator.pubkey(),
+            *validator.pubkey(),
             StakeDeposit::Append,
             Lamports(10_000_000_000),
         )
@@ -281,7 +281,7 @@ async fn test_unstake_activating() {
         (Lamports(10_000_000_000) - Lamports(stake_rent)).unwrap()
     );
 
-    context.unstake(validator.pubkey(), unstake_lamports).await;
+    context.unstake(*validator.pubkey(), unstake_lamports).await;
     let stake_account_after = context.get_stake_account_from_seed(&validator, 0).await;
     assert_eq!(
         (stake_account_before.balance.total() - stake_account_after.balance.total()).unwrap(),

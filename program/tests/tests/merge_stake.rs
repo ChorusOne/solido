@@ -74,7 +74,7 @@ async fn test_merge_stake_combinations() {
     context.deposit(Lamports(100_000_000_000)).await;
     context
         .stake_deposit(
-            validator.pubkey(),
+            *validator.pubkey(),
             StakeDeposit::Append,
             stake_deposit_amount,
         )
@@ -85,7 +85,7 @@ async fn test_merge_stake_combinations() {
     // Create an activating stake account.
     context
         .stake_deposit(
-            validator.pubkey(),
+            *validator.pubkey(),
             StakeDeposit::Append,
             stake_deposit_amount,
         )
@@ -146,7 +146,7 @@ async fn test_merge_validator_with_zero_and_one_stake_account() {
 
     context
         .stake_deposit(
-            validator.pubkey(),
+            *validator.pubkey(),
             StakeDeposit::Append,
             Lamports(10_000_000_000),
         )
