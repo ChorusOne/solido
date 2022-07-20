@@ -1320,6 +1320,15 @@ impl LidoV1 {
         let lido = try_from_slice_unchecked::<LidoV1>(&lido.data.borrow())?;
         Ok(lido)
     }
+
+    /// Checks if the passed manager is the same as the one stored in the state
+    pub fn check_manager(&self, manager: &AccountInfo) -> ProgramResult {
+        if &self.manager != manager.key {
+            msg!("Invalid manager, not the same as the one stored in state");
+            return Err(LidoError::InvalidManager.into());
+        }
+        Ok(())
+    }
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
