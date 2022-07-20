@@ -22,9 +22,8 @@ use crate::commands_multisig::MultisigOpts;
 use crate::commands_solido::{
     command_add_maintainer, command_add_validator, command_create_solido,
     command_deactivate_validator, command_deactivate_validator_if_commission_exceeds_max,
-    command_deposit, command_migrate_state_to_v2, command_remove_maintainer,
-    command_set_max_commission_percentage, command_show_solido, command_show_solido_authorities,
-    command_withdraw,
+    command_deposit, command_remove_maintainer, command_set_max_commission_percentage,
+    command_show_solido, command_show_solido_authorities, command_withdraw,
 };
 use crate::config::*;
 
@@ -215,9 +214,6 @@ REWARDS
     ///
     /// Requires the manager to sign.
     SetMaxValidationCommission(SetMaxValidationCommissionOpts),
-
-    /// Update Solido state to V2
-    MigrateStateToV2(MigrateStateToV2Opts),
 }
 
 fn print_output<Output: fmt::Display + Serialize>(mode: OutputMode, output: &Output) {
@@ -350,11 +346,6 @@ fn main() {
             let output = result.ok_or_abort_with("Failed to set max validation commission.");
             print_output(output_mode, &output);
         }
-        SubCommand::MigrateStateToV2(cmd_opts) => {
-            let result = command_migrate_state_to_v2(&mut config, &cmd_opts);
-            let output = result.ok_or_abort_with("Failed to update Solido state to V2.");
-            print_output(output_mode, &output);
-        }
     }
 }
 
@@ -385,7 +376,6 @@ fn merge_with_config_and_environment(
         SubCommand::SetMaxValidationCommission(opts) => {
             opts.merge_with_config_and_environment(config_file)
         }
-        SubCommand::MigrateStateToV2(opts) => opts.merge_with_config_and_environment(config_file),
     }
 }
 

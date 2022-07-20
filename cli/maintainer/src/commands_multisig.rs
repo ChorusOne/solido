@@ -29,7 +29,7 @@ use solana_sdk::sysvar;
 use lido::{
     instruction::{
         AddMaintainerMetaV2, AddValidatorMetaV2, ChangeRewardDistributionMeta,
-        DeactivateValidatorMetaV2, LidoInstruction, MigrateStateToV2Meta, RemoveMaintainerMetaV2,
+        DeactivateValidatorMetaV2, LidoInstruction, RemoveMaintainerMetaV2,
         SetMaxValidationCommissionMeta,
     },
     state::{FeeRecipients, Lido, RewardDistribution},
@@ -458,27 +458,6 @@ enum SolidoInstruction {
         #[serde(serialize_with = "serialize_b58")]
         manager: Pubkey,
     },
-    MigrateStateToV2 {
-        #[serde(serialize_with = "serialize_b58")]
-        solido_instance: Pubkey,
-
-        #[serde(serialize_with = "serialize_b58")]
-        manager: Pubkey,
-
-        #[serde(serialize_with = "serialize_b58")]
-        validator_list: Pubkey,
-
-        #[serde(serialize_with = "serialize_b58")]
-        maintainer_list: Pubkey,
-
-        #[serde(serialize_with = "serialize_b58")]
-        developer_account: Pubkey,
-
-        reward_distribution: RewardDistribution,
-        max_validators: u32,
-        max_maintainers: u32,
-        max_commission_percentage: u8,
-    },
 }
 
 #[allow(clippy::enum_variant_names)]
@@ -698,32 +677,6 @@ impl fmt::Display for ShowTransactionOutput {
                             "    Max validation commission: {}%",
                             max_commission_percentage
                         )?;
-                    }
-                    SolidoInstruction::MigrateStateToV2 {
-                        solido_instance,
-                        manager,
-                        validator_list,
-                        maintainer_list,
-                        developer_account,
-                        reward_distribution,
-                        max_validators,
-                        max_maintainers,
-                        max_commission_percentage,
-                    } => {
-                        writeln!(f, "It migrates Lido state to a version 2")?;
-                        writeln!(f, "    Solido instance:           {}", solido_instance)?;
-                        writeln!(f, "    Manager:                   {}", manager)?;
-                        writeln!(f, "    Validator list:            {}", validator_list)?;
-                        writeln!(f, "    Maintainer list:           {}", maintainer_list)?;
-                        writeln!(f, "    Developer account:         {}", developer_account)?;
-                        writeln!(f, "    Max validators:            {}", max_validators)?;
-                        writeln!(f, "    Max maintainers:           {}", max_maintainers)?;
-                        writeln!(
-                            f,
-                            "    Max validation commission: {}%",
-                            max_commission_percentage
-                        )?;
-                        writeln!(f, "    {:?}", reward_distribution)?;
                     }
                 }
             }
@@ -1166,26 +1119,6 @@ fn try_parse_solido_instruction(
                 manager: accounts.manager,
             })
         }
-        LidoInstruction::MigrateStateToV2 {
-            reward_distribution,
-            max_validators,
-            max_maintainers,
-            max_commission_percentage,
-        } => {
-            let accounts = MigrateStateToV2Meta::try_from_slice(&instr.accounts)?;
-            ParsedInstruction::SolidoInstruction(SolidoInstruction::MigrateStateToV2 {
-                solido_instance: accounts.lido,
-                manager: accounts.manager,
-                validator_list: accounts.validator_list,
-                maintainer_list: accounts.maintainer_list,
-                developer_account: accounts.developer_account,
-                reward_distribution,
-                max_validators,
-                max_maintainers,
-                max_commission_percentage,
-            })
-        }
-
         _ => ParsedInstruction::InvalidSolidoInstruction,
     })
 }

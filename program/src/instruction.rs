@@ -198,18 +198,6 @@ pub enum LidoInstruction {
         #[allow(dead_code)] // but it's not
         validator_index: u32,
     },
-
-    /// Update Solido state to V2
-    MigrateStateToV2 {
-        #[allow(dead_code)] // but it's not
-        reward_distribution: RewardDistribution,
-        #[allow(dead_code)] // but it's not
-        max_validators: u32,
-        #[allow(dead_code)] // but it's not
-        max_maintainers: u32,
-        #[allow(dead_code)] // but it's not
-        max_commission_percentage: u8,
-    },
 }
 
 impl LidoInstruction {
@@ -987,53 +975,6 @@ pub fn set_max_commission_percentage(
     max_commission_percentage: u8,
 ) -> Instruction {
     let data = LidoInstruction::SetMaxValidationCommission {
-        max_commission_percentage,
-    };
-    Instruction {
-        program_id: *program_id,
-        accounts: accounts.to_vec(),
-        data: data.to_vec(),
-    }
-}
-
-accounts_struct! {
-    MigrateStateToV2Meta, MigrateStateToV2Info {
-        pub lido {
-            is_signer: false,
-            // Needs to be writable for us to update the metrics.
-            is_writable: true,
-        },
-        pub manager {
-            is_signer: true,
-            is_writable: false,
-        },
-        pub validator_list {
-            is_signer: false,
-            is_writable: true,
-        },
-        pub maintainer_list {
-            is_signer: false,
-            is_writable: true,
-        },
-        pub developer_account {
-            is_signer: false,
-            is_writable: false,
-        },
-    }
-}
-
-pub fn migrate_state_to_v2(
-    program_id: &Pubkey,
-    reward_distribution: RewardDistribution,
-    max_validators: u32,
-    max_maintainers: u32,
-    max_commission_percentage: u8,
-    accounts: &MigrateStateToV2Meta,
-) -> Instruction {
-    let data = LidoInstruction::MigrateStateToV2 {
-        reward_distribution,
-        max_validators,
-        max_maintainers,
         max_commission_percentage,
     };
     Instruction {
