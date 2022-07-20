@@ -29,7 +29,7 @@ async fn test_successful_deposit() {
     let st_sol_balance = context.get_st_sol_balance(recipient).await;
     assert_eq!(st_sol_balance.0, TEST_DEPOSIT_AMOUNT.0);
 
-    let solido = context.get_solido().await;
+    let solido = context.get_solido().await.lido;
     assert_eq!(solido.metrics.deposit_amount.total, TEST_DEPOSIT_AMOUNT);
     assert_eq!(solido.metrics.deposit_amount.num_observations(), 1);
 }

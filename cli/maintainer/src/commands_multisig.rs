@@ -28,8 +28,8 @@ use solana_sdk::sysvar;
 
 use lido::{
     instruction::{
-        AddMaintainerMeta, AddValidatorMetaV2, ChangeRewardDistributionMeta,
-        DeactivateValidatorMeta, LidoInstruction, RemoveMaintainerMeta,
+        AddMaintainerMetaV2, AddValidatorMetaV2, ChangeRewardDistributionMeta,
+        DeactivateValidatorMetaV2, LidoInstruction, RemoveMaintainerMetaV2,
         SetMaxValidationCommissionMeta,
     },
     state::{FeeRecipients, Lido, RewardDistribution},
@@ -412,6 +412,8 @@ enum SolidoInstruction {
 
         #[serde(serialize_with = "serialize_b58")]
         validator_vote_account: Pubkey,
+
+        validator_index: u32,
     },
     AddMaintainer {
         #[serde(serialize_with = "serialize_b58")]
@@ -432,6 +434,8 @@ enum SolidoInstruction {
 
         #[serde(serialize_with = "serialize_b58")]
         maintainer: Pubkey,
+
+        maintainer_index: u32,
     },
     ChangeRewardDistribution {
         current_solido: Box<Lido>,
@@ -616,11 +620,13 @@ impl fmt::Display for ShowTransactionOutput {
                         solido_instance,
                         manager,
                         validator_vote_account,
+                        validator_index,
                     } => {
                         writeln!(f, "It deactivates a validator.")?;
                         writeln!(f, "    Solido instance:        {}", solido_instance)?;
                         writeln!(f, "    Manager:                {}", manager)?;
                         writeln!(f, "    Validator vote account: {}", validator_vote_account)?;
+                        writeln!(f, "    Validator index:        {}", validator_index)?;
                     }
                     SolidoInstruction::AddMaintainer {
                         solido_instance,
@@ -636,11 +642,13 @@ impl fmt::Display for ShowTransactionOutput {
                         solido_instance,
                         manager,
                         maintainer,
+                        maintainer_index,
                     } => {
                         writeln!(f, "It removes a maintainer")?;
-                        writeln!(f, "    Solido instance: {}", solido_instance)?;
-                        writeln!(f, "    Manager:         {}", manager)?;
-                        writeln!(f, "    Maintainer:      {}", maintainer)?;
+                        writeln!(f, "    Solido instance:  {}", solido_instance)?;
+                        writeln!(f, "    Manager:          {}", manager)?;
+                        writeln!(f, "    Maintainer:       {}", maintainer)?;
+                        writeln!(f, "    Maintainer index: {}", maintainer_index)?;
                     }
                     SolidoInstruction::ChangeRewardDistribution {
                         current_solido,
@@ -1075,28 +1083,30 @@ fn try_parse_solido_instruction(
                 validator_vote_account: accounts.validator_vote_account,
             })
         }
-        LidoInstruction::DeactivateValidator => {
-            let accounts = DeactivateValidatorMeta::try_from_slice(&instr.accounts)?;
+        LidoInstruction::DeactivateValidatorV2 { validator_index } => {
+            let accounts = DeactivateValidatorMetaV2::try_from_slice(&instr.accounts)?;
             ParsedInstruction::SolidoInstruction(SolidoInstruction::DeactivateValidator {
                 solido_instance: accounts.lido,
                 manager: accounts.manager,
                 validator_vote_account: accounts.validator_vote_account_to_deactivate,
+                validator_index,
             })
         }
-        LidoInstruction::AddMaintainer => {
-            let accounts = AddMaintainerMeta::try_from_slice(&instr.accounts)?;
+        LidoInstruction::AddMaintainerV2 => {
+            let accounts = AddMaintainerMetaV2::try_from_slice(&instr.accounts)?;
             ParsedInstruction::SolidoInstruction(SolidoInstruction::AddMaintainer {
                 solido_instance: accounts.lido,
                 manager: accounts.manager,
                 maintainer: accounts.maintainer,
             })
         }
-        LidoInstruction::RemoveMaintainer => {
-            let accounts = RemoveMaintainerMeta::try_from_slice(&instr.accounts)?;
+        LidoInstruction::RemoveMaintainerV2 { maintainer_index } => {
+            let accounts = RemoveMaintainerMetaV2::try_from_slice(&instr.accounts)?;
             ParsedInstruction::SolidoInstruction(SolidoInstruction::RemoveMaintainer {
                 solido_instance: accounts.lido,
                 manager: accounts.manager,
                 maintainer: accounts.maintainer,
+                maintainer_index,
             })
         }
         LidoInstruction::SetMaxValidationCommission {
@@ -1109,7 +1119,6 @@ fn try_parse_solido_instruction(
                 manager: accounts.manager,
             })
         }
-
         _ => ParsedInstruction::InvalidSolidoInstruction,
     })
 }

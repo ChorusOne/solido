@@ -15,6 +15,7 @@ use solana_sdk::signer::presigner::PresignerError;
 use solana_sdk::signer::SignerError;
 use solana_sdk::transaction::TransactionError;
 
+use crate::snapshot::SnapshotError;
 use anker::error::AnkerError;
 use lido::error::LidoError;
 
@@ -501,6 +502,19 @@ impl AsPrettyError for ParseHashError {
     fn print_pretty(&self) {
         print_red("Solana decode base58 error:");
         println!(" {:?}", self);
+    }
+}
+
+impl AsPrettyError for SnapshotError {
+    fn print_pretty(&self) {
+        print_red("Lido snapshot error:");
+        match self {
+            Self::MissingAccount => println!(" Missing account"),
+            Self::MissingValidatorIdentity(pubkey) => {
+                println!(" Missing validator identity for {}", pubkey)
+            }
+            Self::OtherError(err) => err.print_pretty(),
+        };
     }
 }
 

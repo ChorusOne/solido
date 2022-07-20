@@ -14,7 +14,7 @@ use testlib::solido_context::Context;
 async fn test_successful_change_reward_distribution() {
     let mut context = Context::new_with_maintainer().await;
 
-    let solido = context.get_solido().await;
+    let solido = context.get_solido().await.lido;
     assert_eq!(solido.reward_distribution, context.reward_distribution);
     assert_eq!(
         solido.fee_recipients.treasury_account,
@@ -52,7 +52,7 @@ async fn test_successful_change_reward_distribution() {
         .await
         .expect("Failed to change fees.");
 
-    let solido = context.get_solido().await;
+    let solido = context.get_solido().await.lido;
     assert_eq!(solido.reward_distribution, new_fee);
     assert_eq!(solido.fee_recipients.treasury_account, new_treasury_addr,);
     assert_eq!(solido.fee_recipients.developer_account, new_developer_addr,);
@@ -72,7 +72,7 @@ async fn test_change_reward_distribution_wrong_minter() {
         .create_st_sol_account(not_st_sol_owner.pubkey())
         .await;
 
-    let solido = context.get_solido().await;
+    let solido = context.get_solido().await.lido;
 
     let result = context
         .try_change_reward_distribution(

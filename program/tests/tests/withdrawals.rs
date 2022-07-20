@@ -146,7 +146,7 @@ async fn test_withdrawal_result() {
     let split_stake_account = context.try_withdraw(test_withdraw_amount).await.unwrap();
 
     let split_stake_sol_balance = context.context.get_sol_balance(split_stake_account).await;
-    let solido = context.context.get_solido().await;
+    let solido = context.context.get_solido().await.lido;
     let amount_lamports = solido
         .exchange_rate
         .exchange_st_sol(test_withdraw_amount)
@@ -169,7 +169,7 @@ async fn test_withdrawal_result() {
     assert_eq!(stake_account_balance_after, Lamports(99_997_717_119));
 
     // Test if we updated the metrics
-    let solido_after = context.context.get_solido().await;
+    let solido_after = context.context.get_solido().await.lido;
     assert_eq!(
         solido_after.metrics.withdraw_amount.total_st_sol_amount,
         test_withdraw_amount

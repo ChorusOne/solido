@@ -7,10 +7,11 @@
 //! expectations; there is no "right" answer, but we would like to know what
 //! how many accounts Solido can handle.
 
-use testlib::solido_context::{Context, StakeDeposit, ValidatorAccounts};
+use testlib::solido_context::{Context, StakeDeposit};
 
 use lido::token::Lamports;
 
+use solana_program::pubkey::Pubkey;
 use solana_program_test::tokio;
 
 /// Test how many stake accounts per validator we can support.
@@ -60,39 +61,50 @@ async fn test_update_stake_account_balance_max_accounts() {
 }
 
 #[tokio::test]
+#[ignore]
 async fn test_max_validators_maintainers() {
     let mut context = Context::new_with_maintainer().await;
 
     // The maximum number of validators that we can support, before Deposit or
     // StakeDeposit fails.
-    let max_validators: u32 = 82;
+    let max_validators: u32 = 6_700;
 
-    let mut validator: Option<ValidatorAccounts> = None;
+    let mut first_validator_vote_account = Pubkey::default();
     for i in 0..max_validators {
-        context
-            .memo(&format!("Adding maintainer and validator {}.", i + 1))
-            .await;
-
         // Initially expect every validator to be a maintainer as well, so let's
         // add a maintainer for every validator. We set this to be the context's
-        // maintainer that is used to sign `stake_deposit`. We use a linear
-        // search, so the later maintainers are slightly more expensive to check.
+        // maintainer that is used to sign `stake_deposit`.
         let maintainer = context.add_maintainer().await;
         context.maintainer = Some(maintainer);
 
-        validator = Some(context.add_validator().await);
+        let validator = context.add_validator().await;
+        if i == 0 {
+            first_validator_vote_account = validator.vote_account;
+        }
+        // test with step 100 to reduce waiting
+        if (i + 1) % 100 == 0 {
+            context
+                .memo(&format!("Testing heavy load {}.", i + 1))
+                .await;
+
+            let amount = Lamports(2_000_000_000);
+            context.deposit(amount).await;
+            context
+                .stake_deposit(validator.vote_account, StakeDeposit::Append, amount)
+                .await;
+            context
+                .unstake(validator.vote_account, Lamports(1_000_000_000))
+                .await;
+            // If we get here, then none of the transactions failed.
+        }
     }
 
-    // take out of the loop to reduce the time to wait
-    if let Some(validator) = validator {
-        let amount = Lamports(2_000_000_000);
-        context.deposit(amount).await;
-        context
-            .stake_deposit(validator.vote_account, StakeDeposit::Append, amount)
-            .await;
-        context
-            .unstake(validator.vote_account, Lamports(1_000_000_000))
-            .await;
-        // If we get here, then none of the transactions failed.
-    }
+    // remove from the beginning of a list to test worst case
+    context
+        .deactivate_validator(first_validator_vote_account)
+        .await;
+    context
+        .try_remove_validator(first_validator_vote_account)
+        .await
+        .expect("Could not remove first validator");
 }

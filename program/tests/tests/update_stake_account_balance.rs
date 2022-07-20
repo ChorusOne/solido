@@ -95,7 +95,7 @@ async fn test_update_stake_account_balance() {
     let solido_before = context.get_solido().await;
     let validator_before = solido_before
         .validators
-        .get(&validator.vote_account)
+        .find(&validator.vote_account)
         .unwrap();
 
     let account = context.get_account(validator.vote_account).await;
@@ -129,11 +129,11 @@ async fn test_update_stake_account_balance() {
     let solido_after = context.get_solido().await;
     let validator_after = solido_after
         .validators
-        .get(&validator.vote_account)
+        .find(&validator.vote_account)
         .unwrap();
 
-    let rewards = (validator_after.entry.stake_accounts_balance
-        - validator_before.entry.stake_accounts_balance)
+    let rewards = (validator_after.stake_accounts_balance
+        - validator_before.stake_accounts_balance)
         .expect("Does not underflow, because we received rewards.");
     assert_eq!(rewards, Lamports(arbitrary_rewards));
 
@@ -148,6 +148,7 @@ async fn test_update_stake_account_balance() {
     // to 3% of the rewards. Three lamports differ due to rounding errors.
     let treasury_fee = (treasury_after - treasury_before).unwrap();
     let treasury_fee_sol = solido_after
+        .lido
         .exchange_rate
         .exchange_st_sol(treasury_fee)
         .unwrap();
@@ -157,6 +158,7 @@ async fn test_update_stake_account_balance() {
     // to 2% of the rewards. Two lamport differ due to rounding errors.
     let developer_fee = (developer_after - developer_before).unwrap();
     let developer_fee_sol = solido_after
+        .lido
         .exchange_rate
         .exchange_st_sol(developer_fee)
         .unwrap();

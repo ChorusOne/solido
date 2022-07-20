@@ -47,7 +47,7 @@ use solana_transaction_status::{TransactionDetails, UiTransactionEncoding};
 use solana_vote_program::vote_state::VoteState;
 
 use anker::state::Anker;
-use lido::state::Lido;
+use lido::state::{AccountList, Lido, ListEntry};
 use lido::token::Lamports;
 use spl_token::solana_program::hash::Hash;
 
@@ -215,6 +215,16 @@ impl<'a> Snapshot<'a> {
             // The account was not included in the snapshot, we need to retry.
             None => Err(SnapshotError::MissingAccount),
         }
+    }
+
+    /// Get list of accounts of type T from Solido
+    pub fn get_account_list<T: ListEntry>(
+        &mut self,
+        address: &Pubkey,
+    ) -> crate::Result<AccountList<T>> {
+        let list_account = self.get_account(address)?;
+        let mut data = list_account.data.to_vec();
+        AccountList::from(&mut data).map_err(|e| e.into())
     }
 
     /// Read an account and immediately bincode-deserialize it.

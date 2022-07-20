@@ -22,4 +22,4 @@ panic = "abort"
 anchor-lang = { git = "https://github.com/lidofinance/anchor", branch = "solana-v1.9.28" }
 
 # https://github.com/tiny-http/tiny-http/pull/225
-tiny_http = { git = "https://github.com/ruuda/tiny-http", rev = "3568e8880f995dd0348feff9e29645fce995b534" }
+tiny_http = { git = "https://github.com/tiny-http/tiny-http", rev = "f0fce7ed0bdf7439b5bd0b2d15fa82944aac30f6" }

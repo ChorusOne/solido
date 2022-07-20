@@ -284,6 +284,17 @@ cli_opt_struct! {
         #[clap(long)]
         solido_key_path: PathBuf => PathBuf::default(),
 
+        /// Optional argument for the validator list address, if not passed a random one
+        /// will be created.
+        #[clap(long)]
+        validator_list_key_path: PathBuf => PathBuf::default(),
+
+        /// Optional argument for the maintainer list address, if not passed a random one
+        /// will be created.
+        #[clap(long)]
+        maintainer_list_key_path: PathBuf => PathBuf::default(),
+
+
         /// Used to compute Solido's manager. Multisig instance.
         #[clap(long, value_name = "address")]
         multisig_address: Pubkey,
@@ -323,6 +334,10 @@ cli_opt_struct! {
          /// Amount to withdraw in stSOL, using . as decimal separator.
          #[clap(long, value_name = "st_sol")]
          amount_st_sol: StLamports,
+
+         /// Account that stores the data for validator list.
+         #[clap(long, value_name = "address")]
+         validator_list_address: Pubkey,
     }
 }
 
@@ -334,6 +349,13 @@ cli_opt_struct! {
         /// Account that stores the data for this Solido instance.
         #[clap(long, value_name = "address")]
         solido_address: Pubkey,
+
+        /// Account that stores the data for validator list.
+        #[clap(long, value_name = "address")]
+        validator_list_address: Pubkey,
+        /// Account that stores the data for maintainer list.
+        #[clap(long, value_name = "address")]
+        maintainer_list_address: Pubkey,
 
         /// Address of the validator vote account.
         #[clap(long, value_name = "address")]
@@ -370,6 +392,10 @@ cli_opt_struct! {
         /// Address of the Multisig program.
         #[clap(long, value_name = "address")]
         multisig_program_id: Pubkey,
+
+        /// Account that stores the data for validator list.
+        #[clap(long, value_name = "address")]
+        validator_list_address: Pubkey,
     }
 }
 
@@ -393,6 +419,10 @@ cli_opt_struct! {
         /// Address of the Multisig program.
         #[clap(long)]
         multisig_program_id: Pubkey,
+
+        /// Account that stores the data for maintainer list.
+        #[clap(long, value_name = "address")]
+        maintainer_list_address: Pubkey,
     }
 }
 
@@ -463,6 +493,10 @@ cli_opt_struct! {
         /// Account that stores the data for this Solido instance.
         #[clap(long, value_name = "address")]
         solido_address: Pubkey,
+
+        /// Account that stores the data for validator list.
+        #[clap(long, value_name = "address")]
+        validator_list_address: Pubkey,
     }
 }
 

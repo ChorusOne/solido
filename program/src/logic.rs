@@ -15,8 +15,8 @@ use crate::processor::StakeType;
 use crate::STAKE_AUTHORITY;
 use crate::{
     error::LidoError,
-    instruction::{UnstakeAccountsInfo, UpdateStakeAccountBalanceInfo, WithdrawAccountsInfo},
-    state::Lido,
+    instruction::{UnstakeAccountsInfoV2, UpdateStakeAccountBalanceInfo, WithdrawAccountsInfoV2},
+    state::{AccountType, Lido, ListEntry, Validator},
     token::{Lamports, StLamports},
     MINT_AUTHORITY, RESERVE_ACCOUNT,
 };
@@ -227,7 +227,7 @@ pub fn mint_st_sol_to<'a>(
 /// * The account account must be an stSOL SPL token account.
 pub fn burn_st_sol<'a, 'b>(
     solido: &Lido,
-    accounts: &WithdrawAccountsInfo<'a, 'b>,
+    accounts: &WithdrawAccountsInfoV2<'a, 'b>,
     amount: StLamports,
 ) -> ProgramResult {
     solido.check_mint_is_st_sol_mint(accounts.st_sol_mint)?;
@@ -271,7 +271,7 @@ pub fn burn_st_sol<'a, 'b>(
 // Set the stake and withdraw authority of the destination stake account to the
 // user’s pubkey.
 pub fn transfer_stake_authority(
-    accounts: &WithdrawAccountsInfo,
+    accounts: &WithdrawAccountsInfoV2,
     stake_authority_bump_seed: u8,
 ) -> ProgramResult {
     invoke_signed(
@@ -381,21 +381,19 @@ pub fn distribute_fees(
 /// by the validator's seeds. Returns the destination bump seed.
 pub fn check_unstake_accounts(
     program_id: &Pubkey,
-    lido: &Lido,
-    accounts: &UnstakeAccountsInfo,
+    validator: &Validator,
+    accounts: &UnstakeAccountsInfoV2,
 ) -> Result<u8, ProgramError> {
-    let validator = lido.validators.get(accounts.validator_vote_account.key)?;
-
     // If a validator doesn't have a stake account, it cannot be unstaked.
-    if !validator.entry.has_stake_accounts() {
+    if !validator.has_stake_accounts() {
         msg!(
             "Attempting to unstake from a validator {} that has no stake accounts.",
-            validator.pubkey
+            validator.pubkey()
         );
         return Err(LidoError::InvalidStakeAccount.into());
     }
-    let source_stake_seed = validator.entry.stake_seeds.begin;
-    let destination_stake_seed = validator.entry.unstake_seeds.end;
+    let source_stake_seed = validator.stake_seeds.begin;
+    let destination_stake_seed = validator.unstake_seeds.end;
 
     let (source_stake_account, _) = validator.find_stake_account_address(
         program_id,
@@ -504,6 +502,55 @@ pub fn split_stake_account(
         ]],
     )?;
     Ok(())
+}
+
+/// Check account data is uninitialized and allocated size is correct.
+pub fn check_account_uninitialized(
+    account: &AccountInfo,
+    bytes_to_check: usize,
+    expected_size: usize,
+    account_type: AccountType,
+) -> ProgramResult {
+    if !&account.data.borrow()[..bytes_to_check]
+        .iter()
+        .all(|byte| *byte == 0)
+    {
+        msg!(
+            "Account {} appears to be in use already, refusing to overwrite.",
+            account.key
+        );
+        return Err(LidoError::AlreadyInUse.into());
+    }
+
+    if account.data_len() < expected_size {
+        msg!(
+            "Incorrect allocated bytes for {:?} account: {}, should be at least {}",
+            account_type,
+            account.data_len(),
+            expected_size
+        );
+        return Err(LidoError::InvalidAccountSize.into());
+    }
+
+    Ok(())
+}
+
+/// Check account owner is the given program
+pub fn check_account_owner(
+    account_info: &AccountInfo,
+    program_id: &Pubkey,
+) -> Result<(), ProgramError> {
+    if *program_id != *account_info.owner {
+        msg!(
+            "Expected account {} to be owned by program {}, received {}",
+            account_info.key,
+            program_id,
+            account_info.owner
+        );
+        Err(LidoError::InvalidOwner.into())
+    } else {
+        Ok(())
+    }
 }
 
 #[cfg(test)]

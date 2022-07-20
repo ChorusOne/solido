@@ -20,7 +20,7 @@ async fn test_update_exchange_rate() {
     let start_epoch = context.get_clock().await.epoch;
 
     // Initially the balance is zero, and we haven't minted any stSOL.
-    let solido = context.get_solido().await;
+    let solido = context.get_solido().await.lido;
     assert_eq!(
         solido.exchange_rate,
         ExchangeRate {
@@ -49,7 +49,7 @@ async fn test_update_exchange_rate() {
 
     // There was one deposit, the exchange rate was 1:1, we should now have the
     // same amount of SOL and stSOL.
-    let solido = context.get_solido().await;
+    let solido = context.get_solido().await.lido;
     assert_eq!(
         solido.exchange_rate,
         ExchangeRate {
@@ -81,7 +81,7 @@ async fn test_update_exchange_rate() {
 
     context.update_exchange_rate().await;
 
-    let solido = context.get_solido().await;
+    let solido = context.get_solido().await.lido;
     assert_eq!(
         solido.exchange_rate,
         ExchangeRate {
