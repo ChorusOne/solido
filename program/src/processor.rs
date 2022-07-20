@@ -1025,6 +1025,7 @@ pub fn processor_migrate_to_v2(
 ) -> ProgramResult {
     let accounts = MigrateStateToV2Info::try_from_slice(accounts_raw)?;
     let lido_v1 = LidoV1::deserialize_lido(program_id, accounts.lido)?;
+    lido_v1.check_manager(accounts.manager)?;
 
     if !(lido_v1.lido_version == 0 && Lido::VERSION == 1) {
         return Err(LidoError::LidoVersionMismatch.into());

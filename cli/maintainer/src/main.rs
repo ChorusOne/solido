@@ -22,7 +22,7 @@ use crate::commands_multisig::MultisigOpts;
 use crate::commands_solido::{
     command_add_maintainer, command_add_validator, command_create_solido,
     command_deactivate_validator, command_deactivate_validator_if_commission_exceeds_max,
-    command_deposit, command_migrate_to_v2, command_remove_maintainer,
+    command_deposit, command_migrate_state_to_v2, command_remove_maintainer,
     command_set_max_commission_percentage, command_show_solido, command_show_solido_authorities,
     command_withdraw,
 };
@@ -351,7 +351,7 @@ fn main() {
             print_output(output_mode, &output);
         }
         SubCommand::MigrateStateToV2(cmd_opts) => {
-            let result = config.with_snapshot(|config| command_migrate_to_v2(config, &cmd_opts));
+            let result = command_migrate_state_to_v2(&mut config, &cmd_opts);
             let output = result.ok_or_abort_with("Failed to update Solido state to V2.");
             print_output(output_mode, &output);
         }

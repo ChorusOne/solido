@@ -2,7 +2,7 @@ name: build
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, migrate_v2]
   pull_request:
     branches: '*'
 

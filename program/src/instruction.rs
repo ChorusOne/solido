@@ -1003,6 +1003,10 @@ accounts_struct! {
             // Needs to be writable for us to update the metrics.
             is_writable: true,
         },
+        pub manager {
+            is_signer: true,
+            is_writable: false,
+        },
         pub validator_list {
             is_signer: false,
             is_writable: true,

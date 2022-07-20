@@ -1139,87 +1139,100 @@ impl fmt::Display for MigrateStateToV2Output {
 }
 
 /// CLI entry point to update Solido state to V2
-pub fn command_migrate_to_v2(
-    config: &mut SnapshotConfig,
+pub fn command_migrate_state_to_v2(
+    config: &mut SnapshotClientConfig,
     opts: &MigrateStateToV2Opts,
-) -> solido_cli_common::Result<MigrateStateToV2Output> {
+) -> solido_cli_common::Result<ProposeInstructionOutput> {
     let validator_list_signer = from_key_path_or_random(opts.validator_list_key_path())?;
     let maintainer_list_signer = from_key_path_or_random(opts.maintainer_list_key_path())?;
+    let max_maintainers = 5_000;
 
-    let validator_list_size = AccountList::<Validator>::required_bytes(50_000);
-    let validator_list_account_balance = config
-        .client
-        .get_minimum_balance_for_rent_exemption(validator_list_size)?;
+    let developer_pubkey = config.with_snapshot(|config| {
+        let validator_list_size = AccountList::<Validator>::required_bytes(50_000);
+        let validator_list_account_balance = config
+            .client
+            .get_minimum_balance_for_rent_exemption(validator_list_size)?;
 
-    let maintainer_list_size = AccountList::<Maintainer>::required_bytes(1_000);
-    let maintainer_list_account_balance = config
-        .client
-        .get_minimum_balance_for_rent_exemption(maintainer_list_size)?;
+        let maintainer_list_size = AccountList::<Maintainer>::required_bytes(max_maintainers);
+        let maintainer_list_account_balance = config
+            .client
+            .get_minimum_balance_for_rent_exemption(maintainer_list_size)?;
 
-    let mut instructions = Vec::new();
+        let mut instructions = Vec::new();
 
-    let developer_keypair = push_create_spl_token_account(
-        config,
-        &mut instructions,
-        opts.st_sol_mint(),
-        opts.developer_account_owner(),
-    )?;
-    config
-        .sign_and_send_transaction(&instructions[..], &vec![config.signer, &developer_keypair])?;
-    instructions.clear();
-    eprintln!("Did send SPL account inits.");
+        let developer_keypair = push_create_spl_token_account(
+            config,
+            &mut instructions,
+            opts.st_sol_mint(),
+            opts.developer_account_owner(),
+        )?;
+        config.sign_and_send_transaction(
+            &instructions[..],
+            &vec![config.signer, &developer_keypair],
+        )?;
+        instructions.clear();
+        eprintln!("Did send SPL account inits.");
 
-    // Create the account that holds the validator list itself.
-    instructions.push(system_instruction::create_account(
-        &config.signer.pubkey(),
-        &validator_list_signer.pubkey(),
-        validator_list_account_balance.0,
-        validator_list_size as u64,
-        opts.solido_program_id(),
-    ));
+        // Create the account that holds the validator list itself.
+        instructions.push(system_instruction::create_account(
+            &config.signer.pubkey(),
+            &validator_list_signer.pubkey(),
+            validator_list_account_balance.0,
+            validator_list_size as u64,
+            opts.solido_program_id(),
+        ));
 
-    // Create the account that holds the maintainer list itself.
-    instructions.push(system_instruction::create_account(
-        &config.signer.pubkey(),
-        &maintainer_list_signer.pubkey(),
-        maintainer_list_account_balance.0,
-        maintainer_list_size as u64,
-        opts.solido_program_id(),
-    ));
+        // Create the account that holds the maintainer list itself.
+        instructions.push(system_instruction::create_account(
+            &config.signer.pubkey(),
+            &maintainer_list_signer.pubkey(),
+            maintainer_list_account_balance.0,
+            maintainer_list_size as u64,
+            opts.solido_program_id(),
+        ));
 
-    instructions.push(lido::instruction::migrate_state_to_v2(
-        opts.solido_program_id(),
-        RewardDistribution {
-            treasury_fee: *opts.treasury_fee_share(),
-            developer_fee: *opts.developer_fee_share(),
-            st_sol_appreciation: *opts.st_sol_appreciation_share(),
-        },
-        6_700,
-        1_000,
-        *opts.max_commission_percentage(),
-        &lido::instruction::MigrateStateToV2Meta {
-            lido: *opts.solido_address(),
-            validator_list: validator_list_signer.pubkey(),
-            maintainer_list: maintainer_list_signer.pubkey(),
-            developer_account: developer_keypair.pubkey(),
-        },
-    ));
+        config.sign_and_send_transaction(
+            &instructions[..],
+            &[
+                config.signer,
+                &*validator_list_signer,
+                &*maintainer_list_signer,
+            ],
+        )?;
+        eprintln!("Created validator and maintainer list accounts.");
+        Ok(developer_keypair.pubkey())
+    })?;
 
-    config.sign_and_send_transaction(
-        &instructions[..],
-        &[
-            config.signer,
-            &*validator_list_signer,
-            &*maintainer_list_signer,
-        ],
-    )?;
-    eprintln!("Did send Lido update to V2.");
+    let propose_output = config.with_snapshot(|config| {
+        let (multisig_address, _) =
+            get_multisig_program_address(opts.multisig_program_id(), opts.multisig_address());
 
-    let result = MigrateStateToV2Output {
-        solido_address: *opts.solido_address(),
-        validator_list_address: validator_list_signer.pubkey(),
-        maintainer_list_address: maintainer_list_signer.pubkey(),
-        developer_account: developer_keypair.pubkey(),
-    };
-    Ok(result)
+        let instruction = lido::instruction::migrate_state_to_v2(
+            opts.solido_program_id(),
+            RewardDistribution {
+                treasury_fee: *opts.treasury_fee_share(),
+                developer_fee: *opts.developer_fee_share(),
+                st_sol_appreciation: *opts.st_sol_appreciation_share(),
+            },
+            6_700,
+            max_maintainers,
+            *opts.max_commission_percentage(),
+            &lido::instruction::MigrateStateToV2Meta {
+                lido: *opts.solido_address(),
+                manager: multisig_address,
+                validator_list: validator_list_signer.pubkey(),
+                maintainer_list: maintainer_list_signer.pubkey(),
+                developer_account: developer_pubkey,
+            },
+        );
+
+        propose_instruction(
+            config,
+            opts.multisig_program_id(),
+            *opts.multisig_address(),
+            instruction,
+        )
+    })?;
+
+    Ok(propose_output)
 }

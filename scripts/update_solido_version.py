@@ -13,25 +13,26 @@ Usage:
 
     ../solido/scripts/update_solido_version.py --config ../solido_test.json deactivate-validators --keypair-path ./tests/.keys/test-key-1.json > output
 
-    ../solido/scripts/update_solido_version.py --config ../solido_test.json approve-transactions --keypair-path ./tests/.keys/test-key-1.json < output
-    ../solido/scripts/update_solido_version.py --config ../solido_test.json approve-transactions --keypair-path ./tests/.keys/test-key-2.json < output
-    ../solido/scripts/update_solido_version.py --config ../solido_test.json execute-transactions < output
+    ./target/debug/solido --config ../solido_test.json --keypair-path ./tests/.keys/test-key-1.json multisig approve-batch --transaction-addresses-path output
+    ./target/debug/solido --config ../solido_test.json --keypair-path ./tests/.keys/test-key-2.json multisig approve-batch --transaction-addresses-path output
 
     # Perfom maintainance till validator list is empty, wait for epoch boundary if on mainnet
     ./target/debug/solido --config ../solido_test.json --keypair-path tests/.keys/maintainer-account-key.json perform-maintenance
 
     ../solido/scripts/update_solido_version.py --config ../solido_test.json propose-upgrade --keypair-path ./tests/.keys/test-key-1.json --program-filepath ../solido/target/deploy/lido.so > output
 
-    ../solido/scripts/update_solido_version.py --config ../solido_test.json approve-transactions --keypair-path ./tests/.keys/test-key-1.json < output
-    ../solido/scripts/update_solido_version.py --config ../solido_test.json approve-transactions --keypair-path ./tests/.keys/test-key-2.json < output
-    ../solido/scripts/update_solido_version.py --config ../solido_test.json execute-transactions < output
+    ./target/debug/solido --config ../solido_test.json --keypair-path ./tests/.keys/test-key-1.json multisig approve-batch --transaction-addresses-path output
+    ./target/debug/solido --config ../solido_test.json --keypair-path ./tests/.keys/test-key-2.json multisig approve-batch --transaction-addresses-path output
 
     # cretae developer account owner Fp572FrBjhWprtT7JF4CHgeLzPD9g8s2Ht7k5bdaWjwF
     # solana-keygen new --no-bip39-passphrase --silent --outfile ~/developer_fee_key.json
     # solana --url localhost transfer --allow-unfunded-recipient Fp572FrBjhWprtT7JF4CHgeLzPD9g8s2Ht7k5bdaWjwF 1.0
 
     $cd ../solido
-    scripts/update_solido_version.py --config ../solido_test.json migrate-state --keypair-path ../solido_old/tests/.keys/test-key-1.json
+    scripts/update_solido_version.py --config ../solido_test.json migrate-state --keypair-path ../solido_old/tests/.keys/test-key-1.json > output
+
+    ./target/debug/solido --config ../solido_test.json --keypair-path ../solido_old/tests/.keys/test-key-1.json multisig approve-batch --transaction-addresses-path output
+    ./target/debug/solido --config ../solido_test.json --keypair-path ../solido_old/tests/.keys/test-key-2.json multisig approve-batch --transaction-addresses-path output
 """
 
 
@@ -64,13 +65,6 @@ if __name__ == '__main__':
     current_parser = subparsers.add_parser(
         'deactivate-validators',
         help='Create and output multisig transactions to deactivate all validators',
-    )
-    current_parser.add_argument(
-        "--keypair-path", type=str, help='Signer keypair path', required=True
-    )
-
-    current_parser = subparsers.add_parser(
-        'approve-transactions', help='Approve multisig transactions from stdin'
     )
     current_parser.add_argument(
         "--keypair-path", type=str, help='Signer keypair path', required=True
@@ -122,18 +116,6 @@ if __name__ == '__main__':
             )
 
             print(result['transaction_address'])
-
-    elif args.command == "approve-transactions":
-        for line in sys.stdin:
-            solido(
-                '--config',
-                args.config,
-                'multisig',
-                'approve',
-                '--transaction-address',
-                line.strip(),
-                keypair_path=args.keypair_path,
-            )
 
     elif args.command == "execute-transactions":
         for line in sys.stdin:
@@ -200,7 +182,7 @@ if __name__ == '__main__':
         update_result = solido(
             '--config',
             args.config,
-            'migrate-to-v2',
+            'migrate-state-to-v2',
             '--developer-account-owner',
             'Fp572FrBjhWprtT7JF4CHgeLzPD9g8s2Ht7k5bdaWjwF',
             '--st-sol-mint',
@@ -215,7 +197,7 @@ if __name__ == '__main__':
             '5',
             keypair_path=args.keypair_path,
         )
-        pprint.pp(update_result)
+        print(update_result['transaction_address'])
 
     else:
         eprint("Unknown command %s" % args.command)

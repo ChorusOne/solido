@@ -1026,5 +1026,13 @@ cli_opt_struct! {
         /// will be created.
         #[clap(long)]
         maintainer_list_key_path: PathBuf => PathBuf::default(),
+
+        /// Multisig instance.
+        #[clap(long, value_name = "address")]
+        multisig_address: Pubkey,
+
+        /// Address of the Multisig program.
+        #[clap(long)]
+        multisig_program_id: Pubkey,
     }
 }
