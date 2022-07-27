@@ -22,8 +22,10 @@ pub struct ValidatorInfo {
     // this name to be able to deserialize.
     #[serde(rename = "keybaseUsername")]
     pub keybase_username: Option<String>,
-    // Other keys that can be present in the json object are "details" and
-    // "website", but we have no need for those at this point.
+
+    pub website: Option<String>,
+    // One other key that can be present in the json object is "details",
+    // but we have no need for it at this point.
 }
 
 /// Deserialize a config account that contains validator info.
