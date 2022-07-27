@@ -404,6 +404,14 @@ enum SolidoInstruction {
 
         #[serde(serialize_with = "serialize_b58")]
         validator_fee_st_sol_account: Pubkey,
+
+        // Metadata, obtained from the validator info from the vote account,
+        // not part of the transaction itself.
+        #[serde(serialize_with = "serialize_b58")]
+        validator_identity_account: Pubkey,
+        validator_name: String,
+        validator_keybase: Option<String>,
+        validator_website: Option<String>,
     },
     DeactivateValidator {
         #[serde(serialize_with = "serialize_b58")]
@@ -414,6 +422,14 @@ enum SolidoInstruction {
 
         #[serde(serialize_with = "serialize_b58")]
         validator_vote_account: Pubkey,
+
+        // Metadata, obtained from the validator info from the vote account,
+        // not part of the transaction itself.
+        #[serde(serialize_with = "serialize_b58")]
+        validator_identity_account: Pubkey,
+        validator_name: String,
+        validator_keybase: Option<String>,
+        validator_website: Option<String>,
     },
     AddMaintainer {
         #[serde(serialize_with = "serialize_b58")]
@@ -600,6 +616,10 @@ impl fmt::Display for ShowTransactionOutput {
                         manager,
                         validator_vote_account,
                         validator_fee_st_sol_account,
+                        validator_identity_account,
+                        validator_name,
+                        validator_keybase,
+                        validator_website,
                     } => {
                         writeln!(f, "It adds a validator to Solido")?;
                         writeln!(f, "    Solido instance:        {}", solido_instance)?;
@@ -610,16 +630,70 @@ impl fmt::Display for ShowTransactionOutput {
                             "    Validator fee account:  {}",
                             validator_fee_st_sol_account
                         )?;
+                        writeln!(f, "\n  Current validator info for this vote account:")?;
+                        writeln!(
+                            f,
+                            "    Identity account:       {}",
+                            validator_identity_account
+                        )?;
+                        writeln!(f, "    Name:                   {}", validator_name)?;
+                        match validator_website.as_ref() {
+                            Some(name) => writeln!(f, "    Website:                {}", name)?,
+                            None => writeln!(f, "    Website not provided in validator info.")?,
+                        }
+                        match validator_keybase.as_ref() {
+                            Some(keybase_username) => {
+                                writeln!(
+                                    f,
+                                    "    Keybase proof url:      https://keybase.pub/{}/solana/validator-{}",
+                                    keybase_username,
+                                    validator_identity_account,
+                                )?;
+                                writeln!(f, "    Note, this program did not check that the proof exists. Check the above url manually!")?;
+                            }
+                            None => {
+                                writeln!(f, "    Keybase username not provided in validator info.")?
+                            }
+                        }
                     }
                     SolidoInstruction::DeactivateValidator {
                         solido_instance,
                         manager,
                         validator_vote_account,
+                        validator_identity_account,
+                        validator_name,
+                        validator_keybase,
+                        validator_website,
                     } => {
                         writeln!(f, "It deactivates a validator.")?;
                         writeln!(f, "    Solido instance:        {}", solido_instance)?;
                         writeln!(f, "    Manager:                {}", manager)?;
                         writeln!(f, "    Validator vote account: {}", validator_vote_account)?;
+                        writeln!(f, "\n  Current validator info for this vote account:")?;
+                        writeln!(
+                            f,
+                            "    Identity account:       {}",
+                            validator_identity_account
+                        )?;
+                        writeln!(f, "    Name:                   {}", validator_name)?;
+                        match validator_website.as_ref() {
+                            Some(name) => writeln!(f, "    Website:                {}", name)?,
+                            None => writeln!(f, "    Website not provided in validator info.")?,
+                        }
+                        match validator_keybase.as_ref() {
+                            Some(keybase_username) => {
+                                writeln!(
+                                    f,
+                                    "    Keybase proof url:      https://keybase.pub/{}/solana/validator-{}",
+                                    keybase_username,
+                                    validator_identity_account,
+                                )?;
+                                writeln!(f, "    Note, this program did not check that the proof exists. Check the above url manually!")?;
+                            }
+                            None => {
+                                writeln!(f, "    Keybase username not provided in validator info.")?
+                            }
+                        }
                     }
                     SolidoInstruction::AddMaintainer {
                         solido_instance,
@@ -1062,19 +1136,41 @@ fn try_parse_solido_instruction(
         }
         LidoInstruction::AddValidator => {
             let accounts = AddValidatorMeta::try_from_slice(&instr.accounts)?;
+            let vote_account = config
+                .client
+                .get_vote_account(&accounts.validator_vote_account)?;
+            let validator_identity_account = vote_account.node_pubkey;
+            let info = config
+                .client
+                .get_validator_info(&validator_identity_account)?;
             ParsedInstruction::SolidoInstruction(SolidoInstruction::AddValidator {
                 solido_instance: accounts.lido,
                 manager: accounts.manager,
                 validator_vote_account: accounts.validator_vote_account,
                 validator_fee_st_sol_account: accounts.validator_fee_st_sol_account,
+                validator_identity_account,
+                validator_name: info.name,
+                validator_keybase: info.keybase_username,
+                validator_website: info.website,
             })
         }
         LidoInstruction::DeactivateValidator => {
             let accounts = DeactivateValidatorMeta::try_from_slice(&instr.accounts)?;
+            let vote_account = config
+                .client
+                .get_vote_account(&accounts.validator_vote_account_to_deactivate)?;
+            let validator_identity_account = vote_account.node_pubkey;
+            let info = config
+                .client
+                .get_validator_info(&validator_identity_account)?;
             ParsedInstruction::SolidoInstruction(SolidoInstruction::DeactivateValidator {
                 solido_instance: accounts.lido,
                 manager: accounts.manager,
                 validator_vote_account: accounts.validator_vote_account_to_deactivate,
+                validator_identity_account,
+                validator_name: info.name,
+                validator_keybase: info.keybase_username,
+                validator_website: info.website,
             })
         }
         LidoInstruction::AddMaintainer => {
