@@ -224,7 +224,7 @@ result = multisig(
     upgrade_transaction_address,
     keypair_path=addr2.keypair_path,
 )
-assert result['num_approvals'] == 2
+assert result['num_approvals'][0] == 2
 assert result['threshold'] == 2
 
 result = multisig(
@@ -339,7 +339,7 @@ result = multisig(
     change_multisig_transaction_address,
     keypair_path=addr3.keypair_path,
 )
-assert result['num_approvals'] == 2
+assert result['num_approvals'][0] == 2
 assert result['threshold'] == 2
 
 result = multisig(

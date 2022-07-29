@@ -666,6 +666,10 @@ cli_opt_struct! {
         /// Address of the Solido program.
         #[clap(long)]
         solido_program_id: Pubkey,
+
+        /// Don't interactively ask to check each transaction before signing
+        #[clap(long, takes_value = false, action = clap::ArgAction::SetTrue)]
+        silent: bool
     }
 }
 

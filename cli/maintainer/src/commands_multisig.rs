@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2021 Chorus One AG
 // SPDX-License-Identifier: GPL-3.0
 
+use itertools::Itertools;
 use std::collections::HashSet;
 use std::fmt;
 use std::str::FromStr;
@@ -157,7 +158,7 @@ pub fn main(config: &mut SnapshotClientConfig, multisig_opts: MultisigOpts) {
         SubCommand::Approve(cmd_opts) => {
             let result = approve(
                 config,
-                cmd_opts.transaction_address(),
+                &[*cmd_opts.transaction_address()],
                 cmd_opts.multisig_program_id(),
                 cmd_opts.multisig_address(),
             );
@@ -1443,49 +1444,59 @@ fn propose_change_multisig(
 #[derive(Serialize)]
 struct ApproveOutput {
     pub transaction_id: Signature,
-    pub num_approvals: u64,
+    pub sub_transactions: Vec<Pubkey>,
+    pub num_approvals: Vec<u64>,
     pub threshold: u64,
 }
 
 impl fmt::Display for ApproveOutput {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        writeln!(f, "Transaction approved.")?;
+        writeln!(f, "Transactions approved.")?;
         writeln!(
             f,
             "Solana transaction id of approval: {}",
             self.transaction_id
         )?;
-        writeln!(
-            f,
-            "Multisig transaction now has {} out of {} required approvals.",
-            self.num_approvals, self.threshold,
-        )?;
+
+        for (sub_transaction, num_approvals) in
+            self.sub_transactions.iter().zip(&self.num_approvals)
+        {
+            writeln!(
+                f,
+                "Multisig transaction {} now has {} out of {} required approvals.",
+                sub_transaction, num_approvals, self.threshold,
+            )?;
+        }
         Ok(())
     }
 }
 
-fn approve(
+fn approve<'a>(
     config: &mut SnapshotClientConfig,
-    transaction_address: &Pubkey,
+    transactions: &'a [Pubkey],
     multisig_program_id: &Pubkey,
     multisig_address: &Pubkey,
 ) -> std::result::Result<ApproveOutput, crate::Error> {
     // First, do the actual approval.
     let signature = config.with_snapshot(|config| {
-        let approve_accounts = multisig_accounts::Approve {
-            multisig: *multisig_address,
-            transaction: *transaction_address,
-            // The owner that signs the multisig proposed transaction, should be
-            // the public key that signs the entire approval transaction (which
-            // is also the payer).
-            owner: config.signer.pubkey(),
-        };
-        let approve_instruction = Instruction {
-            program_id: *multisig_program_id,
-            data: multisig_instruction::Approve.data(),
-            accounts: approve_accounts.to_account_metas(None),
-        };
-        config.sign_and_send_transaction(&[approve_instruction], &[config.signer])
+        let mut instructions = vec![];
+        for transaction_address in transactions {
+            let approve_accounts = multisig_accounts::Approve {
+                multisig: *multisig_address,
+                transaction: *transaction_address,
+                // The owner that signs the multisig proposed transaction, should be
+                // the public key that signs the entire approval transaction (which
+                // is also the payer).
+                owner: config.signer.pubkey(),
+            };
+            let approve_instruction = Instruction {
+                program_id: *multisig_program_id,
+                data: multisig_instruction::Approve.data(),
+                accounts: approve_accounts.to_account_metas(None),
+            };
+            instructions.push(approve_instruction);
+        }
+        config.sign_and_send_transaction(&instructions, &[config.signer])
     })?;
 
     // After a successful approval, query the new state of the transaction, so
@@ -1494,12 +1505,17 @@ fn approve(
         let multisig: serum_multisig::Multisig =
             config.client.get_account_deserialize(multisig_address)?;
 
-        let transaction: serum_multisig::Transaction =
-            config.client.get_account_deserialize(transaction_address)?;
+        let mut num_approvals = vec![];
+        for transaction_address in transactions {
+            let transaction: serum_multisig::Transaction =
+                config.client.get_account_deserialize(transaction_address)?;
+            num_approvals.push(transaction.signers.iter().filter(|x| **x).count() as u64);
+        }
 
         let result = ApproveOutput {
             transaction_id: signature,
-            num_approvals: transaction.signers.iter().filter(|x| **x).count() as u64,
+            num_approvals,
+            sub_transactions: transactions.to_vec(),
             threshold: multisig.threshold,
         };
 
@@ -1523,27 +1539,41 @@ fn approve_batch(
         OutputMode::Text => { /* This is fine. */ }
     }
 
+    // If not interactive will execute transactions in chunks
+    const CHUNK_SIZE: usize = 70;
+
     let transaction_addresses = std::fs::read_to_string(opts.transaction_addresses_path())
         .expect("Failed to read transaction addresses from file.");
-    for (i, line) in transaction_addresses.lines().enumerate() {
-        // Take the first word from the line; the remainder can contain a comment
-        // about what the transaction is for.
-        match line
-            .split_ascii_whitespace()
-            .next()
-            .and_then(|addr_str| Pubkey::from_str(addr_str).ok())
-        {
-            Some(addr) => {
-                // Now that we know the transaction address is valid, print the
-                // full line, to preserve any trailing content. (But trim the
-                // newline, println already adds one.)
-                println!("\nTransaction {}", line.trim());
-                approve_transaction_interactive(config, opts, &addr)?;
-            }
-            None => {
-                println!("\nInvalid transaction address on line {}, skipping.", i + 1);
+    for (i, chunk) in transaction_addresses
+        .lines()
+        .chunks(CHUNK_SIZE)
+        .into_iter()
+        .enumerate()
+    {
+        let mut transactions = vec![];
+        for (j, line) in chunk.enumerate() {
+            // Take the first word from the line; the remainder can contain a comment
+            // about what the transaction is for.
+            match line
+                .split_ascii_whitespace()
+                .next()
+                .and_then(|addr_str| Pubkey::from_str(addr_str).ok())
+            {
+                Some(addr) => {
+                    // Now that we know the transaction address is valid, print the
+                    // full line, to preserve any trailing content. (But trim the
+                    // newline, println already adds one.)
+                    transactions.push(addr);
+                }
+                None => {
+                    println!(
+                        "\nInvalid transaction address on line {}, skipping.",
+                        i * CHUNK_SIZE + j + 1
+                    );
+                }
             }
         }
+        approve_transactions(config, opts, &transactions)?;
     }
 
     Ok(())
@@ -1575,51 +1605,67 @@ fn ask_user_y_n(prompt: &'static str) -> bool {
     }
 }
 
-fn approve_transaction_interactive(
+/// Approve and execute transactions interactively or not.
+/// Will execute transaction if not interactive.
+fn approve_transactions(
     config: &mut SnapshotClientConfig,
     opts: &ApproveBatchOpts,
-    transaction_address: &Pubkey,
+    transactions: &[Pubkey],
 ) -> std::result::Result<(), crate::Error> {
-    config.with_snapshot(|config| {
-        let output = show_transaction(
+    if *opts.silent() {
+        let approve_result = approve(
             config,
-            transaction_address,
+            transactions,
             opts.multisig_program_id(),
-            opts.solido_program_id(),
-            None,
+            opts.multisig_address(),
         )?;
-        println!("{}", output);
-        Ok(())
-    })?;
-
-    if !ask_user_y_n("Sign and submit approval transaction?") {
-        println!(
-            "Not approving transaction {}, continuing with next transaction if any.",
-            transaction_address
-        );
+        println!("{}", approve_result);
         return Ok(());
     }
 
-    let approve_result = approve(
-        config,
-        transaction_address,
-        opts.multisig_program_id(),
-        opts.multisig_address(),
-    )?;
-    println!("{}", approve_result);
-
-    let can_execute = approve_result.num_approvals >= approve_result.threshold;
-    if can_execute && ask_user_y_n("Transaction can be executed, sign and submit execution?") {
+    for transaction_address in transactions {
+        println!("\nTransaction {}", transaction_address);
         config.with_snapshot(|config| {
-            let execute_result = execute_transaction(
+            let output = show_transaction(
                 config,
                 transaction_address,
                 opts.multisig_program_id(),
-                opts.multisig_address(),
+                opts.solido_program_id(),
+                None,
             )?;
-            println!("{}", execute_result);
+            println!("{}", output);
             Ok(())
         })?;
+
+        if !ask_user_y_n("Sign and submit approval transaction?") {
+            println!(
+                "Not approving transaction {}, continuing with next transaction if any.",
+                transaction_address
+            );
+            return Ok(());
+        }
+
+        let approve_result = approve(
+            config,
+            &[*transaction_address],
+            opts.multisig_program_id(),
+            opts.multisig_address(),
+        )?;
+        println!("{}", approve_result);
+
+        let can_execute = approve_result.num_approvals[0] >= approve_result.threshold;
+        if can_execute && ask_user_y_n("Transaction can be executed, sign and submit execution?") {
+            config.with_snapshot(|config| {
+                let execute_result = execute_transaction(
+                    config,
+                    transaction_address,
+                    opts.multisig_program_id(),
+                    opts.multisig_address(),
+                )?;
+                println!("{}", execute_result);
+                Ok(())
+            })?;
+        }
     }
 
     Ok(())
