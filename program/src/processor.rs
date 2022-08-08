@@ -220,7 +220,6 @@ pub fn process_stake_deposit(
 
     lido.check_maintainer(
         program_id,
-        &lido.maintainer_list,
         accounts.maintainer_list,
         maintainer_index,
         accounts.maintainer,
@@ -232,7 +231,6 @@ pub fn process_stake_deposit(
     let validator_list_data = &mut *accounts.validator_list.data.borrow_mut();
     let mut validators = lido.deserialize_account_list_info::<Validator>(
         program_id,
-        &lido.validator_list,
         accounts.validator_list,
         validator_list_data,
     )?;
@@ -443,7 +441,6 @@ pub fn process_unstake(
     let lido = Lido::deserialize_lido(program_id, accounts.lido)?;
     lido.check_maintainer(
         program_id,
-        &lido.maintainer_list,
         accounts.maintainer_list,
         maintainer_index,
         accounts.maintainer,
@@ -454,7 +451,6 @@ pub fn process_unstake(
     let validator_list_data = &mut *accounts.validator_list.data.borrow_mut();
     let mut validators = lido.deserialize_account_list_info::<Validator>(
         program_id,
-        &lido.validator_list,
         accounts.validator_list,
         validator_list_data,
     )?;
@@ -580,7 +576,6 @@ pub fn process_update_exchange_rate(
     let validator_list_data = &mut *accounts.validator_list.data.borrow_mut();
     let validators = lido.deserialize_account_list_info::<Validator>(
         program_id,
-        &lido.validator_list,
         accounts.validator_list,
         validator_list_data,
     )?;
@@ -721,7 +716,6 @@ pub fn process_update_stake_account_balance(
     let validator_list_data = &mut *accounts.validator_list.data.borrow_mut();
     let mut validators = lido.deserialize_account_list_info::<Validator>(
         program_id,
-        &lido.validator_list,
         accounts.validator_list,
         validator_list_data,
     )?;
@@ -890,7 +884,6 @@ pub fn process_withdraw(
     let validator_list_data = &mut *accounts.validator_list.data.borrow_mut();
     let mut validators = lido.deserialize_account_list_info::<Validator>(
         program_id,
-        &lido.validator_list,
         accounts.validator_list,
         validator_list_data,
     )?;

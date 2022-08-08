@@ -1054,18 +1054,13 @@ impl Lido {
     pub fn check_maintainer(
         &self,
         program_id: &Pubkey,
-        solido_maintainer_list: &Pubkey,
         maintainer_list: &AccountInfo,
         maintainer_index: u32,
         maintainer: &AccountInfo,
     ) -> ProgramResult {
         let data = &mut *maintainer_list.data.borrow_mut();
-        let mut maintainer_list = self.deserialize_account_list_info::<Maintainer>(
-            program_id,
-            solido_maintainer_list,
-            maintainer_list,
-            data,
-        )?;
+        let mut maintainer_list =
+            self.deserialize_account_list_info::<Maintainer>(program_id, maintainer_list, data)?;
 
         if maintainer_list
             .get_mut(maintainer_index, maintainer.key)
@@ -1109,11 +1104,21 @@ impl Lido {
     pub fn deserialize_account_list_info<'data, T: ListEntry>(
         &self,
         program_id: &Pubkey,
-        solido_list_address: &Pubkey,
         account_list_info: &AccountInfo,
         account_list_data: &'data mut [u8],
     ) -> Result<BigVecWithHeader<'data, T>, ProgramError> {
-        self.check_account_list_info::<T>(program_id, solido_list_address, account_list_info)?;
+        let solido_list_address = match T::TYPE {
+            AccountType::Validator => self.validator_list,
+            AccountType::Maintainer => self.maintainer_list,
+            _ => {
+                msg!(
+                    "Invalid account type {:?} when deserializing account list",
+                    T::TYPE,
+                );
+                return Err(LidoError::InvalidAccountType.into());
+            }
+        };
+        self.check_account_list_info::<T>(program_id, &solido_list_address, account_list_info)?;
         let (header, big_vec) = ListHeader::<T>::deserialize_vec(account_list_data)?;
         Ok(BigVecWithHeader::new(header, big_vec))
     }

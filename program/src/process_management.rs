@@ -64,7 +64,6 @@ pub fn process_add_validator(program_id: &Pubkey, accounts_raw: &[AccountInfo]) 
     let validator_list_data = &mut *accounts.validator_list.data.borrow_mut();
     let mut validators = lido.deserialize_account_list_info::<Validator>(
         program_id,
-        &lido.validator_list,
         accounts.validator_list,
         validator_list_data,
     )?;
@@ -89,7 +88,6 @@ pub fn process_remove_validator(
     let validator_list_data = &mut *accounts.validator_list.data.borrow_mut();
     let mut validators = lido.deserialize_account_list_info::<Validator>(
         program_id,
-        &lido.validator_list,
         accounts.validator_list,
         validator_list_data,
     )?;
@@ -121,7 +119,6 @@ pub fn process_deactivate_validator(
     let validator_list_data = &mut *accounts.validator_list.data.borrow_mut();
     let mut validators = lido.deserialize_account_list_info::<Validator>(
         program_id,
-        &lido.validator_list,
         accounts.validator_list,
         validator_list_data,
     )?;
@@ -159,7 +156,6 @@ pub fn process_deactivate_validator_if_commission_exceeds_max(
     let validator_list_data = &mut *accounts.validator_list.data.borrow_mut();
     let mut validators = lido.deserialize_account_list_info::<Validator>(
         program_id,
-        &lido.validator_list,
         accounts.validator_list,
         validator_list_data,
     )?;
@@ -188,7 +184,6 @@ pub fn process_add_maintainer(program_id: &Pubkey, accounts_raw: &[AccountInfo])
     let maintainer_list_data = &mut *accounts.maintainer_list.data.borrow_mut();
     let mut maintainers = lido.deserialize_account_list_info::<Maintainer>(
         program_id,
-        &lido.maintainer_list,
         accounts.maintainer_list,
         maintainer_list_data,
     )?;
@@ -209,7 +204,6 @@ pub fn process_remove_maintainer(
     let maintainer_list_data = &mut *accounts.maintainer_list.data.borrow_mut();
     let mut maintainers = lido.deserialize_account_list_info::<Maintainer>(
         program_id,
-        &lido.maintainer_list,
         accounts.maintainer_list,
         maintainer_list_data,
     )?;
@@ -257,7 +251,6 @@ pub fn process_merge_stake(
     let validator_list_data = &mut *accounts.validator_list.data.borrow_mut();
     let mut validator = lido.deserialize_account_list_info::<Validator>(
         program_id,
-        &lido.validator_list,
         accounts.validator_list,
         validator_list_data,
     )?;
