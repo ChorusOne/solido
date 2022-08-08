@@ -15,6 +15,17 @@ New features:
 * The `CollectValidatorFee` instruction is no longer supported.
 * The `ClaimValidatorFee` instruction is no longer supported.
 
+## v1.3.3
+
+Released 2022-07-08.
+
+The on-chain Solido program remains functionally unchanged since v1.0.0. The
+Anker program remains unchanged since v1.3.0.
+
+Changes:
+
+* Do not try to call `Anker::SendRewards` from the maintenance daemon.
+
 ## v1.3.2
 
 Released 2022-05-04.

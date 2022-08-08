@@ -73,7 +73,7 @@ export const getWithdrawInstruction = async (
 
   const keys = [
     {
-      pubkey: snapshot.programAddresses.solidoProgramId,
+      pubkey: snapshot.programAddresses.solidoInstanceId,
       isSigner: false,
       isWritable: true,
     },
