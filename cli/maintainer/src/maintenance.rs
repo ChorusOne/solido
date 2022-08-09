@@ -1192,12 +1192,19 @@ impl SolidoState {
         let mut identity_account_balance_metrics = Vec::new();
         let mut vote_credits_metrics = Vec::new();
 
-        for ((((validator, stake_accounts), vote_account), identity_account_balance), info) in self
+        for (
+            (
+                (((validator, stake_accounts), unstake_accounts), vote_account),
+                identity_account_balance,
+            ),
+            info,
+        ) in self
             .solido
             .validators
             .entries
             .iter()
             .zip(self.validator_stake_accounts.iter())
+            .zip(self.validator_unstake_accounts.iter())
             .zip(self.validator_vote_accounts.iter())
             .zip(self.validator_identity_account_balances.iter())
             .zip(self.validator_infos.iter())
@@ -1239,15 +1246,25 @@ impl SolidoState {
                 .map(|(_addr, stake_account)| stake_account.balance)
                 .sum();
 
+            // Stake here can only be inactive or deactivating.
+            let unstake_balance: StakeBalance = unstake_accounts
+                .iter()
+                .map(|(_addr, stake_account)| stake_account.balance)
+                .sum();
+
             let metric = |amount: Lamports, status: &'static str| {
                 annotator
                     .add_labels(Metric::new_sol(amount))
                     .with_label("status", status.to_string())
             };
-            balance_sol_metrics.push(metric(stake_balance.inactive, "inactive"));
+            balance_sol_metrics.push(metric(
+                (stake_balance.inactive + unstake_balance.inactive)
+                    .expect("There is never enough lamports in circulation for this to overflow"),
+                "inactive",
+            ));
             balance_sol_metrics.push(metric(stake_balance.activating, "activating"));
             balance_sol_metrics.push(metric(stake_balance.active, "active"));
-            balance_sol_metrics.push(metric(stake_balance.deactivating, "deactivating"));
+            balance_sol_metrics.push(metric(unstake_balance.deactivating, "deactivating"));
 
             last_voted_slot_metrics
                 .push(annotator.add_labels(Metric::new(vote_account.last_timestamp.slot)));
