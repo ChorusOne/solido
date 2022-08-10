@@ -334,10 +334,6 @@ cli_opt_struct! {
          /// Amount to withdraw in stSOL, using . as decimal separator.
          #[clap(long, value_name = "st_sol")]
          amount_st_sol: StLamports,
-
-         /// Account that stores the data for validator list.
-         #[clap(long, value_name = "address")]
-         validator_list_address: Pubkey,
     }
 }
 
@@ -349,13 +345,6 @@ cli_opt_struct! {
         /// Account that stores the data for this Solido instance.
         #[clap(long, value_name = "address")]
         solido_address: Pubkey,
-
-        /// Account that stores the data for validator list.
-        #[clap(long, value_name = "address")]
-        validator_list_address: Pubkey,
-        /// Account that stores the data for maintainer list.
-        #[clap(long, value_name = "address")]
-        maintainer_list_address: Pubkey,
 
         /// Address of the validator vote account.
         #[clap(long, value_name = "address")]
@@ -392,10 +381,6 @@ cli_opt_struct! {
         /// Address of the Multisig program.
         #[clap(long, value_name = "address")]
         multisig_program_id: Pubkey,
-
-        /// Account that stores the data for validator list.
-        #[clap(long, value_name = "address")]
-        validator_list_address: Pubkey,
     }
 }
 
@@ -419,10 +404,6 @@ cli_opt_struct! {
         /// Address of the Multisig program.
         #[clap(long)]
         multisig_program_id: Pubkey,
-
-        /// Account that stores the data for maintainer list.
-        #[clap(long, value_name = "address")]
-        maintainer_list_address: Pubkey,
     }
 }
 
@@ -493,10 +474,6 @@ cli_opt_struct! {
         /// Account that stores the data for this Solido instance.
         #[clap(long, value_name = "address")]
         solido_address: Pubkey,
-
-        /// Account that stores the data for validator list.
-        #[clap(long, value_name = "address")]
-        validator_list_address: Pubkey,
     }
 }
 

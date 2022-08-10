@@ -267,10 +267,6 @@ def add_validator(
         vote_account.pubkey,
         '--multisig-address',
         multisig_instance,
-        '--validator-list-address',
-        validator_list_address,
-        '--maintainer-list-address',
-        maintainer_list_address,
         keypair_path=test_addrs[1].keypair_path,
     )
     return (validator, transaction_result)
@@ -356,8 +352,6 @@ transaction_result = solido(
     solido_program_id,
     '--solido-address',
     solido_address,
-    '--maintainer-list-address',
-    maintainer_list_address,
     '--maintainer-address',
     maintainer.pubkey,
     '--multisig-address',
@@ -388,8 +382,6 @@ transaction_result = solido(
     solido_program_id,
     '--solido-address',
     solido_address,
-    '--maintainer-list-address',
-    maintainer_list_address,
     '--maintainer-address',
     maintainer.pubkey,
     '--multisig-address',
@@ -417,8 +409,6 @@ transaction_result = solido(
     solido_program_id,
     '--solido-address',
     solido_address,
-    '--maintainer-list-address',
-    maintainer_list_address,
     '--maintainer-address',
     maintainer.pubkey,
     '--multisig-address',
@@ -623,8 +613,6 @@ transaction_result = solido(
     solido_address,
     '--validator-vote-account',
     validator.vote_account.pubkey,
-    '--validator-list-address',
-    validator_list_address,
     keypair_path=test_addrs[0].keypair_path,
 )
 transaction_address = transaction_result['transaction_address']
@@ -823,3 +811,12 @@ expected_result = {
 assert (
     maintainance_result == expected_result
 ), f'\nExpected: {expected_result}\nActual:   {maintainance_result}'
+
+output = {
+    "multisig_program_id": multisig_program_id,
+    "multisig_address": multisig_instance,
+    "solido_program_id": solido_program_id,
+    "solido_address": solido_address,
+    "st_sol_mint": st_sol_mint_account,
+}
+print(json.dumps(output, indent=4))

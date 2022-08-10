@@ -300,13 +300,15 @@ pub fn command_add_validator(
     let (multisig_address, _) =
         get_multisig_program_address(opts.multisig_program_id(), opts.multisig_address());
 
+    let solido = config.client.get_solido(opts.solido_address())?;
+
     let instruction = lido::instruction::add_validator(
         opts.solido_program_id(),
         &lido::instruction::AddValidatorMetaV2 {
             lido: *opts.solido_address(),
             manager: multisig_address,
             validator_vote_account: *opts.validator_vote_account(),
-            validator_list: *opts.validator_list_address(),
+            validator_list: solido.validator_list,
         },
     );
     propose_instruction(
@@ -325,9 +327,10 @@ pub fn command_deactivate_validator(
     let (multisig_address, _) =
         get_multisig_program_address(opts.multisig_program_id(), opts.multisig_address());
 
+    let solido = config.client.get_solido(opts.solido_address())?;
     let validators = config
         .client
-        .get_account_list::<Validator>(opts.validator_list_address())?;
+        .get_account_list::<Validator>(&solido.validator_list)?;
 
     let validator_index = validators
         .position(opts.validator_vote_account())
@@ -339,7 +342,7 @@ pub fn command_deactivate_validator(
             lido: *opts.solido_address(),
             manager: multisig_address,
             validator_vote_account_to_deactivate: *opts.validator_vote_account(),
-            validator_list: *opts.validator_list_address(),
+            validator_list: solido.validator_list,
         },
         validator_index,
     );
@@ -359,13 +362,15 @@ pub fn command_add_maintainer(
     let (multisig_address, _) =
         get_multisig_program_address(opts.multisig_program_id(), opts.multisig_address());
 
+    let solido = config.client.get_solido(opts.solido_address())?;
+
     let instruction = lido::instruction::add_maintainer(
         opts.solido_program_id(),
         &lido::instruction::AddMaintainerMetaV2 {
             lido: *opts.solido_address(),
             manager: multisig_address,
             maintainer: *opts.maintainer_address(),
-            maintainer_list: *opts.maintainer_list_address(),
+            maintainer_list: solido.maintainer_list,
         },
     );
     propose_instruction(
@@ -384,9 +389,10 @@ pub fn command_remove_maintainer(
     let (multisig_address, _) =
         get_multisig_program_address(opts.multisig_program_id(), opts.multisig_address());
 
+    let solido = config.client.get_solido(opts.solido_address())?;
     let maintainers = config
         .client
-        .get_account_list::<Maintainer>(opts.maintainer_list_address())?;
+        .get_account_list::<Maintainer>(&solido.maintainer_list)?;
 
     let maintainer_index = maintainers
         .position(opts.maintainer_address())
@@ -398,7 +404,7 @@ pub fn command_remove_maintainer(
             lido: *opts.solido_address(),
             manager: multisig_address,
             maintainer: *opts.maintainer_address(),
-            maintainer_list: *opts.maintainer_list_address(),
+            maintainer_list: solido.maintainer_list,
         },
         maintainer_index,
     );
@@ -919,7 +925,7 @@ pub fn command_withdraw(
 
         let validators = config
             .client
-            .get_account_list::<Validator>(opts.validator_list_address())?;
+            .get_account_list::<Validator>(&solido.validator_list)?;
 
         let st_sol_address = spl_associated_token_account::get_associated_token_address(
             &config.signer.pubkey(),
@@ -960,7 +966,7 @@ pub fn command_withdraw(
                 source_stake_account: stake_address,
                 destination_stake_account: destination_stake_account.pubkey(),
                 stake_authority,
-                validator_list: *opts.validator_list_address(),
+                validator_list: solido.validator_list,
             },
             *opts.amount_st_sol(),
             validator_index,
@@ -1024,7 +1030,7 @@ pub fn command_deactivate_validator_if_commission_exceeds_max(
 
     let validators = config
         .client
-        .get_account_list::<Validator>(opts.validator_list_address())?;
+        .get_account_list::<Validator>(&solido.validator_list)?;
 
     let mut violations = vec![];
     let mut instructions = vec![];
@@ -1044,7 +1050,7 @@ pub fn command_deactivate_validator_if_commission_exceeds_max(
             &lido::instruction::DeactivateValidatorIfCommissionExceedsMaxMeta {
                 lido: *opts.solido_address(),
                 validator_vote_account_to_deactivate: *validator.pubkey(),
-                validator_list: *opts.validator_list_address(),
+                validator_list: solido.validator_list,
             },
             u32::try_from(validator_index).expect("Too many validators"),
         );

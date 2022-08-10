@@ -11,28 +11,25 @@ Usage:
 
     $cd solido_old
 
-    ../solido/scripts/update_solido_version.py --config ../solido_test.json deactivate-validators --keypair-path ./tests/.keys/test-key-1.json > output
+    ../solido/scripts/update_solido_version.py --config ../solido_test.json deactivate-validators --keypair-path ./tests/.keys/maintainer.json > output
 
-    ./target/debug/solido --config ../solido_test.json --keypair-path ./tests/.keys/test-key-1.json multisig approve-batch --transaction-addresses-path output
-    ./target/debug/solido --config ../solido_test.json --keypair-path ./tests/.keys/test-key-2.json multisig approve-batch --transaction-addresses-path output
+    ./target/debug/solido --config ../solido_test.json --keypair-path ./tests/.keys/maintainer.json multisig approve-batch --transaction-addresses-path output
 
     # Perfom maintainance till validator list is empty, wait for epoch boundary if on mainnet
-    ./target/debug/solido --config ../solido_test.json --keypair-path tests/.keys/maintainer-account-key.json perform-maintenance
+    ./target/debug/solido --config ../solido_test.json --keypair-path tests/.keys/maintainer.json perform-maintenance
 
-    ../solido/scripts/update_solido_version.py --config ../solido_test.json propose-upgrade --keypair-path ./tests/.keys/test-key-1.json --program-filepath ../solido/target/deploy/lido.so > output
+    ../solido/scripts/update_solido_version.py --config ../solido_test.json propose-upgrade --keypair-path ./tests/.keys/maintainer.json --program-filepath ../solido/target/deploy/lido.so > output
 
-    ./target/debug/solido --config ../solido_test.json --keypair-path ./tests/.keys/test-key-1.json multisig approve-batch --transaction-addresses-path output
-    ./target/debug/solido --config ../solido_test.json --keypair-path ./tests/.keys/test-key-2.json multisig approve-batch --transaction-addresses-path output
+    ./target/debug/solido --config ../solido_test.json --keypair-path ./tests/.keys/maintainer.json multisig approve-batch --transaction-addresses-path output
 
     # cretae developer account owner Fp572FrBjhWprtT7JF4CHgeLzPD9g8s2Ht7k5bdaWjwF
     # solana-keygen new --no-bip39-passphrase --silent --outfile ~/developer_fee_key.json
     # solana --url localhost transfer --allow-unfunded-recipient Fp572FrBjhWprtT7JF4CHgeLzPD9g8s2Ht7k5bdaWjwF 1.0
 
     $cd ../solido
-    scripts/update_solido_version.py --config ../solido_test.json migrate-state --keypair-path ../solido_old/tests/.keys/test-key-1.json > output
+    scripts/update_solido_version.py --config ../solido_test.json migrate-state --keypair-path ../solido_old/tests/.keys/maintainer.json > output
 
-    ./target/debug/solido --config ../solido_test.json --keypair-path ../solido_old/tests/.keys/test-key-1.json multisig approve-batch --transaction-addresses-path output
-    ./target/debug/solido --config ../solido_test.json --keypair-path ../solido_old/tests/.keys/test-key-2.json multisig approve-batch --transaction-addresses-path output
+    ./target/debug/solido --config ../solido_test.json --keypair-path ../solido_old/tests/.keys/maintainer.json multisig approve-batch --transaction-addresses-path output
 """
 
 
