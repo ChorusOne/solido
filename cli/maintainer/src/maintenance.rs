@@ -1222,11 +1222,18 @@ impl SolidoState {
         let mut identity_account_balance_metrics = Vec::new();
         let mut vote_credits_metrics = Vec::new();
 
-        for ((((validator, stake_accounts), vote_account), identity_account_balance), info) in self
+        for (
+            (
+                (((validator, stake_accounts), unstake_accounts), vote_account),
+                identity_account_balance,
+            ),
+            info,
+        ) in self
             .validators
             .entries
             .iter()
             .zip(self.validator_stake_accounts.iter())
+            .zip(self.validator_unstake_accounts.iter())
             .zip(self.validator_vote_accounts.iter())
             .zip(self.validator_identity_account_balances.iter())
             .zip(self.validator_infos.iter())
@@ -1265,6 +1272,7 @@ impl SolidoState {
 
             let stake_balance: StakeBalance = stake_accounts
                 .iter()
+                .chain(unstake_accounts.iter())
                 .map(|(_addr, stake_account)| stake_account.balance)
                 .sum();
 
