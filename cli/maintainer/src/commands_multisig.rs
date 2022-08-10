@@ -535,6 +535,40 @@ struct ShowTransactionOutput {
     parsed_instruction: ParsedInstruction,
 }
 
+fn print_validator_info(
+    f: &mut fmt::Formatter,
+    validator_vote_account: &Pubkey,
+    validator_identity_account: &Pubkey,
+    validator_name: &str,
+    validator_website: Option<&str>,
+    validator_keybase: Option<&str>,
+) -> fmt::Result {
+    writeln!(f, "    Validator vote account: {}", validator_vote_account)?;
+    writeln!(f, "\n  Current validator info for this vote account:")?;
+    writeln!(
+        f,
+        "    Identity account:       {}",
+        validator_identity_account
+    )?;
+    writeln!(f, "    Name:                   {}", validator_name)?;
+    match validator_website.as_ref() {
+        Some(url) => writeln!(f, "    Website:                {}", url)?,
+        None => writeln!(f, "    Website not provided in validator info.")?,
+    }
+    match validator_keybase.as_ref() {
+        Some(keybase_username) => {
+            writeln!(
+                f,
+                "    Keybase proof url:      https://keybase.pub/{}/solana/validator-{}",
+                keybase_username, validator_identity_account,
+            )?;
+            writeln!(f, "    Note, this program did not check that the proof exists. Check the above url manually!")?;
+        }
+        None => writeln!(f, "    Keybase username not provided in validator info.")?,
+    }
+    Ok(())
+}
+
 impl fmt::Display for ShowTransactionOutput {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         writeln!(f, "Multisig: {}", self.multisig_address)?;
@@ -624,37 +658,19 @@ impl fmt::Display for ShowTransactionOutput {
                         writeln!(f, "It adds a validator to Solido")?;
                         writeln!(f, "    Solido instance:        {}", solido_instance)?;
                         writeln!(f, "    Manager:                {}", manager)?;
-                        writeln!(f, "    Validator vote account: {}", validator_vote_account)?;
                         writeln!(
                             f,
                             "    Validator fee account:  {}",
                             validator_fee_st_sol_account
                         )?;
-                        writeln!(f, "\n  Current validator info for this vote account:")?;
-                        writeln!(
+                        print_validator_info(
                             f,
-                            "    Identity account:       {}",
-                            validator_identity_account
+                            validator_vote_account,
+                            validator_identity_account,
+                            validator_name,
+                            validator_keybase.as_deref(),
+                            validator_website.as_deref(),
                         )?;
-                        writeln!(f, "    Name:                   {}", validator_name)?;
-                        match validator_website.as_ref() {
-                            Some(name) => writeln!(f, "    Website:                {}", name)?,
-                            None => writeln!(f, "    Website not provided in validator info.")?,
-                        }
-                        match validator_keybase.as_ref() {
-                            Some(keybase_username) => {
-                                writeln!(
-                                    f,
-                                    "    Keybase proof url:      https://keybase.pub/{}/solana/validator-{}",
-                                    keybase_username,
-                                    validator_identity_account,
-                                )?;
-                                writeln!(f, "    Note, this program did not check that the proof exists. Check the above url manually!")?;
-                            }
-                            None => {
-                                writeln!(f, "    Keybase username not provided in validator info.")?
-                            }
-                        }
                     }
                     SolidoInstruction::DeactivateValidator {
                         solido_instance,
@@ -668,32 +684,14 @@ impl fmt::Display for ShowTransactionOutput {
                         writeln!(f, "It deactivates a validator.")?;
                         writeln!(f, "    Solido instance:        {}", solido_instance)?;
                         writeln!(f, "    Manager:                {}", manager)?;
-                        writeln!(f, "    Validator vote account: {}", validator_vote_account)?;
-                        writeln!(f, "\n  Current validator info for this vote account:")?;
-                        writeln!(
+                        print_validator_info(
                             f,
-                            "    Identity account:       {}",
-                            validator_identity_account
+                            validator_vote_account,
+                            validator_identity_account,
+                            validator_name,
+                            validator_keybase.as_deref(),
+                            validator_website.as_deref(),
                         )?;
-                        writeln!(f, "    Name:                   {}", validator_name)?;
-                        match validator_website.as_ref() {
-                            Some(name) => writeln!(f, "    Website:                {}", name)?,
-                            None => writeln!(f, "    Website not provided in validator info.")?,
-                        }
-                        match validator_keybase.as_ref() {
-                            Some(keybase_username) => {
-                                writeln!(
-                                    f,
-                                    "    Keybase proof url:      https://keybase.pub/{}/solana/validator-{}",
-                                    keybase_username,
-                                    validator_identity_account,
-                                )?;
-                                writeln!(f, "    Note, this program did not check that the proof exists. Check the above url manually!")?;
-                            }
-                            None => {
-                                writeln!(f, "    Keybase username not provided in validator info.")?
-                            }
-                        }
                     }
                     SolidoInstruction::AddMaintainer {
                         solido_instance,
