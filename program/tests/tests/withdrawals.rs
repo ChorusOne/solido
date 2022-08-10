@@ -86,6 +86,18 @@ async fn test_withdraw_less_than_rent_fails() {
 }
 
 #[tokio::test]
+async fn test_withdraw_from_inactive_validator() {
+    let mut context = WithdrawContext::new((MINIMUM_STAKE_ACCOUNT_BALANCE * 2).unwrap()).await;
+
+    let validator = context.context.validator.as_ref().unwrap();
+    let vote_account = validator.vote_account.clone();
+    context.context.deactivate_validator(vote_account).await;
+
+    let result = context.try_withdraw(StLamports(MINIMUM_STAKE_ACCOUNT_BALANCE.0 - 1));
+    assert!(result.await.is_ok());
+}
+
+#[tokio::test]
 async fn test_withdraw_beyond_min_balance_fails() {
     let mut context = WithdrawContext::new((MINIMUM_STAKE_ACCOUNT_BALANCE * 2).unwrap()).await;
 
