@@ -59,7 +59,7 @@ jobs:
           ~/.cargo/registry/cache/
           ~/.cargo/git/db/
           target/
-        key: build-1.8.16-v3-${{ hashFiles('Cargo.lock') }}
+        key: build-1.8.16-v3-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
         restore-keys: build-1.8.16-v3
 
     - name: Install development tools
@@ -157,7 +157,7 @@ jobs:
           ~/.cargo/git/db/
           target/
           cli/listener/fuzz/target/
-        key: lint-1.8.16-v3-${{ hashFiles('Cargo.lock', 'cli/listener/fuzz/Cargo.lock') }}
+        key: lint-1.8.16-v3-${{ hashFiles('Cargo.lock', 'cli/listener/fuzz/Cargo.lock', 'rust-toolchain.toml') }}
         restore-keys: lint-1.8.16-v3
 
     - name: Install linters
