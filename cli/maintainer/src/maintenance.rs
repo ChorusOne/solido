@@ -1295,12 +1295,7 @@ impl SolidoState {
 
             let stake_balance: StakeBalance = stake_accounts
                 .iter()
-                .map(|(_addr, stake_account)| stake_account.balance)
-                .sum();
-
-            // Stake here can only be inactive or deactivating.
-            let unstake_balance: StakeBalance = unstake_accounts
-                .iter()
+                .chain(unstake_accounts.iter())
                 .map(|(_addr, stake_account)| stake_account.balance)
                 .sum();
 
@@ -1309,14 +1304,10 @@ impl SolidoState {
                     .add_labels(Metric::new_sol(amount))
                     .with_label("status", status.to_string())
             };
-            balance_sol_metrics.push(metric(
-                (stake_balance.inactive + unstake_balance.inactive)
-                    .expect("There is never enough lamports in circulation for this to overflow"),
-                "inactive",
-            ));
+            balance_sol_metrics.push(metric(stake_balance.inactive, "inactive"));
             balance_sol_metrics.push(metric(stake_balance.activating, "activating"));
             balance_sol_metrics.push(metric(stake_balance.active, "active"));
-            balance_sol_metrics.push(metric(unstake_balance.deactivating, "deactivating"));
+            balance_sol_metrics.push(metric(stake_balance.deactivating, "deactivating"));
 
             unclaimed_fees = (unclaimed_fees + validator.entry.fee_credit)
                 .expect("There shouldn't be so many fees to cause stSOL overflow.");
