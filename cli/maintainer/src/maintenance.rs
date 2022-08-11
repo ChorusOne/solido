@@ -403,13 +403,22 @@ fn sanitize_validator_name(name: &str) -> String {
     // adds no information, strip it here to leave more space for graphs in
     // dashboards, and not waste so much space on the redundant part of the name.
     match name.strip_prefix("Lido / ") {
-        // I don't want distracting emojis in my Grafana dashboards, so remove
-        // code points in the Supplementary Multilingual Plane and beyond. This
-        // strips emojis and dingbats while leaving letters and punctuation of
-        // all contemporary languages.
+        // I don't want distracting emojis in my Grafana dashboards.
         Some(suffix) => suffix
             .chars()
-            .filter(|&ch| ch < '\u{10000}')
+            .filter(|&ch|
+                // Remove code points in the Supplementary Multilingual Plane and
+                // beyond. This strips most emojis and dingbats while leaving
+                // letters and punctuation of all contemporary languages.
+                ch < '\u{10000}'
+                // Remove variation selectors. These can be used to make code
+                // points that are traditionally not emoji, render as emoji.
+                && (ch < '\u{fe00}' || ch > '\u{fe0f}')
+                // Remove code points from the Miscellaneous Symbols block,
+                // which contains dingbats that predate emoji, but nowadays
+                // are usually rendered with colored emoji font instead of an
+                // outline glyph.
+                && (ch < '\u{2600}' || ch > '\u{26ff}'))
             .collect::<String>()
             .trim()
             .to_string(),
