@@ -403,6 +403,8 @@ fn sanitize_validator_name(name: &str) -> String {
     // adds no information, strip it here to leave more space for graphs in
     // dashboards, and not waste so much space on the redundant part of the name.
     match name.strip_prefix("Lido / ") {
+        // Negated range.contains syntax only makes things more cryptic below.
+        #[allow(clippy::manual_range_contains)]
         // I don't want distracting emojis in my Grafana dashboards.
         Some(suffix) => suffix
             .chars()
