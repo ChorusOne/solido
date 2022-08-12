@@ -1,5 +1,23 @@
 # Changelog
 
+## v1.3.4
+
+Released 2022-09-27.
+
+The on-chain Solido program remains functionally unchanged since v1.0.0. The
+Anker program remains unchanged since v1.3.0.
+
+Changes:
+
+ * Update Solana SDK to 1.9.28.
+ * Make the maintainer request additional compute units when withdrawing from
+   inactive stake accounts to the reserve.
+
+Bugfixes:
+
+ * Correctly account for deactivating stake in Prometheus metrics.
+ * Improve validator name sanitization in Prometheus metrics.
+
 ## v1.3.3
 
 Released 2022-07-08.
@@ -9,7 +27,7 @@ Anker program remains unchanged since v1.3.0.
 
 Changes:
 
-* Do not try to call `Anker::SendRewards` from the maintenance daemon.
+ * Do not try to call `Anker::SendRewards` from the maintenance daemon.
 
 ## v1.3.2
 
@@ -20,7 +38,7 @@ Anker program remains unchanged since v1.3.0.
 
 New features:
 
-* Expose Anker TVL metrics in the maintainer Prometheus metrics.
+ * Expose Anker TVL metrics in the maintainer Prometheus metrics.
 
 Bugfixes:
 
