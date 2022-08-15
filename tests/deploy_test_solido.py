@@ -233,10 +233,15 @@ solido_instance = solido(
     solido_address,
 )
 print('\nDetails:')
-print(f'  Multisig program id:      {multisig_program_id}')
-print(f'  Multisig address:         {multisig_instance}')
-print(f'  Solido program id:        {solido_program_id}')
-print(f'  Solido address:           {solido_address}')
+output = {
+    "multisig_program_id": multisig_program_id,
+    "multisig_address": multisig_instance,
+    "solido_program_id": solido_program_id,
+    "solido_address": solido_address,
+    "st_sol_mint": st_sol_mint_account,
+}
+print(json.dumps(output, indent=4))
+
 print(f'  Reserve address:          {solido_instance["reserve_account"]}')
 print(f'  Maintainer address:       {maintainer.pubkey}')
 
