@@ -24,7 +24,7 @@ Usage:
 
     # cretae developer account owner Fp572FrBjhWprtT7JF4CHgeLzPD9g8s2Ht7k5bdaWjwF
     # solana-keygen new --no-bip39-passphrase --silent --outfile ~/developer_fee_key.json
-    # solana --url localhost transfer --allow-unfunded-recipient Fp572FrBjhWprtT7JF4CHgeLzPD9g8s2Ht7k5bdaWjwF 1.0
+    solana --url localhost transfer --allow-unfunded-recipient Fp572FrBjhWprtT7JF4CHgeLzPD9g8s2Ht7k5bdaWjwF 32.0
 
     $cd ../solido
     scripts/update_solido_version.py --config ../solido_test.json migrate-state --keypair-path ../solido_old/tests/.keys/maintainer.json > output
@@ -44,11 +44,15 @@ from typing import Any
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(SCRIPT_DIR))
 
-from tests.util import solido, solana  # type: ignore
+from tests.util import solido, solana, run  # type: ignore
 
 
 def eprint(*args: Any, **kwargs: Any) -> None:
     print(*args, file=sys.stderr, **kwargs)
+
+
+def get_signer() -> Any:
+    return run('solana-keygen', 'pubkey').strip()
 
 
 if __name__ == '__main__':
@@ -166,7 +170,7 @@ if __name__ == '__main__':
             'multisig',
             'propose-upgrade',
             '--spill-address',
-            lido_state['reserve_account'],
+            get_signer(),
             '--buffer-address',
             write_result['buffer'],
             '--program-address',
