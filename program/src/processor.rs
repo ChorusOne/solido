@@ -13,8 +13,8 @@ use crate::{
         UpdateStakeAccountBalanceInfo, WithdrawAccountsInfoV2,
     },
     logic::{
-        burn_st_sol, check_account_owner, check_account_uninitialized, check_mint,
-        check_rent_exempt, check_unstake_accounts, create_account_even_if_funded, distribute_fees,
+        burn_st_sol, check_account_data, check_account_owner, check_mint, check_rent_exempt,
+        check_unstake_accounts, create_account_even_if_funded, distribute_fees,
         initialize_stake_account_undelegated, mint_st_sol_to, split_stake_account,
         transfer_stake_authority, CreateAccountOptions, SplitStakeAccounts,
     },
@@ -75,15 +75,14 @@ pub fn process_initialize(
     check_account_owner(accounts.validator_list, program_id)?;
     check_account_owner(accounts.maintainer_list, program_id)?;
 
-    check_account_uninitialized(accounts.lido, Lido::LEN, Lido::LEN, AccountType::Lido)?;
-    // it's enough to ckeck that first bytes needed for one list entry are zero
-    check_account_uninitialized(
+    check_account_data(accounts.lido, Lido::LEN, Lido::LEN, AccountType::Lido)?;
+    check_account_data(
         accounts.validator_list,
         ValidatorList::required_bytes(1),
         ValidatorList::required_bytes(max_validators),
         AccountType::Validator,
     )?;
-    check_account_uninitialized(
+    check_account_data(
         accounts.maintainer_list,
         MaintainerList::required_bytes(1),
         MaintainerList::required_bytes(max_maintainers),
@@ -1031,14 +1030,13 @@ pub fn processor_migrate_to_v2(
     check_account_owner(accounts.validator_list, program_id)?;
     check_account_owner(accounts.maintainer_list, program_id)?;
 
-    // it's enough to ckeck that first bytes needed for one list entry are zero
-    check_account_uninitialized(
+    check_account_data(
         accounts.validator_list,
         ValidatorList::required_bytes(1),
         ValidatorList::required_bytes(max_validators),
         AccountType::Validator,
     )?;
-    check_account_uninitialized(
+    check_account_data(
         accounts.maintainer_list,
         MaintainerList::required_bytes(1),
         MaintainerList::required_bytes(max_maintainers),

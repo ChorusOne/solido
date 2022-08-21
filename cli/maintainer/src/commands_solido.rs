@@ -576,7 +576,7 @@ impl fmt::Display for ShowSolidoOutput {
         writeln!(f, "\nValidator list {}", self.solido.validator_list)?;
         writeln!(
             f,
-            "\nValidators: {} in use out of {} that the instance can support",
+            "Validators: {} in use out of {} that the instance can support",
             self.validators.len(),
             self.validators.header.max_entries
         )?;
@@ -655,7 +655,7 @@ impl fmt::Display for ShowSolidoOutput {
         writeln!(f, "\nMaintainer list {}", self.solido.maintainer_list)?;
         writeln!(
             f,
-            "\nMaintainers: {} in use out of {} that the instance can support\n",
+            "Maintainers: {} in use out of {} that the instance can support\n",
             self.maintainers.len(),
             self.maintainers.header.max_entries
         )?;

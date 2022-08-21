@@ -504,13 +504,14 @@ pub fn split_stake_account(
     Ok(())
 }
 
-/// Check account data is uninitialized and allocated size is correct.
-pub fn check_account_uninitialized(
+/// Check first bytes are zeros, zero remaining bytes and check allocated size is correct.
+pub fn check_account_data(
     account: &AccountInfo,
     bytes_to_check: usize,
     expected_size: usize,
     account_type: AccountType,
 ) -> ProgramResult {
+    // Can't check all bytes because of compute limit
     if !&account.data.borrow()[..bytes_to_check]
         .iter()
         .all(|byte| *byte == 0)
@@ -521,6 +522,9 @@ pub fn check_account_uninitialized(
         );
         return Err(LidoError::AlreadyInUse.into());
     }
+
+    // zero out remaining bytes
+    account.data.borrow_mut()[bytes_to_check..].fill(0);
 
     if account.data_len() < expected_size {
         msg!(

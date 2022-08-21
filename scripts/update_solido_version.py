@@ -24,7 +24,7 @@ Usage:
 
     # cretae developer account owner Fp572FrBjhWprtT7JF4CHgeLzPD9g8s2Ht7k5bdaWjwF
     # solana-keygen new --no-bip39-passphrase --silent --outfile ~/developer_fee_key.json
-    solana --url localhost transfer --allow-unfunded-recipient Fp572FrBjhWprtT7JF4CHgeLzPD9g8s2Ht7k5bdaWjwF 32.0
+    solana --url localhost transfer --allow-unfunded-recipient ./tests/.keys/maintainer.json 32.0
 
     $cd ../solido
     scripts/update_solido_version.py --config ../solido_test.json migrate-state --keypair-path ../solido_old/tests/.keys/maintainer.json > output
