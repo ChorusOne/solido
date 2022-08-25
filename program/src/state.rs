@@ -64,7 +64,8 @@ impl Default for AccountType {
     Clone, Debug, Default, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema, Serialize,
 )]
 pub struct AccountList<T> {
-    /// Data outside of the list, separated out for cheaper deserializations
+    /// Data outside of the list, separated out for cheaper deserializations.
+    /// Must be a first field to avoid account confusion.
     #[serde(skip_serializing)]
     pub header: ListHeader<T>,
 
@@ -81,12 +82,14 @@ pub type MaintainerList = AccountList<Maintainer>;
     Clone, Debug, Default, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema, Serialize,
 )]
 pub struct ListHeader<T> {
-    /// Maximum allowable number of elements
-    pub max_entries: u32,
+    /// Account type, must be a first field to avoid account confusion
+    pub account_type: AccountType,
 
+    /// Version number for the Lido
     pub lido_version: u8,
 
-    pub account_type: AccountType,
+    /// Maximum allowable number of elements
+    pub max_entries: u32,
 
     phantom: PhantomData<T>,
 }
@@ -660,11 +663,11 @@ impl ExchangeRate {
     Clone, Debug, Default, BorshDeserialize, BorshSerialize, BorshSchema, Eq, PartialEq, Serialize,
 )]
 pub struct Lido {
+    /// Account type, must be a first field to avoid account confusion
+    pub account_type: AccountType,
+
     /// Version number for the Lido
     pub lido_version: u8,
-
-    /// Account type, must be Lido
-    pub account_type: AccountType,
 
     /// Manager of the Lido program, able to execute administrative functions
     #[serde(serialize_with = "serialize_b58")]
@@ -1739,7 +1742,7 @@ mod test_lido {
             let mut res: Vec<u8> = Vec::new();
             BorshSerialize::serialize(&lido, &mut res).unwrap();
 
-            assert_eq!(res[0], i);
+            assert_eq!(res[1], i);
 
             let lido_recovered = try_from_slice_unchecked(&res[..]).unwrap();
             assert_eq!(lido, lido_recovered);
