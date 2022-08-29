@@ -1205,7 +1205,11 @@ pub fn command_migrate_state_to_v2(
                 &*maintainer_list_signer,
             ],
         )?;
-        eprintln!("Created validator and maintainer list accounts.");
+        eprintln!(
+            "Created validator {} and maintainer {} list accounts.",
+            validator_list_signer.pubkey(),
+            maintainer_list_signer.pubkey(),
+        );
         Ok(developer_keypair.pubkey())
     })?;
 
