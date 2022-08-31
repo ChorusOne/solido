@@ -780,12 +780,6 @@ pub fn process_update_stake_account_balance(
         "Stake",
     )?;
 
-    // We tracked in `stake_accounts_balance` what we put in there ourselves, so
-    // the excess is a sum of a donation by some joker and staking rewards.
-    let donation = (stake_observed_total - validator.effective_stake_balance)
-        .expect("Does not underflow because observed_total >= stake_accounts_balance.");
-    msg!("{} in donations observed.", donation);
-
     // Try to withdraw from unstake accounts.
     let mut unstake_removed = Lamports(0);
     let mut unstake_observed_total = Lamports(0);
@@ -846,6 +840,7 @@ pub fn process_update_stake_account_balance(
     let stake_total_with_rewards = (stake_observed_total + unstake_observed_total)?;
     let rewards = (stake_total_with_rewards - validator.stake_accounts_balance)
         .expect("Does not underflow, because tracked balance <= total.");
+    msg!("received rewards and donations {}.", rewards);
 
     // Store the new total. If we withdrew any inactive stake back to the
     // reserve, that is now no longer part of the stake accounts, so subtract

@@ -243,6 +243,16 @@ print(f'  Maintainer address:       {maintainer.pubkey}')
 for i, vote_account in enumerate(validators):
     print(f'  Validator {i} vote account: {vote_account}')
 
+output = {
+    "cluster": get_network(),
+    "multisig_program_id": multisig_program_id,
+    "multisig_address": multisig_instance,
+    "solido_program_id": solido_program_id,
+    "solido_address": solido_address,
+    "st_sol_mint": st_sol_mint_account,
+}
+with open('../solido_test.json', 'w') as outfile:
+    json.dump(output, outfile, indent=4)
 
 print('\nMaintenance command line:')
 print(
