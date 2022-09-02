@@ -194,6 +194,9 @@ pub enum LidoError {
 
     /// Validator list should be empty prior to state update
     ValidatorListNotEmpty = 56,
+
+    /// Stake was not distributed over validators yet, this is done at epoch end
+    ValidatorHasNoStake = 57,
 }
 
 // Just reuse the generated Debug impl for Display. It shows the variant names.

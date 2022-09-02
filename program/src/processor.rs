@@ -898,6 +898,11 @@ pub fn process_withdraw(
     // accounts", regardless of whether the stake in those accounts is active or not.
     let validator = validators.get_mut(validator_index, accounts.validator_vote_account.key)?;
 
+    if validator.effective_stake_balance == Lamports(0) {
+        msg!("Validator {} has no stake", validator.pubkey());
+        return Err(LidoError::ValidatorHasNoStake.into());
+    }
+
     // Note that we compare balances, not keys, because the maximum might not be unique.
     if validator.effective_stake_balance < maximum_stake_balance {
         msg!(

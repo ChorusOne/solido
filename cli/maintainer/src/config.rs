@@ -189,7 +189,13 @@ pub struct ConfigFile {
 }
 
 pub fn read_config(config_path: &Path) -> ConfigFile {
-    let file_content = std::fs::read(config_path).expect("Failed to open config file.");
+    let file_content = match std::fs::read(config_path) {
+        Ok(content) => content,
+        Err(err) => {
+            eprintln!("{}: {:?}.", err, config_path);
+            std::process::exit(0x0100);
+        }
+    };
     let values: Value = serde_json::from_slice(&file_content).expect("Error while reading config.");
     ConfigFile { values }
 }
