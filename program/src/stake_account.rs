@@ -267,7 +267,10 @@ impl StakeAccount {
                 return true;
             }
             // Two activating accounts that share an activation epoch, during the activation epoch.
-            if self.is_activating() && merge_from.is_activating() {
+            if self.is_activating()
+                && merge_from.is_activating()
+                && self.activation_epoch == merge_from.activation_epoch
+            {
                 return true;
             }
         }
