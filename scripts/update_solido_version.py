@@ -27,7 +27,7 @@ Usage:
     solana --url localhost transfer --allow-unfunded-recipient ./tests/.keys/maintainer.json 32.0
 
     $cd ../solido
-    scripts/update_solido_version.py --config ../solido_test.json migrate-state --keypair-path ../solido_old/tests/.keys/maintainer.json > output
+    scripts/update_solido_version.py --config ../solido_test.json propose-migrate --keypair-path ../solido_old/tests/.keys/maintainer.json > output
 
     ./target/debug/solido --config ../solido_test.json --keypair-path ../solido_old/tests/.keys/maintainer.json multisig approve-batch --transaction-addresses-path output
 """
@@ -87,7 +87,7 @@ if __name__ == '__main__':
     )
 
     current_parser = subparsers.add_parser(
-        'migrate-state', help='Update solido state to a version 2'
+        'propose-migrate', help='Update solido state to a version 2'
     )
     current_parser.add_argument(
         "--keypair-path", type=str, help='Signer keypair path', required=True
@@ -179,7 +179,7 @@ if __name__ == '__main__':
         )
         print(propose_result['transaction_address'])
 
-    elif args.command == "migrate-state":
+    elif args.command == "propose-migrate":
         update_result = solido(
             '--config',
             args.config,

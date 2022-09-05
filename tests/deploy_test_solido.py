@@ -201,10 +201,10 @@ validators = [
 # Create two validators of our own, so we have a more interesting stake
 # distribution. These validators are not running, so they will not earn
 # rewards.
-validators.extend(
-    add_validator(i, vote_account=None)
-    for i in range(len(validators), len(validators) + 2)
-)
+# validators.extend(
+#     add_validator(i, vote_account=None)
+#     for i in range(len(validators), len(validators) + 2)
+# )
 
 
 print('Adding maintainer ...')

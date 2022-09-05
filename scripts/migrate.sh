@@ -4,8 +4,17 @@
 
 cd solido_old
 
+# withdraw SOLs from local validator vote account to start fresh
+solana withdraw-from-vote-account test-ledger/vote-account-keypair.json v9zvcQbyuCAuFw6rt7VLedE2qV4NAY8WLaLg37muBM2 999999.9 --authorized-withdrawer test-ledger/vote-account-keypair.json
+
+# create instance
+./tests/deploy_test_solido.py --verbose
+
 # deposit 5 SOL
-./target/debug/solido --config ../solido_test.json deposit --amount-sol 5
+./target/debug/solido --config ../solido_test.json deposit --amount-sol 100
+
+# start maintainer
+./target/debug/solido --config ~/Documents/solido_test.json --keypair-path ../solido_old/tests/.keys/maintainer.json run-maintainer --max-poll-interval-seconds 5
 
 # EPOCH 1
 
@@ -27,7 +36,7 @@ cd ../solido
 solana --url localhost transfer --allow-unfunded-recipient ../solido_old/tests/.keys/maintainer.json 32.0
 
 # propose migration
-scripts/update_solido_version.py --config ../solido_test.json migrate-state --keypair-path ../solido_old/tests/.keys/maintainer.json >> output
+scripts/update_solido_version.py --config ../solido_test.json propose-migrate --keypair-path ../solido_old/tests/.keys/maintainer.json >> output
 
 # EPOCH 2
 
