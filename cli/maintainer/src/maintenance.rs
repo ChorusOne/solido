@@ -603,13 +603,6 @@ impl SolidoState {
 
         let validator = &self.validators.entries[validator_index];
 
-        let (stake_account_end, _bump_seed_end) = validator.find_stake_account_address(
-            &self.solido_program_id,
-            &self.solido_address,
-            validator.stake_seeds.end,
-            StakeType::Stake,
-        );
-
         // Top up the validator to at most its target. If that means we don't use the full
         // reserve, a future maintenance run will stake the remainder with the next validator.
         let mut amount_to_deposit = amount_below_target.min(reserve_balance);
@@ -634,10 +627,31 @@ impl SolidoState {
         // activated in the current epoch. If merging is not possible, then we
         // set `account_merge_into` to the same account as `end`, to signal that
         // we shouldn't merge.
-        let account_merge_into = match self.validator_stake_accounts[validator_index].last() {
-            Some((addr, account)) if account.activation_epoch == self.clock.epoch => *addr,
-            _ => stake_account_end,
-        };
+        let (stake_account_end, account_merge_into) =
+            match self.validator_stake_accounts[validator_index].last() {
+                // Merge
+                Some((addr, account)) if account.activation_epoch == self.clock.epoch => {
+                    let (stake_account_end, _) = validator.find_temporary_stake_account_address(
+                        &self.solido_program_id,
+                        &self.solido_address,
+                        validator.stake_seeds.end,
+                        self.clock.epoch,
+                    );
+
+                    (stake_account_end, *addr)
+                }
+                // Append
+                _ => {
+                    let (stake_account_end, _) = validator.find_stake_account_address(
+                        &self.solido_program_id,
+                        &self.solido_address,
+                        validator.stake_seeds.end,
+                        StakeType::Stake,
+                    );
+
+                    (stake_account_end, stake_account_end)
+                }
+            };
 
         let maintainer_index = self.maintainers.position(&self.maintainer_address)?;
 

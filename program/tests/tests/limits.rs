@@ -7,8 +7,9 @@
 //! expectations; there is no "right" answer, but we would like to know what
 //! how many accounts Solido can handle.
 
-use testlib::solido_context::{Context, StakeDeposit};
+use testlib::solido_context::Context;
 
+use lido::state::StakeDeposit;
 use lido::token::Lamports;
 
 use solana_program::pubkey::Pubkey;

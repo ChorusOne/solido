@@ -12,12 +12,13 @@ use solana_sdk::transport;
 
 use lido::{
     error::LidoError,
+    state::StakeDeposit,
     token::{Lamports, StLamports},
     MINIMUM_STAKE_ACCOUNT_BALANCE,
 };
 use testlib::{
     assert_solido_error,
-    solido_context::{send_transaction, Context, StakeDeposit},
+    solido_context::{send_transaction, Context},
 };
 
 /// Shared context for tests where a given amount has been deposited and staked.

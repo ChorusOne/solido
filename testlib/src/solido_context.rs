@@ -35,7 +35,8 @@ use lido::token::{Lamports, StLamports};
 use lido::{error::LidoError, instruction, RESERVE_ACCOUNT, STAKE_AUTHORITY};
 use lido::{
     state::{
-        AccountList, FeeRecipients, Lido, ListEntry, Maintainer, RewardDistribution, Validator,
+        AccountList, FeeRecipients, Lido, ListEntry, Maintainer, RewardDistribution, StakeDeposit,
+        Validator,
     },
     MINT_AUTHORITY,
 };
@@ -188,19 +189,6 @@ pub async fn send_transaction(
     }
 
     result
-}
-
-/// The different ways to stake some amount from the reserve.
-pub enum StakeDeposit {
-    /// Stake into a new stake account, and delegate the new account.
-    ///
-    /// This consumes the end seed of the validator's stake accounts.
-    Append,
-
-    /// Stake into temporary stake account, and immediately merge it.
-    ///
-    /// This merges into the stake account at `end_seed - 1`.
-    Merge,
 }
 
 #[derive(PartialEq, Debug)]
@@ -934,25 +922,36 @@ impl Context {
             .expect("Trying to stake with a non-member validator.");
 
         let validator_index = solido.validators.position(&validator_vote_account).unwrap();
-        let (stake_account_end, _) = validator.find_stake_account_address(
-            &id(),
-            &self.solido.pubkey(),
-            validator.stake_seeds.end,
-            StakeType::Stake,
-        );
+        let (stake_account_end, stake_account_merge_into) = match approach {
+            StakeDeposit::Append => {
+                let (stake_account_end, _) = validator.find_stake_account_address(
+                    &id(),
+                    &self.solido.pubkey(),
+                    validator.stake_seeds.end,
+                    StakeType::Stake,
+                );
+                (stake_account_end, stake_account_end)
+            }
+            StakeDeposit::Merge => {
+                let (stake_account_end, _) = validator.find_temporary_stake_account_address(
+                    &id(),
+                    &self.solido.pubkey(),
+                    validator.stake_seeds.end,
+                    self.get_clock().await.epoch,
+                );
 
-        let (stake_account_merge_into, _) = validator.find_stake_account_address(
-            &id(),
-            &self.solido.pubkey(),
-            match approach {
-                StakeDeposit::Append => validator.stake_seeds.end,
-                // We do a wrapping sub here, so we can call stake-merge initially,
-                // when end is 0, such that the account to merge into is not the
-                // same as the end account.
-                StakeDeposit::Merge => validator.stake_seeds.end.wrapping_sub(1),
-            },
-            StakeType::Stake,
-        );
+                let (stake_account_merge_into, _) = validator.find_stake_account_address(
+                    &id(),
+                    &self.solido.pubkey(),
+                    // We do a wrapping sub here, so we can call stake-merge initially,
+                    // when end is 0, such that the account to merge into is not the
+                    // same as the end account.
+                    validator.stake_seeds.end.wrapping_sub(1),
+                    StakeType::Stake,
+                );
+                (stake_account_end, stake_account_merge_into)
+            }
+        };
 
         let maintainer = self
             .maintainer

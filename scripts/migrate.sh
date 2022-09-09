@@ -51,4 +51,4 @@ echo ADD_VALIDATOR_TRANSACTION > ../solido/output
 # EPOCH 3
 
 # try to withdraw
-./target/debug/solido --config ~/Documents/solido_test.json withdraw --amount-st-sol 1
+./target/debug/solido --config ~/Documents/solido_test.json withdraw --amount-st-sol 1.1

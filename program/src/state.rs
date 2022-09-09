@@ -464,6 +464,22 @@ impl Validator {
         };
         self.find_stake_account_address_with_authority(program_id, solido_account, authority, seed)
     }
+
+    /// Get stake account address that should be merged into another right after creation.
+    /// This function should be used to create temporary stake accounts
+    /// tied to the epoch that should be merged into another account and destroyed
+    /// after a transaction. So that each epoch would have a diferent
+    /// generation of stake accounts. This is done for security purpose
+    pub fn find_temporary_stake_account_address(
+        &self,
+        program_id: &Pubkey,
+        solido_account: &Pubkey,
+        seed: u64,
+        epoch: Epoch,
+    ) -> (Pubkey, u8) {
+        let authority = [VALIDATOR_STAKE_ACCOUNT, &epoch.to_le_bytes()[..]].concat();
+        self.find_stake_account_address_with_authority(program_id, solido_account, &authority, seed)
+    }
 }
 
 impl Sealed for Validator {}
@@ -1263,6 +1279,19 @@ pub struct Fees {
     /// This is not a fee, and it is not paid out explicitly, but when summed
     /// with the other fields in this struct, that totals the input amount.
     pub st_sol_appreciation_amount: Lamports,
+}
+
+/// The different ways to stake some amount from the reserve.
+pub enum StakeDeposit {
+    /// Stake into a new stake account, and delegate the new account.
+    ///
+    /// This consumes the end seed of the validator's stake accounts.
+    Append,
+
+    /// Stake into temporary stake account, and immediately merge it.
+    ///
+    /// This merges into the stake account at `end_seed - 1`.
+    Merge,
 }
 
 /////////////////////////////////////////////////// OLD STATE ///////////////////////////////////////////////////
