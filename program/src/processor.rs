@@ -56,7 +56,6 @@ use {
 
 /// Program state handler.
 pub fn process_initialize(
-    version: u8,
     program_id: &Pubkey,
     reward_distribution: RewardDistribution,
     max_validators: u32,
@@ -108,12 +107,20 @@ pub fn process_initialize(
     let mut maintainers = MaintainerList::new_default(0);
     maintainers.header.max_entries = max_maintainers;
 
-    let (_, reserve_bump_seed) = Pubkey::find_program_address(
+    let (reserve_account_pda, reserve_bump_seed) = Pubkey::find_program_address(
         &[&accounts.lido.key.to_bytes(), RESERVE_ACCOUNT],
         program_id,
     );
+    if &reserve_account_pda != accounts.reserve_account.key {
+        msg!(
+            "Resrve account {} is incorrect, should be {}",
+            accounts.reserve_account.key,
+            reserve_account_pda
+        );
+        return Err(LidoError::IncorrectReserveAddress.into());
+    }
 
-    let (_, deposit_bump_seed) = Pubkey::find_program_address(
+    let (_, stake_bump_seed) = Pubkey::find_program_address(
         &[&accounts.lido.key.to_bytes(), STAKE_AUTHORITY],
         program_id,
     );
@@ -129,14 +136,14 @@ pub fn process_initialize(
 
     // Initialize fee structure
     let lido = Lido {
-        lido_version: version,
+        lido_version: Lido::VERSION,
         account_type: AccountType::Lido,
         manager: *accounts.manager.key,
         st_sol_mint: *accounts.st_sol_mint.key,
         exchange_rate: ExchangeRate::default(),
         sol_reserve_account_bump_seed: reserve_bump_seed,
         mint_authority_bump_seed: mint_bump_seed,
-        stake_authority_bump_seed: deposit_bump_seed,
+        stake_authority_bump_seed: stake_bump_seed,
         reward_distribution,
         fee_recipients: FeeRecipients {
             treasury_account: *accounts.treasury_account.key,
@@ -1139,7 +1146,6 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
             max_maintainers,
             max_commission_percentage,
         } => process_initialize(
-            Lido::VERSION,
             program_id,
             reward_distribution,
             max_validators,

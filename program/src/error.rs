@@ -197,6 +197,9 @@ pub enum LidoError {
 
     /// Stake was not distributed over validators yet, this is done at epoch end
     ValidatorHasNoStake = 57,
+
+    /// The reserve account address is wrong
+    IncorrectReserveAddress = 58,
 }
 
 // Just reuse the generated Debug impl for Display. It shows the variant names.

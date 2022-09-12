@@ -42,6 +42,8 @@ pub(crate) fn check_mint(
     mint: &AccountInfo,
     mint_authority: &Pubkey,
 ) -> Result<(), ProgramError> {
+    check_account_owner(mint, &spl_token::id())?;
+
     if !rent.is_exempt(mint.lamports(), mint.data_len()) {
         msg!("Mint is not rent-exempt");
         return Err(ProgramError::AccountNotRentExempt);
@@ -67,6 +69,15 @@ pub(crate) fn check_mint(
         msg!("Mint should have an authority.");
         return Err(LidoError::InvalidMint.into());
     }
+
+    if let COption::Some(authority) = spl_mint.freeze_authority {
+        msg!(
+            "Mint should not have a freeze authority, but it is set to {}.",
+            authority
+        );
+        return Err(LidoError::InvalidMint.into());
+    }
+
     Ok(())
 }
 
