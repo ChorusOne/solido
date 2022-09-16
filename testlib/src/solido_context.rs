@@ -105,6 +105,7 @@ pub struct Context {
 pub struct ValidatorAccounts {
     pub node_account: Keypair,
     pub vote_account: Pubkey,
+    pub withdraw_authority: Keypair,
 }
 
 /// Sign and send a transaction with a fresh block hash.
@@ -751,10 +752,11 @@ impl Context {
     /// Create a new key pair and add it as maintainer.
     pub async fn add_validator(&mut self) -> ValidatorAccounts {
         let node_account = self.deterministic_keypair.new_keypair();
+        let withdraw_authority = self.deterministic_keypair.new_keypair();
         let vote_account = self
             .create_vote_account(
                 &node_account,
-                Pubkey::new_unique(),
+                withdraw_authority.pubkey(),
                 self.max_commission_percentage,
             )
             .await;
@@ -762,6 +764,7 @@ impl Context {
         let accounts = ValidatorAccounts {
             node_account,
             vote_account,
+            withdraw_authority,
         };
 
         self.try_add_validator(&accounts)
@@ -1424,6 +1427,26 @@ impl Context {
                 ),
             ],
             vec![],
+        )
+        .await
+    }
+
+    pub async fn try_close_vote_account(
+        &mut self,
+        vote_account: &Pubkey,
+        withdraw_authority: &Keypair,
+    ) -> transport::Result<()> {
+        let vote_info = self.get_account(*vote_account).await;
+
+        send_transaction(
+            &mut self.context,
+            &[solana_vote_program::vote_instruction::withdraw(
+                vote_account,
+                &withdraw_authority.pubkey(),
+                vote_info.lamports,
+                &Pubkey::new_unique(),
+            )],
+            vec![withdraw_authority],
         )
         .await
     }

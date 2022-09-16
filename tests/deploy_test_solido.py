@@ -203,7 +203,7 @@ validators = [
 # rewards.
 # validators.extend(
 #     add_validator(i, vote_account=None)
-#     for i in range(len(validators), len(validators) + 2)
+#     for i in range(len(validators), len(validators) + 1)
 # )
 
 

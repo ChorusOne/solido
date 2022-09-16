@@ -74,16 +74,14 @@ pub fn process_initialize(
     check_account_owner(accounts.validator_list, program_id)?;
     check_account_owner(accounts.maintainer_list, program_id)?;
 
-    check_account_data(accounts.lido, Lido::LEN, Lido::LEN, AccountType::Lido)?;
+    check_account_data(accounts.lido, Lido::LEN, AccountType::Lido)?;
     check_account_data(
         accounts.validator_list,
-        ValidatorList::required_bytes(1),
         ValidatorList::required_bytes(max_validators),
         AccountType::Validator,
     )?;
     check_account_data(
         accounts.maintainer_list,
-        MaintainerList::required_bytes(1),
         MaintainerList::required_bytes(max_maintainers),
         AccountType::Maintainer,
     )?;
@@ -1061,13 +1059,11 @@ pub fn processor_migrate_to_v2(
 
     check_account_data(
         accounts.validator_list,
-        ValidatorList::required_bytes(1),
         ValidatorList::required_bytes(max_validators),
         AccountType::Validator,
     )?;
     check_account_data(
         accounts.maintainer_list,
-        MaintainerList::required_bytes(1),
         MaintainerList::required_bytes(max_maintainers),
         AccountType::Maintainer,
     )?;

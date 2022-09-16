@@ -3,6 +3,7 @@
 
 use solana_program_test::tokio;
 use solana_sdk::pubkey::Pubkey;
+use solana_sdk::signature::Keypair;
 use solana_sdk::signer::Signer;
 
 use testlib::assert_solido_error;
@@ -59,6 +60,7 @@ async fn test_add_validator_with_invalid_owner() {
         .try_add_validator(&ValidatorAccounts {
             node_account: node_account,
             vote_account: invalid_vote_account.pubkey(),
+            withdraw_authority: Keypair::new(),
         })
         .await;
     assert_solido_error!(result, LidoError::ValidatorVoteAccountHasDifferentOwner);

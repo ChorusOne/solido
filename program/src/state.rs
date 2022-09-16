@@ -765,6 +765,25 @@ impl Lido {
         get_instance_packed_len(&lido_instance).unwrap()
     }
 
+    /// Get maximum number of bytes over all Solido owned accounts, including previuos
+    /// versions, that should be checked to be zero to initialize Solido instance
+    ///
+    /// This is also done to avoid account confusion that could cause an old,
+    /// not-yet-upgraded Lido instances to be overwritten with a new initialize instruction
+    pub fn get_bytes_to_check() -> usize {
+        *[
+            LidoV1::LEN,
+            Lido::LEN,
+            // it's enough to check only bytes for `a list of size 1` to be zero,
+            // otherwize the list won't be deserializable
+            ValidatorList::required_bytes(1),
+            MaintainerList::required_bytes(1),
+        ]
+        .iter()
+        .max()
+        .unwrap()
+    }
+
     /// Confirm that the given account is Solido's stSOL mint.
     pub fn check_mint_is_st_sol_mint(&self, mint_account_info: &AccountInfo) -> ProgramResult {
         if &self.st_sol_mint != mint_account_info.key {
@@ -1349,6 +1368,8 @@ pub struct LidoV1 {
 }
 
 impl LidoV1 {
+    pub const LEN: usize = 353;
+
     pub fn deserialize_lido(
         program_id: &Pubkey,
         lido: &AccountInfo,

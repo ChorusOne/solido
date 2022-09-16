@@ -32,7 +32,8 @@ use solana_sdk::{
 };
 use solana_vote_program::vote_state::VoteState;
 use solido_cli_common::{
-    error::MaintenanceError, snapshot::SnapshotConfig, validator_info_utils::ValidatorInfo, Result,
+    error::MaintenanceError, snapshot::SnapshotConfig, snapshot::SnapshotError,
+    validator_info_utils::ValidatorInfo, Result,
 };
 use spl_token::state::Mint;
 
@@ -311,8 +312,8 @@ pub struct SolidoState {
     pub validator_vote_account_balances: Vec<Lamports>,
 
     /// For each validator, in the same order as in `solido.validators`, holds
-    /// the deserialized vote account.
-    pub validator_vote_accounts: Vec<VoteState>,
+    /// the deserialized vote account or None if vote account is closed.
+    pub validator_vote_accounts: Vec<Option<VoteState>>,
 
     /// For each validator, in the same order as in `solido.validators`, holds
     /// the balance of the validator's identity account (which pays for the
@@ -488,16 +489,34 @@ impl SolidoState {
         let mut validator_vote_accounts = Vec::new();
         let mut validator_infos = Vec::new();
         for validator in validators.entries.iter() {
-            let vote_account = config.client.get_account(validator.pubkey())?;
-            let vote_state = config.client.get_vote_account(validator.pubkey())?;
-            let validator_info = config.client.get_validator_info(&vote_state.node_pubkey)?;
-            let identity_account = config.client.get_account(&vote_state.node_pubkey)?;
-            validator_vote_accounts.push(vote_state);
-            validator_vote_account_balances
-                .push(get_account_balance_except_rent(&rent, vote_account));
-            validator_identity_account_balances
-                .push(get_account_balance_except_rent(&rent, identity_account));
-            validator_infos.push(validator_info);
+            match config.client.get_account(validator.pubkey()) {
+                Ok(vote_account) => {
+                    let vote_state = config.client.get_vote_account(validator.pubkey())?;
+
+                    // prometheus
+                    validator_vote_account_balances
+                        .push(get_account_balance_except_rent(&rent, vote_account));
+                    let validator_info =
+                        config.client.get_validator_info(&vote_state.node_pubkey)?;
+                    let identity_account = config.client.get_account(&vote_state.node_pubkey)?;
+                    validator_identity_account_balances
+                        .push(get_account_balance_except_rent(&rent, identity_account));
+                    validator_infos.push(validator_info);
+
+                    validator_vote_accounts.push(Some(vote_state));
+                }
+                Err(err) => match err {
+                    SnapshotError::OtherError(_) => {
+                        // Vote account will not exist if it was closed by node operator.
+                        // It is possible to close a vote account only with inactive stake
+                        // or with no stake, in first case the stake will be withdrawn to
+                        // a reserve and in both cases the validator will be removed
+                        // by a maintainer
+                        validator_vote_accounts.push(None);
+                    }
+                    other => return Err(other),
+                },
+            };
 
             validator_stake_accounts.push(get_validator_stake_accounts(
                 config,
@@ -763,7 +782,8 @@ impl SolidoState {
         None
     }
 
-    /// If there is a validator which exceeded commission limit, try to deactivate it.
+    /// If there is a validator which exceeded commission limit or it's vote account is closed,
+    /// try to deactivate it.
     pub fn try_deactivate_validator_if_commission_exceeds_max(
         &self,
     ) -> Option<MaintenanceInstruction> {
@@ -774,9 +794,17 @@ impl SolidoState {
             .zip(self.validator_vote_accounts.iter())
             .enumerate()
         {
-            // We are only interested in validators that violate commission limit
-            if !validator.active || vote_state.commission <= self.solido.max_commission_percentage {
+            if !validator.active {
                 continue;
+            }
+
+            // We are only interested in validators that violate commission limit
+            if let Some(state) = vote_state {
+                if state.commission <= self.solido.max_commission_percentage {
+                    continue;
+                }
+            } else {
+                // Vote account is closed
             }
 
             let task = MaintenanceOutput::DeactivateValidatorIfCommissionExceedsMax {
@@ -1113,7 +1141,7 @@ impl SolidoState {
             SolidoState::UNBALANCE_THRESHOLD,
         )?;
         let validator = &self.validators.entries[validator_index];
-        let stake_account = &self.validator_stake_accounts[validator_index][0];
+        let stake_account = &self.validator_stake_accounts[validator_index].get(0)?;
 
         let maximum_unstake = (stake_account.1.balance.total() - MINIMUM_STAKE_ACCOUNT_BALANCE)
             .expect("Stake account should always have the minimum amount.");
@@ -1311,14 +1339,17 @@ impl SolidoState {
             balance_sol_metrics.push(metric(stake_balance.active, "active"));
             balance_sol_metrics.push(metric(stake_balance.deactivating, "deactivating"));
 
-            last_voted_slot_metrics
-                .push(annotator.add_labels(Metric::new(vote_account.last_timestamp.slot)));
-            last_voted_timestamp_metrics.push(
-                annotator.add_labels(Metric::new(vote_account.last_timestamp.timestamp as u64)),
-            );
+            if let Some(vote_account) = vote_account {
+                last_voted_slot_metrics
+                    .push(annotator.add_labels(Metric::new(vote_account.last_timestamp.slot)));
+                last_voted_timestamp_metrics.push(
+                    annotator.add_labels(Metric::new(vote_account.last_timestamp.timestamp as u64)),
+                );
+                vote_credits_metrics
+                    .push(annotator.add_labels(Metric::new(vote_account.credits())));
+            }
             identity_account_balance_metrics
                 .push(annotator.add_labels(Metric::new_sol(*identity_account_balance)));
-            vote_credits_metrics.push(annotator.add_labels(Metric::new(vote_account.credits())));
         }
 
         write_metric(

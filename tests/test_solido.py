@@ -210,6 +210,16 @@ maintainer_list_address = result['maintainer_list_address']
 
 print(f'> Created instance at {solido_address}.')
 
+output = {
+    "multisig_program_id": multisig_program_id,
+    "multisig_address": multisig_instance,
+    "solido_program_id": solido_program_id,
+    "solido_address": solido_address,
+    "st_sol_mint": st_sol_mint_account,
+}
+with open('../solido_test.json', 'w') as outfile:
+    json.dump(output, outfile, indent=4)
+
 solido_instance = solido(
     'show-solido',
     '--solido-program-id',
@@ -504,8 +514,8 @@ print('> There was nothing to do, as expected.')
 def add_validator_and_approve(keypath_account: str, keypath_vote: str) -> Validator:
     # Adding another validator
     (validator, transaction_result) = add_validator(
-        'validator-account-key-1',
-        'validator-vote-account-key-1',
+        keypath_account,
+        keypath_vote,
     )
 
     transaction_address = transaction_result['transaction_address']
@@ -812,11 +822,47 @@ assert (
     maintainance_result == expected_result
 ), f'\nExpected: {expected_result}\nActual:   {maintainance_result}'
 
-output = {
-    "multisig_program_id": multisig_program_id,
-    "multisig_address": multisig_instance,
-    "solido_program_id": solido_program_id,
-    "solido_address": solido_address,
-    "st_sol_mint": st_sol_mint_account,
-}
-print(json.dumps(output, indent=4))
+#############################################################################
+
+print(
+    '\nRestore max validation commission to %d%% ...'
+    % (MAX_VALIDATION_COMMISSION_PERCENTAGE)
+)
+transaction_status = set_max_validation_commission(MAX_VALIDATION_COMMISSION_PERCENTAGE)
+assert transaction_status['did_execute'] == True
+
+validator_3 = add_validator_and_approve(
+    'validator-account-key-3', 'validator-vote-account-key-3'
+)
+solido_instance = solido(
+    'show-solido',
+    '--solido-program-id',
+    solido_program_id,
+    '--solido-address',
+    solido_address,
+)
+number_validators = len(solido_instance['validators']['entries'])
+assert (
+    number_validators == 2
+), f'\nExpected 2 validators\nGot: {number_validators} validators'
+
+print(f'\nClosing vote account {validator_3.vote_account.pubkey}')
+solana(
+    "close-vote-account",
+    validator_3.vote_account.pubkey,
+    "tests/.keys/test-key-1.json",
+    "--authorized-withdrawer",
+    validator_3.withdrawer_account.keypair_path,
+)
+
+print('\nConsuming all maintainence instructions (should remove all validators) ...')
+consume_maintainence_instructions(False)
+solido_instance = solido(
+    'show-solido',
+    '--solido-program-id',
+    solido_program_id,
+    '--solido-address',
+    solido_address,
+)
+number_validators = len(solido_instance['validators']['entries'])
+assert number_validators == 0

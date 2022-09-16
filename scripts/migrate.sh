@@ -4,17 +4,20 @@
 
 cd solido_old
 
+# start local validator
+rm -rf tests/.keys/ test-ledger/ tests/__pycache__/ && solana-test-validator --slots-per-epoch 300
+
 # withdraw SOLs from local validator vote account to start fresh
 solana withdraw-from-vote-account test-ledger/vote-account-keypair.json v9zvcQbyuCAuFw6rt7VLedE2qV4NAY8WLaLg37muBM2 999999.9 --authorized-withdrawer test-ledger/vote-account-keypair.json
 
 # create instance
 ./tests/deploy_test_solido.py --verbose
 
-# deposit 5 SOL
-./target/debug/solido --config ../solido_test.json deposit --amount-sol 100
-
 # start maintainer
-./target/debug/solido --config ~/Documents/solido_test.json --keypair-path ../solido_old/tests/.keys/maintainer.json run-maintainer --max-poll-interval-seconds 5
+./target/debug/solido --config ~/Documents/solido_test.json --keypair-path ../solido_old/tests/.keys/maintainer.json run-maintainer --max-poll-interval-seconds 1
+
+# deposit some SOL
+./target/debug/solido --config ../solido_test.json deposit --amount-sol 100
 
 # EPOCH 1
 

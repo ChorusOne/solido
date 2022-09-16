@@ -518,10 +518,12 @@ pub fn split_stake_account(
 /// Check first bytes are zeros, zero remaining bytes and check allocated size is correct.
 pub fn check_account_data(
     account: &AccountInfo,
-    bytes_to_check: usize,
     expected_size: usize,
     account_type: AccountType,
 ) -> ProgramResult {
+    // Take minimum to stay in a slice bounds and be under compute budget
+    let bytes_to_check = std::cmp::min(account.data_len(), Lido::get_bytes_to_check());
+
     // Can't check all bytes because of compute limit
     if !&account.data.borrow()[..bytes_to_check]
         .iter()

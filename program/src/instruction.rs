@@ -104,7 +104,7 @@ pub enum LidoInstruction {
     AddValidatorV2,
 
     /// Check if validator increased his commission over maximum allowed
-    /// and deactivate him if he did
+    /// or if vote account is closed, then deactivate it
     ///
     /// Requires no permission
     DeactivateValidatorIfCommissionExceedsMax {

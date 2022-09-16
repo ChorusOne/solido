@@ -132,8 +132,8 @@ pub fn process_deactivate_validator(
     Ok(())
 }
 
-/// Set the `active` flag to false for a given validator if it's commission is
-/// bigger then max allowed. It is permissionless.
+/// Mark validator inactive if it's commission is bigger then max
+/// allowed or if it's vote account is closed. It is permissionless.
 ///
 /// This prevents new funds from being staked with this validator, and enables
 /// removing the validator once no stake is delegated to it any more.
@@ -144,13 +144,6 @@ pub fn process_deactivate_validator_if_commission_exceeds_max(
 ) -> ProgramResult {
     let accounts = DeactivateValidatorIfCommissionExceedsMaxInfo::try_from_slice(accounts_raw)?;
     let lido = Lido::deserialize_lido(program_id, accounts.lido)?;
-
-    let data = accounts.validator_vote_account_to_deactivate.data.borrow();
-    let commission = get_vote_account_commission(&data)?;
-
-    if commission <= lido.max_commission_percentage {
-        return Ok(());
-    }
 
     let validator_list_data = &mut *accounts.validator_list.data.borrow_mut();
     let mut validators = lido.deserialize_account_list_info::<Validator>(
@@ -166,6 +159,17 @@ pub fn process_deactivate_validator_if_commission_exceeds_max(
 
     if !validator.active {
         return Ok(());
+    }
+
+    if accounts.validator_vote_account_to_deactivate.owner == &solana_program::vote::program::id() {
+        let data = accounts.validator_vote_account_to_deactivate.data.borrow();
+        let commission = get_vote_account_commission(&data)?;
+
+        if commission <= lido.max_commission_percentage {
+            return Ok(());
+        }
+    } else {
+        // The vote account is closed by node operator
     }
 
     validator.active = false;

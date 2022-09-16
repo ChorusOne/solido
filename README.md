@@ -85,7 +85,7 @@ The Solana version that we test against is listed in our [CI config][ci-config].
 [solana-tools]: https://docs.solana.com/cli/install-solana-cli-tools
 [docker]:       https://docs.docker.com/engine/install/
 [reproduce]:    https://chorusone.github.io/solido/development/reproducibility/
-[ci-config]:    https://github.com/ChorusOne/solido/blob/main/.github/workflows/build.yml
+[ci-config]:    https://github.com/lidofinance/solido/blob/main/.github/workflows/build.yml
 
 ### Cloning the repository
 
@@ -93,7 +93,7 @@ This repository contains a Git submodule. To clone it, pass
 `--recurse-submodules`:
 
 ```console
-$ git clone --recurse-submodules https://github.com/chorusone/solido
+$ git clone --recurse-submodules https://github.com/lidofinance/solido
 ```
 
 If you already cloned the repository without submodules, you can still

@@ -126,9 +126,7 @@ jobs:
       run: |
         export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
         validator=$(tests/start_test_validator.py)
-
         tests/airdrop_lamports.sh
-
         tests/test_anker.py
         killall -9 solana-test-validator
         rm -r test-ledger
