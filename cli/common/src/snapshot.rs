@@ -505,7 +505,11 @@ pub struct SnapshotClient {
 /// on their validator. At the time of writing, it defaults to 100.
 fn is_too_many_inputs_error(error: &ClientError) -> bool {
     match error.kind() {
-        ClientErrorKind::RpcError(RpcError::RpcRequestError(message)) => {
+        ClientErrorKind::RpcError(RpcError::RpcResponseError {
+            code: _,
+            message,
+            data: _,
+        }) => {
             // Unfortunately, there is no way to get a structured error; all we
             // get is a string that looks like this:
             //
