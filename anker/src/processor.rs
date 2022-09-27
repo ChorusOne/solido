@@ -563,7 +563,7 @@ fn process_send_rewards(
     accounts_raw: &[AccountInfo],
     wormhole_nonce: u32,
 ) -> ProgramResult {
-    let accounts = SendRewardsAccountsInfo::try_from_slice(accounts_raw)?;
+    let accounts = Box::new(SendRewardsAccountsInfo::try_from_slice(accounts_raw)?);
     let anker = deserialize_anker(program_id, accounts.anker, accounts.solido)?.1;
     anker.check_ust_reserve_address(
         program_id,
@@ -622,11 +622,11 @@ fn process_send_rewards(
         )?;
     }
 
-    let payload = crate::wormhole::Payload::new(
+    let payload = Box::new(crate::wormhole::Payload::new(
         wormhole_nonce,
         reserve_ust_amount,
         anker.terra_rewards_destination.to_foreign(),
-    );
+    ));
 
     // For the order and meaning of the accounts, see also
     // https://github.com/certusone/wormhole/blob/537d56b37aa041a585f2c90515fa3a7ffa5898b5/solana/modules/token_bridge/program/src/instructions.rs#L328-L390.

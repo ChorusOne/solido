@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2022 Chorus One AG
+// SPDX-License-Identifier: GPL-3.0
+
 use anker::{
     error::AnkerError,
     state::{POOL_PRICE_MIN_SAMPLE_DISTANCE, POOL_PRICE_NUM_SAMPLES},

@@ -66,7 +66,6 @@ impl TokenPoolContext {
         .expect("Failed to generate UST mint instruction.");
         send_transaction(
             &mut solido_context.context,
-            &mut solido_context.nonce,
             &[mint_instruction],
             vec![&self.ust_mint_authority],
         )
@@ -162,7 +161,6 @@ impl TokenPoolContext {
 
         send_transaction(
             &mut solido_context.context,
-            &mut solido_context.nonce,
             &[pool_instruction],
             vec![&self.swap_account],
         )
@@ -222,7 +220,6 @@ impl Context {
 
         send_transaction(
             &mut solido_context.context,
-            &mut solido_context.nonce,
             &[instruction::initialize(
                 &id(),
                 &instruction::InitializeAccountsMeta {
@@ -323,7 +320,6 @@ impl Context {
 
         send_transaction(
             &mut self.solido_context.context,
-            &mut self.solido_context.nonce,
             &[instruction::deposit(
                 &id(),
                 &instruction::DepositAccountsMeta {
@@ -383,7 +379,6 @@ impl Context {
 
         send_transaction(
             &mut self.solido_context.context,
-            &mut self.solido_context.nonce,
             &[instruction::withdraw(
                 &id(),
                 &instruction::WithdrawAccountsMeta {
@@ -461,7 +456,6 @@ impl Context {
         .expect("Could not create swap instruction.");
         send_transaction(
             &mut self.solido_context.context,
-            &mut self.solido_context.nonce,
             &[swap_instruction],
             vec![authority],
         )
@@ -490,7 +484,6 @@ impl Context {
 
         send_transaction(
             &mut self.solido_context.context,
-            &mut self.solido_context.nonce,
             &[instruction::sell_rewards(
                 &id(),
                 &instruction::SellRewardsAccountsMeta {
@@ -513,8 +506,66 @@ impl Context {
             )],
             vec![],
         )
-        .await?;
-        Ok(())
+        .await
+    }
+
+    /// Call the `SendRewards` instruction. Note that this will fail, because we
+    /// don't have the Wormhole programs available in the test context. But we
+    /// can still test everything up to the point where we call Wormhole.
+    pub async fn try_send_rewards(&mut self) -> transport::Result<()> {
+        let solido_address = self.solido_context.solido.pubkey();
+
+        let (anker_instance, _anker_bump_seed) =
+            anker::find_instance_address(&id(), &solido_address);
+
+        let (ust_reserve_account, _ust_reserve_bump_seed) =
+            anker::find_ust_reserve_account(&id(), &anker_instance);
+
+        let (reserve_authority, _reserve_authority_bump_seed) =
+            find_reserve_authority(&id(), &anker_instance);
+
+        let anker = self.get_anker().await;
+        let message = self.solido_context.deterministic_keypair.new_keypair();
+
+        let transfer_args = anker::wormhole::WormholeTransferArgs::new(
+            anker.wormhole_parameters.token_bridge_program_id,
+            anker.wormhole_parameters.core_bridge_program_id,
+            self.token_pool_context.ust_mint_address,
+            self.solido_context.context.payer.pubkey(),
+            ust_reserve_account,
+            reserve_authority,
+            message.pubkey(),
+        );
+
+        let wormhole_nonce = 1;
+
+        send_transaction(
+            &mut self.solido_context.context,
+            &[instruction::send_rewards(
+                &id(),
+                &instruction::SendRewardsAccountsMeta {
+                    anker: anker_instance,
+                    solido: solido_address,
+                    reserve_authority,
+                    wormhole_token_bridge_program_id: transfer_args.token_bridge_program_id,
+                    wormhole_core_bridge_program_id: transfer_args.core_bridge_program_id,
+                    payer: transfer_args.payer,
+                    config_key: transfer_args.config_key,
+                    ust_reserve_account,
+                    wrapped_meta_key: transfer_args.wrapped_meta_key,
+                    ust_mint: self.token_pool_context.ust_mint_address,
+                    authority_signer_key: transfer_args.authority_signer_key,
+                    bridge_config: transfer_args.bridge_config,
+                    message: message.pubkey(),
+                    emitter_key: transfer_args.emitter_key,
+                    sequence_key: transfer_args.sequence_key,
+                    fee_collector_key: transfer_args.fee_collector_key,
+                },
+                wormhole_nonce,
+            )],
+            vec![&message],
+        )
+        .await
     }
 
     /// Return the value of the given amount of stSOL in SOL.
@@ -554,7 +605,6 @@ impl Context {
     ) -> transport::Result<()> {
         send_transaction(
             &mut self.solido_context.context,
-            &mut self.solido_context.nonce,
             &[instruction::change_terra_rewards_destination(
                 &id(),
                 &instruction::ChangeTerraRewardsDestinationAccountsMeta {
@@ -576,7 +626,6 @@ impl Context {
         let anker = self.get_anker().await;
         send_transaction(
             &mut self.solido_context.context,
-            &mut self.solido_context.nonce,
             &[instruction::change_token_swap_pool(
                 &id(),
                 &instruction::ChangeTokenSwapPoolAccountsMeta {
@@ -600,7 +649,6 @@ impl Context {
     ) -> transport::Result<()> {
         send_transaction(
             &mut self.solido_context.context,
-            &mut self.solido_context.nonce,
             &[instruction::change_sell_rewards_min_out_bps(
                 &id(),
                 &instruction::ChangeSellRewardsMinOutBpsAccountsMeta {
@@ -624,7 +672,6 @@ impl Context {
 
         send_transaction(
             &mut self.solido_context.context,
-            &mut self.solido_context.nonce,
             &[instruction::fetch_pool_price(
                 &id(),
                 &instruction::FetchPoolPriceAccountsMeta {

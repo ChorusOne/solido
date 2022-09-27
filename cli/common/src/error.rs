@@ -9,6 +9,7 @@ use solana_client::rpc_request::{RpcError, RpcResponseErrorData};
 use solana_program::instruction::InstructionError;
 use solana_program::program_error::ProgramError;
 use solana_program::pubkey::PubkeyError;
+use solana_sdk::hash::ParseHashError;
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signer::presigner::PresignerError;
 use solana_sdk::signer::SignerError;
@@ -496,6 +497,13 @@ impl AsPrettyError for SignerError {
     }
 }
 
+impl AsPrettyError for ParseHashError {
+    fn print_pretty(&self) {
+        print_red("Solana decode base58 error:");
+        println!(" {:?}", self);
+    }
+}
+
 impl AsPrettyError for Box<dyn AsPrettyError + 'static> {
     fn print_pretty(&self) {
         (**self).print_pretty()
@@ -584,6 +592,12 @@ impl From<Box<bincode::ErrorKind>> for Error {
 
 impl From<serde_json::Error> for Error {
     fn from(err: serde_json::Error) -> Error {
+        Box::new(err)
+    }
+}
+
+impl From<ParseHashError> for Error {
+    fn from(err: ParseHashError) -> Error {
         Box::new(err)
     }
 }
