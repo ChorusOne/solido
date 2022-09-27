@@ -189,6 +189,14 @@ if get_network() == 'http://127.0.0.1:8899':
         solido_instance['rewards_withdraw_authority'],
     )
 
+    solana(
+        'validator-info',
+        'publish',
+        '--keypair',
+        './test-ledger/validator-keypair.json',
+        "solana-test-validator",
+    )
+
 
 # Allow only validators that are voting, have 100% commission, and have their
 # withdrawer set to Solido's rewards withdraw authority. On a local testnet,
@@ -213,10 +221,10 @@ validators = [
 # Create two validators of our own, so we have a more interesting stake
 # distribution. These validators are not running, so they will not earn
 # rewards.
-validators.extend(
-    add_validator(i, vote_account=None)
-    for i in range(len(validators), len(validators) + 2)
-)
+# validators.extend(
+#     add_validator(i, vote_account=None)
+#     for i in range(len(validators), len(validators) + 2)
+# )
 
 
 print('Adding maintainer ...')
@@ -276,3 +284,15 @@ print(
         ]
     ),
 )
+
+
+output = {
+    "cluster": get_network(),
+    "multisig_program_id": multisig_program_id,
+    "multisig_address": multisig_instance,
+    "solido_program_id": solido_program_id,
+    "solido_address": solido_address,
+    "st_sol_mint": st_sol_mint_account,
+}
+with open('../solido_test.json', 'w') as outfile:
+    json.dump(output, outfile, indent=4)

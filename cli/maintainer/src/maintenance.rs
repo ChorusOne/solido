@@ -25,6 +25,7 @@ use solana_program::{
 };
 use solana_sdk::{
     account::{Account, ReadableAccount},
+    compute_budget::ComputeBudgetInstruction,
     fee_calculator::DEFAULT_TARGET_LAMPORTS_PER_SIGNATURE,
     instruction::Instruction,
     signer::{keypair::Keypair, Signer},
@@ -1700,7 +1701,13 @@ pub fn try_perform_maintenance(
             for keypair in &maintenance_instruction.additional_signers {
                 signers.push(keypair);
             }
-            config.sign_and_send_transaction(&[maintenance_instruction.instruction], &signers)?;
+
+            let budget_instruction = ComputeBudgetInstruction::request_units(400_000, 0);
+
+            config.sign_and_send_transaction(
+                &[budget_instruction, maintenance_instruction.instruction],
+                &signers,
+            )?;
             Ok(Some(maintenance_instruction.output))
         }
         None => Ok(None),
