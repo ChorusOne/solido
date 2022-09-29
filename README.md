@@ -1,9 +1,6 @@
 # Lido for Solana
 
-[![Coverage][cov-img]][cov]
-
-[cov-img]: https://codecov.io/gh/ChorusOne/solido/branch/main/graph/badge.svg?token=USB921ZL6B
-[cov]:     https://codecov.io/gh/ChorusOne/solido/branch/main/graph/badge.svg?token=USB921ZL6B
+**Note:** The new upstream is at [lidofinance/solido](https://github.com/lidofinance/solido).
 
 *Lido for Solana* (“Solido” for short) is a [Lido DAO][lido]-governed liquid
 staking protocol for the Solana blockchain. Anyone who stakes their SOL tokens
