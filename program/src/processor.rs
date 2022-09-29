@@ -993,7 +993,7 @@ pub fn process_withdraw(
             stake_program: accounts.stake_program,
         },
         sol_to_withdraw,
-        &[&[]],
+        &[],
     )?;
 
     // Give control of the stake to the user.
