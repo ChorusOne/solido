@@ -5,10 +5,9 @@
 
 # 1. Get last commit hash
 VERSION=$(git rev-parse --short HEAD)
-TAG="chorusone/solido:$VERSION"
-BASETAG="chorusone/solido-base"
+TAG="guyos/solido:$VERSION"
+BASETAG="guyos/solido-base"
 SOLIPATH="/root/.local/share/solana/install/releases/1.9.28/solana-release/bin/solido"
-
 
 # 2. Build container image
 echo "Building container image $TAG"

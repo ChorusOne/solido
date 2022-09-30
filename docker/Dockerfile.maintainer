@@ -1,4 +1,4 @@
-FROM chorusone/solido-base
+FROM guyos/solido-base
 
 ENV SOLIDOBUILDPATH="/solido-build"
 ENV SOLIDOPATH="/solido"
