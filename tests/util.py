@@ -27,6 +27,10 @@ class TestAccount(NamedTuple):
 
 
 def run(*args: str) -> str:
+    return str(run_process(*args).stdout)
+
+
+def run_process(*args: str) -> Any:
     """
     Run a program, ensure it exits with code 0, return its stdout.
     """
@@ -45,7 +49,7 @@ def run(*args: str) -> str:
             print('Stderr:', err.stderr)
         raise
 
-    return result.stdout
+    return result
 
 
 def get_solido_program_path() -> str:
