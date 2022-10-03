@@ -48,7 +48,9 @@ mod spl_token_utils;
 // we write the default values on the rustdoc so Clap can print them in help
 // messages.
 #[derive(Parser, Debug)]
-#[clap(after_long_help = r#"CONFIGURATION:
+#[clap(
+    version,
+    after_long_help = r#"CONFIGURATION:
     All of the options of this program can also be provided as an environment
     variable with "SOLIDO_" prefix. E.g. to provide --keypair-path, set the
     SOLIDO_KEYPAIR_PATH environment variable.
@@ -62,7 +64,8 @@ mod spl_token_utils;
     {
       "cluster": "https://api.mainnet-beta.solana.com",
       "keypair_path": "/path/to/id.json"
-    }"#)]
+    }"#
+)]
 struct Opts {
     /// The contents of a keypair file to sign and pay with, as json array.
     ///
