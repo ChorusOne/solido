@@ -29,7 +29,6 @@ use solana_sdk::{
     fee_calculator::DEFAULT_TARGET_LAMPORTS_PER_SIGNATURE,
     instruction::Instruction,
     signer::{keypair::Keypair, Signer},
-    stake::state::StakeState,
 };
 use solana_vote_program::vote_state::VoteState;
 use solido_cli_common::{
@@ -1061,15 +1060,19 @@ impl SolidoState {
             self.validator_stake_accounts.iter(),
             self.validator_unstake_accounts.iter()
         ) {
-            let stake_rent = Lamports(self.rent.minimum_balance(std::mem::size_of::<StakeState>()));
-            let expected_difference_stake = stake_accounts
+            let current_stake_balance = stake_accounts
                 .iter()
-                .map(|(_addr, detail)| {
-                    (detail.balance.inactive - stake_rent)
-                        .expect("Inactive stake is always greater then rent exempt amount")
-                })
+                .map(|(_addr, detail)| detail.balance.total())
                 .sum::<lido::token::Result<Lamports>>()
                 .expect("If this overflows, there would be more than u64::MAX staked.");
+
+            let expected_difference_stake =
+                if current_stake_balance > validator.compute_effective_stake_balance() {
+                    (current_stake_balance - validator.compute_effective_stake_balance())
+                        .expect("Does not overflow because current > entry.balance.")
+                } else {
+                    Lamports(0)
+                };
 
             let mut removed_unstake = Lamports(0);
 
@@ -1678,11 +1681,11 @@ pub fn try_perform_maintenance(
         // as possible.
         .or_else(|| state.try_merge_on_all_stakes())
         .or_else(|| state.try_update_exchange_rate())
-        .or_else(|| state.try_update_stake_account_balance())
         .or_else(|| state.try_unstake_from_inactive_validator())
         // Collecting validator fees goes after updating the exchange rate,
         // because it may be rejected if the exchange rate is outdated.
         // Same for updating the validator balance.
+        .or_else(|| state.try_update_stake_account_balance())
         .or_else(|| state.try_deactivate_validator_if_commission_exceeds_max())
         .or_else(|| state.try_stake_deposit())
         .or_else(|| state.try_unstake_from_active_validators())
