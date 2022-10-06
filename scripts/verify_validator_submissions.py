@@ -32,10 +32,10 @@ from validator_onboarding import Address, ValidatorResponse, iter_rows_from_stdi
 from validator_onboarding import print_ok, print_warn, print_error
 
 
-SOLIDO_AUTHORIZED_WITHDAWER = 'GgrQiJ8s2pfHsfMbEFtNcejnzLegzZ16c9XtJ2X2FpuF'
 ST_SOL_MINT = '7dHbWXmci3dT8UFYWYZweBLXgycu7Y3iL6trKn1Y7ARj'
 VOTE_PROGRAM = 'Vote111111111111111111111111111111111111111'
 SPL_TOKEN_PROGRAM = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'
+MAX_VALIDATION_COMMISSION_PERCENTAGE = 5
 
 
 def solana(*args: str) -> Any:
@@ -164,20 +164,23 @@ def check_validator_response(
         print_error('Vote account address does not hold a vote account.')
         return
 
-    if vote_account.authorized_withdrawer == SOLIDO_AUTHORIZED_WITHDAWER:
-        print_ok('Authorized withdrawer set to Solido.')
-    else:
-        print_error('Wrong authorized withdrawer.')
-
     if vote_account.num_votes > 0:
         print_ok('Vote account has votes.')
     else:
         print_warn('Vote account has not voted yet.')
 
-    if vote_account.commission == 100:
-        print_ok('Vote account commission is 100%.')
+    if vote_account.commission <= MAX_VALIDATION_COMMISSION_PERCENTAGE:
+        print_ok(
+            'Vote account commission is less than {}%.'.format(
+                MAX_VALIDATION_COMMISSION_PERCENTAGE
+            ),
+        )
     else:
-        print_error('Vote account commission is not 100%.')
+        print_error(
+            'Vote account commission is more than {}%.'.format(
+                MAX_VALIDATION_COMMISSION_PERCENTAGE
+            ),
+        )
 
     validator_info = validators_by_identity.get(vote_account.validator_identity_address)
     if validator_info is None:

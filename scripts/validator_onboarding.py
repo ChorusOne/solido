@@ -19,7 +19,6 @@ class ValidatorResponse(NamedTuple):
     validator_name: str
     keybase_username: str
     vote_account_address: Address
-    withdraw_authority_check: Address
     commission_check: str
     will_vote_check: str
     added_to_keybase_check: str
