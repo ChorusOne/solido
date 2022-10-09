@@ -29,6 +29,7 @@ use solana_sdk::{
     fee_calculator::DEFAULT_TARGET_LAMPORTS_PER_SIGNATURE,
     instruction::Instruction,
     signer::{keypair::Keypair, Signer},
+    stake::state::StakeState,
 };
 use solana_vote_program::vote_state::VoteState;
 use solido_cli_common::{
@@ -1060,18 +1061,28 @@ impl SolidoState {
             self.validator_stake_accounts.iter(),
             self.validator_unstake_accounts.iter()
         ) {
-            let current_stake_balance = stake_accounts
-                .iter()
-                .map(|(_addr, detail)| detail.balance.total())
-                .sum::<lido::token::Result<Lamports>>()
+            // Check if total stake changed or some part is inactive and update balance.
+            // Part of total stake can become inactive after merging two stake accounts
+            // (without changing a total value) or can be increased after a donation.
+            // Active stake increases after receiving rewards.
+            let stake_rent = Lamports(self.rent.minimum_balance(std::mem::size_of::<StakeState>()));
+            let mut total_stake_balance = Lamports(0);
+            let mut can_be_withdrawn = Lamports(0);
+            for (_, detail) in stake_accounts {
+                total_stake_balance = (total_stake_balance + detail.balance.total())
+                    .expect("If this overflows, there would be more than u64::MAX staked.");
+                can_be_withdrawn = (can_be_withdrawn
+                    + (detail.balance.inactive - stake_rent)
+                        .expect("Inactive stake is always greater than rent exempt amount"))
                 .expect("If this overflows, there would be more than u64::MAX staked.");
+            }
 
             let expected_difference_stake =
-                if current_stake_balance > validator.compute_effective_stake_balance() {
-                    (current_stake_balance - validator.compute_effective_stake_balance())
+                if total_stake_balance > validator.compute_effective_stake_balance() {
+                    (total_stake_balance - validator.compute_effective_stake_balance())
                         .expect("Does not overflow because current > entry.balance.")
                 } else {
-                    Lamports(0)
+                    can_be_withdrawn
                 };
 
             let mut removed_unstake = Lamports(0);

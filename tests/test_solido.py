@@ -444,6 +444,21 @@ def perform_maintenance() -> Any:
     )
 
 
+def consume_maintainence_instructions(verbose: bool = False) -> Any:
+    """
+    Perform maintenance instructions till no more left
+    """
+    last_result = None
+    while True:
+        maintainance_result = perform_maintenance()
+        if maintainance_result is not None:
+            last_result = maintainance_result
+            if verbose:
+                print(maintainance_result)
+        else:
+            return last_result
+
+
 print('\nRunning maintenance (should be no-op if epoch is unchanged) ...')
 result = perform_maintenance()
 if solido_instance['solido']['exchange_rate']['computed_in_epoch'] == current_epoch:
@@ -743,19 +758,6 @@ expected_result = {
     }
 }
 assert result == expected_result, f'\nExpected: {expected_result}\nActual:   {result}'
-
-
-def consume_maintainence_instructions(verbose: bool = False) -> None:
-    """
-    Perform maintenance instructions till no more left
-    """
-    while True:
-        maintainance_result = perform_maintenance()
-        if maintainance_result is not None:
-            if verbose:
-                print(maintainance_result)
-        else:
-            break
 
 
 print('\nConsuming all maintainence instructions')
