@@ -571,16 +571,16 @@ expected_result = {
 }
 assert result == expected_result, f'\nExpected: {expected_result}\nActual:   {result}'
 
-# By donating to the stake account, we trigger maintenance to run WithdrawInactiveStake.
+# By donating to the stake account, we trigger maintenance to run UpdateStakeAccountBalance.
 print(
     f'\nDonating to stake account {stake_account_address}, then running maintenance ...'
 )
 solana('transfer', stake_account_address, '0.1')
 
 result = perform_maintenance()
-assert 'WithdrawInactiveStake' in result
+assert 'UpdateStakeAccountBalance' in result
 expected_result = {
-    'WithdrawInactiveStake': {
+    'UpdateStakeAccountBalance': {
         'validator_vote_account': validator.vote_account.pubkey,
         'expected_difference_stake_lamports': 100_000_000,  # We donated 0.1 SOL.
         'unstake_withdrawn_to_reserve_lamports': 1_499_750_000,  # Amount that was unstaked for the newcomming validator.
@@ -593,7 +593,7 @@ expected_result = {
 
 assert result == expected_result, f'\nExpected: {expected_result}\nActual:   {result}'
 
-print('> Performed WithdrawInactiveStake as expected.')
+print('> Performed UpdateStakeAccountBalance as expected.')
 
 
 print('\nDonating 1.0 SOL to reserve, then running maintenance ...')
@@ -700,7 +700,7 @@ assert val['unstake_seeds'] == {'begin': 1, 'end': 2}
 print('\nRunning maintenance (should withdraw from validator\'s unstake account) ...')
 result = perform_maintenance()
 expected_result = {
-    'WithdrawInactiveStake': {
+    'UpdateStakeAccountBalance': {
         'validator_vote_account': validator.vote_account.pubkey,
         'expected_difference_stake_lamports': 0,
         'unstake_withdrawn_to_reserve_lamports': 1_500_250_000,

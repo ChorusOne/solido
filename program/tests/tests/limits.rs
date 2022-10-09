@@ -27,7 +27,7 @@ async fn test_update_stake_account_balance_max_accounts() {
     let validator = context.add_validator().await;
 
     // The maximum number of stake accounts per validator that we can support,
-    // before WithdrawInactiveStake fails.
+    // before UpdateStakeAccountBalance fails.
     let max_accounts = 9;
 
     for i in 0..=max_accounts {
@@ -37,7 +37,7 @@ async fn test_update_stake_account_balance_max_accounts() {
             .stake_deposit(validator.vote_account, StakeDeposit::Append, amount)
             .await;
 
-        // Put some additional SOL in the stake account, so `WithdrawInactiveStake`
+        // Put some additional SOL in the stake account, so `UpdateStakeAccountBalance`
         // has something to withdraw. This consumes more compute units than a
         // no-op update, so we actually test the worst case.
         context.fund(stake_account, Lamports(100_000)).await;

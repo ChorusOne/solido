@@ -71,7 +71,7 @@ pub enum MaintenanceOutput {
 
     UpdateExchangeRate,
 
-    WithdrawInactiveStake {
+    UpdateStakeAccountBalance {
         /// The vote account of the validator that we want to update.
         #[serde(serialize_with = "serialize_b58")]
         validator_vote_account: Pubkey,
@@ -80,7 +80,7 @@ pub enum MaintenanceOutput {
         ///
         /// This is only an expected value, because a different transaction might
         /// execute between us observing the state and concluding that there is
-        /// a difference, and our `WithdrawInactiveStake` instruction executing.
+        /// a difference, and our `UpdateStakeAccountBalance` instruction executing.
         #[serde(rename = "expected_difference_stake_lamports")]
         expected_difference_stake: Lamports,
 
@@ -172,12 +172,12 @@ impl fmt::Display for MaintenanceOutput {
             MaintenanceOutput::UpdateExchangeRate => {
                 writeln!(f, "Updated exchange rate.")?;
             }
-            MaintenanceOutput::WithdrawInactiveStake {
+            MaintenanceOutput::UpdateStakeAccountBalance {
                 validator_vote_account,
                 expected_difference_stake,
                 unstake_withdrawn_to_reserve,
             } => {
-                writeln!(f, "Withdrew inactive stake.")?;
+                writeln!(f, "Updated stake account balance.")?;
                 writeln!(
                     f,
                     "  Validator vote account:        {}",
@@ -1122,7 +1122,7 @@ impl SolidoState {
                     },
                     u32::try_from(validator_index).expect("Too many validators"),
                 );
-                let task = MaintenanceOutput::WithdrawInactiveStake {
+                let task = MaintenanceOutput::UpdateStakeAccountBalance {
                     validator_vote_account: *validator.pubkey(),
                     expected_difference_stake,
                     unstake_withdrawn_to_reserve: removed_unstake,

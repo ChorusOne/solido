@@ -43,7 +43,7 @@ struct MaintenanceMetrics {
     /// Number of times we performed `UpdateExchangeRate`.
     transactions_update_exchange_rate: u64,
 
-    /// Number of times we performed `WithdrawInactiveStake`.
+    /// Number of times we performed `UpdateStakeAccountBalance`.
     transactions_update_stake_account_balance: u64,
 
     /// Number of times we performed a `MergeStake`.
@@ -135,7 +135,7 @@ impl MaintenanceMetrics {
             MaintenanceOutput::UpdateExchangeRate => {
                 self.transactions_update_exchange_rate += 1;
             }
-            MaintenanceOutput::WithdrawInactiveStake { .. } => {
+            MaintenanceOutput::UpdateStakeAccountBalance { .. } => {
                 self.transactions_update_stake_account_balance += 1;
             }
             MaintenanceOutput::MergeStake { .. } => self.transactions_merge_stake += 1,
