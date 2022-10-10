@@ -63,12 +63,6 @@ struct MaintenanceMetrics {
 
     /// Number of times we performed `Unstake` on an active validator for balancing purposes.
     transactions_unstake_from_active_validator: u64,
-
-    /// Number of times we performed `SellRewards` on the Anker instance.
-    transactions_sell_rewards: u64,
-
-    /// Number of times we performed `FetchPoolPrice` on the Anker instance.
-    transactions_fetch_pool_price: u64,
 }
 
 impl MaintenanceMetrics {
@@ -111,10 +105,6 @@ impl MaintenanceMetrics {
                         .with_label("operation", "RemoveValidator".to_string()),
                     Metric::new(self.transactions_unstake_from_active_validator)
                         .with_label("operation", "UnstakeFromActiveValidator".to_string()),
-                    Metric::new(self.transactions_sell_rewards)
-                        .with_label("operation", "SellRewards".to_string()),
-                    Metric::new(self.transactions_fetch_pool_price)
-                        .with_label("operation", "FetchPoolPrice".to_string()),
                     Metric::new(self.transactions_deactivate_validator_if_commission_exceeds_max)
                         .with_label(
                             "operation",
@@ -149,8 +139,6 @@ impl MaintenanceMetrics {
             MaintenanceOutput::UnstakeFromActiveValidator { .. } => {
                 self.transactions_unstake_from_active_validator += 1
             }
-            MaintenanceOutput::SellRewards { .. } => self.transactions_sell_rewards += 1,
-            MaintenanceOutput::FetchPoolPrice { .. } => self.transactions_fetch_pool_price += 1,
         }
     }
 }
@@ -188,7 +176,6 @@ fn run_maintenance_iteration(
         let state = SolidoState::new(
             config,
             opts.solido_program_id(),
-            opts.anker_program_id(),
             opts.solido_address(),
             *opts.stake_time(),
         )?;
@@ -312,8 +299,6 @@ impl<'a, 'b> Daemon<'a, 'b> {
             transactions_remove_validator: 0,
             transactions_deactivate_validator_if_commission_exceeds_max: 0,
             transactions_unstake_from_active_validator: 0,
-            transactions_sell_rewards: 0,
-            transactions_fetch_pool_price: 0,
         };
         Daemon {
             config,

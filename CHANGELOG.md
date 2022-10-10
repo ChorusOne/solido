@@ -7,6 +7,7 @@ New features:
 * Solido no longer requires that validators use a 100%-commission account of which Solido
   is the withdraw authority. Any vote account can now be used, as long as its commission does
   not exceed Solido’s configured maximum commission percentage.
+  Anchor protocol integration is removed.
 
 **Compatibility**
 

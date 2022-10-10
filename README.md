@@ -45,8 +45,6 @@ and documentation, are in a different repository, which is not yet public.
 
  * `program` — Solido, the on-chain Solana BPF program that implements Lido for
    Solana.
- * `anker` — Anker, the on-chain Solana BPF program that implements integration
-   with the [Anchor Protocol][anchor-protocol] on [Terra][terra].
  * `multisig` — A pinned version of the on-chain [Serum multisig
    program][multisig], used as the upgrade authority of the Solido program, and
    as the manager of the Solido instance.
@@ -54,7 +52,7 @@ and documentation, are in a different repository, which is not yet public.
    programs.
  * `docker` — Dockerfiles for reproducible builds, and for the maintainer image.
  * `testlib` — Utilities for writing tests using the `solana-program-test` test
-   framework. The individual tests are in `program/tests` and `anker/tests`.
+   framework. The individual tests are in `program/tests`.
  * `tests` — Scripts that test the actual `solido` binary and on-chain program.
 
 [multisig]:        https://github.com/project-serum/multisig
@@ -127,7 +125,7 @@ $ cargo build-bpf
 $ cargo test-bpf
 ```
 
-The programs `lido.so`, `anker.so`, and `serum_multisig.so` can then be found in
+The programs `lido.so`, and `serum_multisig.so` can then be found in
 `target/deploy`.
 
 ### Docker container

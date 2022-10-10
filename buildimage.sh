@@ -32,7 +32,7 @@ echo "Running container id is=$CON_ID"
 
 #6. Copy artefacts locally
 ## a. on-chain
-programs=("lido" "serum_multisig" "anker")
+programs=("lido" "serum_multisig")
 for i in "${programs[@]}"
 do
   echo "Copying $i program and hash"

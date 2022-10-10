@@ -17,7 +17,6 @@ use solana_sdk::signer::Signer;
 use solido_cli_common::error::{Abort, CliError, Error};
 use solido_cli_common::snapshot::{Config, OutputMode, SnapshotClient};
 
-use crate::commands_anker::AnkerOpts;
 use crate::commands_multisig::MultisigOpts;
 use crate::commands_solido::{
     command_add_maintainer, command_add_validator, command_create_solido,
@@ -28,14 +27,11 @@ use crate::commands_solido::{
 };
 use crate::config::*;
 
-mod anker_state;
-mod commands_anker;
 mod commands_multisig;
 mod commands_solido;
 mod config;
 mod daemon;
 mod maintenance;
-mod serialization_utils;
 mod spl_token_utils;
 
 /// Solido -- Interact with Lido for Solana.
@@ -209,9 +205,6 @@ REWARDS
     /// Interact with a deployed Multisig program for governance tasks.
     Multisig(MultisigOpts),
 
-    /// Interact with the Anker (Anchor Protocol integration) program.
-    Anker(AnkerOpts),
-
     /// Set max_commission_percentage to control validator's fees.
     /// If validators exeed the threshold they will be deactivated by
     /// a maintainer.
@@ -272,7 +265,6 @@ fn main() {
 
     merge_with_config_and_environment(&mut opts.subcommand, config_file.as_ref());
     match opts.subcommand {
-        SubCommand::Anker(cmd_opts) => commands_anker::main(&mut config, &cmd_opts),
         SubCommand::CreateSolido(cmd_opts) => {
             let result = config.with_snapshot(|config| command_create_solido(config, &cmd_opts));
             let output = result.ok_or_abort_with("Failed to create Solido instance.");
@@ -366,7 +358,6 @@ fn merge_with_config_and_environment(
     config_file: Option<&ConfigFile>,
 ) {
     match subcommand {
-        SubCommand::Anker(opts) => opts.merge_with_config_and_environment(config_file),
         SubCommand::CreateSolido(opts) => opts.merge_with_config_and_environment(config_file),
         SubCommand::AddValidator(opts) => opts.merge_with_config_and_environment(config_file),
         SubCommand::DeactivateValidator(opts) => {

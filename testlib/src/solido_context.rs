@@ -26,9 +26,7 @@ use solana_sdk::transport;
 use solana_sdk::transport::TransportError;
 use solana_vote_program::vote_instruction;
 use solana_vote_program::vote_state::{VoteInit, VoteState};
-use std::sync::Once;
 
-use anker::error::AnkerError;
 use lido::processor::StakeType;
 use lido::stake_account::StakeAccount;
 use lido::token::{Lamports, StLamports};
@@ -40,8 +38,6 @@ use lido::{
     },
     MINT_AUTHORITY,
 };
-
-static INIT: Once = Once::new();
 
 pub struct DeterministicKeypairGen {
     rng: StdRng,
@@ -178,15 +174,6 @@ pub async fn send_transaction(
             ),
             None => println!("This error is not a known Solido error."),
         }
-        // Even though this is the Solido context, we also check for the Anker error,
-        // because the Anker context builds on this.
-        match AnkerError::from_u32(error_code) {
-            Some(err) => println!(
-                "If this error originated from Anker, it was this variant: {:?}",
-                err,
-            ),
-            None => println!("This error is not a known Anker error."),
-        }
     }
 
     result
@@ -236,24 +223,6 @@ impl Context {
             "lido",
             crate::solido_context::id(),
             processor!(lido::processor::process),
-        );
-        program_test.add_program(
-            "anker",
-            crate::anker_context::id(),
-            processor!(anker::processor::process),
-        );
-
-        // Add the actual Orca token swap program, so we test against the real thing.
-        // If we don't have it locally, download it from the chain.
-        INIT.call_once(|| {
-            // call it once so that Solana rpc would not block us by IP
-            crate::util::ensure_orca_program_exists();
-        });
-        program_test.add_program("orca_token_swap_v2", anker::orca_token_swap_v2::id(), None);
-        program_test.add_program(
-            "orca_token_swap_v2",
-            anker::orca_token_swap_v2_fake::id(),
-            None,
         );
 
         let mut result = Self {

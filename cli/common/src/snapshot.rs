@@ -46,7 +46,6 @@ use solana_sdk::transaction::Transaction;
 use solana_transaction_status::{TransactionDetails, UiTransactionEncoding};
 use solana_vote_program::vote_state::VoteState;
 
-use anker::state::Anker;
 use lido::state::{AccountList, Lido, ListEntry};
 use lido::token::Lamports;
 use spl_token::solana_program::hash::Hash;
@@ -360,25 +359,6 @@ impl<'a> Snapshot<'a> {
                     address: *solido_address,
                     context: format!(
                         "Failed to deserialize Lido struct, data length is {} bytes.",
-                        account.data.len()
-                    ),
-                });
-                Err(error.into())
-            }
-        }
-    }
-
-    /// Read the account and deserialize the Anker struct.
-    pub fn get_anker(&mut self, anker_address: &Pubkey) -> crate::Result<Anker> {
-        let account = self.get_account(anker_address)?;
-        match try_from_slice_unchecked::<Anker>(&account.data) {
-            Ok(anker) => Ok(anker),
-            Err(err) => {
-                let error: Error = Box::new(SerializationError {
-                    cause: Some(err.into()),
-                    address: *anker_address,
-                    context: format!(
-                        "Failed to deserialize Anker struct, data length is {} bytes.",
                         account.data.len()
                     ),
                 });

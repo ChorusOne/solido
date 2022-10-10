@@ -71,7 +71,6 @@ jobs:
     - name: Run unit tests
       run: |
         cargo test --manifest-path program/Cargo.toml
-        cargo test --manifest-path anker/Cargo.toml
         cargo test --manifest-path cli/maintainer/Cargo.toml
         cargo test --manifest-path cli/listener/Cargo.toml
         cargo test --manifest-path cli/common/Cargo.toml
@@ -91,7 +90,6 @@ jobs:
         # But only run the tests for Solido itself, the SPL tests are already
         # executed upstream.
         RUST_BACKTRACE=1 cargo test-bpf --manifest-path program/Cargo.toml
-        RUST_BACKTRACE=1 cargo test-bpf --manifest-path anker/Cargo.toml
 
     - name: Build CLI client
       run: cargo build --bin solido
@@ -119,15 +117,6 @@ jobs:
         tests/airdrop_lamports.sh
 
         tests/test_multisig.py
-        killall -9 solana-test-validator
-        rm -r test-ledger
-
-    - name: Run Anker integration test
-      run: |
-        export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
-        validator=$(tests/start_test_validator.py)
-        tests/airdrop_lamports.sh
-        tests/test_anker.py
         killall -9 solana-test-validator
         rm -r test-ledger
 
@@ -172,7 +161,6 @@ jobs:
 
     - name: Run Clippy
       run: |
-        cargo clippy --manifest-path anker/Cargo.toml -- --deny warnings
         cargo clippy --manifest-path cli/common/Cargo.toml -- --deny warnings
         cargo clippy --manifest-path cli/listener/Cargo.toml -- --deny warnings
         cargo clippy --manifest-path cli/listener/fuzz/Cargo.toml -- --deny warnings
