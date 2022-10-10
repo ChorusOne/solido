@@ -17,6 +17,11 @@ jobs:
       - uses: actions/checkout@v2
         with:
           submodules: true
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: 1.60.0
+            override: true
+            components: rustfmt
 
       - name: Check Rust formatting
         uses: actions-rs/cargo@v1
@@ -43,6 +48,10 @@ jobs:
     - uses: actions/checkout@v2
       with:
         submodules: true
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: 1.60.0
+        override: true
 
     - name: cache-build-artifacts
       uses: actions/cache@v2
@@ -127,6 +136,11 @@ jobs:
     - uses: actions/checkout@v2
       with:
         submodules: true
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: 1.60.0
+        override: true
+        components: rustfmt, clippy
 
     - name: cache-build-artifacts
       uses: actions/cache@v2
