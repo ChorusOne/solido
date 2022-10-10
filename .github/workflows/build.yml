@@ -20,8 +20,8 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: 1.60.0
-            override: true
-            components: rustfmt
+          override: true
+          components: rustfmt
 
       - name: Check Rust formatting
         uses: actions-rs/cargo@v1
@@ -170,7 +170,6 @@ jobs:
         # TODO: Pin the exact version with Nix instead, to make it easier to use
         # the same version locally.
         sudo pip3 install mypy==0.902
-        rustup component add clippy
         cargo install cargo-license --version 0.4.1
 
     - name: Run Clippy
