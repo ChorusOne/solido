@@ -1071,10 +1071,10 @@ impl SolidoState {
             for (_, detail) in stake_accounts {
                 total_stake_balance = (total_stake_balance + detail.balance.total())
                     .expect("If this overflows, there would be more than u64::MAX staked.");
-                can_be_withdrawn = (can_be_withdrawn
-                    + (detail.balance.inactive - stake_rent)
-                        .expect("Inactive stake is always greater than rent exempt amount"))
-                .expect("If this overflows, there would be more than u64::MAX staked.");
+                let diff = (detail.balance.inactive - stake_rent)
+                    .expect("Inactive stake is always greater than rent exempt amount");
+                can_be_withdrawn = (can_be_withdrawn + diff)
+                    .expect("If this overflows, there would be more than u64::MAX staked.");
             }
 
             let expected_difference_stake =

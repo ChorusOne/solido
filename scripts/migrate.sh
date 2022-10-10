@@ -5,7 +5,7 @@
 cd solido_old
 
 # start local validator
-rm -rf tests/.keys/ test-ledger/ tests/__pycache__/ && solana-test-validator --slots-per-epoch 300
+rm -rf tests/.keys/ test-ledger/ tests/__pycache__/ && solana-test-validator --slots-per-epoch 150
 
 # withdraw SOLs from local validator vote account to start fresh
 solana withdraw-from-vote-account test-ledger/vote-account-keypair.json v9zvcQbyuCAuFw6rt7VLedE2qV4NAY8WLaLg37muBM2 999999.9 --authorized-withdrawer test-ledger/vote-account-keypair.json
@@ -20,6 +20,10 @@ solana withdraw-from-vote-account test-ledger/vote-account-keypair.json v9zvcQby
 ./target/debug/solido --config ../solido_test.json deposit --amount-sol 100
 
 # EPOCH 1
+
+# receive some rewards
+
+# EPOCH 2
 
 # deactivate validators
 ../solido/scripts/update_solido_version.py --config ../solido_test.json deactivate-validators --keypair-path ./tests/.keys/maintainer.json > output
@@ -41,7 +45,7 @@ solana --url localhost transfer --allow-unfunded-recipient ../solido_old/tests/.
 # propose migration
 scripts/update_solido_version.py --config ../solido_test.json propose-migrate --keypair-path ../solido_old/tests/.keys/maintainer.json >> output
 
-# EPOCH 2
+# EPOCH 3
 
 # wait for maintainers to remove validators, approve program update and migration
 ./target/debug/solido --config ../solido_test.json --keypair-path ../solido_old/tests/.keys/maintainer.json multisig approve-batch --transaction-addresses-path output
@@ -51,7 +55,11 @@ scripts/update_solido_version.py --config ../solido_test.json propose-migrate --
 echo ADD_VALIDATOR_TRANSACTION > ../solido/output
 ./target/debug/solido --config ../solido_test.json --keypair-path ../solido_old/tests/.keys/maintainer.json multisig approve-batch --transaction-addresses-path output
 
-# EPOCH 3
+# EPOCH 4
 
 # try to withdraw
 ./target/debug/solido --config ~/Documents/solido_test.json withdraw --amount-st-sol 1.1
+
+# withdraw developer some fee to self
+spl-token transfer --from DEVELOPER_FEE_ADDRESS STSOL_MINT_ADDRESS 0.0001 $(solana-keygen pubkey) --owner ~/developer_fee_key.json
+# spl-token account-info --address DEVELOPER_FEE_ADDRESS

@@ -868,3 +868,30 @@ solido_instance = solido(
 )
 number_validators = len(solido_instance['validators']['entries'])
 assert number_validators == 0
+
+
+# def test_rewards():
+#     def balance(v1, v2, v3, reserve):
+#         return v1 + v2 + v3 + reserve
+
+#     s1_before = balance(8.048978427, 9.054659727, 7.948410296, 2.4 + 0.00089088)
+#     s1 = balance(9.150682817, 9.054659727, 9.150682816, 0.09691397)
+#     assert s1_before == s1
+#     s2 = balance(9.210892341, 9.126038084, 9.212256215, 0.10147973)
+#     rewards = s2 - s1
+
+#     def rewards_from_fees(t1, d1, a1, t2, d2, a2):
+#         dt = t2 - t1
+#         print(f"dt {dt}, {0.04*rewards}, {dt-0.04*rewards}")
+#         dd = d2 - d1
+#         print(f"dd {dd}, {0.01*rewards}, {dd-0.01*rewards}")
+#         da = a2 - a1
+#         print(f"da {da}, {0.95*rewards}, {da-0.95*rewards}")
+#         return dt + dd + da
+
+#     rewards_alt = rewards_from_fees(
+#         0.008198959, 0.003279583, 0.147581266, 0.016108040, 0.005256852, 0.335421956
+#     )
+
+#     diff = rewards - rewards_alt
+#     print(diff)

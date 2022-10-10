@@ -8,6 +8,7 @@ use lido::error::LidoError;
 use lido::processor::StakeType;
 use lido::state::{ListEntry, StakeDeposit};
 use lido::token::Lamports;
+use lido::MINIMUM_STAKE_ACCOUNT_BALANCE;
 use solana_program_test::tokio;
 use solana_sdk::signer::Signer;
 
@@ -228,7 +229,7 @@ async fn test_stake_deposit_fails_if_validator_with_less_stake_exists() {
         .stake_deposit(
             v1.vote_account,
             StakeDeposit::Append,
-            Lamports(1_000_000_000),
+            MINIMUM_STAKE_ACCOUNT_BALANCE,
         )
         .await;
 
@@ -238,7 +239,7 @@ async fn test_stake_deposit_fails_if_validator_with_less_stake_exists() {
         .try_stake_deposit(
             v1.vote_account,
             StakeDeposit::Append,
-            Lamports(1_000_000_000),
+            MINIMUM_STAKE_ACCOUNT_BALANCE,
         )
         .await;
     assert_solido_error!(result, LidoError::ValidatorWithLessStakeExists);
@@ -248,7 +249,7 @@ async fn test_stake_deposit_fails_if_validator_with_less_stake_exists() {
         .stake_deposit(
             v2.vote_account,
             StakeDeposit::Append,
-            Lamports(1_000_000_000),
+            MINIMUM_STAKE_ACCOUNT_BALANCE,
         )
         .await;
 
@@ -257,7 +258,7 @@ async fn test_stake_deposit_fails_if_validator_with_less_stake_exists() {
         .stake_deposit(
             v2.vote_account,
             StakeDeposit::Append,
-            Lamports(1_000_000_000),
+            MINIMUM_STAKE_ACCOUNT_BALANCE,
         )
         .await;
 }

@@ -4,6 +4,7 @@
 use lido::error::LidoError;
 use lido::state::StakeDeposit;
 use lido::token::Lamports;
+use lido::MINIMUM_STAKE_ACCOUNT_BALANCE;
 use solana_program_test::tokio;
 use testlib::assert_solido_error;
 use testlib::solido_context::Context;
@@ -25,7 +26,7 @@ async fn test_update_stake_account_balance() {
     assert_eq!(solido_before, solido_after);
 
     // Deposit and stake the deposit with the validator. This creates one stake account.
-    let initial_amount = Lamports(1_000_000_000);
+    let initial_amount = MINIMUM_STAKE_ACCOUNT_BALANCE;
     context.deposit(initial_amount).await;
     let stake_account = context
         .stake_deposit(validator.vote_account, StakeDeposit::Append, initial_amount)
