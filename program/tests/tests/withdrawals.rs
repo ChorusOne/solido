@@ -12,12 +12,13 @@ use solana_sdk::transport;
 
 use lido::{
     error::LidoError,
+    state::StakeDeposit,
     token::{Lamports, StLamports},
     MINIMUM_STAKE_ACCOUNT_BALANCE,
 };
 use testlib::{
     assert_solido_error,
-    solido_context::{send_transaction, Context, StakeDeposit},
+    solido_context::{send_transaction, Context},
 };
 
 /// Shared context for tests where a given amount has been deposited and staked.
@@ -83,6 +84,18 @@ async fn test_withdraw_less_than_rent_fails() {
     // for succesful withdrawals.
     let result = context.try_withdraw(StLamports(minimum_rent + 1)).await;
     assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_withdraw_from_inactive_validator() {
+    let mut context = WithdrawContext::new((MINIMUM_STAKE_ACCOUNT_BALANCE * 2).unwrap()).await;
+
+    let validator = context.context.validator.as_ref().unwrap();
+    let vote_account = validator.vote_account.clone();
+    context.context.deactivate_validator(vote_account).await;
+
+    let result = context.try_withdraw(StLamports(MINIMUM_STAKE_ACCOUNT_BALANCE.0 - 1));
+    assert!(result.await.is_ok());
 }
 
 #[tokio::test]

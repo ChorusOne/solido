@@ -16,7 +16,6 @@ use solana_sdk::signer::SignerError;
 use solana_sdk::transaction::TransactionError;
 
 use crate::snapshot::SnapshotError;
-use anker::error::AnkerError;
 use lido::error::LidoError;
 
 /// Return whether the transaction may have executed despite the client error.
@@ -369,10 +368,6 @@ pub fn print_pretty_error_code(error_code: u32) {
         None => {
             println!("    Error {} is not a known Multisig error.", error_code);
         }
-    }
-    match AnkerError::from_u32(error_code) {
-        Some(err) => println!("    Anker error {} is {:?}", error_code, err),
-        None => println!("    Error {} is not a known Anker error.", error_code),
     }
 }
 

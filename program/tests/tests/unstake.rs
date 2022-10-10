@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0
 
 use testlib::assert_solido_error;
-use testlib::solido_context::{self, Context, StakeDeposit};
+use testlib::solido_context::{self, Context};
 
 use lido::processor::StakeType;
-use lido::state::ListEntry;
+use lido::state::{ListEntry, StakeDeposit};
 use lido::MINIMUM_STAKE_ACCOUNT_BALANCE;
 use lido::{error::LidoError, token::Lamports};
 use solana_program::stake::state::StakeState;

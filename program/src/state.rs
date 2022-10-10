@@ -64,7 +64,8 @@ impl Default for AccountType {
     Clone, Debug, Default, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema, Serialize,
 )]
 pub struct AccountList<T> {
-    /// Data outside of the list, separated out for cheaper deserializations
+    /// Data outside of the list, separated out for cheaper deserializations.
+    /// Must be a first field to avoid account confusion.
     #[serde(skip_serializing)]
     pub header: ListHeader<T>,
 
@@ -81,12 +82,14 @@ pub type MaintainerList = AccountList<Maintainer>;
     Clone, Debug, Default, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema, Serialize,
 )]
 pub struct ListHeader<T> {
-    /// Maximum allowable number of elements
-    pub max_entries: u32,
+    /// Account type, must be a first field to avoid account confusion
+    pub account_type: AccountType,
 
+    /// Version number for the Lido
     pub lido_version: u8,
 
-    pub account_type: AccountType,
+    /// Maximum allowable number of elements
+    pub max_entries: u32,
 
     phantom: PhantomData<T>,
 }
@@ -461,6 +464,22 @@ impl Validator {
         };
         self.find_stake_account_address_with_authority(program_id, solido_account, authority, seed)
     }
+
+    /// Get stake account address that should be merged into another right after creation.
+    /// This function should be used to create temporary stake accounts
+    /// tied to the epoch that should be merged into another account and destroyed
+    /// after a transaction. So that each epoch would have a diferent
+    /// generation of stake accounts. This is done for security purpose
+    pub fn find_temporary_stake_account_address(
+        &self,
+        program_id: &Pubkey,
+        solido_account: &Pubkey,
+        seed: u64,
+        epoch: Epoch,
+    ) -> (Pubkey, u8) {
+        let authority = [VALIDATOR_STAKE_ACCOUNT, &epoch.to_le_bytes()[..]].concat();
+        self.find_stake_account_address_with_authority(program_id, solido_account, &authority, seed)
+    }
 }
 
 impl Sealed for Validator {}
@@ -660,11 +679,11 @@ impl ExchangeRate {
     Clone, Debug, Default, BorshDeserialize, BorshSerialize, BorshSchema, Eq, PartialEq, Serialize,
 )]
 pub struct Lido {
+    /// Account type, must be a first field to avoid account confusion
+    pub account_type: AccountType,
+
     /// Version number for the Lido
     pub lido_version: u8,
-
-    /// Account type, must be Lido
-    pub account_type: AccountType,
 
     /// Manager of the Lido program, able to execute administrative functions
     #[serde(serialize_with = "serialize_b58")]
@@ -744,6 +763,25 @@ impl Lido {
             ..Default::default()
         };
         get_instance_packed_len(&lido_instance).unwrap()
+    }
+
+    /// Get maximum number of bytes over all Solido owned accounts, including previuos
+    /// versions, that should be checked to be zero to initialize Solido instance
+    ///
+    /// This is also done to avoid account confusion that could cause an old,
+    /// not-yet-upgraded Lido instances to be overwritten with a new initialize instruction
+    pub fn get_bytes_to_check() -> usize {
+        *[
+            LidoV1::LEN,
+            Lido::LEN,
+            // it's enough to check only bytes for `a list of size 1` to be zero,
+            // otherwize the list won't be deserializable
+            ValidatorList::required_bytes(1),
+            MaintainerList::required_bytes(1),
+        ]
+        .iter()
+        .max()
+        .unwrap()
     }
 
     /// Confirm that the given account is Solido's stSOL mint.
@@ -1262,6 +1300,19 @@ pub struct Fees {
     pub st_sol_appreciation_amount: Lamports,
 }
 
+/// The different ways to stake some amount from the reserve.
+pub enum StakeDeposit {
+    /// Stake into a new stake account, and delegate the new account.
+    ///
+    /// This consumes the end seed of the validator's stake accounts.
+    Append,
+
+    /// Stake into temporary stake account, and immediately merge it.
+    ///
+    /// This merges into the stake account at `end_seed - 1`.
+    Merge,
+}
+
 /////////////////////////////////////////////////// OLD STATE ///////////////////////////////////////////////////
 
 /// An entry in `AccountMap`.
@@ -1317,6 +1368,8 @@ pub struct LidoV1 {
 }
 
 impl LidoV1 {
+    pub const LEN: usize = 353;
+
     pub fn deserialize_lido(
         program_id: &Pubkey,
         lido: &AccountInfo,
@@ -1739,7 +1792,7 @@ mod test_lido {
             let mut res: Vec<u8> = Vec::new();
             BorshSerialize::serialize(&lido, &mut res).unwrap();
 
-            assert_eq!(res[0], i);
+            assert_eq!(res[1], i);
 
             let lido_recovered = try_from_slice_unchecked(&res[..]).unwrap();
             assert_eq!(lido, lido_recovered);

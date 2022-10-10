@@ -1,6 +1,6 @@
 FROM chorusone/solido-base
 
-ENV SOLVERSION=1.8.16
+ENV SOLVERSION=1.9.28
 ENV SOLINSTALLCHECKSUM=08c092af36706e0556a0516e270171d9ea3683965246ee81d979e0c157a3864e
 ENV SOLPATH="/root/.local/share/solana/install/active_release/bin"
 ENV SOLIDOBUILDPATH="$SOLPATH/solido-build"
@@ -40,7 +40,6 @@ RUN cd $SOLIDOBUILDPATH \
 # Hash on-chain programs
 RUN cd $SOLIDORELEASEPATH/deploy \
     && sha256sum lido.so >> lido.hash \
-    && sha256sum anker.so >> anker.hash \
     && sha256sum serum_multisig.so >> serum_multisig.hash
 
 
@@ -50,4 +49,3 @@ RUN cd $SOLIDORELEASEPATH/cli \
     && sha256sum listener >> listener.hash
 
 WORKDIR $SOLPATH
-

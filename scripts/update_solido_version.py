@@ -24,10 +24,10 @@ Usage:
 
     # cretae developer account owner Fp572FrBjhWprtT7JF4CHgeLzPD9g8s2Ht7k5bdaWjwF
     # solana-keygen new --no-bip39-passphrase --silent --outfile ~/developer_fee_key.json
-    # solana --url localhost transfer --allow-unfunded-recipient Fp572FrBjhWprtT7JF4CHgeLzPD9g8s2Ht7k5bdaWjwF 1.0
+    solana --url localhost transfer --allow-unfunded-recipient ./tests/.keys/maintainer.json 32.0
 
     $cd ../solido
-    scripts/update_solido_version.py --config ../solido_test.json migrate-state --keypair-path ../solido_old/tests/.keys/maintainer.json > output
+    scripts/update_solido_version.py --config ../solido_test.json propose-migrate --keypair-path ../solido_old/tests/.keys/maintainer.json > output
 
     ./target/debug/solido --config ../solido_test.json --keypair-path ../solido_old/tests/.keys/maintainer.json multisig approve-batch --transaction-addresses-path output
 """
@@ -44,11 +44,15 @@ from typing import Any
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(SCRIPT_DIR))
 
-from tests.util import solido, solana  # type: ignore
+from tests.util import solido, solana, run  # type: ignore
 
 
 def eprint(*args: Any, **kwargs: Any) -> None:
     print(*args, file=sys.stderr, **kwargs)
+
+
+def get_signer() -> Any:
+    return run('solana-keygen', 'pubkey').strip()
 
 
 if __name__ == '__main__':
@@ -83,7 +87,7 @@ if __name__ == '__main__':
     )
 
     current_parser = subparsers.add_parser(
-        'migrate-state', help='Update solido state to a version 2'
+        'propose-migrate', help='Update solido state to a version 2'
     )
     current_parser.add_argument(
         "--keypair-path", type=str, help='Signer keypair path', required=True
@@ -166,7 +170,7 @@ if __name__ == '__main__':
             'multisig',
             'propose-upgrade',
             '--spill-address',
-            lido_state['reserve_account'],
+            get_signer(),
             '--buffer-address',
             write_result['buffer'],
             '--program-address',
@@ -175,21 +179,21 @@ if __name__ == '__main__':
         )
         print(propose_result['transaction_address'])
 
-    elif args.command == "migrate-state":
+    elif args.command == "propose-migrate":
         update_result = solido(
             '--config',
             args.config,
             'migrate-state-to-v2',
             '--developer-account-owner',
-            'Fp572FrBjhWprtT7JF4CHgeLzPD9g8s2Ht7k5bdaWjwF',
+            '2d7gxHrVHw2grzWBdRQcWS7T1r9KnaaGXZBtzPBbzHEF',
             '--st-sol-mint',
             config['st_sol_mint'],
             '--developer-fee-share',
-            '2',
+            '1',
             '--treasury-fee-share',
             '4',
             '--st-sol-appreciation-share',
-            '94',
+            '95',
             '--max-commission-percentage',
             '5',
             keypair_path=args.keypair_path,

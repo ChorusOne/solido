@@ -13,8 +13,8 @@ use crate::{
         UpdateStakeAccountBalanceInfo, WithdrawAccountsInfoV2,
     },
     logic::{
-        burn_st_sol, check_account_owner, check_account_uninitialized, check_mint,
-        check_rent_exempt, check_unstake_accounts, create_account_even_if_funded, distribute_fees,
+        burn_st_sol, check_account_data, check_account_owner, check_mint, check_rent_exempt,
+        check_unstake_accounts, create_account_even_if_funded, distribute_fees,
         initialize_stake_account_undelegated, mint_st_sol_to, split_stake_account,
         transfer_stake_authority, CreateAccountOptions, SplitStakeAccounts,
     },
@@ -28,7 +28,7 @@ use crate::{
     stake_account::{deserialize_stake_account, StakeAccount},
     state::{
         AccountType, ExchangeRate, FeeRecipients, Lido, LidoV1, ListEntry, Maintainer,
-        MaintainerList, RewardDistribution, Validator, ValidatorList,
+        MaintainerList, RewardDistribution, StakeDeposit, Validator, ValidatorList,
     },
     token::{Lamports, Rational, StLamports},
     MAXIMUM_UNSTAKE_ACCOUNTS, MINIMUM_STAKE_ACCOUNT_BALANCE, MINT_AUTHORITY, RESERVE_ACCOUNT,
@@ -56,7 +56,6 @@ use {
 
 /// Program state handler.
 pub fn process_initialize(
-    version: u8,
     program_id: &Pubkey,
     reward_distribution: RewardDistribution,
     max_validators: u32,
@@ -75,17 +74,14 @@ pub fn process_initialize(
     check_account_owner(accounts.validator_list, program_id)?;
     check_account_owner(accounts.maintainer_list, program_id)?;
 
-    check_account_uninitialized(accounts.lido, Lido::LEN, Lido::LEN, AccountType::Lido)?;
-    // it's enough to ckeck that first bytes needed for one list entry are zero
-    check_account_uninitialized(
+    check_account_data(accounts.lido, Lido::LEN, AccountType::Lido)?;
+    check_account_data(
         accounts.validator_list,
-        ValidatorList::required_bytes(1),
         ValidatorList::required_bytes(max_validators),
         AccountType::Validator,
     )?;
-    check_account_uninitialized(
+    check_account_data(
         accounts.maintainer_list,
-        MaintainerList::required_bytes(1),
         MaintainerList::required_bytes(max_maintainers),
         AccountType::Maintainer,
     )?;
@@ -109,12 +105,20 @@ pub fn process_initialize(
     let mut maintainers = MaintainerList::new_default(0);
     maintainers.header.max_entries = max_maintainers;
 
-    let (_, reserve_bump_seed) = Pubkey::find_program_address(
+    let (reserve_account_pda, reserve_bump_seed) = Pubkey::find_program_address(
         &[&accounts.lido.key.to_bytes(), RESERVE_ACCOUNT],
         program_id,
     );
+    if &reserve_account_pda != accounts.reserve_account.key {
+        msg!(
+            "Resrve account {} is incorrect, should be {}",
+            accounts.reserve_account.key,
+            reserve_account_pda
+        );
+        return Err(LidoError::IncorrectReserveAddress.into());
+    }
 
-    let (_, deposit_bump_seed) = Pubkey::find_program_address(
+    let (_, stake_bump_seed) = Pubkey::find_program_address(
         &[&accounts.lido.key.to_bytes(), STAKE_AUTHORITY],
         program_id,
     );
@@ -130,14 +134,14 @@ pub fn process_initialize(
 
     // Initialize fee structure
     let lido = Lido {
-        lido_version: version,
+        lido_version: Lido::VERSION,
         account_type: AccountType::Lido,
         manager: *accounts.manager.key,
         st_sol_mint: *accounts.st_sol_mint.key,
         exchange_rate: ExchangeRate::default(),
         sol_reserve_account_bump_seed: reserve_bump_seed,
         mint_authority_bump_seed: mint_bump_seed,
-        stake_authority_bump_seed: deposit_bump_seed,
+        stake_authority_bump_seed: stake_bump_seed,
         reward_distribution,
         fee_recipients: FeeRecipients {
             treasury_account: *accounts.treasury_account.key,
@@ -271,13 +275,46 @@ pub fn process_stake_deposit(
         return Err(LidoError::ValidatorWithLessStakeExists.into());
     }
 
+    let clock = Clock::get()?;
+
+    // Now we have two options:
+    //
+    // 1. This was the first time we stake in this epoch, so we cannot merge the
+    //    new account into anything. We need to delegate it, and "consume" the
+    //    new stake account at this seed.
+    //
+    // 2. There already exists an activating stake account for the validator,
+    //    and we can merge into it. The number of stake accounts does not change.
+    //
+    // We assume that the maintainer checked this, and we are in case 2 if the
+    // accounts passed differ, and in case 1 if they don't. Note, if the
+    // maintainer incorrectly opted for merge, the transaction will fail. If the
+    // maintainer incorrectly opted for append, we will consume one stake account
+    // that could have been avoided, but it can still be merged after activation.
+    let (approach, stake_account_end_authority) =
+        if accounts.stake_account_end.key == accounts.stake_account_merge_into.key {
+            (StakeDeposit::Append, VALIDATOR_STAKE_ACCOUNT.to_vec())
+        } else {
+            (
+                StakeDeposit::Merge,
+                // stake_account_end should be destroyed after a transaction, but a malicious
+                // maintainer could append an instruction to the transaction that
+                // transfers some SOL to this account and changes stake/withdraw authority thus making
+                // it a permanent account. This will make stake deposit fail. We create a temporary
+                // stake account tied to the current epoch so that stake account reviving could
+                // affect only the current epoch. And stake deposit should work in the next epoch after
+                // we remove the maintainer from Solido
+                [VALIDATOR_STAKE_ACCOUNT, &clock.epoch.to_le_bytes()[..]].concat(),
+            )
+        };
+
     let stake_account_bump_seed = Lido::check_stake_account(
         program_id,
         accounts.lido.key,
         validator,
         validator.stake_seeds.end,
         accounts.stake_account_end,
-        VALIDATOR_STAKE_ACCOUNT,
+        &stake_account_end_authority,
     )?;
 
     if accounts.stake_account_end.data.borrow().len() > 0 {
@@ -293,7 +330,7 @@ pub fn process_stake_deposit(
     let stake_account_seeds = &[
         accounts.lido.key.as_ref(),
         validator.vote_account_address.as_ref(),
-        VALIDATOR_STAKE_ACCOUNT,
+        &stake_account_end_authority,
         &stake_account_seed[..],
         &stake_account_bump_seed[..],
     ][..];
@@ -331,99 +368,88 @@ pub fn process_stake_deposit(
     validator.stake_accounts_balance = (validator.stake_accounts_balance + amount)?;
     validator.effective_stake_balance = validator.compute_effective_stake_balance();
 
-    // Now we have two options:
-    //
-    // 1. This was the first time we stake in this epoch, so we cannot merge the
-    //    new account into anything. We need to delegate it, and "consume" the
-    //    new stake account at this seed.
-    //
-    // 2. There already exists an activating stake account for the validator,
-    //    and we can merge into it. The number of stake accounts does not change.
-    //
-    // We assume that the maintainer checked this, and we are in case 2 if the
-    // accounts passed differ, and in case 1 if they don't. Note, if the
-    // maintainer incorrectly opted for merge, the transaction will fail. If the
-    // maintainer incorrectly opted for append, we will consume one stake account
-    // that could have been avoided, but it can still be merged after activation.
-    if accounts.stake_account_end.key == accounts.stake_account_merge_into.key {
+    match approach {
         // Case 1: we delegate, and we don't touch `stake_account_merge_into`.
-        msg!(
-            "Delegating stake account at seed {} ...",
-            validator.stake_seeds.end
-        );
-        invoke_signed(
-            &stake_program::instruction::delegate_stake(
+        StakeDeposit::Append => {
+            msg!(
+                "Delegating stake account at seed {} ...",
+                validator.stake_seeds.end
+            );
+            invoke_signed(
+                &stake_program::instruction::delegate_stake(
+                    accounts.stake_account_end.key,
+                    accounts.stake_authority.key,
+                    accounts.validator_vote_account.key,
+                ),
+                &[
+                    accounts.stake_account_end.clone(),
+                    accounts.validator_vote_account.clone(),
+                    accounts.sysvar_clock.clone(),
+                    accounts.stake_history.clone(),
+                    accounts.stake_program_config.clone(),
+                    accounts.stake_authority.clone(),
+                    accounts.stake_program.clone(),
+                ],
+                &[&[
+                    accounts.lido.key.as_ref(),
+                    STAKE_AUTHORITY,
+                    &[lido.stake_authority_bump_seed],
+                ]],
+            )?;
+
+            // We now consumed this stake account, bump the index.
+            validator.stake_seeds.end += 1;
+        }
+        StakeDeposit::Merge => {
+            // Case 2: Merge the new undelegated stake account into the existing one.
+            if validator.stake_seeds.end <= validator.stake_seeds.begin {
+                msg!("Can only stake-merge if there is at least one stake account to merge into.");
+                return Err(LidoError::InvalidStakeAccount.into());
+            }
+            Lido::check_stake_account(
+                program_id,
+                accounts.lido.key,
+                validator,
+                // Does not underflow, because end > begin >= 0.
+                validator.stake_seeds.end - 1,
+                accounts.stake_account_merge_into,
+                VALIDATOR_STAKE_ACCOUNT,
+            )?;
+            // The stake program checks that the two accounts can be merged; if we
+            // tried to merge, but the epoch is different, then this will fail.
+            msg!(
+                "Merging into existing stake account at seed {} ...",
+                validator.stake_seeds.end - 1
+            );
+            let merge_instructions = stake_program::instruction::merge(
+                accounts.stake_account_merge_into.key,
                 accounts.stake_account_end.key,
                 accounts.stake_authority.key,
-                accounts.validator_vote_account.key,
-            ),
-            &[
-                accounts.stake_account_end.clone(),
-                accounts.validator_vote_account.clone(),
-                accounts.sysvar_clock.clone(),
-                accounts.stake_history.clone(),
-                accounts.stake_program_config.clone(),
-                accounts.stake_authority.clone(),
-                accounts.stake_program.clone(),
-            ],
-            &[&[
-                accounts.lido.key.as_ref(),
-                STAKE_AUTHORITY,
-                &[lido.stake_authority_bump_seed],
-            ]],
-        )?;
+            );
+            // For some reason, `merge` returns a `Vec` of instructions, but when
+            // you look at the implementation, it unconditionally returns a single
+            // instruction.
+            assert_eq!(merge_instructions.len(), 1);
+            let merge_instruction = &merge_instructions[0];
 
-        // We now consumed this stake account, bump the index.
-        validator.stake_seeds.end += 1;
-    } else {
-        // Case 2: Merge the new undelegated stake account into the existing one.
-        if validator.stake_seeds.end <= validator.stake_seeds.begin {
-            msg!("Can only stake-merge if there is at least one stake account to merge into.");
-            return Err(LidoError::InvalidStakeAccount.into());
+            invoke_signed(
+                merge_instruction,
+                &[
+                    accounts.stake_account_merge_into.clone(),
+                    accounts.stake_account_end.clone(),
+                    accounts.sysvar_clock.clone(),
+                    accounts.stake_history.clone(),
+                    accounts.stake_authority.clone(),
+                    accounts.stake_program.clone(),
+                ],
+                &[&[
+                    accounts.lido.key.as_ref(),
+                    STAKE_AUTHORITY,
+                    &[lido.stake_authority_bump_seed],
+                ]],
+            )?;
         }
-        Lido::check_stake_account(
-            program_id,
-            accounts.lido.key,
-            validator,
-            // Does not underflow, because end > begin >= 0.
-            validator.stake_seeds.end - 1,
-            accounts.stake_account_merge_into,
-            VALIDATOR_STAKE_ACCOUNT,
-        )?;
-        // The stake program checks that the two accounts can be merged; if we
-        // tried to merge, but the epoch is different, then this will fail.
-        msg!(
-            "Merging into existing stake account at seed {} ...",
-            validator.stake_seeds.end - 1
-        );
-        let merge_instructions = stake_program::instruction::merge(
-            accounts.stake_account_merge_into.key,
-            accounts.stake_account_end.key,
-            accounts.stake_authority.key,
-        );
-        // For some reason, `merge` returns a `Vec` of instructions, but when
-        // you look at the implementation, it unconditionally returns a single
-        // instruction.
-        assert_eq!(merge_instructions.len(), 1);
-        let merge_instruction = &merge_instructions[0];
-
-        invoke_signed(
-            merge_instruction,
-            &[
-                accounts.stake_account_merge_into.clone(),
-                accounts.stake_account_end.clone(),
-                accounts.sysvar_clock.clone(),
-                accounts.stake_history.clone(),
-                accounts.stake_authority.clone(),
-                accounts.stake_program.clone(),
-            ],
-            &[&[
-                accounts.lido.key.as_ref(),
-                STAKE_AUTHORITY,
-                &[lido.stake_authority_bump_seed],
-            ]],
-        )?;
-    }
+    };
 
     Ok(())
 }
@@ -781,12 +807,6 @@ pub fn process_update_stake_account_balance(
         "Stake",
     )?;
 
-    // We tracked in `stake_accounts_balance` what we put in there ourselves, so
-    // the excess is a sum of a donation by some joker and staking rewards.
-    let donation = (stake_observed_total - validator.effective_stake_balance)
-        .expect("Does not underflow because observed_total >= stake_accounts_balance.");
-    msg!("{} in donations observed.", donation);
-
     // Try to withdraw from unstake accounts.
     let mut unstake_removed = Lamports(0);
     let mut unstake_observed_total = Lamports(0);
@@ -847,6 +867,7 @@ pub fn process_update_stake_account_balance(
     let stake_total_with_rewards = (stake_observed_total + unstake_observed_total)?;
     let rewards = (stake_total_with_rewards - validator.stake_accounts_balance)
         .expect("Does not underflow, because tracked balance <= total.");
+    msg!("received rewards and donations {}.", rewards);
 
     // Store the new total. If we withdrew any inactive stake back to the
     // reserve, that is now no longer part of the stake accounts, so subtract
@@ -903,6 +924,11 @@ pub fn process_withdraw(
     // With effective here we mean "total in stake accounts" - "total in unstake
     // accounts", regardless of whether the stake in those accounts is active or not.
     let validator = validators.get_mut(validator_index, accounts.validator_vote_account.key)?;
+
+    if validator.effective_stake_balance == Lamports(0) {
+        msg!("Validator {} has no stake", validator.pubkey());
+        return Err(LidoError::ValidatorHasNoStake.into());
+    }
 
     // Note that we compare balances, not keys, because the maximum might not be unique.
     if validator.effective_stake_balance < maximum_stake_balance {
@@ -1031,16 +1057,13 @@ pub fn processor_migrate_to_v2(
     check_account_owner(accounts.validator_list, program_id)?;
     check_account_owner(accounts.maintainer_list, program_id)?;
 
-    // it's enough to ckeck that first bytes needed for one list entry are zero
-    check_account_uninitialized(
+    check_account_data(
         accounts.validator_list,
-        ValidatorList::required_bytes(1),
         ValidatorList::required_bytes(max_validators),
         AccountType::Validator,
     )?;
-    check_account_uninitialized(
+    check_account_data(
         accounts.maintainer_list,
-        MaintainerList::required_bytes(1),
         MaintainerList::required_bytes(max_maintainers),
         AccountType::Maintainer,
     )?;
@@ -1119,7 +1142,6 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
             max_maintainers,
             max_commission_percentage,
         } => process_initialize(
-            Lido::VERSION,
             program_id,
             reward_distribution,
             max_validators,

@@ -42,6 +42,8 @@ pub(crate) fn check_mint(
     mint: &AccountInfo,
     mint_authority: &Pubkey,
 ) -> Result<(), ProgramError> {
+    check_account_owner(mint, &spl_token::id())?;
+
     if !rent.is_exempt(mint.lamports(), mint.data_len()) {
         msg!("Mint is not rent-exempt");
         return Err(ProgramError::AccountNotRentExempt);
@@ -67,6 +69,15 @@ pub(crate) fn check_mint(
         msg!("Mint should have an authority.");
         return Err(LidoError::InvalidMint.into());
     }
+
+    if let COption::Some(authority) = spl_mint.freeze_authority {
+        msg!(
+            "Mint should not have a freeze authority, but it is set to {}.",
+            authority
+        );
+        return Err(LidoError::InvalidMint.into());
+    }
+
     Ok(())
 }
 
@@ -504,13 +515,16 @@ pub fn split_stake_account(
     Ok(())
 }
 
-/// Check account data is uninitialized and allocated size is correct.
-pub fn check_account_uninitialized(
+/// Check first bytes are zeros, zero remaining bytes and check allocated size is correct.
+pub fn check_account_data(
     account: &AccountInfo,
-    bytes_to_check: usize,
     expected_size: usize,
     account_type: AccountType,
 ) -> ProgramResult {
+    // Take minimum to stay in a slice bounds and be under compute budget
+    let bytes_to_check = std::cmp::min(account.data_len(), Lido::get_bytes_to_check());
+
+    // Can't check all bytes because of compute limit
     if !&account.data.borrow()[..bytes_to_check]
         .iter()
         .all(|byte| *byte == 0)
@@ -521,6 +535,9 @@ pub fn check_account_uninitialized(
         );
         return Err(LidoError::AlreadyInUse.into());
     }
+
+    // zero out remaining bytes
+    account.data.borrow_mut()[bytes_to_check..].fill(0);
 
     if account.data_len() < expected_size {
         msg!(

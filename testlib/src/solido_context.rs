@@ -26,21 +26,18 @@ use solana_sdk::transport;
 use solana_sdk::transport::TransportError;
 use solana_vote_program::vote_instruction;
 use solana_vote_program::vote_state::{VoteInit, VoteState};
-use std::sync::Once;
 
-use anker::error::AnkerError;
 use lido::processor::StakeType;
 use lido::stake_account::StakeAccount;
 use lido::token::{Lamports, StLamports};
 use lido::{error::LidoError, instruction, RESERVE_ACCOUNT, STAKE_AUTHORITY};
 use lido::{
     state::{
-        AccountList, FeeRecipients, Lido, ListEntry, Maintainer, RewardDistribution, Validator,
+        AccountList, FeeRecipients, Lido, ListEntry, Maintainer, RewardDistribution, StakeDeposit,
+        Validator,
     },
     MINT_AUTHORITY,
 };
-
-static INIT: Once = Once::new();
 
 pub struct DeterministicKeypairGen {
     rng: StdRng,
@@ -104,6 +101,7 @@ pub struct Context {
 pub struct ValidatorAccounts {
     pub node_account: Keypair,
     pub vote_account: Pubkey,
+    pub withdraw_authority: Keypair,
 }
 
 /// Sign and send a transaction with a fresh block hash.
@@ -176,31 +174,9 @@ pub async fn send_transaction(
             ),
             None => println!("This error is not a known Solido error."),
         }
-        // Even though this is the Solido context, we also check for the Anker error,
-        // because the Anker context builds on this.
-        match AnkerError::from_u32(error_code) {
-            Some(err) => println!(
-                "If this error originated from Anker, it was this variant: {:?}",
-                err,
-            ),
-            None => println!("This error is not a known Anker error."),
-        }
     }
 
     result
-}
-
-/// The different ways to stake some amount from the reserve.
-pub enum StakeDeposit {
-    /// Stake into a new stake account, and delegate the new account.
-    ///
-    /// This consumes the end seed of the validator's stake accounts.
-    Append,
-
-    /// Stake into temporary stake account, and immediately merge it.
-    ///
-    /// This merges into the stake account at `end_seed - 1`.
-    Merge,
 }
 
 #[derive(PartialEq, Debug)]
@@ -247,24 +223,6 @@ impl Context {
             "lido",
             crate::solido_context::id(),
             processor!(lido::processor::process),
-        );
-        program_test.add_program(
-            "anker",
-            crate::anker_context::id(),
-            processor!(anker::processor::process),
-        );
-
-        // Add the actual Orca token swap program, so we test against the real thing.
-        // If we don't have it locally, download it from the chain.
-        INIT.call_once(|| {
-            // call it once so that Solana rpc would not block us by IP
-            crate::util::ensure_orca_program_exists();
-        });
-        program_test.add_program("orca_token_swap_v2", anker::orca_token_swap_v2::id(), None);
-        program_test.add_program(
-            "orca_token_swap_v2",
-            anker::orca_token_swap_v2_fake::id(),
-            None,
         );
 
         let mut result = Self {
@@ -763,10 +721,11 @@ impl Context {
     /// Create a new key pair and add it as maintainer.
     pub async fn add_validator(&mut self) -> ValidatorAccounts {
         let node_account = self.deterministic_keypair.new_keypair();
+        let withdraw_authority = self.deterministic_keypair.new_keypair();
         let vote_account = self
             .create_vote_account(
                 &node_account,
-                Pubkey::new_unique(),
+                withdraw_authority.pubkey(),
                 self.max_commission_percentage,
             )
             .await;
@@ -774,6 +733,7 @@ impl Context {
         let accounts = ValidatorAccounts {
             node_account,
             vote_account,
+            withdraw_authority,
         };
 
         self.try_add_validator(&accounts)
@@ -934,25 +894,36 @@ impl Context {
             .expect("Trying to stake with a non-member validator.");
 
         let validator_index = solido.validators.position(&validator_vote_account).unwrap();
-        let (stake_account_end, _) = validator.find_stake_account_address(
-            &id(),
-            &self.solido.pubkey(),
-            validator.stake_seeds.end,
-            StakeType::Stake,
-        );
+        let (stake_account_end, stake_account_merge_into) = match approach {
+            StakeDeposit::Append => {
+                let (stake_account_end, _) = validator.find_stake_account_address(
+                    &id(),
+                    &self.solido.pubkey(),
+                    validator.stake_seeds.end,
+                    StakeType::Stake,
+                );
+                (stake_account_end, stake_account_end)
+            }
+            StakeDeposit::Merge => {
+                let (stake_account_end, _) = validator.find_temporary_stake_account_address(
+                    &id(),
+                    &self.solido.pubkey(),
+                    validator.stake_seeds.end,
+                    self.get_clock().await.epoch,
+                );
 
-        let (stake_account_merge_into, _) = validator.find_stake_account_address(
-            &id(),
-            &self.solido.pubkey(),
-            match approach {
-                StakeDeposit::Append => validator.stake_seeds.end,
-                // We do a wrapping sub here, so we can call stake-merge initially,
-                // when end is 0, such that the account to merge into is not the
-                // same as the end account.
-                StakeDeposit::Merge => validator.stake_seeds.end.wrapping_sub(1),
-            },
-            StakeType::Stake,
-        );
+                let (stake_account_merge_into, _) = validator.find_stake_account_address(
+                    &id(),
+                    &self.solido.pubkey(),
+                    // We do a wrapping sub here, so we can call stake-merge initially,
+                    // when end is 0, such that the account to merge into is not the
+                    // same as the end account.
+                    validator.stake_seeds.end.wrapping_sub(1),
+                    StakeType::Stake,
+                );
+                (stake_account_end, stake_account_merge_into)
+            }
+        };
 
         let maintainer = self
             .maintainer
@@ -1425,6 +1396,26 @@ impl Context {
                 ),
             ],
             vec![],
+        )
+        .await
+    }
+
+    pub async fn try_close_vote_account(
+        &mut self,
+        vote_account: &Pubkey,
+        withdraw_authority: &Keypair,
+    ) -> transport::Result<()> {
+        let vote_info = self.get_account(*vote_account).await;
+
+        send_transaction(
+            &mut self.context,
+            &[solana_vote_program::vote_instruction::withdraw(
+                vote_account,
+                &withdraw_authority.pubkey(),
+                vote_info.lamports,
+                &Pubkey::new_unique(),
+            )],
+            vec![withdraw_authority],
         )
         .await
     }

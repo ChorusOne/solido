@@ -155,7 +155,6 @@ if __name__ == '__main__':
             ['test', '--no-run', '--manifest-path', 'cli/maintainer/Cargo.toml']
         ),
         *build_binaries(['test', '--no-run', '--manifest-path', 'program/Cargo.toml']),
-        *build_binaries(['test', '--no-run', '--manifest-path', 'anker/Cargo.toml']),
         *build_binaries(['build']),
     ]
 

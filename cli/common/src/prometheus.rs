@@ -5,7 +5,6 @@
 //!
 //! See also <https://prometheus.io/docs/instrumenting/exposition_formats/#text-based-format>.
 
-use anker::token::{BLamports, MicroUst};
 use lido::metrics::{LamportsHistogram, Metrics};
 use lido::token::{Lamports, StLamports};
 use std::io;
@@ -88,18 +87,6 @@ impl<'a> Metric<'a> {
     /// Construct a metric that measures an amount of stSOL.
     pub fn new_st_sol(amount: StLamports) -> Metric<'a> {
         // One stLamport is 1e-9 stSOL, so we use nano here.
-        Metric::new(MetricValue::Nano(amount.0))
-    }
-
-    /// Construct a metric that measures an amount of UST.
-    pub fn new_ust(amount: MicroUst) -> Metric<'a> {
-        // One microUst is 1e-6 UST, so we use micro here.
-        Metric::new(MetricValue::Micro(amount.0))
-    }
-
-    /// Construct a metric that measures an amount of bSOL.
-    pub fn new_b_sol(amount: BLamports) -> Metric<'a> {
-        // One bLamports is 1e-9 bSOL, so we use nano here.
         Metric::new(MetricValue::Nano(amount.0))
     }
 
@@ -320,91 +307,6 @@ pub fn write_solido_metrics_as_prometheus<W: io::Write>(
             help: "Total amount of stSOL that users returned to us for withdrawals.",
             type_: "counter",
             metrics: vec![Metric::new_st_sol(metrics.withdraw_amount.total_st_sol_amount).at(at)],
-        },
-    )?;
-
-    Ok(())
-}
-
-pub fn write_anker_metrics_as_prometheus<W: io::Write>(
-    metrics: &anker::metrics::Metrics,
-    at: SystemTime,
-    out: &mut W,
-) -> io::Result<()> {
-    write_metric(
-        out,
-        &MetricFamily {
-            name: "anker_swapped_rewards_st_sol_total",
-            help: "Total amount of stSOL rewards swapped by our Anker instance.",
-            type_: "gauge",
-            metrics: vec![Metric::new_st_sol(metrics.swapped_rewards_st_sol_total).at(at)],
-        },
-    )?;
-    write_metric(
-        out,
-        &MetricFamily {
-            name: "anker_swapped_rewards_ust_total",
-            help: "Total amount of UST rewards swapped by our Anker instance.",
-            type_: "gauge",
-            metrics: vec![Metric::new_ust(metrics.swapped_rewards_ust_total).at(at)],
-        },
-    )?;
-
-    // Deposit metrics
-    write_metric(
-        out,
-        &MetricFamily {
-            name: "anker_deposit_st_sol_total",
-            help: "Total amount stSOL deposited into Anker",
-            type_: "gauge",
-            metrics: vec![Metric::new_st_sol(metrics.deposit_metric.st_sol_total).at(at)],
-        },
-    )?;
-    write_metric(
-        out,
-        &MetricFamily {
-            name: "anker_deposit_b_sol_total",
-            help: "Total amount bSOL minted in response to a deposit into Anker",
-            type_: "gauge",
-            metrics: vec![Metric::new_b_sol(metrics.deposit_metric.b_sol_total).at(at)],
-        },
-    )?;
-    write_metric(
-        out,
-        &MetricFamily {
-            name: "anker_deposit_count_total",
-            help: "Total number of deposits made by users on Anker.",
-            type_: "gauge",
-            metrics: vec![Metric::new(metrics.deposit_metric.count).at(at)],
-        },
-    )?;
-
-    // Withdraw metrics
-    write_metric(
-        out,
-        &MetricFamily {
-            name: "anker_withdraw_st_sol_total",
-            help: "Total amount of stSOL withdrawn in response from burning bSOL from Anker",
-            type_: "gauge",
-            metrics: vec![Metric::new_st_sol(metrics.withdraw_metric.st_sol_total).at(at)],
-        },
-    )?;
-    write_metric(
-        out,
-        &MetricFamily {
-            name: "anker_withdraw_b_sol_total",
-            help: "Total amount of bSOL burned in response from withdrawing stSOL from Anker",
-            type_: "gauge",
-            metrics: vec![Metric::new_b_sol(metrics.withdraw_metric.b_sol_total).at(at)],
-        },
-    )?;
-    write_metric(
-        out,
-        &MetricFamily {
-            name: "anker_withdraw_count_total",
-            help: "Total number of withdrawals made by users on Anker.",
-            type_: "gauge",
-            metrics: vec![Metric::new(metrics.withdraw_metric.count).at(at)],
         },
     )?;
 

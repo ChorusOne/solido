@@ -8,11 +8,6 @@ use std::fmt;
 use std::io;
 use std::time::SystemTime;
 
-use anker::{
-    logic::get_one_st_sol_for_ust_price_from_pool,
-    state::{POOL_PRICE_MAX_SAMPLE_AGE, POOL_PRICE_MIN_SAMPLE_DISTANCE},
-    token::MicroUst,
-};
 use itertools::izip;
 
 use serde::Serialize;
@@ -29,10 +24,12 @@ use solana_sdk::{
     fee_calculator::DEFAULT_TARGET_LAMPORTS_PER_SIGNATURE,
     instruction::Instruction,
     signer::{keypair::Keypair, Signer},
+    stake::state::StakeState,
 };
 use solana_vote_program::vote_state::VoteState;
 use solido_cli_common::{
-    error::MaintenanceError, snapshot::SnapshotConfig, validator_info_utils::ValidatorInfo, Result,
+    error::MaintenanceError, snapshot::SnapshotConfig, snapshot::SnapshotError,
+    validator_info_utils::ValidatorInfo, Result,
 };
 use spl_token::state::Mint;
 
@@ -47,9 +44,7 @@ use lido::{
     util::serialize_b58,
     MINIMUM_STAKE_ACCOUNT_BALANCE, MINT_AUTHORITY, STAKE_AUTHORITY,
 };
-use spl_token_swap::curve::calculator::{CurveCalculator, TradeDirection};
 
-use crate::anker_state::AnkerState;
 use crate::config::{PerformMaintenanceOpts, StakeTime};
 
 /// A brief description of the maintenance performed. Not relevant functionally,
@@ -69,7 +64,7 @@ pub enum MaintenanceOutput {
 
     UpdateExchangeRate,
 
-    WithdrawInactiveStake {
+    UpdateStakeAccountBalance {
         /// The vote account of the validator that we want to update.
         #[serde(serialize_with = "serialize_b58")]
         validator_vote_account: Pubkey,
@@ -78,7 +73,7 @@ pub enum MaintenanceOutput {
         ///
         /// This is only an expected value, because a different transaction might
         /// execute between us observing the state and concluding that there is
-        /// a difference, and our `WithdrawInactiveStake` instruction executing.
+        /// a difference, and our `UpdateStakeAccountBalance` instruction executing.
         #[serde(rename = "expected_difference_stake_lamports")]
         expected_difference_stake: Lamports,
 
@@ -107,16 +102,6 @@ pub enum MaintenanceOutput {
         validator_vote_account: Pubkey,
     },
     UnstakeFromActiveValidator(Unstake),
-
-    FetchPoolPrice {
-        #[serde(rename = "st_sol_price_in_micro_ust")]
-        expected_st_sol_price_in_ust: MicroUst,
-    },
-
-    SellRewards {
-        #[serde(rename = "st_sol_amount_st_lamports")]
-        st_sol_amount: StLamports,
-    },
 }
 
 #[derive(Debug, Eq, PartialEq, Serialize)]
@@ -170,12 +155,12 @@ impl fmt::Display for MaintenanceOutput {
             MaintenanceOutput::UpdateExchangeRate => {
                 writeln!(f, "Updated exchange rate.")?;
             }
-            MaintenanceOutput::WithdrawInactiveStake {
+            MaintenanceOutput::UpdateStakeAccountBalance {
                 validator_vote_account,
                 expected_difference_stake,
                 unstake_withdrawn_to_reserve,
             } => {
-                writeln!(f, "Withdrew inactive stake.")?;
+                writeln!(f, "Updated stake account balance.")?;
                 writeln!(
                     f,
                     "  Validator vote account:        {}",
@@ -234,20 +219,6 @@ impl fmt::Display for MaintenanceOutput {
                 )?;
                 writeln!(f, "  Validator vote account: {}", validator_vote_account)?;
             }
-            MaintenanceOutput::SellRewards { st_sol_amount } => {
-                writeln!(f, "Sell stSOL rewards")?;
-                writeln!(f, "  Amount:               {}", st_sol_amount)?;
-            }
-            MaintenanceOutput::FetchPoolPrice {
-                expected_st_sol_price_in_ust,
-            } => {
-                writeln!(f, "Fetch Pool Price")?;
-                writeln!(
-                    f,
-                    "  Expected amount per stSOL: {}",
-                    expected_st_sol_price_in_ust
-                )?;
-            }
         }
         Ok(())
     }
@@ -294,9 +265,6 @@ pub struct SolidoState {
     pub solido_address: Pubkey,
     pub solido: Lido,
 
-    /// Anker parameters
-    pub anker_state: Option<AnkerState>,
-
     /// For each validator, in the same order as in `solido.validators`, holds
     /// the stake balance of the derived stake accounts from the begin seed until
     /// end seed.
@@ -311,8 +279,8 @@ pub struct SolidoState {
     pub validator_vote_account_balances: Vec<Lamports>,
 
     /// For each validator, in the same order as in `solido.validators`, holds
-    /// the deserialized vote account.
-    pub validator_vote_accounts: Vec<VoteState>,
+    /// the deserialized vote account or None if vote account is closed.
+    pub validator_vote_accounts: Vec<Option<VoteState>>,
 
     /// For each validator, in the same order as in `solido.validators`, holds
     /// the balance of the validator's identity account (which pays for the
@@ -457,7 +425,6 @@ impl SolidoState {
     pub fn new(
         config: &mut SnapshotConfig,
         solido_program_id: &Pubkey,
-        anker_program_id: &Pubkey,
         solido_address: &Pubkey,
         stake_time: StakeTime,
     ) -> Result<SolidoState> {
@@ -488,16 +455,34 @@ impl SolidoState {
         let mut validator_vote_accounts = Vec::new();
         let mut validator_infos = Vec::new();
         for validator in validators.entries.iter() {
-            let vote_account = config.client.get_account(validator.pubkey())?;
-            let vote_state = config.client.get_vote_account(validator.pubkey())?;
-            let validator_info = config.client.get_validator_info(&vote_state.node_pubkey)?;
-            let identity_account = config.client.get_account(&vote_state.node_pubkey)?;
-            validator_vote_accounts.push(vote_state);
-            validator_vote_account_balances
-                .push(get_account_balance_except_rent(&rent, vote_account));
-            validator_identity_account_balances
-                .push(get_account_balance_except_rent(&rent, identity_account));
-            validator_infos.push(validator_info);
+            match config.client.get_account(validator.pubkey()) {
+                Ok(vote_account) => {
+                    let vote_state = config.client.get_vote_account(validator.pubkey())?;
+
+                    // prometheus
+                    validator_vote_account_balances
+                        .push(get_account_balance_except_rent(&rent, vote_account));
+                    let validator_info =
+                        config.client.get_validator_info(&vote_state.node_pubkey)?;
+                    let identity_account = config.client.get_account(&vote_state.node_pubkey)?;
+                    validator_identity_account_balances
+                        .push(get_account_balance_except_rent(&rent, identity_account));
+                    validator_infos.push(validator_info);
+
+                    validator_vote_accounts.push(Some(vote_state));
+                }
+                Err(err) => match err {
+                    SnapshotError::OtherError(_) => {
+                        // Vote account will not exist if it was closed by node operator.
+                        // It is possible to close a vote account only with inactive stake
+                        // or with no stake, in first case the stake will be withdrawn to
+                        // a reserve and in both cases the validator will be removed
+                        // by a maintainer
+                        validator_vote_accounts.push(None);
+                    }
+                    other => return Err(other),
+                },
+            };
 
             validator_stake_accounts.push(get_validator_stake_accounts(
                 config,
@@ -531,25 +516,11 @@ impl SolidoState {
         // program does that anyway.
         let maintainer_address = config.signer.pubkey();
 
-        let anker_state = if anker_program_id == &Pubkey::default() {
-            None
-        } else {
-            let (anker_address, _bump_seed) =
-                anker::find_instance_address(anker_program_id, solido_address);
-            Some(AnkerState::new(
-                config,
-                anker_program_id,
-                &anker_address,
-                &solido,
-            )?)
-        };
-
         Ok(SolidoState {
             produced_at: SystemTime::now(),
             solido_program_id: *solido_program_id,
             solido_address: *solido_address,
             solido,
-            anker_state,
             validator_stake_accounts,
             validator_unstake_accounts,
             validator_vote_account_balances,
@@ -603,13 +574,6 @@ impl SolidoState {
 
         let validator = &self.validators.entries[validator_index];
 
-        let (stake_account_end, _bump_seed_end) = validator.find_stake_account_address(
-            &self.solido_program_id,
-            &self.solido_address,
-            validator.stake_seeds.end,
-            StakeType::Stake,
-        );
-
         // Top up the validator to at most its target. If that means we don't use the full
         // reserve, a future maintenance run will stake the remainder with the next validator.
         let mut amount_to_deposit = amount_below_target.min(reserve_balance);
@@ -634,10 +598,31 @@ impl SolidoState {
         // activated in the current epoch. If merging is not possible, then we
         // set `account_merge_into` to the same account as `end`, to signal that
         // we shouldn't merge.
-        let account_merge_into = match self.validator_stake_accounts[validator_index].last() {
-            Some((addr, account)) if account.activation_epoch == self.clock.epoch => *addr,
-            _ => stake_account_end,
-        };
+        let (stake_account_end, account_merge_into) =
+            match self.validator_stake_accounts[validator_index].last() {
+                // Merge
+                Some((addr, account)) if account.activation_epoch == self.clock.epoch => {
+                    let (stake_account_end, _) = validator.find_temporary_stake_account_address(
+                        &self.solido_program_id,
+                        &self.solido_address,
+                        validator.stake_seeds.end,
+                        self.clock.epoch,
+                    );
+
+                    (stake_account_end, *addr)
+                }
+                // Append
+                _ => {
+                    let (stake_account_end, _) = validator.find_stake_account_address(
+                        &self.solido_program_id,
+                        &self.solido_address,
+                        validator.stake_seeds.end,
+                        StakeType::Stake,
+                    );
+
+                    (stake_account_end, stake_account_end)
+                }
+            };
 
         let maintainer_index = self.maintainers.position(&self.maintainer_address)?;
 
@@ -749,7 +734,8 @@ impl SolidoState {
         None
     }
 
-    /// If there is a validator which exceeded commission limit, try to deactivate it.
+    /// If there is a validator which exceeded commission limit or it's vote account is closed,
+    /// try to deactivate it.
     pub fn try_deactivate_validator_if_commission_exceeds_max(
         &self,
     ) -> Option<MaintenanceInstruction> {
@@ -760,9 +746,17 @@ impl SolidoState {
             .zip(self.validator_vote_accounts.iter())
             .enumerate()
         {
-            // We are only interested in validators that violate commission limit
-            if !validator.active || vote_state.commission <= self.solido.max_commission_percentage {
+            if !validator.active {
                 continue;
+            }
+
+            // We are only interested in validators that violate commission limit
+            if let Some(state) = vote_state {
+                if state.commission <= self.solido.max_commission_percentage {
+                    continue;
+                }
+            } else {
+                // Vote account is closed
             }
 
             let task = MaintenanceOutput::DeactivateValidatorIfCommissionExceedsMax {
@@ -806,115 +800,6 @@ impl SolidoState {
             return Some(MaintenanceInstruction::new(instruction, task));
         }
         None
-    }
-
-    /// Get the amount of rewards we can sell in Anker.
-    fn get_anker_rewards(&self) -> Option<StLamports> {
-        let anker_state = self.anker_state.as_ref()?;
-        let reserve_st_sol = anker_state.st_sol_reserve_balance;
-        let st_sol_amount = self
-            .solido
-            .exchange_rate
-            .exchange_sol(Lamports(anker_state.b_sol_total_supply_amount.0))
-            .expect("It will not overflow because we always have less than the total amount of minted Sol.");
-
-        (reserve_st_sol - st_sol_amount).ok()
-    }
-
-    /// Try to sell the extra stSOL rewards for UST tokens or
-    /// to update the historical pool price exchange rate to protect us
-    /// against sandwiching attacks.
-    pub fn try_sell_anker_rewards(&self) -> Option<MaintenanceInstruction> {
-        let anker_state = self.anker_state.as_ref()?;
-
-        let rewards = self.get_anker_rewards()?;
-        let min_rewards_to_sell = self
-            .solido
-            .exchange_rate
-            .exchange_sol(Self::MINIMUM_WITHDRAW_AMOUNT)
-            .expect("The price of a signature should be small enough that it doesn't overflow.");
-        // We should not call the instruction if the rewards are 0, or if the rewards are so small
-        // that the transaction cost is a significant portion of the rewards.
-        if rewards < min_rewards_to_sell {
-            return None;
-        }
-
-        // Fees as in the `spl_token_swap` `SwapCurve::swap` calculation.
-        let trade_fee = anker_state.pool_fees.trading_fee(rewards.0 as u128)?;
-        let owner_fee = anker_state.pool_fees.owner_trading_fee(rewards.0 as u128)?;
-
-        let total_fees = trade_fee.checked_add(owner_fee)?;
-        let rewards_minus_fees = (rewards.0 as u128).checked_sub(total_fees)?;
-
-        let expected_proceeds = anker_state
-            .constant_product_calculator
-            .swap_without_fees(
-                rewards_minus_fees,
-                anker_state.pool_st_sol_balance.0 as u128,
-                anker_state.pool_ust_balance.0 as u128,
-                TradeDirection::AtoB,
-            )?
-            .destination_amount_swapped;
-        let expected_proceeds = MicroUst(expected_proceeds as u64);
-
-        // We want at least 0.01 UST out if we are going to do the swap at all.
-        let min_proceeds = MicroUst(10_000);
-        if expected_proceeds < min_proceeds {
-            return None;
-        }
-
-        // Check if we can sell the rewards with the preset slippage tolerance.
-        // Note that this might change when the instruction gets included in the block.
-        let minimum_ust_amount_for_rewards = anker_state
-            .anker
-            .historical_st_sol_prices
-            .minimum_ust_swap_amount(rewards, anker_state.anker.sell_rewards_min_out_bps)
-            .ok()?;
-        if expected_proceeds < minimum_ust_amount_for_rewards {
-            return None;
-        }
-
-        let oldest_price_sample = anker_state.anker.historical_st_sol_prices.first();
-        let slots_elapsed_since_oldest_sample =
-            self.clock.slot.saturating_sub(oldest_price_sample.slot);
-
-        let youngest_sample = anker_state.anker.historical_st_sol_prices.last();
-        let slots_elapsed_since_youngest_sample =
-            self.clock.slot.saturating_sub(youngest_sample.slot);
-
-        // If the youngest sample is too recent, we are not yet allowed to sell
-        // rewards or update the price.
-        if slots_elapsed_since_youngest_sample < POOL_PRICE_MIN_SAMPLE_DISTANCE {
-            return None;
-        }
-
-        // Time to update the historical price
-        if slots_elapsed_since_oldest_sample > POOL_PRICE_MAX_SAMPLE_AGE
-            || oldest_price_sample.slot == 0
-        {
-            let expected_st_sol_price_in_ust = get_one_st_sol_for_ust_price_from_pool(
-                &anker_state.constant_product_calculator,
-                &anker_state.pool_st_sol_account,
-                &anker_state.pool_ust_account,
-                anker_state.pool_st_sol_balance,
-                anker_state.pool_ust_balance,
-            )
-            .ok()?;
-            Some(MaintenanceInstruction::new(
-                anker_state.get_fetch_pool_price_instruction(self.solido_address),
-                MaintenanceOutput::FetchPoolPrice {
-                    expected_st_sol_price_in_ust,
-                },
-            ))
-        } else {
-            Some(MaintenanceInstruction::new(
-                anker_state
-                    .get_sell_rewards_instruction(self.solido_address, self.solido.st_sol_mint),
-                MaintenanceOutput::SellRewards {
-                    st_sol_amount: anker_state.st_sol_reserve_balance,
-                },
-            ))
-        }
     }
 
     /// Get an instruction to merge accounts.
@@ -1018,18 +903,28 @@ impl SolidoState {
             self.validator_stake_accounts.iter(),
             self.validator_unstake_accounts.iter()
         ) {
-            let current_stake_balance = stake_accounts
-                .iter()
-                .map(|(_addr, detail)| detail.balance.total())
-                .sum::<lido::token::Result<Lamports>>()
-                .expect("If this overflows, there would be more than u64::MAX staked.");
+            // Check if total stake changed or some part is inactive and update balance.
+            // Part of total stake can become inactive after merging two stake accounts
+            // (without changing a total value) or can be increased after a donation.
+            // Active stake increases after receiving rewards.
+            let stake_rent = Lamports(self.rent.minimum_balance(std::mem::size_of::<StakeState>()));
+            let mut total_stake_balance = Lamports(0);
+            let mut can_be_withdrawn = Lamports(0);
+            for (_, detail) in stake_accounts {
+                total_stake_balance = (total_stake_balance + detail.balance.total())
+                    .expect("If this overflows, there would be more than u64::MAX staked.");
+                let diff = (detail.balance.inactive - stake_rent)
+                    .expect("Inactive stake is always greater than rent exempt amount");
+                can_be_withdrawn = (can_be_withdrawn + diff)
+                    .expect("If this overflows, there would be more than u64::MAX staked.");
+            }
 
             let expected_difference_stake =
-                if current_stake_balance > validator.compute_effective_stake_balance() {
-                    (current_stake_balance - validator.compute_effective_stake_balance())
+                if total_stake_balance > validator.compute_effective_stake_balance() {
+                    (total_stake_balance - validator.compute_effective_stake_balance())
                         .expect("Does not overflow because current > entry.balance.")
                 } else {
-                    Lamports(0)
+                    can_be_withdrawn
                 };
 
             let mut removed_unstake = Lamports(0);
@@ -1069,7 +964,7 @@ impl SolidoState {
                     },
                     u32::try_from(validator_index).expect("Too many validators"),
                 );
-                let task = MaintenanceOutput::WithdrawInactiveStake {
+                let task = MaintenanceOutput::UpdateStakeAccountBalance {
                     validator_vote_account: *validator.pubkey(),
                     expected_difference_stake,
                     unstake_withdrawn_to_reserve: removed_unstake,
@@ -1099,7 +994,7 @@ impl SolidoState {
             SolidoState::UNBALANCE_THRESHOLD,
         )?;
         let validator = &self.validators.entries[validator_index];
-        let stake_account = &self.validator_stake_accounts[validator_index][0];
+        let stake_account = &self.validator_stake_accounts[validator_index].get(0)?;
 
         let maximum_unstake = (stake_account.1.balance.total() - MINIMUM_STAKE_ACCOUNT_BALANCE)
             .expect("Stake account should always have the minimum amount.");
@@ -1130,8 +1025,7 @@ impl SolidoState {
     /// Write metrics about the current Solido instance in Prometheus format.
     pub fn write_prometheus<W: io::Write>(&self, out: &mut W) -> io::Result<()> {
         use solido_cli_common::prometheus::{
-            write_anker_metrics_as_prometheus, write_metric, write_solido_metrics_as_prometheus,
-            Metric, MetricFamily,
+            write_metric, write_solido_metrics_as_prometheus, Metric, MetricFamily,
         };
 
         write_metric(
@@ -1297,14 +1191,17 @@ impl SolidoState {
             balance_sol_metrics.push(metric(stake_balance.active, "active"));
             balance_sol_metrics.push(metric(stake_balance.deactivating, "deactivating"));
 
-            last_voted_slot_metrics
-                .push(annotator.add_labels(Metric::new(vote_account.last_timestamp.slot)));
-            last_voted_timestamp_metrics.push(
-                annotator.add_labels(Metric::new(vote_account.last_timestamp.timestamp as u64)),
-            );
+            if let Some(vote_account) = vote_account {
+                last_voted_slot_metrics
+                    .push(annotator.add_labels(Metric::new(vote_account.last_timestamp.slot)));
+                last_voted_timestamp_metrics.push(
+                    annotator.add_labels(Metric::new(vote_account.last_timestamp.timestamp as u64)),
+                );
+                vote_credits_metrics
+                    .push(annotator.add_labels(Metric::new(vote_account.credits())));
+            }
             identity_account_balance_metrics
                 .push(annotator.add_labels(Metric::new_sol(*identity_account_balance)));
-            vote_credits_metrics.push(annotator.add_labels(Metric::new(vote_account.credits())));
         }
 
         write_metric(
@@ -1409,44 +1306,6 @@ impl SolidoState {
         )?;
 
         write_solido_metrics_as_prometheus(&self.solido.metrics, self.produced_at, out)?;
-        if let Some(anker_state) = &self.anker_state {
-            write_metric(
-                out,
-                &MetricFamily {
-                    name: "anker_token_supply_b_sol",
-                    help: "Amount of bSOL that exists currently.",
-                    type_: "gauge",
-                    metrics: vec![Metric::new_b_sol(anker_state.b_sol_total_supply_amount)
-                        .at(self.produced_at)],
-                },
-            )?;
-
-            write_metric(
-                out,
-                &MetricFamily {
-                    name: "anker_reserve_st_sol",
-                    help: "Amount of stSOL in reserve.",
-                    type_: "gauge",
-                    metrics: vec![
-                        Metric::new_st_sol(anker_state.st_sol_reserve_balance).at(self.produced_at)
-                    ],
-                },
-            )?;
-
-            write_metric(
-                out,
-                &MetricFamily {
-                    name: "anker_reserve_ust",
-                    help: "Amount of UST in reserve.",
-                    type_: "gauge",
-                    metrics: vec![
-                        Metric::new_ust(anker_state.ust_reserve_balance).at(self.produced_at)
-                    ],
-                },
-            )?;
-
-            write_anker_metrics_as_prometheus(&anker_state.anker.metrics, self.produced_at, out)?;
-        }
 
         Ok(())
     }
@@ -1644,8 +1503,7 @@ pub fn try_perform_maintenance(
         .or_else(|| state.try_deactivate_validator_if_commission_exceeds_max())
         .or_else(|| state.try_stake_deposit())
         .or_else(|| state.try_unstake_from_active_validators())
-        .or_else(|| state.try_remove_validator())
-        .or_else(|| state.try_sell_anker_rewards());
+        .or_else(|| state.try_remove_validator());
 
     match instruction_output {
         Some(maintenance_instruction) => {
@@ -1675,7 +1533,6 @@ pub fn run_perform_maintenance(
     let state = SolidoState::new(
         config,
         opts.solido_program_id(),
-        opts.anker_program_id(),
         opts.solido_address(),
         *opts.stake_time(),
     )?;
@@ -1694,7 +1551,6 @@ mod test {
             solido_program_id: Pubkey::new_unique(),
             solido_address: Pubkey::new_unique(),
             solido: Lido::default(),
-            anker_state: Some(AnkerState::default()),
             validator_stake_accounts: vec![],
             validator_unstake_accounts: vec![],
             validator_vote_account_balances: vec![],
