@@ -98,6 +98,15 @@ class Instance:
 
         print(f'> Created instance at {self.solido_address}')
 
+        solido_instance = self.pull_solido()
+        solana(
+            'program',
+            'set-upgrade-authority',
+            '--new-upgrade-authority',
+            solido_instance['solido']['manager'],
+            self.solido_program_id,
+        )
+
         self.approve_and_execute = get_approve_and_execute(
             multisig_program_id=self.multisig_program_id,
             multisig_instance=self.multisig_instance,

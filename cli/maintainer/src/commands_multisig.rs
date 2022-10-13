@@ -1136,7 +1136,7 @@ pub fn propose_instruction(
     let dummy_tx = serum_multisig::Transaction {
         multisig: multisig_address,
         program_id: instruction.program_id,
-        accounts,
+        accounts: accounts.clone(),
         data: instruction.data.clone(),
         signers: multisig
             .owners
@@ -1168,15 +1168,6 @@ pub fn propose_instruction(
         tx_account_size as u64,
         multisig_program_id,
     );
-
-    // The Multisig program expects `serum_multisig::TransactionAccount` instead
-    // of `solana_sdk::AccountMeta`. The types are structurally identical,
-    // but not nominally, so we need to convert these.
-    let accounts: Vec<_> = instruction
-        .accounts
-        .iter()
-        .map(serum_multisig::TransactionAccount::from)
-        .collect();
 
     let multisig_accounts = multisig_accounts::CreateTransaction {
         multisig: multisig_address,

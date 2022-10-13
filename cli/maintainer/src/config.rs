@@ -762,10 +762,30 @@ cli_opt_struct! {
 }
 
 cli_opt_struct! {
+    CreateV2AccountsOpts {
+        /// Address of the Solido program
+        #[clap(long, value_name = "address")]
+        solido_program_id: Pubkey,
+
+        /// stSol mint address, used to create SPL token developer account
+        #[clap(long, value_name = "address")]
+        st_sol_mint: Pubkey,
+
+        /// Account who will own the stSOL SPL token account that receives the developer fees.
+        #[clap(long, value_name = "address")]
+        developer_account_owner: Pubkey,
+    }
+}
+
+cli_opt_struct! {
     MigrateStateToV2Opts {
         /// Address of the Solido program
         #[clap(long, value_name = "address")]
         solido_program_id: Pubkey,
+
+        /// Solido address
+        #[clap(long, value_name = "address")]
+        solido_address: Pubkey,
 
         /// The maximum validator fee a validator can have to be accepted by protocol.
         #[clap(long, value_name = "int")]
@@ -785,27 +805,17 @@ cli_opt_struct! {
         #[clap(long, value_name = "int")]
         st_sol_appreciation_share: u32,
 
-        /// Account who will own the stSOL SPL token account that receives the developer fees.
+        /// Account who will receive stSOL developer fees.
         #[clap(long, value_name = "address")]
-        developer_account_owner: Pubkey,
+        developer_fee_address: Pubkey,
 
-        /// stSol mint address, used to create SPL token developer account
-        #[clap(long, value_name = "address")]
-        st_sol_mint: Pubkey,
-
-        /// Solido address
-        #[clap(long, value_name = "address")]
-        solido_address: Pubkey,
-
-        /// Optional argument for the validator list address, if not passed a random one
-        /// will be created.
+        /// Validator list data address
         #[clap(long)]
-        validator_list_key_path: PathBuf => PathBuf::default(),
+        validator_list_address: Pubkey,
 
-        /// Optional argument for the maintainer list address, if not passed a random one
-        /// will be created.
+        /// Maintainer list data address
         #[clap(long)]
-        maintainer_list_key_path: PathBuf => PathBuf::default(),
+        maintainer_list_address: Pubkey,
 
         /// Multisig instance.
         #[clap(long, value_name = "address")]
