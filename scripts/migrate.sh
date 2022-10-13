@@ -30,7 +30,7 @@ solana withdraw-from-vote-account test-ledger/vote-account-keypair.json v9zvcQby
 ./target/debug/solido --config ../solido_test.json --keypair-path ./tests/.keys/maintainer.json multisig approve-batch --transaction-addresses-path output
 
 # propose program upgrade
-../solido/scripts/update_solido_version.py --config ../solido_test.json propose-upgrade --keypair-path ./tests/.keys/maintainer.json --program-filepath ../solido/target/deploy/lido.so > ../solido/output
+../solido/scripts/update_solido_version.py --config ../solido_test.json load-program --program-filepath ../solido/target/deploy/lido.so |xargs -I {}  ./target/debug/solido --config ~/Documents/solido_test.json --keypair-path ../solido_old/tests/.keys/maintainer.json multisig propose-upgrade --spill-address $(solana-keygen pubkey) --buffer-address {} --program-address $(cat ../solido_test.json | jq -r .solido_program_id) > ../solido/output
 
 # create a new validator with a 5% commission and propose to add it
 solana-keygen new --no-bip39-passphrase --force --silent --outfile ../solido_old/tests/.keys/vote-account-key.json

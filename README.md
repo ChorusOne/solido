@@ -71,6 +71,8 @@ you need:
    * `libhidapi-dev`
    * `pkg-config`
    * `openssl`
+   * `build-essential`
+   * `libsqlite3-dev`
 
 The Solana version that we test against is listed in our [CI config][ci-config].
 

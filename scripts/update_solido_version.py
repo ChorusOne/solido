@@ -18,7 +18,7 @@ Usage:
     # Perfom maintainance till validator list is empty, wait for epoch boundary if on mainnet
     ./target/debug/solido --config ../solido_test.json --keypair-path tests/.keys/maintainer.json perform-maintenance
 
-    ../solido/scripts/update_solido_version.py --config ../solido_test.json propose-upgrade --keypair-path ./tests/.keys/maintainer.json --program-filepath ../solido/target/deploy/lido.so > output
+    ../solido/scripts/update_solido_version.py --config ../solido_test.json load-program --keypair-path ./tests/.keys/maintainer.json --program-filepath ../solido/target/deploy/lido.so > output
 
     ./target/debug/solido --config ../solido_test.json --keypair-path ./tests/.keys/maintainer.json multisig approve-batch --transaction-addresses-path output
 
@@ -76,11 +76,8 @@ if __name__ == '__main__':
     )
 
     current_parser = subparsers.add_parser(
-        'propose-upgrade',
-        help='Write program from `program-filepath` to a random buffer address. Create multisig transaction to upgrade Solido state',
-    )
-    current_parser.add_argument(
-        "--keypair-path", type=str, help='Signer keypair path', required=True
+        'load-program',
+        help='Write program from `program-filepath` to a random buffer address.',
     )
     current_parser.add_argument(
         "--program-filepath", help='/path/to/program.so', required=True
@@ -129,7 +126,7 @@ if __name__ == '__main__':
                 line.strip(),
             )
 
-    elif args.command == "propose-upgrade":
+    elif args.command == "load-program":
         lido_state = solido('--config', args.config, 'show-solido')
         program_result = solana(
             '--output', 'json', 'program', 'show', config['solido_program_id']
@@ -154,7 +151,6 @@ if __name__ == '__main__':
             args.program_filepath,
         )
         write_result = json.loads(write_result)
-        # print("Buffer address %s" % write_result['buffer'])
 
         solana(
             'program',
@@ -163,21 +159,7 @@ if __name__ == '__main__':
             lido_state['solido']['manager'],
             write_result['buffer'],
         )
-
-        propose_result = solido(
-            '--config',
-            args.config,
-            'multisig',
-            'propose-upgrade',
-            '--spill-address',
-            get_signer(),
-            '--buffer-address',
-            write_result['buffer'],
-            '--program-address',
-            config['solido_program_id'],
-            keypair_path=args.keypair_path,
-        )
-        print(propose_result['transaction_address'])
+        print(write_result['buffer'])
 
     elif args.command == "propose-migrate":
         update_result = solido(
