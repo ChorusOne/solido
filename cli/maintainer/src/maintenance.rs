@@ -318,6 +318,11 @@ pub struct SolidoState {
     /// Parsed list entries from list accounts
     pub validators: AccountList<Validator>,
     pub maintainers: AccountList<Maintainer>,
+
+    /// Threshold for when to consider the end of an epoch.
+    /// E.g. if set to 95, the end of epoch would be considered if the system
+    /// is past 95% of the epoch's time.
+    pub end_of_epoch_threshold: u8,
 }
 
 fn get_validator_stake_accounts(
@@ -413,20 +418,13 @@ impl SolidoState {
         denominator: 10,
     };
 
-    /// Threshold for when to consider the end of an epoch.
-    /// E.g. if set to 19/20, the end of epoch would be considered if the system
-    /// is past 95% of the epoch's time.
-    const END_OF_EPOCH_THRESHOLD: Rational = Rational {
-        numerator: 19,
-        denominator: 20,
-    };
-
     /// Read the state from the on-chain data.
     pub fn new(
         config: &mut SnapshotConfig,
         solido_program_id: &Pubkey,
         solido_address: &Pubkey,
         stake_time: StakeTime,
+        end_of_epoch_threshold: u8,
     ) -> Result<SolidoState> {
         let solido = config.client.get_solido(solido_address)?;
 
@@ -539,6 +537,7 @@ impl SolidoState {
             stake_time,
             validators,
             maintainers,
+            end_of_epoch_threshold,
         })
     }
 
@@ -1424,7 +1423,7 @@ impl SolidoState {
     }
 
     /// Return None if we observe we moved past `1 -
-    /// SolidoState::END_OF_EPOCH_THRESHOLD`%. Return Some(()) if the above
+    /// config.end_of_epoch_threshold`%. Return Some(()) if the above
     /// condition fails or `self.stake_unstake_any_time` is set to
     /// `true`.
     pub fn confirm_should_stake_unstake_in_current_slot(&self) -> Option<()> {
@@ -1448,7 +1447,11 @@ impl SolidoState {
                     numerator: slot_past_epoch,
                     denominator: slots_per_epoch,
                 };
-                if ratio > SolidoState::END_OF_EPOCH_THRESHOLD {
+                let theshold = Rational {
+                    numerator: self.end_of_epoch_threshold as u64,
+                    denominator: 100,
+                };
+                if ratio > theshold {
                     Some(())
                 } else {
                     None
@@ -1535,6 +1538,7 @@ pub fn run_perform_maintenance(
         opts.solido_program_id(),
         opts.solido_address(),
         *opts.stake_time(),
+        *opts.end_of_epoch_threshold(),
     )?;
     try_perform_maintenance(config, &state)
 }
@@ -1569,6 +1573,7 @@ mod test {
             stake_time: StakeTime::Anytime,
             validators: AccountList::<Validator>::new_default(0),
             maintainers: AccountList::<Maintainer>::new_default(0),
+            end_of_epoch_threshold: 95,
         };
 
         // The reserve should be rent-exempt.

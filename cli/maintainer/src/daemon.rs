@@ -178,6 +178,7 @@ fn run_maintenance_iteration(
             opts.solido_program_id(),
             opts.solido_address(),
             *opts.stake_time(),
+            *opts.end_of_epoch_threshold(),
         )?;
 
         // If it's not our maintainer duty at this time, then don't try to

@@ -450,6 +450,12 @@ cli_opt_struct! {
         /// "anytime" option is only intended for testing purposes.
         #[clap(long, value_name = "anytime/only-near-epoch-end")]
         stake_time: StakeTime => StakeTime::OnlyNearEpochEnd,
+
+        /// Threshold for when to consider the end of an epoch.
+        /// E.g. if set to 95, the end of epoch would be considered if the system
+        /// is past 95% of the epoch's time.
+        #[clap(long)]
+        end_of_epoch_threshold: u8 => 95,
     }
 }
 
@@ -701,6 +707,12 @@ cli_opt_struct! {
         /// "anytime" option is only intended for testing purposes.
         #[clap(long, value_name = "anytime/only-near-epoch-end")]
         stake_time: StakeTime => StakeTime::OnlyNearEpochEnd,
+
+        /// Threshold for when to consider the end of an epoch.
+        /// E.g. if set to 95, the end of epoch would be considered if the system
+        /// is past 95% of the epoch's time.
+        #[clap(long)]
+        end_of_epoch_threshold: u8 => 95,
     }
 }
 

@@ -266,6 +266,16 @@ fn main() {
         output_mode,
     };
 
+    fn check_end_of_epoch_threshold(threshold: u8) {
+        if threshold > 100 {
+            eprint!(
+                "End of epoch threshold should be less than 100, but is {}",
+                threshold
+            );
+            std::process::exit(1);
+        }
+    }
+
     merge_with_config_and_environment(&mut opts.subcommand, config_file.as_ref());
     match opts.subcommand {
         SubCommand::CreateSolido(cmd_opts) => {
@@ -275,6 +285,7 @@ fn main() {
         }
         SubCommand::Multisig(cmd_opts) => commands_multisig::main(&mut config, cmd_opts),
         SubCommand::PerformMaintenance(cmd_opts) => {
+            check_end_of_epoch_threshold(*cmd_opts.end_of_epoch_threshold());
             // This command only performs one iteration, `RunMaintainer` runs continuously.
             let result = config
                 .with_snapshot(|config| maintenance::run_perform_maintenance(config, &cmd_opts));
@@ -289,6 +300,7 @@ fn main() {
             }
         }
         SubCommand::RunMaintainer(cmd_opts) => {
+            check_end_of_epoch_threshold(*cmd_opts.end_of_epoch_threshold());
             daemon::main(&mut config, &cmd_opts);
         }
         SubCommand::AddValidator(cmd_opts) => {
