@@ -447,6 +447,8 @@ pub struct ShowSolidoOutput {
     pub validators: AccountList<Validator>,
 
     pub maintainers: AccountList<Maintainer>,
+
+    pub reserve_account_balance: Lamports,
 }
 
 impl fmt::Display for ShowSolidoOutput {
@@ -474,6 +476,8 @@ impl fmt::Display for ShowSolidoOutput {
             "  stSOL supply:      {}",
             self.solido.exchange_rate.st_sol_supply
         )?;
+
+        writeln!(f, "\nReserve balance: {}", self.reserve_account_balance)?;
 
         writeln!(f, "\nAuthorities (public key, bump seed):")?;
         writeln!(
@@ -678,6 +682,8 @@ pub fn command_show_solido(
     let mint_authority =
         lido.get_mint_authority(opts.solido_program_id(), opts.solido_address())?;
 
+    let reserve_account_balance = config.client.get_account(&reserve_account)?.lamports;
+
     let validators = config
         .client
         .get_account_list::<Validator>(&lido.validator_list)?;
@@ -712,6 +718,7 @@ pub fn command_show_solido(
         mint_authority,
         validators,
         maintainers,
+        reserve_account_balance: Lamports(reserve_account_balance),
     })
 }
 

@@ -22,7 +22,6 @@ solana withdraw-from-vote-account test-ledger/vote-account-keypair.json \
 ./target/debug/solido --config ../solido_test.json \
                       --keypair-path ../solido_old/tests/.keys/maintainer.json \
                       run-maintainer --max-poll-interval-seconds 1 \
-                      --end-of-epoch-threshold 75
 
 # deposit some SOL
 ./target/debug/solido --config ../solido_test.json deposit --amount-sol 100
@@ -98,6 +97,12 @@ cd ../solido
 ./target/debug/solido --config ../solido_test.json \
                       --keypair-path ../solido_old/tests/.keys/maintainer.json \
                       multisig approve-batch --transaction-addresses-path output
+
+# start a new maintainer
+./target/debug/solido --config ../solido_test.json \
+                      --keypair-path ../solido_old/tests/.keys/maintainer.json \
+                      run-maintainer --max-poll-interval-seconds 1 \
+                      --end-of-epoch-threshold 75
 
 # add validator
 solana-keygen pubkey ../solido_old/tests/.keys/vote-account-key.json > validators.txt
