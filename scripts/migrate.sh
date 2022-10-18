@@ -21,7 +21,7 @@ solana withdraw-from-vote-account test-ledger/vote-account-keypair.json \
 # start maintainer
 ./target/debug/solido --config ../solido_test.json \
                       --keypair-path ../solido_old/tests/.keys/maintainer.json \
-                      run-maintainer --max-poll-interval-seconds 1 \
+                      run-maintainer --max-poll-interval-seconds 1
 
 # deposit some SOL
 ./target/debug/solido --config ../solido_test.json deposit --amount-sol 100
@@ -46,17 +46,22 @@ jq -s '.[0] * .[1]' v2_new_accounts.json ../solido_test.json > ../temp.json
 mv ../temp.json ../solido_test.json
 
 # load program to a buffer account
-../solido/scripts/update_solido_version.py \
-    --config ../solido_test.json load-program \
-    --program-filepath ../solido/target/deploy/lido.so > buffer
+../solido/scripts/operation.py \
+    --config ../solido_test.json \
+    load-program --program-filepath ../solido/target/deploy/lido.so --outfile buffer
 
 # deactivate validators
-../solido/scripts/update_solido_version.py \
+../solido/scripts/operation.py \
     --config ../solido_test.json \
-    deactivate-validators --keypair-path ./tests/.keys/maintainer.json > output
+    deactivate-validators --keypair-path ./tests/.keys/maintainer.json --outfile output
+# batch sign transactions
 ./target/debug/solido --config ../solido_test.json \
-                      --keypair-path ./tests/.keys/maintainer.json \
-                      multisig approve-batch --transaction-addresses-path output
+                      --keypair-path ../solido_old/tests/.keys/maintainer.json \
+                      multisig approve-batch --silent --transaction-addresses-path output
+# execute transactions one by one
+../solido/scripts/operation.py \
+    --config ../solido_test.json \
+    execute-transactions --transactions output --keypair-path ./tests/.keys/maintainer.json
 
 # create a new validator keys with a 5% commission
 solana-keygen new --no-bip39-passphrase --force --silent \
@@ -104,17 +109,21 @@ cd ../solido
                       run-maintainer --max-poll-interval-seconds 1 \
                       --end-of-epoch-threshold 75
 
-# add validator
+# add validators
 solana-keygen pubkey ../solido_old/tests/.keys/vote-account-key.json > validators.txt
-../solido/scripts/update_solido_version.py \
+../solido/scripts/operation.py \
     --config ../solido_test.json \
-    add-validators \
+    add-validators --outfile output \
     --vote-accounts validators.txt \
-    --keypair-path ../solido_old/tests/.keys/maintainer.json > output
-
+    --keypair-path ../solido_old/tests/.keys/maintainer.json
+# batch sign transactions
 ./target/debug/solido --config ../solido_test.json \
                       --keypair-path ../solido_old/tests/.keys/maintainer.json \
-                      multisig approve-batch --transaction-addresses-path output
+                      multisig approve-batch --silent --transaction-addresses-path output
+# execute transactions one by one
+../solido/scripts/operation.py \
+    --config ../solido_test.json \
+    execute-transactions --transactions output --keypair-path ../solido_old/tests/.keys/maintainer.json
 
 ###############################################################################
 #                                   EPOCH 4                                   #
@@ -122,7 +131,7 @@ solana-keygen pubkey ../solido_old/tests/.keys/vote-account-key.json > validator
 
 
 # try to withdraw
-./target/debug/solido --config ~/Documents/solido_test.json withdraw --amount-st-sol 1.1
+./target/debug/solido --config ../solido_test.json withdraw --amount-st-sol 1.1
 
 # withdraw developer some fee to self
 spl-token transfer --from DEVELOPER_FEE_ADDRESS STSOL_MINT_ADDRESS \

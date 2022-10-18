@@ -1,9 +1,15 @@
 #!/bin/bash
 
-scp -r solido_old/target/deploy/serum_multisig.so  build:/home/guyos/test_setup/solido_old/target/deploy/
-scp -r solido_old/target/deploy/lido.so  build:/home/guyos/test_setup/solido_old/target/deploy/
-scp -r solido_old/target/release/solido  build:/home/guyos/test_setup/solido_old/target/debug/
+set -e
 
-scp -r solido/target/deploy/serum_multisig.so  build:/home/guyos/test_setup/solido/target/deploy/
-scp -r solido/target/deploy/lido.so  build:/home/guyos/test_setup/solido/target/deploy/
-scp -r solido/target/release/solido  build:/home/guyos/test_setup/solido/target/debug/
+function copy_dir() {
+    cargo build --release --manifest-path $1/Cargo.toml
+    cargo build-bpf --manifest-path $1/Cargo.toml
+
+    scp -r $1/target/deploy/serum_multisig.so $2/deploy
+    scp -r $1/target/deploy/lido.so  $2/deploy
+    scp -r $1/target/release/solido  $2/debug
+}
+
+copy_dir solido_old build:/home/guyos/test_setup/solido_old/target
+copy_dir solido build:/home/guyos/test_setup/solido/target

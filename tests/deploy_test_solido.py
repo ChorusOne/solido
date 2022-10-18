@@ -10,12 +10,11 @@ useful when testing the maintenance daemon locally.
 
 import json
 import os
-from typing import Optional, Dict, Any
+from typing import Optional, Any
 
 from util import (
     create_test_account,
     solana_program_deploy,
-    create_spl_token_account,
     create_vote_account,
     get_network,
     solana,
@@ -58,7 +57,6 @@ class Instance:
             self.maintainer.pubkey,
         )
         self.multisig_instance = multisig_data['multisig_address']
-        multisig_pda = multisig_data['multisig_program_derived_address']
         print(f'> Created instance at {self.multisig_instance}')
 
         print('\nCreating Solido instance ...')
@@ -234,7 +232,6 @@ class Instance:
         print(f'\nCreating validator {index} ...')
 
         if vote_account is None:
-            solido_instance = self.pull_solido()
             validator = create_test_account(
                 f'tests/.keys/validator-{index}-account.json'
             )

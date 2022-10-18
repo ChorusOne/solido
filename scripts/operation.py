@@ -1,16 +1,14 @@
 #!/usr/bin/env python3
 
 """
-This script has multiple options to update Solido state version
+This script has multiple options to to interact with Solido
 """
 
 
-import pprint
 import argparse
 import json
 import sys
 import os.path
-import fileinput
 from typing import Any
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -45,6 +43,12 @@ if __name__ == '__main__':
         help='Signer keypair or a ledger path',
         required=True,
     )
+    current_parser.add_argument(
+        "--outfile",
+        type=str,
+        help='Output file path',
+        required=True,
+    )
 
     current_parser = subparsers.add_parser(
         'load-program',
@@ -52,6 +56,12 @@ if __name__ == '__main__':
     )
     current_parser.add_argument(
         "--program-filepath", help='/path/to/program.so', required=True
+    )
+    current_parser.add_argument(
+        "--outfile",
+        type=str,
+        help='Output file path',
+        required=True,
     )
 
     current_parser = subparsers.add_parser(
@@ -70,6 +80,29 @@ if __name__ == '__main__':
         help='Signer keypair or a ledger path',
         required=True,
     )
+    current_parser.add_argument(
+        "--outfile",
+        type=str,
+        help='Output file path',
+        required=True,
+    )
+
+    current_parser = subparsers.add_parser(
+        'execute-transactions',
+        help='Execute transactions from file one by one',
+    )
+    current_parser.add_argument(
+        "--keypair-path",
+        type=str,
+        help='Signer keypair or a ledger path',
+        required=True,
+    )
+    current_parser.add_argument(
+        "--transactions",
+        type=str,
+        help='Transactions file path. Each transaction per line',
+        required=True,
+    )
 
     args = parser.parse_args()
 
@@ -84,20 +117,29 @@ if __name__ == '__main__':
     if args.command == "deactivate-validators":
         lido_state = solido('--config', args.config, 'show-solido')
         validators = lido_state['solido']['validators']['entries']
-        for validator in validators:
-            result = solido(
-                '--config',
-                args.config,
-                'deactivate-validator',
-                '--validator-vote-account',
-                validator['pubkey'],
-                keypair_path=args.keypair_path,
-            )
-            print(result['transaction_address'])
+        print("vote accounts:")
+        with open(args.outfile, 'w') as ofile:
+            for validator in validators:
+                print(validator['pubkey'])
+                result = solido(
+                    '--config',
+                    args.config,
+                    'deactivate-validator',
+                    '--validator-vote-account',
+                    validator['pubkey'],
+                    keypair_path=args.keypair_path,
+                )
+                address = result.get('transaction_address')
+                if address is None:
+                    eprint(result)
+                else:
+                    ofile.write(address + '\n')
 
     elif args.command == "add-validators":
-        with open(args.vote_accounts) as infile:
+        print("vote accounts:")
+        with open(args.vote_accounts) as infile, open(args.outfile, 'w') as ofile:
             for pubkey in infile:
+                print(pubkey)
                 result = solido(
                     '--config',
                     args.config,
@@ -106,7 +148,35 @@ if __name__ == '__main__':
                     pubkey.strip(),
                     keypair_path=args.keypair_path,
                 )
-                print(result['transaction_address'])
+                address = result.get('transaction_address')
+                if address is None:
+                    eprint(result)
+                else:
+                    ofile.write(address + '\n')
+
+    elif args.command == "execute-transactions":
+        with open(args.transactions) as infile:
+            for transaction in infile:
+                transaction = transaction.strip()
+                transaction_info = solido(
+                    '--config',
+                    args.config,
+                    'multisig',
+                    'show-transaction',
+                    '--transaction-address',
+                    transaction,
+                )
+                if not transaction_info['did_execute']:
+                    result = solido(
+                        '--config',
+                        args.config,
+                        'multisig',
+                        'execute-transaction',
+                        '--transaction-address',
+                        transaction,
+                        keypair_path=args.keypair_path,
+                    )
+                    print(f"Transaction {transaction} executed")
 
     elif args.command == "load-program":
         lido_state = solido('--config', args.config, 'show-solido')
@@ -128,7 +198,8 @@ if __name__ == '__main__':
             lido_state['solido']['manager'],
             write_result['buffer'],
         )
-        print(write_result['buffer'])
+        with open(args.outfile, 'w') as ofile:
+            ofile.write(write_result['buffer'])
 
     else:
         eprint("Unknown command %s" % args.command)
