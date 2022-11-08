@@ -10,12 +10,12 @@ import json
 import sys
 import os.path
 from typing import Any
+import verify_transaction
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(SCRIPT_DIR))
 
 from tests.util import solido, solana, run  # type: ignore
-
 
 def eprint(*args: Any, **kwargs: Any) -> None:
     print(*args, file=sys.stderr, **kwargs)
@@ -112,12 +112,6 @@ if __name__ == '__main__':
         "--transactions-path",
         type=str,
         help='Path to transactions file',
-        required=True,
-    )
-    current_parser.add_argument(
-        "--transaction-type",
-        type=str,
-        help='Type of transactions in a transaction file',
         required=True,
     )
 
@@ -220,18 +214,25 @@ if __name__ == '__main__':
 
     elif args.command == "check-transactions":
         with open(args.transactions_path, 'r') as ifile:
+            Counter = 0
+            Success = 0
             for transaction in ifile:
-                print(transaction)
                 result = solido(
                     '--config',
                     args.config,
                     'multisig',
                     'show-transaction',
                     '--transaction-address',
-                    transaction,
+                    transaction.strip(),
                 )
+                Counter += 1
+                print("Transaction #" + str(Counter) + ": " + transaction.strip())
+                if verify_transaction.verify_transaction_data(result) :
+                    Success += 1
+                
+                # print(result['signers'])
                 # result['']
                 # config.get('program-id')
-
+            print("Summary: successfully verified " + str(Success) + " from " + str(Counter) + " transactions")
     else:
         eprint("Unknown command %s" % args.command)
