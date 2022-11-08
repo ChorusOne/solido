@@ -104,6 +104,23 @@ if __name__ == '__main__':
         required=True,
     )
 
+    current_parser = subparsers.add_parser(
+        'check-transactions',
+        help='Check transactions from a file',
+    )
+    current_parser.add_argument(
+        "--transactions-path",
+        type=str,
+        help='Path to transactions file',
+        required=True,
+    )
+    current_parser.add_argument(
+        "--transaction-type",
+        type=str,
+        help='Type of transactions in a transaction file',
+        required=True,
+    )
+
     args = parser.parse_args()
 
     sys.argv.append('--verbose')
@@ -200,6 +217,21 @@ if __name__ == '__main__':
         )
         with open(args.outfile, 'w') as ofile:
             ofile.write(write_result['buffer'])
+
+    elif args.command == "check-transactions":
+        with open(args.transactions_path, 'r') as ifile:
+            for transaction in ifile:
+                print(transaction)
+                result = solido(
+                    '--config',
+                    args.config,
+                    'multisig',
+                    'show-transaction',
+                    '--transaction-address',
+                    transaction,
+                )
+                # result['']
+                # config.get('program-id')
 
     else:
         eprint("Unknown command %s" % args.command)
