@@ -3,9 +3,9 @@
 """
 This script has multiple options to to interact with Solido
 """
+from typing import Any, Dict
 
-
-Sample = {
+Sample: Dict[str, Any] = {
     'solido_instance': '2i2crMWRb9nUY6HpDDp3R1XAXXB9UNdWAdtD9Kp9eUNT',
     'manager': '2cAVMSn3bfTyPBMnYYY3UgqvE44SM2LLqT7iN6CiMF4T',
     'validator_vote_account': '2FaFw4Yv5noJfa23wKrFDpqoxXo8MxQGbKP3LjxMiJ13',
@@ -30,41 +30,44 @@ ValidatorVoteAccSet = set()
 VerificationStatus = True
 
 
-def CheckField(dataDict, key):
+def CheckField(dataDict: Any, key: str) -> str:
+    retbuf = key + " " + str(dataDict.get(key))
     if key in dataDict.keys():
-        retbuf = key + " " + str(dataDict.get(key))
         if dataDict.get(key) == Sample.get(key):
             retbuf += " [OK]\n"
         else:
             retbuf += " [BAD]\n"
+            global VerificationStatus
             VerificationStatus = False
-        return retbuf
+    return retbuf
 
 
-def CheckRewardField(dataDict, key):
+def CheckRewardField(dataDict: Any, key: str) -> str:
+    retbuf = key + " " + str(dataDict.get(key))
     if key in dataDict.keys():
-        retbuf = key + " " + str(dataDict.get(key))
-        if dataDict.get(key) == Sample.get('reward_distribution').get(key):
+        if dataDict.get(key) == Sample['reward_distribution'][key]:
             retbuf += " [OK]\n"
         else:
             retbuf += " [BAD]\n"
+            global VerificationStatus
             VerificationStatus = False
-        return retbuf
+    return retbuf
 
 
-def CheckVoteAccField(dataDict, key):
+def CheckVoteAccField(dataDict: Any, key: str) -> str:
+    retbuf = key + " " + str(dataDict.get(key))
     if key in dataDict.keys():
-        retbuf = key + " " + dataDict.get(key)
         if dataDict.get(key) not in ValidatorVoteAccSet:
             ValidatorVoteAccSet.add(dataDict.get(key))
             retbuf += " [OK]\n"
         else:
             retbuf += " [BAD]\n"
+            global VerificationStatus
             VerificationStatus = False
-        return retbuf
+    return retbuf
 
 
-def verify_transaction_data(json_data):
+def verify_transaction_data(json_data: Any) -> bool:
     # print(json_data)
     l1_keys = json_data['parsed_instruction']
     output_buf = ""
