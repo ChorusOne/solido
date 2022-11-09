@@ -86,8 +86,8 @@ cd ../solido
                       multisig propose-upgrade \
                       --spill-address $(solana-keygen pubkey) \
                       --buffer-address "$(< ../solido_old/buffer)" \
-                      --program-address $(jq -r .solido_program_id ../solido_test.json) \
-    | jq -r .transaction_address > output
+                      --program-address $(jq -r .solido_program_id ../solido_test.json) > temp
+awk '/{/,/}/' temp | jq -r .transaction_address >> output
 
 # propose migration
 ./target/debug/solido --output json --config ../solido_test.json \
@@ -95,8 +95,8 @@ cd ../solido
                       migrate-state-to-v2 --developer-fee-share 1 \
                       --treasury-fee-share 4 \
                       --st-sol-appreciation-share 95 \
-                      --max-commission-percentage 5 \
-    | jq -r .transaction_address >> output
+                      --max-commission-percentage 5 > temp
+awk '/{/,/}/' temp | jq -r .transaction_address >> output
 
 # wait for maintainers to remove validators, approve program update and migration
 ./target/debug/solido --config ../solido_test.json \

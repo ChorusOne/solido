@@ -179,6 +179,7 @@ if __name__ == '__main__':
                     transaction,
                 )
                 if not transaction_info['did_execute']:
+                    print(f"Executing transaction {transaction}")
                     result = solido(
                         '--config',
                         args.config,
