@@ -17,6 +17,7 @@ sys.path.append(os.path.dirname(SCRIPT_DIR))
 
 from tests.util import solido, solana, run  # type: ignore
 
+
 def eprint(*args: Any, **kwargs: Any) -> None:
     print(*args, file=sys.stderr, **kwargs)
 
@@ -227,12 +228,18 @@ if __name__ == '__main__':
                 )
                 Counter += 1
                 print("Transaction #" + str(Counter) + ": " + transaction.strip())
-                if verify_transaction.verify_transaction_data(result) :
+                if verify_transaction.verify_transaction_data(result):
                     Success += 1
-                
+
                 # print(result['signers'])
                 # result['']
                 # config.get('program-id')
-            print("Summary: successfully verified " + str(Success) + " from " + str(Counter) + " transactions")
+            print(
+                "Summary: successfully verified "
+                + str(Success)
+                + " from "
+                + str(Counter)
+                + " transactions"
+            )
     else:
         eprint("Unknown command %s" % args.command)
