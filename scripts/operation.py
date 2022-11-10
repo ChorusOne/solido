@@ -218,6 +218,10 @@ if __name__ == '__main__':
         with open(args.transactions_path, 'r') as ifile:
             Counter = 0
             Success = 0
+
+            verify_transaction.verify_solido_state(
+                solido('--config', args.config, 'show-solido'))
+                
             for transaction in ifile:
                 result = solido(
                     '--config',
