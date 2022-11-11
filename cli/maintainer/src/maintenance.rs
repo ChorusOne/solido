@@ -1015,8 +1015,15 @@ impl SolidoState {
             // of Lamports, we don't bother withdrawing. We try to do this
             // so we don't pay more for fees than the amount that we'll
             // withdraw. Or if we have stake to remove from unstake accounts.
-            if expected_difference_stake > SolidoState::MINIMUM_WITHDRAW_AMOUNT
-                || removed_unstake > Lamports(0)
+            // If we're dealing with an inactive validator, we try to withraw
+            // all inactive stake.
+            let minimum_withdraw_amount = if validator.entry.active {
+                SolidoState::MINIMUM_WITHDRAW_AMOUNT
+            } else {
+                Lamports(0)
+            };
+
+            if expected_difference_stake > minimum_withdraw_amount || removed_unstake > Lamports(0)
             {
                 // The balance of this validator is not up to date, try to update it.
                 let mut stake_account_addrs = Vec::new();
@@ -1610,11 +1617,11 @@ pub fn try_perform_maintenance(
         // as possible.
         .or_else(|| state.try_merge_on_all_stakes())
         .or_else(|| state.try_update_exchange_rate())
+        .or_else(|| state.try_update_stake_account_balance())
         .or_else(|| state.try_unstake_from_inactive_validator())
         // Collecting validator fees goes after updating the exchange rate,
         // because it may be rejected if the exchange rate is outdated.
         // Same for updating the validator balance.
-        .or_else(|| state.try_update_stake_account_balance())
         .or_else(|| state.try_deactivate_validator_if_commission_exceeds_max())
         .or_else(|| state.try_stake_deposit())
         .or_else(|| state.try_unstake_from_active_validators())
