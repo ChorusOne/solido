@@ -35,21 +35,25 @@ SolidoState = "Unknown state"
 
 
 def printSolution(flag: bool) -> str:
-    if flag :
+    if flag:
         return " [OK]\n"
     else:
         global VerificationStatus
         VerificationStatus = False
         return " [BAD]\n"
 
+
 def checkSolidoState(state: str) -> bool:
     return SolidoState == state
+
 
 def checkVoteInV1Set(address: str) -> bool:
     return address in ValidatorSetV1
 
+
 def checkVoteInV2Set(address: str) -> bool:
     return address in ValidatorSetV2
+
 
 def checkVoteUnic(address: str) -> bool:
     if address not in ValidatorVoteAccSet:
@@ -58,53 +62,59 @@ def checkVoteUnic(address: str) -> bool:
     else:
         return False
 
+
 def ValidateSolidoState(state: str) -> str:
     return printSolution(SolidoState == state)
+
 
 def ValidateField(dataDict: Any, key: str) -> str:
     value = dataDict.get(key)
     retbuf = key + " " + str(value)
-    if key in dataDict.keys(): 
+    if key in dataDict.keys():
         retbuf += printSolution(value == Sample.get(key))
     else:
         retbuf += printSolution(False)
     return retbuf
 
+
 def ValidateRewardField(dataDict: Any, key: str) -> str:
     value = dataDict.get(key)
     retbuf = key + " " + str(value)
-    if key in dataDict.keys(): 
+    if key in dataDict.keys():
         retbuf += printSolution(value == Sample.get('reward_distribution').get(key))
     else:
         retbuf += printSolution(False)
     return retbuf
 
+
 def ValidateDeactivateV1VoteAccount(dataDict: Any, key: str) -> str:
     value = dataDict.get(key)
     retbuf = key + " " + str(value)
-    if key in dataDict.keys(): 
+    if key in dataDict.keys():
         retbuf += printSolution(checkVoteUnic(value) and checkVoteInV1Set(value))
     else:
         retbuf += printSolution(False)
     return retbuf
 
+
 def ValidateAddV2VoteAccount(dataDict: Any, key: str) -> str:
     value = dataDict.get(key)
     retbuf = key + " " + str(value)
-    if key in dataDict.keys(): 
+    if key in dataDict.keys():
         retbuf += printSolution(checkVoteUnic(value) and checkVoteInV2Set(value))
     else:
         retbuf += printSolution(False)
     return retbuf
+
 
 def verify_solido_state(json_data: Any) -> None:
     # parse solido state
     l1_keys = json_data.get('solido')
     global SolidoVersion
     SolidoVersion = l1_keys.get('lido_version')
-    for validator in l1_keys.get('validators').get('entries') :
+    for validator in l1_keys.get('validators').get('entries'):
         vote_acc = validator.get('pubkey')
-        if validator.get('entry').get('active') == True :
+        if validator.get('entry').get('active') == True:
             ValidatorSetV1.add(vote_acc)
 
     # detect current state
@@ -117,18 +127,19 @@ def verify_solido_state(json_data: Any) -> None:
     elif SolidoVersion == 1 and len(ValidatorSetV1) == 0:
         SolidoState = "Add validators"
     else:
-        SolidoState = "Unknown state: solido version = " 
-        + str(SolidoVersion) + " active validators count = "
-        + str(len(ValidatorSetV1))
-    
-    #output result
+        SolidoState = "Unknown state: solido version = "
+        +str(SolidoVersion) + " active validators count = "
+        +str(len(ValidatorSetV1))
+
+    # output result
     print("\nCurrent migration state: " + SolidoState + "\n")
+
 
 def verify_transaction_data(json_data: Any) -> bool:
     # print(json_data)
     l1_keys = json_data['parsed_instruction']
     output_buf = ""
-    global VerificationStatus 
+    global VerificationStatus
     VerificationStatus = True
     if 'SolidoInstruction' in l1_keys.keys():
         output_buf += "SolidoInstruction "
@@ -139,7 +150,9 @@ def verify_transaction_data(json_data: Any) -> bool:
             trans_data = l2_data['DeactivateValidator']
             output_buf += ValidateField(trans_data, 'solido_instance')
             output_buf += ValidateField(trans_data, 'manager')
-            output_buf += ValidateDeactivateV1VoteAccount(trans_data, 'validator_vote_account')
+            output_buf += ValidateDeactivateV1VoteAccount(
+                trans_data, 'validator_vote_account'
+            )
         elif 'AddValidator' in l2_data.keys():
             output_buf += "AddValidator"
             output_buf += ValidateSolidoState("Add validators")
@@ -163,7 +176,9 @@ def verify_transaction_data(json_data: Any) -> bool:
             reward_distribution = trans_data.get('reward_distribution')
             output_buf += ValidateRewardField(reward_distribution, 'treasury_fee')
             output_buf += ValidateRewardField(reward_distribution, 'developer_fee')
-            output_buf += ValidateRewardField(reward_distribution, 'st_sol_appreciation')
+            output_buf += ValidateRewardField(
+                reward_distribution, 'st_sol_appreciation'
+            )
         else:
             output_buf += "Unknown instruction\n"
             VerificationStatus = False

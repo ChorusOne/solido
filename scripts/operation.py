@@ -45,10 +45,7 @@ if __name__ == '__main__':
         required=True,
     )
     current_parser.add_argument(
-        "--outfile",
-        type=str,
-        help='Output file path',
-        required=True,
+        "--outfile", type=str, help='Output file path', required=True
     )
 
     current_parser = subparsers.add_parser(
@@ -59,10 +56,7 @@ if __name__ == '__main__':
         "--program-filepath", help='/path/to/program.so', required=True
     )
     current_parser.add_argument(
-        "--outfile",
-        type=str,
-        help='Output file path',
-        required=True,
+        "--outfile", type=str, help='Output file path', required=True
     )
 
     current_parser = subparsers.add_parser(
@@ -82,15 +76,11 @@ if __name__ == '__main__':
         required=True,
     )
     current_parser.add_argument(
-        "--outfile",
-        type=str,
-        help='Output file path',
-        required=True,
+        "--outfile", type=str, help='Output file path', required=True
     )
 
     current_parser = subparsers.add_parser(
-        'execute-transactions',
-        help='Execute transactions from file one by one',
+        'execute-transactions', help='Execute transactions from file one by one'
     )
     current_parser.add_argument(
         "--keypair-path",
@@ -106,14 +96,10 @@ if __name__ == '__main__':
     )
 
     current_parser = subparsers.add_parser(
-        'check-transactions',
-        help='Check transactions from a file',
+        'check-transactions', help='Check transactions from a file'
     )
     current_parser.add_argument(
-        "--transactions-path",
-        type=str,
-        help='Path to transactions file',
-        required=True,
+        "--transactions-path", type=str, help='Path to transactions file', required=True
     )
 
     args = parser.parse_args()
@@ -220,8 +206,9 @@ if __name__ == '__main__':
             Success = 0
 
             verify_transaction.verify_solido_state(
-                solido('--config', args.config, 'show-solido'))
-                
+                solido('--config', args.config, 'show-solido')
+            )
+
             for transaction in ifile:
                 result = solido(
                     '--config',
