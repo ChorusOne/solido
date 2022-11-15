@@ -1,0 +1,11 @@
+{
+  "validator_list_address": "GL9kqRNUTUosW3RsDoXHCuXUZn73SgQQmBvtp1ng2co4",
+  "maintainer_list_address": "5dvtr16i34hwXuCtTNHXXJ5ojeidVPXbceN9pXxrE8bn",
+  "developer_fee_address": "5Y5LVTXbtMYsibjp9uQMmCyZbtSru8zktuxGPV9eHu3m",
+  "cluster": "https://api.mainnet-beta.solana.com",
+  "multisig_program_id": "AAHT26ecV3FEeFmL2gDZW6FfEqjPkghHbAkNZGqwT8Ww",
+  "multisig_address": "3cXyJbjoAUNLpQsFrFJTTTp8GD3uPeabYbsCVobkQpD1",
+  "solido_program_id": "CrX7kMhLC3cSsXJdT7JDgqrRVWGnUpX3gfEfxxU2NVLi",
+  "solido_address": "49Yi1TKkNyYjPAFdR9LBvoHcUjuPX4Df5T5yv39w2XTn",
+  "st_sol_mint": "7dHbWXmci3dT8UFYWYZweBLXgycu7Y3iL6trKn1Y7ARj"
+}
