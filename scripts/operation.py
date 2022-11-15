@@ -11,11 +11,19 @@ import sys
 import os.path
 from typing import Any
 import verify_transaction
+from install_solido import install_solido
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(SCRIPT_DIR))
 
 from tests.util import solido, solana, run  # type: ignore
+
+
+def set_solido_cli_path(strData):
+    if os.path.isfile(strData):
+        os.environ["SOLPATH"] = strData
+    else:
+        print("Program not exist: " + strData)
 
 
 def eprint(*args: Any, **kwargs: Any) -> None:
@@ -28,9 +36,6 @@ def get_signer() -> Any:
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--config", type=str, help='Path to json config file', required=True
-    )
 
     subparsers = parser.add_subparsers(title='subcommands', dest="command")
 
@@ -94,26 +99,42 @@ if __name__ == '__main__':
         help='Transactions file path. Each transaction per line',
         required=True,
     )
+    current_parser.add_argument(
+        "--phase",
+        type=str,
+        help='Phase of deploy: preparation, deactivation, upgrade, adding',
+        required=True,
+    )
 
     current_parser = subparsers.add_parser(
         'check-transactions', help='Check transactions from a file'
     )
     current_parser.add_argument(
+        "--phase",
+        type=str,
+        help='Phase of deploy: preparation, deactivation, upgrade, adding',
+        required=True,
+    )
+    current_parser.add_argument(
         "--transactions-path", type=str, help='Path to transactions file', required=True
     )
+
+    current_parser = subparsers.add_parser('test', help='`Command for tests`')
 
     args = parser.parse_args()
 
     sys.argv.append('--verbose')
 
-    with open(args.config) as f:
+    install_solido()
+    with open(os.getenv("SOLIDO_CONFIG")) as f:
         config = json.load(f)
         cluster = config.get("cluster")
         if cluster:
             os.environ['NETWORK'] = cluster
 
     if args.command == "deactivate-validators":
-        lido_state = solido('--config', args.config, 'show-solido')
+        set_solido_cli_path(os.getenv("SOLIDO_V1"))
+        lido_state = solido('--config', os.getenv("SOLIDO_CONFIG"), 'show-solido')
         validators = lido_state['solido']['validators']['entries']
         print("vote accounts:")
         with open(args.outfile, 'w') as ofile:
@@ -121,7 +142,7 @@ if __name__ == '__main__':
                 print(validator['pubkey'])
                 result = solido(
                     '--config',
-                    args.config,
+                    os.getenv("SOLIDO_CONFIG"),
                     'deactivate-validator',
                     '--validator-vote-account',
                     validator['pubkey'],
@@ -134,13 +155,14 @@ if __name__ == '__main__':
                     ofile.write(address + '\n')
 
     elif args.command == "add-validators":
+        set_solido_cli_path(os.getenv("SOLIDO_V2"))
         print("vote accounts:")
         with open(args.vote_accounts) as infile, open(args.outfile, 'w') as ofile:
             for pubkey in infile:
                 print(pubkey)
                 result = solido(
                     '--config',
-                    args.config,
+                    os.getenv("SOLIDO_CONFIG"),
                     'add-validator',
                     '--validator-vote-account',
                     pubkey.strip(),
@@ -154,11 +176,19 @@ if __name__ == '__main__':
 
     elif args.command == "execute-transactions":
         with open(args.transactions) as infile:
+            if args.phase == "deactivation":
+                set_solido_cli_path(os.getenv("SOLIDO_V1"))
+            elif args.phase == "adding":
+                print(args.phase)
+                set_solido_cli_path(os.getenv("SOLIDO_V2"))
+            else:
+                print("Unknown phase")
+
             for transaction in infile:
                 transaction = transaction.strip()
                 transaction_info = solido(
                     '--config',
-                    args.config,
+                    os.getenv("SOLIDO_CONFIG"),
                     'multisig',
                     'show-transaction',
                     '--transaction-address',
@@ -168,7 +198,7 @@ if __name__ == '__main__':
                     print(f"Executing transaction {transaction}")
                     result = solido(
                         '--config',
-                        args.config,
+                        os.getenv("SOLIDO_CONFIG"),
                         'multisig',
                         'execute-transaction',
                         '--transaction-address',
@@ -178,7 +208,8 @@ if __name__ == '__main__':
                     print(f"Transaction {transaction} executed")
 
     elif args.command == "load-program":
-        lido_state = solido('--config', args.config, 'show-solido')
+        set_solido_cli_path(os.getenv("SOLIDO_V1"))
+        lido_state = solido('--config', os.getenv("SOLIDO_CONFIG"), 'show-solido')
         write_result = solana(
             '--output',
             'json',
@@ -202,36 +233,26 @@ if __name__ == '__main__':
 
     elif args.command == "check-transactions":
         with open(args.transactions_path, 'r') as ifile:
-            Counter = 0
-            Success = 0
+            if args.phase == "deactivation":
+                print(args.phase)
+                set_solido_cli_path(os.getenv("SOLIDO_V1"))
+                verify_transaction.verify_solido_state()
+                verify_transaction.verify_transactions(ifile)
+            elif args.phase == "preparation":
+                print(args.phase)
+            elif args.phase == "upgrade":
+                print(args.phase)
+                set_solido_cli_path(os.getenv("SOLIDO_V1"))
+                verify_transaction.verify_solido_state()
+                set_solido_cli_path(os.getenv("SOLIDO_V2"))
+                verify_transaction.verify_transactions(ifile)
+            elif args.phase == "adding":
+                print(args.phase)
+                set_solido_cli_path(os.getenv("SOLIDO_V2"))
+                verify_transaction.verify_solido_state()
+                verify_transaction.verify_transactions(ifile)
+            else:
+                print("Unknown phase")
 
-            verify_transaction.verify_solido_state(
-                solido('--config', args.config, 'show-solido')
-            )
-
-            for transaction in ifile:
-                result = solido(
-                    '--config',
-                    args.config,
-                    'multisig',
-                    'show-transaction',
-                    '--transaction-address',
-                    transaction.strip(),
-                )
-                Counter += 1
-                print("Transaction #" + str(Counter) + ": " + transaction.strip())
-                if verify_transaction.verify_transaction_data(result):
-                    Success += 1
-
-                # print(result['signers'])
-                # result['']
-                # config.get('program-id')
-            print(
-                "Summary: successfully verified "
-                + str(Success)
-                + " from "
-                + str(Counter)
-                + " transactions"
-            )
     else:
         eprint("Unknown command %s" % args.command)

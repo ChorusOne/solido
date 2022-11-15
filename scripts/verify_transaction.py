@@ -3,7 +3,15 @@
 """
 This script has multiple options to to interact with Solido
 """
+
+import sys
+import os.path
 from typing import Any, Dict
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.dirname(SCRIPT_DIR))
+
+from tests.util import solido, solana, run  # type: ignore
 
 Sample: Dict[str, Any] = {
     'solido_instance': '2i2crMWRb9nUY6HpDDp3R1XAXXB9UNdWAdtD9Kp9eUNT',
@@ -107,15 +115,20 @@ def ValidateAddV2VoteAccount(dataDict: Any, key: str) -> str:
     return retbuf
 
 
-def verify_solido_state(json_data: Any) -> None:
+def verify_solido_state() -> None:
+    # get solido state
+    json_data = solido('--config', os.getenv("SOLIDO_CONFIG"), 'show-solido')
+
     # parse solido state
     l1_keys = json_data.get('solido')
     global SolidoVersion
     SolidoVersion = l1_keys.get('lido_version')
-    for validator in l1_keys.get('validators').get('entries'):
-        vote_acc = validator.get('pubkey')
-        if validator.get('entry').get('active') == True:
-            ValidatorSetV1.add(vote_acc)
+    validators = l1_keys.get('validators')
+    if validators != None:
+        for validator in validators.get('entries'):
+            vote_acc = validator.get('pubkey')
+            if validator.get('entry').get('active') == True:
+                ValidatorSetV1.add(vote_acc)
 
     # detect current state
     global SolidoState
@@ -124,15 +137,21 @@ def verify_solido_state(json_data: Any) -> None:
             SolidoState = "Deactivate validators"
         elif len(ValidatorSetV1) == 0:
             SolidoState = "Upgrade program"
+        else:
+            SolidoState = "Unknown state - solido version = "
+            SolidoState += str(SolidoVersion)
+            SolidoState += " active validators count = "
+            SolidoState += str(len(ValidatorSetV1))
     elif SolidoVersion == 1 and len(ValidatorSetV1) == 0:
         SolidoState = "Add validators"
     else:
-        SolidoState = "Unknown state: solido version = "
-        +str(SolidoVersion) + " active validators count = "
-        +str(len(ValidatorSetV1))
+        SolidoState = "Unknown state - solido version = "
+        SolidoState += str(SolidoVersion)
+        SolidoState += " active validators count = "
+        SolidoState += str(len(ValidatorSetV1))
 
     # output result
-    print("\nCurrent migration state: " + SolidoState + "\n")
+    print("\nCurrent migration state: " + SolidoState)
 
 
 def verify_transaction_data(json_data: Any) -> bool:
@@ -193,6 +212,34 @@ def verify_transaction_data(json_data: Any) -> bool:
         output_buf += "Unknown instruction\n"
         VerificationStatus = False
 
-    output_buf += "\n"
     print(output_buf)
     return VerificationStatus
+
+
+def verify_transactions(ifile):
+    Counter = 0
+    Success = 0
+    for transaction in ifile:
+        result = solido(
+            '--config',
+            os.getenv("SOLIDO_CONFIG"),
+            'multisig',
+            'show-transaction',
+            '--transaction-address',
+            transaction.strip(),
+        )
+        Counter += 1
+        print("Transaction #" + str(Counter) + ": " + transaction.strip())
+        if verify_transaction_data(result):
+            Success += 1
+    print(
+        "Summary: successfully verified "
+        + str(Success)
+        + " from "
+        + str(Counter)
+        + " transactions"
+    )
+
+
+if __name__ == '__main__':
+    print("main")
