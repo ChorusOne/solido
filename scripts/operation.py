@@ -120,6 +120,11 @@ if __name__ == '__main__':
         "--transactions-path", type=str, help='Path to transactions file', required=True
     )
 
+    current_parser = subparsers.add_parser(
+        'install-solido',
+        help='Install solido_v1 and solido_v2 for deploy actions',
+    )
+
     current_parser = subparsers.add_parser('test', help='`Command for tests`')
 
     args = parser.parse_args()
@@ -254,6 +259,7 @@ if __name__ == '__main__':
                 verify_transaction.verify_transactions(ifile)
             else:
                 print("Unknown phase")
-
+    elif args.command == "install-solido":
+        print("Install solido...")
     else:
         eprint("Unknown command %s" % args.command)

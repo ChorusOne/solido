@@ -34,23 +34,23 @@ def install_solido():
     # install solido v1
     if not os.path.isdir(pathStr + "/solido_v1/"):
         outout = os.system(
-            "git clone --recurse-submodules -b current https://github.com/lidofinance/solido solido_v1"
+            "git clone --recurse-submodules -b v1.3.6 https://github.com/lidofinance/solido solido_v1"
         )
-        output = os.chdir(pathStr + "/solido_v1/")
-        outout = os.system("cargo build --release")
+    output = os.chdir(pathStr + "/solido_v1/")
+    outout = os.system("cargo build --release")
     if os.path.isfile(pathStr + "/solido_v1/target/release/solido"):
         os.environ["SOLIDO_V1"] = pathStr + "/solido_v1/target/release/solido"
     else:
         print("Program not exist: " + pathStr + "/solido_v1/target/release/solido")
     output = os.chdir(pathStr)
 
-    # install solido v1
+    # install solido v2
     if not os.path.isdir(pathStr + "/solido_v2/"):
         outout = os.system(
-            "git clone --recurse-submodules -b main https://github.com/lidofinance/solido solido_v2"
+            "git clone --recurse-submodules -b v2.0.0 https://github.com/lidofinance/solido solido_v2"
         )
-        output = os.chdir(pathStr + "/solido_v2/")
-        outout = os.system("cargo build --release")
+    output = os.chdir(pathStr + "/solido_v2/")
+    outout = os.system("cargo build --release")
     if os.path.isfile(pathStr + "/solido_v2/target/release/solido"):
         os.environ["SOLIDO_V2"] = pathStr + "/solido_v2/target/release/solido"
     else:
