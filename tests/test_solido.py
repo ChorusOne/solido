@@ -92,10 +92,7 @@ multisig_pda = multisig_data['multisig_program_derived_address']
 print(f'> Created instance at {multisig_instance}.')
 
 
-def approve_and_execute(
-    transaction_to_approve: str,
-    signer: TestAccount,
-) -> None:
+def approve_and_execute(transaction_to_approve: str, signer: TestAccount) -> None:
     """
     Helper to approve and execute a transaction with a single key.
     """
@@ -335,14 +332,8 @@ solido_instance = solido(
 
 assert solido_instance['validators']['entries'][0] == {
     'pubkey': validator.vote_account.pubkey,
-    'stake_seeds': {
-        'begin': 0,
-        'end': 0,
-    },
-    'unstake_seeds': {
-        'begin': 0,
-        'end': 0,
-    },
+    'stake_seeds': {'begin': 0, 'end': 0},
+    'unstake_seeds': {'begin': 0, 'end': 0},
     'stake_accounts_balance': 0,
     'unstake_accounts_balance': 0,
     'effective_stake_balance': 0,
@@ -379,9 +370,7 @@ solido_instance = solido(
     solido_address,
 )
 
-assert solido_instance['maintainers']['entries'][0] == {
-    'pubkey': maintainer.pubkey,
-}
+assert solido_instance['maintainers']['entries'][0] == {'pubkey': maintainer.pubkey}
 
 print(f'> Removing maintainer {maintainer}')
 transaction_result = solido(
@@ -528,10 +517,7 @@ print('> There was nothing to do, as expected.')
 
 def add_validator_and_approve(keypath_account: str, keypath_vote: str) -> Validator:
     # Adding another validator
-    (validator, transaction_result) = add_validator(
-        keypath_account,
-        keypath_vote,
-    )
+    (validator, transaction_result) = add_validator(keypath_account, keypath_vote)
 
     transaction_address = transaction_result['transaction_address']
     approve_and_execute(transaction_address, test_addrs[0])
@@ -721,9 +707,7 @@ expected_result = {
 print('\nRunning maintenance (should remove the validator) ...')
 result = perform_maintenance()
 expected_result = {
-    'RemoveValidator': {
-        'validator_vote_account': validator.vote_account.pubkey,
-    }
+    'RemoveValidator': {'validator_vote_account': validator.vote_account.pubkey}
 }
 assert result == expected_result, f'\nExpected: {expected_result}\nActual:   {result}'
 

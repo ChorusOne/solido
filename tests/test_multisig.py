@@ -127,14 +127,7 @@ with tempfile.TemporaryDirectory() as scratch_dir:
 # derived address should be able to.
 print('\nAttempting direct upgrade, which should fail ...')
 try:
-    solana(
-        'program',
-        'deploy',
-        '--program-id',
-        program_id,
-        '--buffer',
-        buffer_address,
-    )
+    solana('program', 'deploy', '--program-id', program_id, '--buffer', buffer_address)
 except subprocess.CalledProcessError as err:
     assert err.returncode == 1
     new_info = solana_program_show(program_id)
@@ -360,15 +353,8 @@ assert result['parsed_instruction'] == {
     'MultisigChange': {
         'old_threshold': 2,
         'new_threshold': 2,
-        'old_owners': [
-            addr1.pubkey,
-            addr2.pubkey,
-            addr3.pubkey,
-        ],
-        'new_owners': [
-            addr1.pubkey,
-            addr2.pubkey,
-        ],
+        'old_owners': [addr1.pubkey, addr2.pubkey, addr3.pubkey],
+        'new_owners': [addr1.pubkey, addr2.pubkey],
     }
 }
 print('> Transaction has the required number of signatures.')
@@ -423,10 +409,7 @@ result = multisig(
     upgrade_transaction_address,
 )
 assert 'Outdated' in result['signers']
-assert result['signers']['Outdated'] == {
-    'num_signed': 2,
-    'num_owners': 3,
-}
+assert result['signers']['Outdated'] == {'num_signed': 2, 'num_owners': 3}
 print('> Owners ids are gone, but approval count is preserved as expected.')
 
 

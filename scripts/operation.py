@@ -51,10 +51,7 @@ if __name__ == '__main__':
         required=True,
     )
     current_parser.add_argument(
-        "--outfile", 
-        type=str, 
-        help='Output file path', 
-        required=True
+        "--outfile", type=str, help='Output file path', required=True
     )
 
     current_parser = subparsers.add_parser(

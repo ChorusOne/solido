@@ -48,9 +48,7 @@ def get_rpc_block_height() -> Optional[int]:
 if __name__ == "__main__":
     # Start the validator, pipe its stdout to /dev/null.
     test_validator = subprocess.Popen(
-        [
-            'solana-test-validator',
-        ],
+        ['solana-test-validator'],
         stdout=subprocess.DEVNULL,
         # Somehow, CI only works if `shell=True`, so this argument is left here on
         # purpose.

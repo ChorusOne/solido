@@ -85,10 +85,7 @@ def get_token_account(address: Address) -> Optional[TokenAccount]:
     try:
         process = subprocess.run(cmd, check=True, capture_output=True, encoding='utf-8')
         result = json.loads(process.stdout)
-        return TokenAccount(
-            mint_address=result['mint'],
-            state=result['state'],
-        )
+        return TokenAccount(mint_address=result['mint'], state=result['state'])
     except subprocess.CalledProcessError:
         return None
 
@@ -173,13 +170,13 @@ def check_validator_response(
         print_ok(
             'Vote account commission is less than {}%.'.format(
                 MAX_VALIDATION_COMMISSION_PERCENTAGE
-            ),
+            )
         )
     else:
         print_error(
             'Vote account commission is more than {}%.'.format(
                 MAX_VALIDATION_COMMISSION_PERCENTAGE
-            ),
+            )
         )
 
     validator_info = validators_by_identity.get(vote_account.validator_identity_address)
