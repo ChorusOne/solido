@@ -4,7 +4,7 @@
 #                                   EPOCH 0                                   #
 ###############################################################################
 
-cd solido_old
+cd home
 
 # start local validator
 rm -rf tests/.keys/ test-ledger/ tests/__pycache__/ && \
@@ -18,7 +18,9 @@ solana withdraw-from-vote-account test-ledger/vote-account-keypair.json \
 # create instance
 ./tests/deploy_test_solido.py --verbose
 
-cp ../solido_test.json ../solido_config.json
+# optional for mainnet
+# cp ./solido_test.json ./solido_config.json
+
 # start maintainer
 ./solido_v1/target/release/solido --config ./solido_config.json \
                       --keypair-path ./solido_v1/tests/.keys/maintainer.json \
@@ -38,13 +40,13 @@ cp ../solido_test.json ../solido_config.json
 ###############################################################################
 
 # create new v2 accounts
-../solido_v2/target/release/solido \
+./solido_v2/target/release/solido \
     --output json \
-    --config ../solido_test.json create-v2-accounts \
+    --config ./solido_test.json create-v2-accounts \
     --developer-account-owner 2d7gxHrVHw2grzWBdRQcWS7T1r9KnaaGXZBtzPBbzHEF \
     > v2_new_accounts.json
-jq -s '.[0] * .[1]' v2_new_accounts.json ../solido_test.json > ../temp.json
-mv ../temp.json ../solido_test.json
+jq -s '.[0] * .[1]' v2_new_accounts.json ./solido_test.json > ./temp.json
+mv ./temp.json ./solido_test.json
 
 # load program to a buffer account
 ./solido_v2/scripts/operation.py \
@@ -78,8 +80,6 @@ solana create-vote-account \
        ./solido_v1/tests/.keys/vote-account-key.json \
        ./solido_v1/test-ledger/validator-keypair.json \
        ./solido_v1/tests/.keys/vote-account-withdrawer-key.json --commission 5
-
-cd ../solido
 
 ###############################################################################
 #                                   EPOCH 3                                   #
@@ -125,9 +125,6 @@ solana-keygen pubkey ./solido_v1/tests/.keys/vote-account-key.json > validators.
     add-validators --outfile adding_trx.txt \
     --vote-accounts validators.txt \
     --keypair-path ./solido_v1/tests/.keys/maintainer.json
-
-    ./script_update/scripts/operation.py \
-    check-transactions --phase adding --transactions-path adding_trx.txt
 
 # verify transaction
 ./solido_v2/scripts/operation.py \

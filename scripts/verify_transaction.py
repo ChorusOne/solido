@@ -6,7 +6,7 @@ This script has multiple options to to interact with Solido
 
 import sys
 import os.path
-from typing import Any, Dict
+from typing import Any, Dict, Set
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(SCRIPT_DIR))
@@ -14,12 +14,10 @@ sys.path.append(os.path.dirname(SCRIPT_DIR))
 from tests.util import solido, solana, run  # type: ignore
 
 Sample: Dict[str, Any] = {
-    'solido_instance': '2i2crMWRb9nUY6HpDDp3R1XAXXB9UNdWAdtD9Kp9eUNT',
-    'manager': '2cAVMSn3bfTyPBMnYYY3UgqvE44SM2LLqT7iN6CiMF4T',
-    'validator_vote_account': '2FaFw4Yv5noJfa23wKrFDpqoxXo8MxQGbKP3LjxMiJ13',
-    'program_to_upgrade': '2QYdJZhBrg5wAvkVA98WM2JtTXngsTpBXSq2LXnVUa33',
-    'program_data_address': 'HZe59cxGy7irFUtcmcUwkmvERrwyCUKaJQavwt7VrVTg',
-    'buffer_address': '2LCfqfcQBjKEpvyA54vwAGaYTUXt1L13MwEsDbrzuJbw',
+    'solido_instance': '2i2crMWRb9nUY6HpDDp3R1XAXXB9UNdWAdtD9Kp9eUNT', # "solido_address": "49Yi1TKkNyYjPAFdR9LBvoHcUjuPX4Df5T5yv39w2XTn",
+    'program_to_upgrade': '2QYdJZhBrg5wAvkVA98WM2JtTXngsTpBXSq2LXnVUa33', #solido_config.json : solido_program_id
+    'program_data_address': 'HZe59cxGy7irFUtcmcUwkmvERrwyCUKaJQavwt7VrVTg', 
+    'buffer_address': '2LCfqfcQBjKEpvyA54vwAGaYTUXt1L13MwEsDbrzuJbw', # buffer adres account
     'validator_list': 'HDLRixNLF3PLBMfxhKgKxeZEDhA84RiRUSZFm2zwimeE',
     'maintainer_list': '2uLFh1Ec8NP1fftKD2MLnF12Kw4CTXNHhDtqsWVz7f9K',
     'developer_account': '5vgbVafXQiVb9ftDix1NadV7D6pgP5H9YPCaoKcPrBxZ',
@@ -37,9 +35,10 @@ Sample: Dict[str, Any] = {
 ValidatorVoteAccSet = set()
 VerificationStatus = True
 ValidatorSetV1 = set()
-ValidatorSetV2 = set()
+ValidatorSetV2: Set[str] = set() # will be filled later
 SolidoVersion = -1
 SolidoState = "Unknown state"
+TransOrder = list()
 
 
 def printSolution(flag: bool) -> str:
@@ -49,7 +48,6 @@ def printSolution(flag: bool) -> str:
         global VerificationStatus
         VerificationStatus = False
         return " [BAD]\n"
-
 
 def checkSolidoState(state: str) -> bool:
     return SolidoState == state
@@ -72,7 +70,7 @@ def checkVoteUnic(address: str) -> bool:
 
 
 def ValidateSolidoState(state: str) -> str:
-    return printSolution(SolidoState == state)
+    return "Solido state " + state + printSolution(SolidoState == state)
 
 
 def ValidateField(dataDict: Any, key: str) -> str:
@@ -114,6 +112,17 @@ def ValidateAddV2VoteAccount(dataDict: Any, key: str) -> str:
         retbuf += printSolution(False)
     return retbuf
 
+def ValidateTransOrder(trans) :
+    retbuf = "Transaction order "
+    if trans == "BpfLoaderUpgrade" :
+        retbuf += "BpfLoaderUpgrade"
+        retbuf += printSolution(len(TransOrder) == 0)
+    elif trans == "MigrateStateToV2" :
+        retbuf += "MigrateStateToV2"
+        retbuf += printSolution(len(TransOrder) == 1 and TransOrder[0] == "BpfLoaderUpgrade")
+    else:
+        retbuf += printSolution(False)
+    return retbuf
 
 def verify_solido_state() -> None:
     # get solido state
@@ -155,7 +164,7 @@ def verify_solido_state() -> None:
 
 
 def verify_transaction_data(json_data: Any) -> bool:
-    # print(json_data)
+    print(json_data)
     l1_keys = json_data['parsed_instruction']
     output_buf = ""
     global VerificationStatus
@@ -180,7 +189,7 @@ def verify_transaction_data(json_data: Any) -> bool:
             output_buf += ValidateField(trans_data, 'manager')
             output_buf += ValidateAddV2VoteAccount(trans_data, 'validator_vote_account')
         elif 'MigrateStateToV2' in l2_data.keys():
-            output_buf += "MigrateStateToV2"
+            output_buf += ValidateTransOrder("MigrateStateToV2")
             output_buf += ValidateSolidoState("Upgrade program")
             trans_data = l2_data.get('MigrateStateToV2')
             output_buf += ValidateField(trans_data, 'solido_instance')
@@ -202,7 +211,8 @@ def verify_transaction_data(json_data: Any) -> bool:
             output_buf += "Unknown instruction\n"
             VerificationStatus = False
     elif 'BpfLoaderUpgrade' in l1_keys.keys():
-        output_buf += "BpfLoaderUpgrade"
+        output_buf += ValidateTransOrder("BpfLoaderUpgrade")
+        TransOrder.append("BpfLoaderUpgrade")
         output_buf += ValidateSolidoState("Upgrade program")
         l2_data = l1_keys['BpfLoaderUpgrade']
         output_buf += ValidateField(l2_data, 'program_to_upgrade')

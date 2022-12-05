@@ -184,3 +184,7 @@ jobs:
     - name: Check license compatibility
       run: |
         tests/check_licenses.py
+
+    - name: Typecheck Python
+      run: |
+        git ls-files | grep '\.py$' | xargs mypy

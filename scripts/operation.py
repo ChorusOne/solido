@@ -9,9 +9,10 @@ import argparse
 import json
 import sys
 import os.path
-from typing import Any
+from typing import Any, Optional
 import verify_transaction
 from install_solido import install_solido
+
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(SCRIPT_DIR))
@@ -23,7 +24,7 @@ def set_solido_cli_path(strData):
     if os.path.isfile(strData):
         os.environ["SOLPATH"] = strData
     else:
-        print("Program not exist: " + strData)
+        print("Program does not exist: " + strData)
 
 
 def eprint(*args: Any, **kwargs: Any) -> None:
@@ -50,7 +51,10 @@ if __name__ == '__main__':
         required=True,
     )
     current_parser.add_argument(
-        "--outfile", type=str, help='Output file path', required=True
+        "--outfile", 
+        type=str, 
+        help='Output file path', 
+        required=True
     )
 
     current_parser = subparsers.add_parser(
@@ -126,7 +130,7 @@ if __name__ == '__main__':
     sys.argv.append('--verbose')
 
     install_solido()
-    with open(os.getenv("SOLIDO_CONFIG")) as f:
+    with open(str(os.getenv("SOLIDO_CONFIG"))) as f:
         config = json.load(f)
         cluster = config.get("cluster")
         if cluster:
