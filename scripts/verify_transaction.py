@@ -71,7 +71,7 @@ def checkVoteUnic(address: str) -> bool:
 
 
 def ValidateSolidoState(state: str) -> str:
-    return "Solido state " + state + printSolution(SolidoState == state)
+    return ": Solido state " + state + printSolution(SolidoState == state)
 
 
 def ValidateField(dataDict: Any, key: str) -> str:
@@ -174,7 +174,6 @@ def verify_solido_state() -> None:
 
 
 def verify_transaction_data(json_data: Any) -> bool:
-    print(json_data)
     l1_keys = json_data['parsed_instruction']
     output_buf = ""
     global VerificationStatus

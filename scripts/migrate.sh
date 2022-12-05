@@ -18,8 +18,8 @@ solana withdraw-from-vote-account test-ledger/vote-account-keypair.json \
 # create instance
 ./tests/deploy_test_solido.py --verbose
 
-# optional for mainnet
-# cp ./solido_test.json ./solido_config.json
+# optional for test
+cp ./solido_test.json ./solido_config.json
 
 # start maintainer
 ./solido_v1/target/release/solido --config ./solido_config.json \
